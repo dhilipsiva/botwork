@@ -74,6 +74,12 @@ pub enum BWErr {
     NativeError(String),
     #[error("Native callback panicked: {0}")]
     NativePanic(String),
+    #[error("Operation cancelled: {0}")]
+    Cancelled(String),
+    #[error("Operation timed out: {0}")]
+    Timeout(String),
+    #[error("Async runtime failure: {0}")]
+    AsyncRuntime(String),
 }
 
 #[derive(Clone, Debug, Default)]

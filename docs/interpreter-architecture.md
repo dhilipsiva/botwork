@@ -184,3 +184,41 @@ For both entry kinds, the interpreter resolves/checks arity first, then evaluate
 `statement_signatures()` lists visible signatures in normalized order, resolving lexical shadowing. `statement_signature(header)` looks up a complete header; `signature_for_call(call)` gives a hover consumer the same metadata in the current lexical environment. `complete_statements(prefix)` matches normalized initial sentence text before the first parameter and returns the same records; it does not parse incomplete expressions. `help()` renders those records. These queries never invoke callbacks or execute definitions. Metadata clones own their retained source and are independent of registry mutations.
 
 CLI `--list-statements` and `--statement-help 'Log |value|'` use the initialized built-in registry and require no script. They cannot be combined with file execution/debug flags. Unknown headers return BW2002 and malformed headers return syntax diagnostics. Static analysis of unexecuted modules, editor protocol wiring, inferred DSL types, and incomplete-edit recovery remain tooling work; registry queries alone do not resolve arbitrary nested source scopes.
+
+
+## Async Operation Contract
+
+`core::operation::NativeOperation` establishes the host interface for future I/O statements and adapters. It uses the shared native signature schema and owned finite values. `asynchronous(signature, callback)` accepts a future-producing callback; `blocking(signature, max_in_flight, callback)` dispatches synchronous work to a bounded Tokio worker pool. Clones share the callback and its blocking capacity. Hosts supply a live Tokio runtime with time enabled. The synchronous DSL evaluator does not dispatch these operations yet; asynchronous program/CLI integration remains a separate runtime task.
+
+```rust
+use botwork::core::{
+    operation::{NativeOperation, OperationControl},
+    signature::{StatementSignature, ValueKind},
+    grammar::Literal,
+};
+
+let signature = StatementSignature::native("Echo |value|")?
+    .parameter("value", ValueKind::String)?
+    .returns(ValueKind::String);
+let operation = NativeOperation::asynchronous(signature, |mut values, control| async move {
+    control.checkpoint()?;
+    tokio::task::yield_now().await;
+    Ok(values.remove(0))
+})?;
+let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build().unwrap();
+let value = runtime.block_on(operation.invoke(
+    vec![Literal::String("hello".into())], OperationControl::default(),
+))?;
+assert_eq!(value.to_string(), "hello");
+# Ok::<(), botwork::core::diagnostic::Diagnostic>(())
+```
+
+`OperationControl` clones share a cancellation request. `child(optional_deadline)` inherits parent cancellation and the earlier monotonic deadline; cancelling a child does not stop its parent/siblings. Each invocation creates its own child control. Callbacks use `checkpoint()` before effects and periodically during computation, or await `stopped()` alongside I/O. Cancellation is BW5001, deadline expiry BW5002, and runtime/configuration failure BW5003. When both stop conditions are observed together, explicit cancellation takes priority. A cancelled/expired control rejects entry, including callback construction; there are no implicit retries.
+
+Arguments are owned, checked for arity/kinds/finiteness before entry, and delivered once in order. Results are checked before publication. Callbacks return `DiagnosticResult<Literal>` to preserve original sources, codes, call context, and nested causes. Missing locations use the registered header; direct host calls do not invent DSL call frames. Factory/poll/worker unwinding panics become BW4003; process aborts and panicking destructors are outside this guarantee. Runtime panic hooks remain active.
+
+Async factories must return promptly and defer effects into the future. Future polls must yield; cancellation/deadlines cannot preempt blocking code inside a poll. On a stop request, the invocation drops the async future and its synchronous resources before returning. Hosts dropping the invocation also drop that future and signal its child. Async cleanup that must itself be awaited needs the planned resource lifecycle contract. Do not detach unowned tasks from a callback. These limits follow Tokio's [timeout contract](https://docs.rs/tokio/1.53.1/tokio/time/fn.timeout.html).
+
+Blocking callbacks run through `spawn_blocking`, with an explicit nonzero maximum shared by operation clones. Capacity waiting is cancellable, and a permit remains held until its worker exits. A stop request signals the worker, aborts it if still queued, then awaits completion before returning the primary cancellation/timeout. A worker failure during that drain remains a structured cause. Blocking callbacks must use checkpoints and bounded waits so they can finish cooperatively; no hard termination deadline is promised for uncooperative in-process work. Tokio [cannot abort started blocking callbacks](https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html). Integrations needing hard termination require isolated workers under the later shutdown contract.
+
+If a host drops a blocking invocation instead of requesting cancellation and awaiting it, its worker is signalled but cannot be joined synchronously by Drop. The worker can continue until it cooperates; its permit remains held meanwhile. Keep the runtime alive until owned work finishes. Cancellation does not undo completed external effects or guarantee an effect never happened; adapters must expose appropriate retry/idempotency semantics. Whole-run cancellation, teardown, reporting outcomes, bounded parallel runs, and async DSL dispatch remain explicit roadmap work.

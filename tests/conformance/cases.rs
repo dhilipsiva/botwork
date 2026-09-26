@@ -6,6 +6,8 @@ pub enum Input {
     NativeInvalidReturn,
     SignatureValid,
     SignatureInvalid,
+    AsyncSuccess,
+    AsyncExpired,
 }
 
 #[derive(Clone)]
@@ -117,5 +119,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::SignatureValid, stdout: "", code: None, error: None },
         Case { id: "signature-invalid", positive: &[], invalid: &["F6"], boundary: &[],
             input: Input::SignatureInvalid, stdout: "", code: Some("BW3003"), error: Some("Parameter `value` (argument 1)") },
+        Case { id: "async-success", positive: &["F7"], invalid: &[], boundary: &["F7"],
+            input: Input::AsyncSuccess, stdout: "", code: None, error: None },
+        Case { id: "async-expired", positive: &[], invalid: &["F7"], boundary: &[],
+            input: Input::AsyncExpired, stdout: "", code: Some("BW5002"), error: Some("Operation deadline expired") },
     ]
 }

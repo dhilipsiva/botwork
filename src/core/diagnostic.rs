@@ -28,6 +28,9 @@ pub enum DiagnosticCode {
     Output,
     Native,
     NativePanic,
+    Cancelled,
+    Timeout,
+    AsyncRuntime,
 }
 
 impl DiagnosticCode {
@@ -48,6 +51,9 @@ impl DiagnosticCode {
             Self::Output => "BW4001",
             Self::Native => "BW4002",
             Self::NativePanic => "BW4003",
+            Self::Cancelled => "BW5001",
+            Self::Timeout => "BW5002",
+            Self::AsyncRuntime => "BW5003",
         }
     }
 }
@@ -76,6 +82,9 @@ impl BWErr {
             Self::OutputError(_) => DiagnosticCode::Output,
             Self::NativeError(_) => DiagnosticCode::Native,
             Self::NativePanic(_) => DiagnosticCode::NativePanic,
+            Self::Cancelled(_) => DiagnosticCode::Cancelled,
+            Self::Timeout(_) => DiagnosticCode::Timeout,
+            Self::AsyncRuntime(_) => DiagnosticCode::AsyncRuntime,
         }
     }
 
@@ -96,6 +105,9 @@ impl BWErr {
             Self::OutputError(_) => "Check the output destination and account for bytes already written before retrying.".into(),
             Self::NativeError(_) => "Check the registered operation's requirements and reason; account for completed effects before retrying.".into(),
             Self::NativePanic(_) => "Fix the native callback; return an error for expected failures and inspect captured host state before reuse.".into(),
+            Self::Cancelled(_) => "Inspect completed effects and use a fresh operation control for an intentional retry.".into(),
+            Self::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.".into(),
+            Self::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.".into(),
         }
     }
 }
@@ -232,6 +244,9 @@ impl Diagnostic {
             | BWErr::ArithmeticError(reason)
             | BWErr::OutputError(reason)
             | BWErr::NativeError(reason)
+            | BWErr::Cancelled(reason)
+            | BWErr::Timeout(reason)
+            | BWErr::AsyncRuntime(reason)
             | BWErr::NativePanic(reason) => value_map([("reason", text(reason))]),
         };
         value_map([

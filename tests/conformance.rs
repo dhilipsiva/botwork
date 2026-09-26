@@ -270,6 +270,50 @@ fn check_signature_case(case: &Case) {
     }
 }
 
+fn check_async_case(case: &Case) {
+    use botwork::core::{
+        operation::{NativeOperation, OperationControl},
+        signature::StatementSignature,
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let count = Arc::new(AtomicUsize::new(0));
+        let calls = Arc::clone(&count);
+        let operation = NativeOperation::asynchronous(
+            StatementSignature::native("Host").unwrap(),
+            move |_, _| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                async { Ok(Literal::Int(7)) }
+            },
+        )
+        .unwrap();
+        let mut control = OperationControl::default();
+        if case.error.is_some() {
+            control = control.child(Some(tokio::time::Instant::now()));
+        }
+        let result = operation.invoke(vec![], control).await;
+        match case.error {
+            Some(expected) => {
+                let error = result.unwrap_err();
+                assert_eq!(error.code().as_str(), case.code.unwrap());
+                assert!(error.to_string().contains(expected));
+                assert_eq!(count.load(Ordering::SeqCst), 0);
+            }
+            None => {
+                assert!(matches!(result, Ok(Literal::Int(7))));
+                assert_eq!(count.load(Ordering::SeqCst), 1);
+            }
+        }
+    });
+}
+
 #[test]
 fn conformance_inputs_match_status_stdout_and_error_contracts() {
     let cases = cases();
@@ -288,6 +332,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             }
             Input::SignatureValid | Input::SignatureInvalid => {
                 check_signature_case(&case);
+                continue;
+            }
+            Input::AsyncSuccess | Input::AsyncExpired => {
+                check_async_case(&case);
                 continue;
             }
         };
