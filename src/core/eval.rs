@@ -1,19 +1,22 @@
 use pest::iterators::Pair;
-use pest::Parser;
 use std::{
-    cell::RefCell,
     collections::HashMap,
     io::{self, Write},
-    rc::Rc,
+    sync::Arc,
 };
 
-use super::grammar::{
-    finite_float, BWErr, BWParser, Literal, LiteralResult, Operate, Rule, PRATT_PARSER,
+use super::{
+    ast::{
+        self, AssignmentValue, Block, Call, Definition, ElseBranch, Expr, ExprKind, Node, Program,
+        Statement, StatementKind,
+    },
+    grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
 };
 
 #[cfg(test)]
 mod tests;
 
+// Replaced by explicit completion outcomes in the following control-flow TODO.
 #[derive(Clone, Debug, Default, PartialEq)]
 enum InteruptKind {
     #[default]
@@ -23,23 +26,16 @@ enum InteruptKind {
     Return,
 }
 
-/// Metadata used to indicate program interuption.
-/// Like BREAK, CONTINUE, RETURN
 #[derive(Clone, Debug, Default)]
 struct Interupt {
     kind: InteruptKind,
     literal: Literal,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 enum StmtType {
-    #[default]
-    None,
     Native(Callback),
-    UserDefined {
-        header: String,
-        block: String,
-    },
+    UserDefined(Arc<Definition>),
 }
 
 #[derive(Clone, Default)]
@@ -47,32 +43,20 @@ pub struct Context {
     variables: HashMap<String, Literal>,
     statements: HashMap<String, StmtType>,
     interupt: Interupt,
+    #[cfg(test)]
+    expression_visits: Vec<String>,
 }
 
 impl Context {
-    fn get_variable(&self, name: &String) -> LiteralResult {
-        match self.variables.get(name) {
-            Some(value) => Ok(value.to_owned()),
-            None => Err(BWErr::VariableNotDefined(name.clone())),
-        }
+    fn get_variable(&self, name: &str) -> LiteralResult {
+        self.variables
+            .get(name)
+            .cloned()
+            .ok_or_else(|| BWErr::VariableNotDefined(name.to_owned()))
     }
-
-    /*
-    fn contains_variable(&self, name: &String) -> bool {
-        self.variables.contains_key(name)
-    }
-    */
 
     fn set_variable(&mut self, name: String, literal: Literal) -> Option<Literal> {
         self.variables.insert(name, literal)
-    }
-
-    fn contains_statement(&self, name: &String) -> bool {
-        self.statements.contains_key(name)
-    }
-
-    fn get_statement(&self, name: &String, statement: &mut Option<StmtType>) {
-        *statement = self.statements.get(name).cloned();
     }
 
     pub fn init_statements(&mut self) {
@@ -80,27 +64,11 @@ impl Context {
             .insert("log|param|".into(), StmtType::Native(log_param));
     }
 
-    /// TODO: Right now, this stringifies the header & block pair and parses everytimme
-    /// it is required to execute. As one might realize, this could degrade the persormance.
-    /// I was not able to push Pair<Rule> into the state because it had lot of lifetime to deal with.
-    /// I am new to rust and lifetimes is still a concept that I trying to grasp.
-    /// It soulw be awesome if somone could help me with this.
-    fn push_statement(&mut self, stmt_header: Pair<Rule>, stmt_block: Pair<Rule>) {
-        let stmt_hash = get_stmt_hash(&stmt_header);
-        self.statements.insert(
-            stmt_hash,
-            StmtType::UserDefined {
-                header: stmt_header.as_str().into(),
-                block: stmt_block.as_str().into(),
-            },
-        );
-    }
-
     fn push_interupt(&mut self, interupt: Interupt) {
         if InteruptKind::None == self.interupt.kind {
-            self.interupt = interupt
+            self.interupt = interupt;
         } else {
-            unreachable!("Tried pusing interupt, while an other one os already in progress!")
+            unreachable!("Tried pushing an interrupt while another is in progress");
         }
     }
 
@@ -108,473 +76,291 @@ impl Context {
         self.push_interupt(Interupt {
             kind: InteruptKind::Break,
             literal: Literal::None,
-        })
+        });
     }
 
     fn push_interupt_continue(&mut self) {
         self.push_interupt(Interupt {
             kind: InteruptKind::Continue,
             literal: Literal::None,
-        })
+        });
     }
 
     fn push_interupt_return(&mut self, literal: Literal) {
         self.push_interupt(Interupt {
             kind: InteruptKind::Return,
             literal,
-        })
+        });
     }
 
     fn has_loop_interupt(&self) -> bool {
-        match self.interupt.kind {
-            InteruptKind::Continue | InteruptKind::Break => true,
-            InteruptKind::None | InteruptKind::Return => false,
-        }
+        matches!(
+            self.interupt.kind,
+            InteruptKind::Continue | InteruptKind::Break
+        )
     }
 
     fn has_return_interupt(&self) -> bool {
-        matches!(self.interupt.kind, InteruptKind::Return)
+        self.interupt.kind == InteruptKind::Return
     }
 
     fn pop_interupt(&mut self) -> Interupt {
-        let interupt = self.interupt.clone();
-        self.interupt.literal = Literal::None; // Just in case
-        self.interupt.kind = InteruptKind::None;
-        interupt
+        std::mem::take(&mut self.interupt)
     }
 }
 
-type Callback = fn(Pair<Rule>, &mut Context) -> LiteralResult;
+type Callback = fn(&Call, &mut Context) -> LiteralResult;
 
-fn hashify(text: &str) -> String {
-    text.replace(' ', "").to_lowercase()
-}
-
-fn get_stmt_hash(pair: &Pair<Rule>) -> String {
-    let mut hash = String::new();
-    for pair in pair.clone().into_inner() {
-        match pair.as_rule() {
-            Rule::part => hash.push_str(&hashify(pair.as_str())),
-            Rule::param_invoke | Rule::ident => hash.push_str("|param|"),
-            _ => unreachable!(),
-        }
-    }
-    hash
-}
-
-fn log_param(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let param_pair = pair
-        .into_inner()
-        .rfind(|pair| pair.as_rule() == Rule::param_invoke)
-        .ok_or(BWErr::ParameterMissingError(
-            "`Log {param}` requires atleast 1 parameter".into(),
-        ))?;
-    let ok = botwork(param_pair, globals)?;
-    write_log(&ok, &mut io::stdout().lock())?;
-    Ok(ok)
+fn log_param(call: &Call, context: &mut Context) -> LiteralResult {
+    let expression = call.arguments.last().ok_or_else(|| {
+        BWErr::ParameterMissingError("`Log {param}` requires at least 1 parameter".into())
+    })?;
+    let value = evaluate_expression(expression, context)?;
+    write_log(&value, &mut io::stdout().lock())?;
+    Ok(value)
 }
 
 fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
     writeln!(output, "{value}").map_err(|error| BWErr::OutputError(error.to_string()))
 }
 
-fn no_op(_pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    Ok(Literal::None)
-}
-
-fn stmt_invoke(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let hash = get_stmt_hash(&pair);
-    if !globals.contains_statement(&hash) {
-        return Err(BWErr::StatementNotDefined(pair.as_str().into()));
-    }
-    let mut statement: Option<StmtType> = None;
-    globals.get_statement(&hash, &mut statement);
-    let statement = statement.ok_or(BWErr::VariableNotDefined(pair.as_str().into()))?;
-    match statement {
-        StmtType::None => unreachable!("None is just a default!"),
-        StmtType::Native(statement) => statement(pair, globals),
-        StmtType::UserDefined { header, block } => {
-            //TODO: Zip parameter names from header & insert it onto globals
-            let mut header = BWParser::parse(Rule::stmt_header, &header)
-                .map_err(|_| BWErr::ParsingError("Parsing cached header failed".into()))?;
-            let mut block = BWParser::parse(Rule::stmt_block, &block)
-                .map_err(|_| BWErr::ParsingError("Parsing cached block failed".into()))?;
-            let stmt_header = header
-                .next()
-                .ok_or(BWErr::ParsingError("No header pair found in Pairs".into()))?;
-            let stmt_block = block
-                .next()
-                .ok_or(BWErr::ParsingError("No Block pair found in Pairs".into()))?;
-            if header.count() != 0 || block.count() != 0 {
-                return Err(BWErr::ParsingError(
-                    "More cached header/block pair found!".into(),
+fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
+    let definition = context
+        .statements
+        .get(&call.signature)
+        .cloned()
+        .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
+    match definition {
+        StmtType::Native(callback) => callback(call, context),
+        StmtType::UserDefined(definition) => {
+            if definition.parameters.len() != call.arguments.len() {
+                return Err(BWErr::ParameterMissingError(
+                    "The call does not match the definition's parameter count".into(),
                 ));
             }
-            let idents = stmt_header
-                .into_inner()
-                .filter(|pair| pair.as_rule() == Rule::ident);
-            // .collect::<Vec<Pair<Rule>>>();
-            let param_invoks = pair
-                .into_inner()
-                .filter(|pair| pair.as_rule() == Rule::param_invoke);
-            // .collect::<Vec<Pair<Rule>>>();
-            for (ident, param_invoke) in idents.zip(param_invoks) {
-                let literal = botwork(param_invoke, globals)?;
-                globals.set_variable(ident.as_str().into(), literal);
+            // Argument binding and invocation frames have their own remaining TODO.
+            for (parameter, argument) in definition.parameters.iter().zip(&call.arguments) {
+                let value = evaluate_expression(argument, context)?;
+                context.set_variable(parameter.text.clone(), value);
             }
-            botwork(stmt_block, globals)
+            evaluate_block(&definition.body, context)
         }
     }
 }
 
-fn pratt_parse(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let globals = Rc::new(RefCell::new(globals));
-    let result = PRATT_PARSER
-        .map_primary(|primary| botwork(primary, &mut globals.borrow_mut()))
-        .map_infix(|lhs, op, rhs| op.as_rule().operate_binary(lhs?, rhs?))
-        .parse(pair.into_inner());
-    result
-}
+fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResult {
+    #[cfg(test)]
+    context
+        .expression_visits
+        .push(expression.span.text().to_owned());
 
-fn unary(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    let operator = inner
-        .next()
-        .ok_or_else(|| BWErr::ParsingError("Missing unary operator".into()))?;
-    let operand = inner
-        .next()
-        .ok_or_else(|| BWErr::ParsingError("Missing unary operand".into()))?;
-    if inner.next().is_some() {
-        return Err(BWErr::ParsingError("Unexpected unary operand".into()));
-    }
-    operator.as_rule().operate_unary(botwork(operand, globals)?)
-}
-
-fn integer(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    match pair.as_str().parse() {
-        Ok(integer) => Ok(Literal::Int(integer)),
-        Err(err) => Err(BWErr::ParsingIntegerError(err.to_string())),
-    }
-}
-
-fn float(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    match pair.as_str().parse() {
-        Ok(float) => finite_float(float, "Float literal"),
-        Err(err) => Err(BWErr::ParsingIntegerError(err.to_string())),
-    }
-}
-
-fn boolean_true(_pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    Ok(Literal::Bool(true))
-}
-
-fn boolean_false(_pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    Ok(Literal::Bool(false))
-}
-
-fn string(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    let content = pair
-        .into_inner()
-        .next()
-        .ok_or_else(|| BWErr::ParsingError("Missing string content".into()))?;
-    let mut value = String::new();
-    let mut chars = content.as_str().chars();
-    while let Some(character) = chars.next() {
-        if character == '\\' {
-            value.push(match chars.next() {
-                Some('n') => '\n',
-                Some('"') => '"',
-                Some('\\') => '\\',
-                _ => return Err(BWErr::ParsingError("Invalid string escape".into())),
-            });
-        } else {
-            value.push(character);
+    match &expression.kind {
+        ExprKind::Integer(text) => text
+            .parse::<i32>()
+            .map(Literal::Int)
+            .map_err(|error| BWErr::ParsingIntegerError(error.to_string())),
+        ExprKind::Float(text) => {
+            let value = text
+                .parse::<f32>()
+                .map_err(|error| BWErr::ParsingIntegerError(error.to_string()))?;
+            finite_float(value, "Float literal")
         }
-    }
-    Ok(Literal::String(value))
-}
-
-fn keyword(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    Ok(Literal::String(pair.as_str().into()))
-}
-
-fn array(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut tokens = vec![];
-    for inner_pair in pair.into_inner() {
-        let token = botwork(inner_pair, globals)?;
-        tokens.push(token);
-    }
-    Ok(Literal::Array(tokens))
-}
-
-fn map(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut map = HashMap::new();
-    for inner_pair in pair.into_inner() {
-        let mut kv = inner_pair.into_inner();
-        let keyword = kv
-            .next()
-            .ok_or(BWErr::ParsingError("Getting keyword from map_pair".into()))?;
-        let value = kv
-            .next()
-            .ok_or(BWErr::ParsingError("Getting keyword from map_pair".into()))?;
-        if kv.next().is_some() {
-            unreachable!("Map statment still has unused pairs!");
-        }
-        if let Literal::String(keyword) = botwork(keyword, globals)? {
-            let value = botwork(value, globals)?;
-            map.insert(keyword, value);
-        } else {
-            return Err(BWErr::ParsingError(
-                "Keyword in map MUST always be a String identifier token".into(),
-            ));
-        }
-    }
-    Ok(Literal::Map(map))
-}
-
-fn stmt_assign(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    let ident = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting ident failed".into()))?
-        .as_str()
-        .to_string();
-    let value = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting value failed".into()))?;
-    if inner.next().is_some() {
-        unreachable!("Assignment statment still has unused pairs!");
-    }
-    let value = botwork(value, globals)?;
-    globals.set_variable(ident, value.clone());
-    Ok(value)
-}
-
-fn ident(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let ident = pair.as_str().to_string();
-    globals.get_variable(&ident)
-}
-
-fn dot_path(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
-    Err(BWErr::UnsupportedAccessError(pair.as_str().to_owned()))
-}
-
-fn stmt_if(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.clone().into_inner();
-    let condition = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting condition failed".into()))?;
-    let block = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting true block failed".into()))?;
-    let condition = botwork(condition, globals)?;
-    if let Literal::Bool(is_true) = condition {
-        if is_true {
-            botwork(block, globals)
-        } else {
-            match inner.next() {
-                Some(block) => {
-                    let result = botwork(block, globals);
-                    if inner.next().is_some() {
-                        unreachable!("If statment still has unused pairs!");
-                    }
-                    result
-                }
-                None => no_op(pair, globals),
+        ExprKind::Bool(value) => Ok(Literal::Bool(*value)),
+        ExprKind::String(value) => Ok(Literal::String(value.clone())),
+        ExprKind::Variable(name) => context.get_variable(name),
+        ExprKind::Access(path) => Err(BWErr::UnsupportedAccessError(path.clone())),
+        ExprKind::Array(elements) => elements
+            .iter()
+            .map(|element| evaluate_expression(element, context))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Literal::Array),
+        ExprKind::Map(entries) => {
+            let mut values = HashMap::new();
+            for (key, expression) in entries {
+                values.insert(key.text.clone(), evaluate_expression(expression, context)?);
             }
+            Ok(Literal::Map(values))
         }
-    } else {
-        Err(BWErr::OperationIncompatibleError(
-            "The conditional expression in `If` should always evaluvate to boolean value".into(),
-        ))
+        ExprKind::Unary {
+            operator, operand, ..
+        } => operator
+            .to_rule()
+            .operate_unary(evaluate_expression(operand, context)?),
+        ExprKind::Binary {
+            operator,
+            left,
+            right,
+            ..
+        } => {
+            let left = evaluate_expression(left, context)?;
+            let right = evaluate_expression(right, context)?;
+            operator.to_rule().operate_binary(left, right)
+        }
     }
 }
 
-fn stmt_block(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut results = vec![];
-    for block in pair.into_inner() {
-        if Rule::stmt_break == block.as_rule() {
-            globals.push_interupt_break();
+fn evaluate_block(block: &Block, context: &mut Context) -> LiteralResult {
+    let mut results = Vec::new();
+    for statement in &block.statements {
+        if matches!(statement.kind, StatementKind::Break) {
+            context.push_interupt_break();
             return Ok(Literal::Array(results));
-        } else if Rule::stmt_continue == block.as_rule() {
-            globals.push_interupt_continue();
+        } else if matches!(statement.kind, StatementKind::Continue) {
+            context.push_interupt_continue();
             return Ok(Literal::Array(results));
-        } else if globals.has_loop_interupt() {
+        } else if context.has_loop_interupt() {
             return Ok(Literal::Array(results));
-        } else if globals.has_return_interupt() {
-            let interupt = globals.pop_interupt();
-            // TODO: results is lost. Think of something else.
-            return Ok(interupt.literal);
+        } else if context.has_return_interupt() {
+            return Ok(context.pop_interupt().literal);
         } else {
-            let result = botwork(block, globals)?;
-            results.push(result);
+            results.push(execute_statement(statement, context)?);
         }
     }
     Ok(Literal::Array(results))
 }
 
-fn stmt_for(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    let ident = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting ident failed".into()))?;
-    let array = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting array failed".into()))?;
-    let block = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting block failed".into()))?;
-    if inner.next().is_some() {
-        unreachable!("For statment still has unused pairs!");
-    }
-    if let Literal::Array(array) = botwork(array.clone(), globals)? {
-        let mut results = vec![];
-        for i in array {
-            globals.set_variable(ident.as_str().to_string(), i);
-            let result = botwork(block.clone(), globals)?;
-            results.push(result);
-            let interupt = globals.pop_interupt();
-            match interupt.kind {
-                InteruptKind::None => (),
-                InteruptKind::Continue => continue,
-                InteruptKind::Break => return Ok(Literal::Array(results)),
-                InteruptKind::Return => {
-                    // push it back because it needs to be habdled by stmt_block
-                    globals.push_interupt(interupt);
-                    break;
-                }
+fn evaluate_for(
+    binding: &str,
+    iterable: &Expr,
+    body: &Block,
+    context: &mut Context,
+) -> LiteralResult {
+    let Literal::Array(values) = evaluate_expression(iterable, context)? else {
+        return Err(BWErr::OperationIncompatibleError(
+            "For requires an array to iterate over".into(),
+        ));
+    };
+    let mut results = Vec::new();
+    for value in values {
+        context.set_variable(binding.to_owned(), value);
+        results.push(evaluate_block(body, context)?);
+        let interupt = context.pop_interupt();
+        match interupt.kind {
+            InteruptKind::None => (),
+            InteruptKind::Continue => continue,
+            InteruptKind::Break => break,
+            InteruptKind::Return => {
+                context.push_interupt(interupt);
+                break;
             }
         }
-        Ok(Literal::Array(results))
-    } else {
-        Err(BWErr::OperationIncompatibleError(format!(
-            "FOR loop requires array to iterate over. But found: {}",
-            array
-        )))
     }
+    Ok(Literal::Array(results))
 }
 
-fn stmt_while(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    let expr = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting ident failed".into()))?;
-    let block = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting block failed".into()))?;
-    if inner.next().is_some() {
-        unreachable!("While statment still has unused pairs!");
-    }
-    let mut results = vec![];
+fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> LiteralResult {
+    let mut results = Vec::new();
     loop {
-        if let Literal::Bool(should_loop) = botwork(expr.clone(), globals)? {
-            if !should_loop {
-                return Ok(Literal::Array(results));
-            }
-            let result = botwork(block.clone(), globals)?;
-            results.push(result);
-            let interupt = globals.pop_interupt();
-            match interupt.kind {
-                InteruptKind::None => (),
-                InteruptKind::Continue => continue,
-                InteruptKind::Break => return Ok(Literal::Array(results)),
-                InteruptKind::Return => {
-                    // push it back because it needs to be habdled by stmt_block
-                    globals.push_interupt(interupt);
-                    return Ok(Literal::Array(results));
-                }
-            }
-        } else {
+        let Literal::Bool(should_loop) = evaluate_expression(condition, context)? else {
             return Err(BWErr::OperationIncompatibleError(
-                "While loop requires expressions to return boolean".into(),
+                "While requires a boolean condition".into(),
             ));
+        };
+        if !should_loop {
+            break;
         }
-    }
-}
-
-fn stmt_try(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    let try_block = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting try block failed".into()))?;
-    let catch_block = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting catch block failed".into()))?;
-    if inner.next().is_some() {
-        unreachable!("While statment still has unused pairs!");
-    }
-    let try_result = botwork(try_block, globals);
-    if try_result.is_ok() {
-        try_result
-    } else {
-        botwork(catch_block, globals)
-    }
-}
-
-fn stmt_define(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    let stmt_header = inner.next().ok_or(BWErr::ParsingError(
-        "Getting statement header failed".into(),
-    ))?;
-    let stmt_block = inner
-        .next()
-        .ok_or(BWErr::ParsingError("Getting statement block failed".into()))?;
-    if inner.next().is_some() {
-        unreachable!("Statement definition still has unused pairs!");
-    }
-    globals.push_statement(stmt_header, stmt_block);
-    Ok(Literal::None)
-}
-
-fn stmt_return(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let mut inner = pair.into_inner();
-    match inner.next() {
-        Some(expr) => {
-            if inner.next().is_some() {
-                unreachable!("Return statement still has unused pairs!");
+        results.push(evaluate_block(body, context)?);
+        let interupt = context.pop_interupt();
+        match interupt.kind {
+            InteruptKind::None => (),
+            InteruptKind::Continue => continue,
+            InteruptKind::Break => break,
+            InteruptKind::Return => {
+                context.push_interupt(interupt);
+                break;
             }
-            let literal = botwork(expr, globals)?;
-            globals.push_interupt_return(literal.clone());
-            Ok(literal)
         }
-        None => {
-            globals.push_interupt_return(Literal::None);
+    }
+    Ok(Literal::Array(results))
+}
+
+/// Evaluate an already parsed, owned statement in this context.
+///
+/// Definitions retain their syntax tree and source spans after the program is dropped.
+/// Control-flow and invocation-scope limitations are tracked in TODO.md.
+pub fn execute_statement(statement: &Statement, context: &mut Context) -> LiteralResult {
+    match &statement.kind {
+        StatementKind::Assign { name, value } => {
+            let value = match value {
+                AssignmentValue::Expression(expression) => {
+                    evaluate_expression(expression, context)?
+                }
+                AssignmentValue::Call(call) => invoke(call, context)?,
+            };
+            context.set_variable(name.text.clone(), value.clone());
+            Ok(value)
+        }
+        StatementKind::Define(definition) => {
+            context.statements.insert(
+                definition.signature.clone(),
+                StmtType::UserDefined(Arc::clone(definition)),
+            );
             Ok(Literal::None)
         }
+        StatementKind::Invoke(call) => invoke(call, context),
+        StatementKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            let Literal::Bool(condition) = evaluate_expression(condition, context)? else {
+                return Err(BWErr::OperationIncompatibleError(
+                    "If requires a boolean condition".into(),
+                ));
+            };
+            if condition {
+                evaluate_block(then_branch, context)
+            } else {
+                match else_branch {
+                    Some(ElseBranch::Block(block)) => evaluate_block(block, context),
+                    Some(ElseBranch::If(statement)) => execute_statement(statement, context),
+                    None => Ok(Literal::None),
+                }
+            }
+        }
+        StatementKind::For {
+            binding,
+            iterable,
+            body,
+        } => evaluate_for(&binding.text, iterable, body, context),
+        StatementKind::While { condition, body } => evaluate_while(condition, body, context),
+        StatementKind::Try { body, handler } => match evaluate_block(body, context) {
+            Ok(value) => Ok(value),
+            Err(_) => evaluate_block(handler, context),
+        },
+        StatementKind::Return(expression) => {
+            let value = match expression {
+                Some(expression) => evaluate_expression(expression, context)?,
+                None => Literal::None,
+            };
+            context.push_interupt_return(value.clone());
+            Ok(value)
+        }
+        // The full placement validator is a separate TODO; direct invalid dispatch is fallible.
+        StatementKind::Break | StatementKind::Continue => Err(BWErr::OperationIncompatibleError(
+            "Loop control requires an enclosing loop body".into(),
+        )),
     }
 }
 
-pub fn botwork(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
-    let op = match pair.as_rule() {
-        Rule::EOI => no_op,
-        Rule::stmt_invoke => stmt_invoke,
-        Rule::stmt_define => stmt_define,
-        Rule::stmt_assign => stmt_assign,
-        Rule::param_invoke => pratt_parse,
-        Rule::expression => pratt_parse,
-        Rule::power => pratt_parse,
-        Rule::unary => unary,
-        Rule::array => array,
-        Rule::ident => ident,
-        Rule::dot_path => dot_path,
-        Rule::map => map,
-        Rule::keyword => keyword,
-        Rule::integer => integer,
-        Rule::float => float,
-        Rule::string => string,
-        Rule::logical_not => no_op,
-        Rule::boolean_true => boolean_true,
-        Rule::boolean_false => boolean_false,
-        Rule::stmt_if => stmt_if,
-        Rule::stmt_else => stmt_block,
-        Rule::stmt_for => stmt_for,
-        Rule::stmt_while => stmt_while,
-        Rule::stmt_try => stmt_try,
-        Rule::stmt_catch => stmt_block,
-        Rule::stmt_return => stmt_return,
-        Rule::seperator => no_op,
-        Rule::stmt_block => stmt_block,
-        _ => unreachable!(),
-    };
-    op(pair, globals)
+/// Evaluate a program without parsing or rebuilding its statements.
+pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResult {
+    let mut result = Literal::None;
+    for statement in &program.statements {
+        result = execute_statement(statement, context)?;
+    }
+    Ok(result)
+}
+
+/// Compatibility entry point for callers that already hold a Pest pair.
+///
+/// This lowers the pair once. Prefer `Program::parse` and `evaluate_program` to
+/// share one owned source allocation across an entire script.
+pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
+    match ast::from_pair(pair)? {
+        Node::Statement(statement) => execute_statement(&statement, context),
+        Node::Expression(expression) => evaluate_expression(&expression, context),
+        Node::Block(block) => evaluate_block(&block, context),
+        Node::None => Ok(Literal::None),
+    }
 }

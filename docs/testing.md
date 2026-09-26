@@ -3,7 +3,9 @@
 Run `cargo test` from the repository root. Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
 
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
+- `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, and original byte/line/column spans.
 - `src/core/eval/tests.rs` checks evaluation, state, conditions, collections, and error handling.
+- `tests/ast_execution.rs` checks execution after source/program ownership ends, deferred numeric errors, and the parser-pair compatibility entry point.
 - `tests/cli.rs` invokes Cargo's built CLI and checks exit status, stdout, and stderr independently. Inputs live under `tests/fixtures/`.
 - `tests/examples.rs` checks the exact expected stdout of the bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
 - `tests/language_contract.rs` records named expectations from the [core specification](language-specification.md), with active cases for implemented behavior and ignored cases for upcoming scope/control changes.
@@ -31,7 +33,7 @@ The command collects **library unit tests** and **all active Rust tests** separa
 
 Reports and test logs are written under ignored `target/coverage/`: `unit.json`, `all.json`, their `.log` files, and `both-summary.json` (or the selected scope's summary). Summaries record commands, versions, platform, source/test hashes, test counts, and per-file covered/total lines. The Git revision is the base revision; when the worktree is dirty, input hashes identify the measured files. Stop editing source/tests during collection.
 
-Coverage includes executable lines in maintained Rust source files. It excludes test files and the isolated Pest-generated parser in `src/core/parser.rs`; handwritten operators in `grammar.rs` remain included. Other derives, such as clap and thiserror, can contribute mapped lines. Library-only coverage excludes `main.rs`; full-suite coverage includes it. Module-only files have no executable lines. Review the expected source-file lists in `scripts/coverage.py` whenever adding code; mismatches fail collection.
+Coverage includes executable lines in maintained Rust source files, including owned syntax construction in `ast.rs`, evaluation in `eval.rs`, and operators in `grammar.rs`. It excludes test files and the isolated Pest-generated parser in `src/core/parser.rs`. Other derives, such as clap and thiserror, can contribute mapped lines. Library-only coverage excludes `main.rs`; full-suite coverage includes it. Module-only files have no executable lines. Review the expected source-file lists in `scripts/coverage.py` whenever adding code; mismatches fail collection.
 
 Line coverage does **not** measure grammar-rule coverage, branch coverage, ignored regressions, doctests, assertions' quality, or correctness of every exercised path. README's 50% unit-coverage goal is an intermediate target, and TODO milestone 10 retains the stronger release gates. The helper's eight tests run in CI; instrumented coverage collection is currently a local command.
 
@@ -52,6 +54,10 @@ Tool references: [cargo-llvm-cov usage](https://github.com/taiki-e/cargo-llvm-co
 The library unit result exceeds the intermediate 50% numerical target within its stated scope. CLI coverage comes from integration tests. A second clean unit capture after the full suite returned identical counts, confirming profile isolation for this run. Full-suite execution covered CLI source lines, confirming that subprocess profiles contributed. Separate uninstrumented debug and release suites also passed.
 
 These are baseline measurements, not release-gate results: 13 known regressions remain unresolved, grammar-rule and branch coverage are unmeasured, and the measured operator code still has substantial gaps. Keep this initial record; later measurements should be recorded separately with their own source hashes and tool versions.
+
+### Owned AST Measurement — 2026-09-26
+
+[The AST capture](coverage-after-ast.json) records the expanded source scope: `ast.rs`, `eval.rs`, and `grammar.rs`, plus `main.rs` in the full suite. Library unit coverage is **686/774 lines (88.63%)** from 82 tests; the full suite covers **723/799 lines (90.49%)** from 132 active tests, with 16 pending tests ignored. All recorded input hashes matched the measured worktree. Source scope and implementation changed, so these percentages are not a like-for-like comparison with the initial baseline. Branch and grammar-rule coverage, pending behavior, and final release gates remain unmeasured or unfinished.
 
 ## Known Defects
 

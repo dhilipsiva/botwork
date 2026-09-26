@@ -48,12 +48,12 @@ class CoverageTests(unittest.TestCase):
                 SUMMARIZE(report(("a.rs", covered, total)), {"a.rs"})
 
     def test_exclusions_retain_maintained_source_files(self):
-        for path in ("tests/cli.rs", "src/core/eval/tests.rs", "src/core/parser.rs"):
+        for path in ("tests/cli.rs", "src/core/eval/tests.rs", "src/core/ast/tests.rs", "src/core/parser.rs"):
             for separator in ("/", "\\"):
                 with self.subTest(path=path, separator=separator):
                     self.assertIsNotNone(re.search(COVERAGE["EXCLUSIONS"],
                                                   ("root/" + path).replace("/", separator)))
-        for path in ("src/main.rs", "src/core/eval.rs", "src/core/grammar.rs"):
+        for path in ("src/main.rs", "src/core/ast.rs", "src/core/eval.rs", "src/core/grammar.rs"):
             self.assertIsNone(re.search(COVERAGE["EXCLUSIONS"], "root/" + path))
 
     def test_collection_separates_scopes_and_counts_ignored_tests(self):

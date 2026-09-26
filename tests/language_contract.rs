@@ -2,21 +2,16 @@
 //! Ignored cases are specified behavior awaiting their implementation TODO.
 
 use botwork::core::{
-    eval::{botwork, Context},
-    grammar::{BWErr, BWParser, Literal, LiteralResult, Rule},
+    ast::Program,
+    eval::{evaluate_program, Context},
+    grammar::{BWErr, Literal, LiteralResult},
 };
-use pest::Parser;
 
 fn evaluate(source: &str) -> LiteralResult {
-    let tree = BWParser::parse(Rule::botwork, source)
-        .map_err(|error| BWErr::ParsingError(error.to_string()))?;
+    let program = Program::parse("<contract>", source)?;
     let mut context = Context::default();
     context.init_statements();
-    let mut result = Literal::None;
-    for pair in tree.filter(|pair| pair.as_rule() != Rule::EOI) {
-        result = botwork(pair, &mut context)?;
-    }
-    Ok(result)
+    evaluate_program(&program, &mut context)
 }
 
 #[test]

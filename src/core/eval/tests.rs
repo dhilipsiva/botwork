@@ -1,17 +1,72 @@
-use super::{botwork, BWErr, BWParser, Context, Literal, LiteralResult, Rule};
-use pest::Parser;
+use super::{evaluate_program, BWErr, Context, Literal, LiteralResult, Program};
 
 fn evaluate(source: &str, context: &mut Context) -> LiteralResult {
-    let tree = BWParser::parse(Rule::botwork, source).expect("valid test program");
-    let mut result = Literal::None;
-    for pair in tree.filter(|pair| pair.as_rule() != Rule::EOI) {
-        result = botwork(pair, context)?;
-    }
-    Ok(result)
+    let program = Program::parse("<test>", source).expect("valid test program");
+    evaluate_program(&program, context)
 }
 
 fn variable(context: &Context, name: &str) -> Literal {
-    context.get_variable(&name.to_owned()).unwrap()
+    context.get_variable(name).unwrap()
+}
+
+#[test]
+fn binary_evaluation_does_not_visit_the_right_operand_after_a_left_error() {
+    let mut context = Context::default();
+    let error = evaluate("|answer| = |missing_left + (1 / 0)|", &mut context).unwrap_err();
+    assert!(matches!(error, BWErr::VariableNotDefined(name) if name == "missing_left"));
+    assert_eq!(
+        context.expression_visits.len(),
+        2,
+        "only binary root and left operand may be visited"
+    );
+    assert_eq!(context.expression_visits[1].trim(), "missing_left");
+}
+
+#[test]
+fn custom_calls_reuse_the_same_definition_and_original_source_spans() {
+    use super::{StatementKind, StmtType};
+    use std::sync::Arc;
+
+    let mut context = Context::default();
+    let weak_definition = {
+        let source = String::from(
+            "# original\nDouble |value| {\n Return |value * 2|\n |unreachable| = |missing|\n}",
+        );
+        let program = Program::parse("original.botwork", &source).unwrap();
+        let StatementKind::Define(definition) = &program.statements[0].kind else {
+            panic!("definition")
+        };
+        let weak = Arc::downgrade(definition);
+        evaluate_program(&program, &mut context).unwrap();
+        let StmtType::UserDefined(stored) = &context.statements["double|param|"] else {
+            panic!("stored definition")
+        };
+        assert!(Arc::ptr_eq(definition, stored));
+        weak
+    };
+
+    for value in [2, 5, 9] {
+        let result = evaluate(&format!("|answer| = Double |{value}|"), &mut context);
+        assert!(matches!(result, Ok(Literal::Int(answer)) if answer == value * 2));
+        let StmtType::UserDefined(stored) = &context.statements["double|param|"] else {
+            panic!("stored definition")
+        };
+        assert!(Arc::ptr_eq(&weak_definition.upgrade().unwrap(), stored));
+        assert_eq!(
+            Arc::strong_count(stored),
+            1,
+            "calls must not retain cloned bodies"
+        );
+        assert_eq!(stored.span.source().name(), "original.botwork");
+        assert_eq!(stored.span.line_column(), (2, 1));
+        assert_eq!(stored.body.statements[0].span.line_column(), (3, 2));
+        assert_eq!(stored.body.statements[0].span.text(), "Return |value * 2|");
+    }
+    drop(context);
+    assert!(
+        weak_definition.upgrade().is_none(),
+        "stored syntax must be released with its context"
+    );
 }
 
 #[test]

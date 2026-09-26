@@ -1,0 +1,156 @@
+{
+  "base_revision": "756b0b6681d3f81bd9e4c33b7be77f51bcd19e2e",
+  "captured_at": "2026-09-26T12:18:32.881393+00:00",
+  "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+  "cargo_llvm_cov": "cargo-llvm-cov 0.9.1",
+  "excluded": [
+    "tests/**",
+    "src/**/tests.rs",
+    "src/core/parser.rs (generated Pest parser)"
+  ],
+  "input_sha256": {
+    "Cargo.lock": "e21b1f746f8991dd3b0543947eec8808333dec4364878b21ef5faceda270331e",
+    "Cargo.toml": "c5c7c934f4856a13d5aa9ab6b78d59a3ec7903a4ff3537e9309c979aaae5e2e7",
+    "examples/01-expressions.botwork": "3f6f8bd724b055d75b4b421629856010c26ac6961e1ba15856db84d26613e5c2",
+    "examples/02-syntaxes.botwork": "7cab851198c5bbe035903165cfb9206d358f9d444f559b0b18ee46ae62d51ef0",
+    "examples/03-precedence.botwork": "b0b2870854a7e297e9b5eea2f9019db936dcd3024c22611819e67c508d6b366c",
+    "examples/04-arithmetic-errors.botwork": "e49fafd48ce85ffa0c5f75ea773bfd4b9ed04553e3a8d33a7292b61e627acced",
+    "examples/05-powers.botwork": "c5e333354f69b513dec839e8b7f90ff70d9ed95ffe5a038c01d926a52dc110e8",
+    "examples/06-keywords.botwork": "5bc86e45961de2b8684cfeec78d3555f87b1a8581b23b3d3e80e3ff571206829",
+    "scripts/coverage.py": "a20d6a53a3b571156d6daec08d4f33a4e9c6fb9ded523d60b9c7f767e8079c0d",
+    "src/core/ast.rs": "ab691b9d9b5ef8e1e85a8a5f5a8f7b5742753f5cde99b16d9bfdf3b04bd01800",
+    "src/core/ast/tests.rs": "eabb9e09b7c17f34153afa6f2a17ad25ec3e3a596a1b27fbd57aaad8e0379db5",
+    "src/core/eval.rs": "993ce08e8d3e20a00e540618778c4a4eaa32b71ddd528f5284507c9bdaa1776e",
+    "src/core/eval/tests.rs": "8fea382e3028681903615548a01acdaf6036f5ba7ad384aab5ae98852ecb2b73",
+    "src/core/grammar.pest": "1ed9955dd755ff36d6c1d3dde90316d0bc3945f6dfac6df4d38209b1766c64e9",
+    "src/core/grammar.rs": "0e2b3ffd6aea7cdafd9991e509d184553f96e0badf89b212e1f7ddc3189ab990",
+    "src/core/grammar/tests.rs": "5d41b489cccb646a0eabf707e2df0df571d9fed493351d485756c47623616e07",
+    "src/core/mod.rs": "a965940e7d032db6b25904d6a8c593b8c7d93a1ac84dce1f3bae9fff872784ca",
+    "src/core/parser.rs": "a3cedaef0d733a66f59213c81b85a17f03f2ed63f74340987685ac1decc0dec1",
+    "src/lib.rs": "0ef0a2bc9fabad23421ee18ce3bd3fe710c9d25d8efe333b11a47c901c49a409",
+    "src/main.rs": "8e969c8edc667aef3973455463621b32b5d52e3fd67fa6184aec346ff768792f",
+    "tests/ast_execution.rs": "5ced0e5e3fa8844af6f44d22861b388f59ac1c1258d5b6ef78600cd298f8765d",
+    "tests/cli.rs": "f7960805741db71ac3ff9cf374e7581ff6827186c7b48fcf1997b531b0d06d40",
+    "tests/coverage_tools.py": "a2cd8ed2dcd5d82995433ade5661033ca1f471480f8643e6b37f02630073f1fc",
+    "tests/examples.rs": "1cd8122d275b6ca3c0315ebd51a201159ae66d66f255d4db644a80a63ca24a13",
+    "tests/fixtures/arithmetic-failure.botwork": "6b4a40345efebdd71b87c8c2ffc45ba41435f341b27fbfe6b5135064c43b9077",
+    "tests/fixtures/assignment.botwork": "0f82f7a5d559a643353bc5d4c808e8d009a0548e7e88364be6587ee46d79b1b9",
+    "tests/fixtures/catch-failure.botwork": "ba1dec4665f7020e86a0f3f2e0a22c87708ae3dc07cfb0bddfc487e85c08f7a8",
+    "tests/fixtures/catch-output.botwork": "b2b296eed731fd235bc612b08f8afd6f9072a162625ffd04e7c51b26eecad468",
+    "tests/fixtures/caught-access.botwork": "7d0feb74e08676c9f67925abd34177589bd5cea6cb10b584bc07362771384510",
+    "tests/fixtures/caught-error.botwork": "57e4eb4ee974920d605a526ac3597ea059d54af4014d67835e7594e507c6092b",
+    "tests/fixtures/keyword-prefix-error.botwork": "fa2a5de53791cab3dbd1bc54e439c4001bdb26b516da263074136ce391502f8d",
+    "tests/fixtures/log-values.botwork": "9506609187b59bccbfff7d7bfb0e7a0b5710f098e939a61171d9e3822fc9446c",
+    "tests/fixtures/missing-catch.botwork": "63164d2cdded8e9a8732a1da2c1917cc6be8a84dd1812df740d8ca6b458097bb",
+    "tests/fixtures/runtime-after-output.botwork": "0c2f0ef91e2559d1fca0487a6d5f60e3d563b46e084ccd876042c9e5587ba7af",
+    "tests/fixtures/runtime-error.botwork": "72895c2d67ba7f42ee7f0ad4a1fa77ece573990f09aa3066e8fd2f8ac27c7b7b",
+    "tests/fixtures/syntax-after-output.botwork": "0f80a3e0fa3efc354ee6d6318dfc7c3377a695d100c97889cc2ad69f082f4f9a",
+    "tests/fixtures/syntax-error.botwork": "9e02d96150cb830fa32b0f1b9057233e053764d9e9216381c402e80add37bf39",
+    "tests/fixtures/unsupported-access.botwork": "31e2aa5834b5f234bb20195235adb4ce90a48d6c51710343d18cb993145a98dd",
+    "tests/language_contract.rs": "b00565981fd604570fd3b3edc8e3792e7ed29ab7bbd3c5955a3ede1a0464095a",
+    "tests/regressions.rs": "874bcd067eaa70cc3a8947f94bc495942848d1a6c051d62666ad57c2433ed6dc"
+  },
+  "llvm_cov": "LLVM (http://llvm.org/):\n  LLVM version 22.1.6-rust-1.97.1-stable\n  Optimized build.",
+  "llvm_profdata": "LLVM (http://llvm.org/):\n  LLVM version 22.1.6-rust-1.97.1-stable\n  Optimized build.",
+  "metric": "executable line coverage of maintained Rust source files",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "profile": "debug",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6",
+  "schema": 1,
+  "scopes": {
+    "all": {
+      "command": [
+        "cargo",
+        "llvm-cov",
+        "--locked",
+        "--json",
+        "--summary-only",
+        "--ignore-filename-regex",
+        "(^|[/\\\\])tests([/\\\\]|\\.rs$)|[/\\\\]src[/\\\\]core[/\\\\]parser\\.rs$",
+        "--output-path",
+        "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/all.json",
+        "--offline"
+      ],
+      "covered": 723,
+      "environment": {
+        "CARGO_LLVM_COV_BUILD_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/all-target",
+        "CARGO_LLVM_COV_TARGET_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/all-target",
+        "LLVM_PROFILE_FILE_NAME": "botwork-%p-%m.profraw"
+      },
+      "files": {
+        "src/core/ast.rs": {
+          "covered": 319,
+          "total": 335
+        },
+        "src/core/eval.rs": {
+          "covered": 218,
+          "total": 241
+        },
+        "src/core/grammar.rs": {
+          "covered": 162,
+          "total": 198
+        },
+        "src/main.rs": {
+          "covered": 24,
+          "total": 25
+        }
+      },
+      "percent": 90.49,
+      "tests": {
+        "failed": 0,
+        "ignored": 16,
+        "passed": 132
+      },
+      "total": 799
+    },
+    "unit": {
+      "command": [
+        "cargo",
+        "llvm-cov",
+        "--locked",
+        "--json",
+        "--summary-only",
+        "--ignore-filename-regex",
+        "(^|[/\\\\])tests([/\\\\]|\\.rs$)|[/\\\\]src[/\\\\]core[/\\\\]parser\\.rs$",
+        "--output-path",
+        "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/unit.json",
+        "--lib",
+        "--offline"
+      ],
+      "covered": 686,
+      "environment": {
+        "CARGO_LLVM_COV_BUILD_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/unit-target",
+        "CARGO_LLVM_COV_TARGET_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/unit-target",
+        "LLVM_PROFILE_FILE_NAME": "botwork-%p-%m.profraw"
+      },
+      "files": {
+        "src/core/ast.rs": {
+          "covered": 314,
+          "total": 335
+        },
+        "src/core/eval.rs": {
+          "covered": 210,
+          "total": 241
+        },
+        "src/core/grammar.rs": {
+          "covered": 162,
+          "total": 198
+        }
+      },
+      "percent": 88.63,
+      "tests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 82
+      },
+      "total": 774
+    }
+  },
+  "unmeasured": [
+    "branch coverage",
+    "grammar-rule coverage",
+    "ignored regressions",
+    "doctests"
+  ],
+  "worktree_status": "M scripts/coverage.py\n M src/core/eval.rs\n M src/core/eval/tests.rs\n M src/core/mod.rs\n M src/main.rs\n M tests/coverage_tools.py\n M tests/language_contract.rs\n M tests/regressions.rs\n?? src/core/ast.rs\n?? src/core/ast/\n?? tests/ast_execution.rs"
+}

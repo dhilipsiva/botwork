@@ -2,7 +2,8 @@
 //! Remove each ignore when its corresponding TODO is implemented.
 
 use botwork::core::{
-    eval::{botwork, Context},
+    ast::Program,
+    eval::{evaluate_program, Context},
     grammar::{BWErr, BWParser, Literal, LiteralResult, Rule},
 };
 use pest::Parser;
@@ -12,13 +13,8 @@ use std::process::Command;
 fn evaluate(source: &str) -> LiteralResult {
     let mut context = Context::default();
     context.init_statements();
-    let tree = BWParser::parse(Rule::botwork, source)
-        .map_err(|err| BWErr::ParsingError(err.to_string()))?;
-    let mut result = Literal::None;
-    for pair in tree.filter(|pair| pair.as_rule() != Rule::EOI) {
-        result = botwork(pair, &mut context)?;
-    }
-    Ok(result)
+    let program = Program::parse("<regression>", source)?;
+    evaluate_program(&program, &mut context)
 }
 
 fn assert_int(source: &str, expected: i32) {

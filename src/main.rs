@@ -1,9 +1,8 @@
 use botwork::core::{
-    eval::{botwork, Context},
-    grammar::{BWParser, Rule},
+    ast::Program,
+    eval::{execute_statement, Context},
 };
 use clap::Parser as Clap;
-use pest::Parser;
 use std::{
     error::Error,
     fs::read_to_string,
@@ -26,32 +25,20 @@ struct Args {
 
 fn run(file: &Path, debug: bool) -> Result<(), Box<dyn Error>> {
     let source = read_to_string(file)?;
-    let tree = BWParser::parse(Rule::botwork, &source)?;
+    let program = Program::parse(&file.display().to_string(), &source)?;
     let mut context = Context::default();
     context.init_statements();
-    for pair in tree {
-        if debug && pair.as_rule() != Rule::EOI {
-            let (line, column) = pair.as_span().start_pos().line_col();
-            let kind = match pair.as_rule() {
-                Rule::stmt_assign => "assignment",
-                Rule::stmt_define => "definition",
-                Rule::stmt_invoke => "call",
-                Rule::stmt_if => "if",
-                Rule::stmt_for => "for",
-                Rule::stmt_while => "while",
-                Rule::stmt_try => "try",
-                Rule::stmt_return => "return",
-                Rule::stmt_break => "break",
-                Rule::stmt_continue => "continue",
-                _ => "statement",
-            };
+    for statement in &program.statements {
+        if debug {
+            let (line, column) = statement.span.line_column();
+            let kind = statement.kind_name();
             writeln!(
                 io::stderr().lock(),
                 "debug: {}:{line}:{column}: {kind}",
                 file.display()
             )?;
         }
-        botwork(pair, &mut context)?;
+        execute_statement(statement, &mut context)?;
     }
     Ok(())
 }

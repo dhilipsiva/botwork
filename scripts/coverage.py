@@ -20,7 +20,7 @@ TOOL_VERSION = "cargo-llvm-cov 0.9.1"
 EXCLUSIONS = r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
 # Review these lists whenever adding executable source files. Module declarations
 # have no executable lines; the generated Pest parser is excluded deliberately.
-LIBRARY_FILES = {"src/core/eval.rs", "src/core/grammar.rs"}
+LIBRARY_FILES = {"src/core/ast.rs", "src/core/eval.rs", "src/core/grammar.rs"}
 EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs"}}
 
 
