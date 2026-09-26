@@ -61,7 +61,19 @@ Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `
 
 `In` follows the same keyword rules within `For |item| In |items| { ... }`, but remains available in custom names such as `In order`. Comments may separate complete tokens. Parentheses can delimit boolean operators: `(true)and(false)` is valid. See [the keyword example](../examples/06-keywords.botwork).
 
-Identifier characters, multilingual normalization, and statement-name collisions remain separate specification work. The existing identifier alphabet and complete-keyword matching are preserved; layout follows the whitespace rules above.
+Identifier characters and complete multilingual authoring remain separate specification work. Statement matching and collision behavior follow the rules below; layout follows the whitespace rules above.
+
+### Statement Signatures and Definition Collisions
+
+Statement matching removes ASCII spaces/tabs and applies Unicode lowercase mapping to each remaining character. Parameters contribute positional placeholders; their labels do not affect call matching. Thus `Read value |x|`, `READ\tVALUE |other|` (with a literal tab), and `readvalue|x|` share one signature. Parameter count, placement, and punctuation remain significant: `Read!`, `Read?`, `Read`, and `Read |x|` are different signatures. Comments and explicit continuations do not contribute to the name.
+
+This is per-character lowercase matching, with no locale-specific rules, Unicode normalization, or full case folding. Accented uppercase/lowercase pairs such as `É`/`é` match; composed/decomposed spellings, `ß`/`SS`, and final/ordinary Greek sigma remain distinct. Other Unicode whitespace remains literal sentence text. Variable and parameter names retain exact, case-sensitive spelling: `x` and `X` are different bindings.
+
+A definition becomes available when executed. Registering the same normalized signature again in the **same frame** raises catchable `DuplicateStatement`, reporting the original and conflicting source file/line/column. The existing definition is preserved. Skipped branches register nothing; repeating a declaration in a loop collides on its second execution. A new invocation frame may shadow a parent definition, and separate invocations may create their own local helpers. Calls resolve the nearest lexical definition uniquely.
+
+The CLI registers native `Log` first; redefining its signature in that frame reports the native origin as `<builtin Log>`. Library `init_statements()` is idempotent and fills only unoccupied native slots, preserving custom definitions registered beforehand. Initialize natives first when they should own their signatures. Future imports must use the same collision rules rather than replacing existing definitions.
+
+Repeated parameter labels within one definition raise `DuplicateParameter` during whole-program validation, even in unused/unreachable definitions. Both parameter locations are reported before any statement executes; this validation error cannot be caught by the script. Distinct case-sensitive labels such as `|x|` and `|X|` remain valid. See [the naming example](../examples/15-statement-names.botwork).
 
 ## Binary Operator Precedence
 

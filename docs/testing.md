@@ -11,6 +11,7 @@ Run `cargo test` from the repository root. Run `cargo test --release` to check t
 - `tests/language_contract.rs` checks named expectations from the [core specification](language-specification.md), including lexical scope and control propagation. All its current cases are active; further conformance work remains in the roadmap.
 - `tests/value_contract.rs` checks all 686 binary and 14 unary operator/value-kind combinations, control/iterable kinds, None/absence, collection copies, duplicate map keys, iteration/display order, comparison chains, and implicit/explicit result rules.
 - `tests/layout_contract.rs` checks LF/CRLF, tabs, multiline syntax, statement boundaries/continuations, comments, reserved delimiters, string preservation, invalid layouts, and original source locations. Example `14` and CLI fixtures cover the same grammar through process execution.
+- `tests/naming_contract.rs` checks space/tab/case normalization, Unicode distinctions, unique signatures, duplicate parameter/definition errors, retained source locations, lexical shadowing, cleanup, native initialization, and preserved original registrations. Example `15`, Pair compatibility, and CLI cases verify public execution boundaries.
 
 Tests assert language behavior and error categories rather than Rust source line numbers or map iteration order. No external services or extra testing crates are required for the initial suite. Add a minimal regression before fixing a known defect; do not preserve defective behavior as an expected result.
 

@@ -142,6 +142,21 @@ fn signed_integer_example_handles_boundaries_and_catchable_failures() {
 }
 
 #[test]
+fn statement_name_example_matches_calls_and_preserves_definitions_after_collisions() {
+    assert_example(
+        "15-statement-names.botwork",
+        &[
+            "7",
+            "caught duplicate definition",
+            "7",
+            "[1, 2]",
+            "[2, 1]",
+            "native Log preserved",
+        ],
+    );
+}
+
+#[test]
 fn multiline_layout_example_preserves_delimiters_and_statement_boundaries() {
     assert_example(
         "14-multiline-layout.botwork",

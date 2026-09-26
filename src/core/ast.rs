@@ -1,6 +1,6 @@
 //! Owned syntax and original source locations, independent of Pest lifetimes.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use pest::{iterators::Pair, Parser};
 
@@ -64,6 +64,11 @@ impl Span {
         (line, column)
     }
 
+    pub fn location(&self) -> String {
+        let (line, column) = self.line_column();
+        format!("{}:{line}:{column}", self.source.name())
+    }
+
     fn of(pair: &Pair<Rule>, source: &Arc<SourceFile>) -> Self {
         let span = pair.as_span();
         Self {
@@ -96,7 +101,7 @@ impl Program {
         Ok(program)
     }
 
-    /// Check control placement in every statement, including unreachable bodies.
+    /// Check control placement and parameter names, including unreachable bodies.
     /// This does not evaluate expressions or resolve names.
     pub fn validate(&self) -> Result<(), BWErr> {
         validate_script(&self.statements)
@@ -192,13 +197,25 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), 
             statement,
             "Continue requires an enclosing loop in the same invocation",
         )),
-        StatementKind::Define(definition) => validate_statements(
-            &definition.body.statements,
-            ControlScope {
-                in_definition: true,
-                in_loop: false,
-            },
-        ),
+        StatementKind::Define(definition) => {
+            let mut parameters = HashMap::new();
+            for parameter in &definition.parameters {
+                if let Some(original) = parameters.insert(&parameter.text, &parameter.span) {
+                    return Err(BWErr::DuplicateParameter {
+                        name: parameter.text.clone(),
+                        original: original.location(),
+                        duplicate: parameter.span.location(),
+                    });
+                }
+            }
+            validate_statements(
+                &definition.body.statements,
+                ControlScope {
+                    in_definition: true,
+                    in_loop: false,
+                },
+            )
+        }
         StatementKind::For { body, .. } | StatementKind::While { body, .. } => validate_statements(
             &body.statements,
             ControlScope {
@@ -568,7 +585,15 @@ fn signature(pair: &Pair<Rule>) -> Result<String, BWErr> {
     let mut signature = String::new();
     for part in pair.clone().into_inner() {
         match part.as_rule() {
-            Rule::part => signature.push_str(&part.as_str().replace(' ', "").to_lowercase()),
+            Rule::part => {
+                for character in part
+                    .as_str()
+                    .chars()
+                    .filter(|character| !matches!(character, ' ' | '\t'))
+                {
+                    signature.extend(character.to_lowercase());
+                }
+            }
             Rule::ident | Rule::param_invoke => signature.push_str("|param|"),
             Rule::continuation => (),
             _ => return Err(invalid("statement signature")),

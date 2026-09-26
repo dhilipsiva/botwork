@@ -29,7 +29,10 @@ type CompletionResult = Result<Completion, BWErr>;
 
 #[derive(Clone)]
 enum StmtType {
-    Native(Callback),
+    Native {
+        callback: Callback,
+        name: &'static str,
+    },
     UserDefined(Arc<Definition>),
 }
 
@@ -111,7 +114,11 @@ impl Context {
     pub fn init_statements(&mut self) {
         self.frames[self.current]
             .statements
-            .insert("log|param|".into(), StmtType::Native(log_param));
+            .entry("log|param|".into())
+            .or_insert(StmtType::Native {
+                callback: log_param,
+                name: "Log",
+            });
     }
 }
 
@@ -135,7 +142,7 @@ fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
         .get_statement(&call.signature)
         .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
     match definition {
-        StmtType::Native(callback) => callback(call, context),
+        StmtType::Native { callback, .. } => callback(call, context),
         StmtType::UserDefined(definition) => {
             if definition.parameters.len() != call.arguments.len() {
                 return Err(BWErr::ParameterMissingError(
@@ -409,7 +416,19 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
             Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {
-            context.frames[context.current].statements.insert(
+            let statements = &mut context.frames[context.current].statements;
+            if let Some(original) = statements.get(&definition.signature) {
+                let original = match original {
+                    StmtType::Native { name, .. } => format!("<builtin {name}>"),
+                    StmtType::UserDefined(original) => original.span.location(),
+                };
+                return Err(BWErr::DuplicateStatement {
+                    signature: definition.signature.clone(),
+                    original,
+                    duplicate: definition.span.location(),
+                });
+            }
+            statements.insert(
                 definition.signature.clone(),
                 StmtType::UserDefined(Arc::clone(definition)),
             );

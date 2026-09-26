@@ -2,7 +2,7 @@
 
 ## Parse Once, Execute Owned Syntax
 
-`Program::parse(name, source)` in [ast.rs](../src/core/ast.rs) parses the complete input with Pest, converts its pairs into owned statements and expressions, then validates control placement. The returned program has no lifetime dependency on the caller's string. Syntax and placement errors prevent execution of the whole program.
+`Program::parse(name, source)` in [ast.rs](../src/core/ast.rs) parses the complete input with Pest, converts its pairs into owned statements and expressions, then validates control placement and parameter names. The returned program has no lifetime dependency on the caller's string. Syntax and validation errors prevent execution of the whole program.
 
 The tree represents assignments, calls, definitions, branches, loops, error handlers, and control statements explicitly. Expressions retain their operator, operands, and grouping. The Pratt parser builds this structure; it no longer evaluates values. Map entries stay in source order until evaluation.
 
@@ -30,15 +30,19 @@ Each program shares one `Arc<SourceFile>` containing its name and original UTF-8
 
 `Statement::kind()` exposes an immutable view of typed syntax for inspection. `kind_name()` supplies the existing CLI trace labels. Control-placement errors use the offending statement's original file, line, and column. Runtime errors do not yet include these spans or statement call stacks; structured diagnostics remain a separate TODO.
 
-## Validate Control Placement
+## Validate Controls and Parameter Names
 
 `Program::validate()` walks all statements in source order, including unused definitions, skipped branches and handlers, and statements after an unconditional control transfer. It tracks whether a custom definition and a loop enclose each statement. Entering a definition resets loop permission; entering a loop preserves definition permission. Branches and handlers inherit both. `Return` requires a custom body; `Break` and `Continue` require a loop in that same body or at script level.
 
 The first invalid placement returns `ControlFlowError` with the offending statement's original span. Validation does not evaluate expressions, convert numbers, resolve names, or catch errors. Full parsing/lowering finishes before validation, so syntax errors take precedence.
 
+Each definition also validates exact parameter-name uniqueness before visiting its body. `DuplicateParameter` records both original locations and is rejected before any execution, including for unused definitions. `Span::location()` formats original file/line/column for declaration diagnostics.
+
 ## Reuse Definitions
 
 Executing a definition registers its `Arc<Definition>` in the context. Each invocation shares the same parsed parameter list and body. No invocation reparses the definition, reconstructs its expressions, or clones its whole syntax tree. The definition and its original source locations remain usable after the caller drops the defining program and input string.
+
+Signatures strip ASCII spaces/tabs and lowercase Unicode characters individually; parameters contribute positional placeholders. Registration checks only the current frame and returns `DuplicateStatement` instead of replacing an existing entry. Both definition locations survive through retained source owners. Native entries carry a display name for their origin; initialization fills vacant slots only. Lexical parent shadowing remains valid, and invocation cleanup applies to collision errors like other runtime failures.
 
 Retained definitions keep their complete source file alive. Dropping the context releases them unless another program/context owns a reference. Local registration follows the defining invocation's lifetime; the immutable nested syntax can remain part of its outer definition's shared body.
 
@@ -76,6 +80,6 @@ Runtime boundaries retain defensive checks for escaping controls, including a ca
 
 ## Remaining Interpreter Work
 
-Resource limits, the complete value/naming contracts, imports, structured runtime diagnostics, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Scope and completion checks do not establish complete language conformance or the release quality gates.
+Resource limits, complete multilingual authoring, imports, structured runtime diagnostics, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

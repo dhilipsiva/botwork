@@ -460,7 +460,7 @@ fn malformed_computed_reads_and_all_indexed_assignments_are_syntax_errors() {
 }
 
 #[test]
-fn signatures_preserve_existing_space_case_and_tab_rules() {
+fn signatures_normalize_spaces_tabs_and_case_with_positional_parameters() {
     let program = Program::parse(
         "names.botwork",
         "Pair |x| WITH |y| {}\nPAIR   |1| with|2|\nTab\tname {}\nTab\tname\n",
@@ -489,7 +489,7 @@ fn signatures_preserve_existing_space_case_and_tab_rules() {
     let StatementKind::Invoke(tab_call) = &program.statements[3].kind else {
         panic!("expected tab call");
     };
-    assert_eq!(tab_definition.signature, "tab\tname");
+    assert_eq!(tab_definition.signature, "tabname");
     assert_eq!(tab_call.signature, tab_definition.signature);
 }
 

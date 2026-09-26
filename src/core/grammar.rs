@@ -36,6 +36,18 @@ pub enum BWErr {
     VariableNotDefined(String),
     #[error("Statement not defined: {0}")]
     StatementNotDefined(String),
+    #[error("Duplicate statement `{signature}` at {duplicate}; first defined at {original}")]
+    DuplicateStatement {
+        signature: String,
+        original: String,
+        duplicate: String,
+    },
+    #[error("Duplicate parameter `{name}` at {duplicate}; first declared at {original}")]
+    DuplicateParameter {
+        name: String,
+        original: String,
+        duplicate: String,
+    },
     #[error("Parameter missing: {0}")]
     ParameterMissingError(String),
     #[error("Parsing error: {0}")]

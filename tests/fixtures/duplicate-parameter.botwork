@@ -1,0 +1,4 @@
+Log |"must not execute"|
+If |false| {
+    Pair |x| with |x| { Return |x| }
+}

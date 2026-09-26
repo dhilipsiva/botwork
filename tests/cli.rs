@@ -86,6 +86,57 @@ fn signed_integer_overflow_fails_after_printing_the_valid_minimum() {
 }
 
 #[test]
+fn duplicate_statements_report_both_locations_and_stop_after_prior_output() {
+    let path = fixture("duplicate-statement.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostic.contains("Duplicate statement `choice`"),
+        "{diagnostic}"
+    );
+    assert!(
+        diagnostic.contains("duplicate-statement.botwork:1:1"),
+        "{diagnostic}"
+    );
+    assert!(
+        diagnostic.contains("duplicate-statement.botwork:3:1"),
+        "{diagnostic}"
+    );
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
+fn duplicate_parameters_in_skipped_definitions_prevent_all_output_and_tracing() {
+    let path = fixture("duplicate-parameter.botwork");
+    for debug in [false, true] {
+        let mut arguments = vec!["--file", path.to_str().unwrap()];
+        if debug {
+            arguments.push("--debug");
+        }
+        let output = run(&arguments);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let diagnostic = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            diagnostic.contains("Duplicate parameter `x`"),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains("duplicate-parameter.botwork:3:11"),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains("duplicate-parameter.botwork:3:20"),
+            "{diagnostic}"
+        );
+        assert!(!diagnostic.contains("debug:"));
+        assert!(!diagnostic.contains("panicked"));
+    }
+}
+
+#[test]
 fn unclosed_block_comments_and_continuations_prevent_all_output() {
     for name in [
         "unclosed-block-comment.botwork",

@@ -1,0 +1,28 @@
+# ASCII spaces/tabs and letter case do not distinguish statement names.
+Read value |x| { Return |x + 1| }
+|answer| = READVALUE |6|
+Log |answer|
+Try {
+    read value |renamed| { Return |99| }
+} Catch {
+    Log |"caught duplicate definition"|
+}
+|answer| = Read value |6|
+Log |answer|
+
+# Parameter and variable names are case-sensitive.
+Pair |x| with |X| { Return |[x, X]| }
+|pair| = Pair |1| with |2|
+Log |pair|
+
+# A new invocation may shadow an enclosing definition in its own frame.
+Helper { Return |1| }
+Outer {
+    HELPER { Return |2| }
+    |value| = Helper
+    Return |value|
+}
+|local| = Outer
+|root| = Helper
+Log |[local, root]|
+Try { LOG |value| {} } Catch { Log |"native Log preserved"| }

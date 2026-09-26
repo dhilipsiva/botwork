@@ -6,6 +6,43 @@ use botwork::core::{
 use pest::Parser;
 
 #[test]
+fn pair_execution_rejects_duplicate_parameters_before_registration_and_reports_collisions() {
+    let mut context = Context::default();
+    let invalid = "# prefix\nPair |x| with |x| {}";
+    let pair = BWParser::parse(Rule::botwork, invalid)
+        .unwrap()
+        .next()
+        .unwrap();
+    assert!(
+        matches!(botwork(pair, &mut context), Err(BWErr::DuplicateParameter { original, duplicate, .. })
+        if original == "<input>:2:7" && duplicate == "<input>:2:16")
+    );
+    let call = Program::parse("call.botwork", "Pair |1| with |2|").unwrap();
+    assert!(matches!(
+        evaluate_program(&call, &mut context),
+        Err(BWErr::StatementNotDefined(_))
+    ));
+    for (source, succeeds) in [
+        ("# first\nRead Value {}", true),
+        ("# second\n\tREAD\tVALUE {}", false),
+    ] {
+        let pair = BWParser::parse(Rule::botwork, source)
+            .unwrap()
+            .next()
+            .unwrap();
+        let result = botwork(pair, &mut context);
+        if succeeds {
+            result.unwrap();
+        } else {
+            assert!(
+                matches!(result, Err(BWErr::DuplicateStatement { original, duplicate, .. })
+                if original == "<input>:2:1" && duplicate == "<input>:2:2")
+            );
+        }
+    }
+}
+
+#[test]
 fn computed_access_works_through_owned_and_pair_execution_after_setup_is_dropped() {
     let mut context = Context::default();
     {
