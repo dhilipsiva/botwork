@@ -163,8 +163,7 @@ fn get_stmt_hash(pair: &Pair<Rule>) -> String {
 fn log_param(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
     let param_pair = pair
         .into_inner()
-        .filter(|pair| pair.as_rule() == Rule::param_invoke)
-        .last()
+        .rfind(|pair| pair.as_rule() == Rule::param_invoke)
         .ok_or(BWErr::ParameterMissingError(
             "`Log {param}` requires atleast 1 parameter".into(),
         ))?;

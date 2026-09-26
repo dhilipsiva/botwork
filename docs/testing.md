@@ -22,3 +22,22 @@ The collection-access regression temporarily permits a specific unsupported-acce
 ## CLI Failure Contract
 
 Successful scripts, including errors handled by `Try/Catch`, exit with status `0`. File-read failures, syntax errors, and uncaught evaluation errors exit with status `1` and write a diagnostic to stderr containing the input path. Invalid command-line arguments are rejected by clap. An uncaught runtime error stops execution before the following statement. Syntax diagnostics retain the parser's line and column information.
+
+## Continuous Integration
+
+[CI configuration](../.github/workflows/ci.yml) runs on pushes to `main`, pull requests, and manual dispatch. Ubuntu jobs use the stable Rust toolchain and build/test both debug and release profiles. Formatting and Clippy run in the debug job. The checked-in `Cargo.lock` fixes dependency resolution for all jobs.
+
+Run the same checks locally:
+
+```sh
+cargo +stable fmt --all -- --check
+cargo +stable clippy --locked --all-targets -- -D warnings
+cargo +stable build --locked --all-targets
+cargo +stable test --locked
+cargo +stable build --locked --all-targets --release
+cargo +stable test --locked --release
+```
+
+Use `--offline` with build, test, and Clippy commands when dependencies are cached (before `--` for Clippy). Formatting needs no offline flag. Ignored regressions remain visible pending work; CI does not claim they pass. New stable-toolchain lints may require narrow maintenance fixes, which must retain behavioral tests.
+
+The checkout action is pinned to the upstream v7.0.1 commit, verified against its tag. Configuration references: [checkout action](https://github.com/actions/checkout/tree/3d3c42e5aac5ba805825da76410c181273ba90b1) and [GitHub workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax). Local command and YAML checks establish configuration readiness; the first hosted run must be observed after publication before claiming hosted CI success.

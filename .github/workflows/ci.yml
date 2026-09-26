@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: debug
+            flags: ""
+          - profile: release
+            flags: --release
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust and checking tools
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+      - name: Check formatting
+        if: matrix.profile == 'debug'
+        run: cargo +stable fmt --all -- --check
+      - name: Check Clippy warnings
+        if: matrix.profile == 'debug'
+        run: cargo +stable clippy --locked --all-targets -- -D warnings
+      - name: Build all targets
+        run: cargo +stable build --locked --all-targets ${{ matrix.flags }}
+      - name: Run tests and examples
+        run: cargo +stable test --locked ${{ matrix.flags }}

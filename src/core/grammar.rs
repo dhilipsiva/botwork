@@ -93,7 +93,7 @@ impl fmt::Display for Literal {
             }
             Self::Map(values) => {
                 let mut entries: Vec<_> = values.iter().collect();
-                entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+                entries.sort_unstable_by_key(|(key, _)| *key);
                 formatter.write_str("{")?;
                 for (index, (key, value)) in entries.into_iter().enumerate() {
                     if index != 0 {

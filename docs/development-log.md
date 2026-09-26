@@ -57,3 +57,10 @@ One TODO is selected, designed, implemented, verified, and committed before the 
 - **Design:** Invoke Cargo's actual CLI, compare exact expected output derived from the scripts, and independently assert successful status and empty stderr. Store expected lines in Rust strings to preserve intentional whitespace without opaque snapshots.
 - **Implementation:** Added `tests/examples.rs` for the expression and syntax demonstrations and documented how to run it.
 - **Verification:** Both examples passed in debug and release. Independent source review confirmed the expected 12 expression-output lines and 37 syntax-output lines, including the final product 27.5, custom result 18, and While values 3/4/5/6. The wider suite now has 54 active tests and 13 pending ignored regressions.
+
+## Configure Continuous Integration
+
+- **Plan:** Establish the declared build/test/format/lint checks with reproducible dependency resolution.
+- **Design:** Use an Ubuntu debug/release matrix, stable Rust with rustfmt/Clippy, locked Cargo commands, read-only checkout permissions, a pinned checkout action, and finite job timeouts. Keep hosted validation separate from local evidence.
+- **Implementation:** Added `.github/workflows/ci.yml`, tracked Cargo.lock for the executable, and documented matching local commands. Fixed only the two reported Clippy findings: reverse parameter lookup and map sorting by key.
+- **Verification:** Formatting and strict Clippy passed. Both profiles built all targets and passed all 54 active tests with `--locked --offline`; 13 known regressions remain ignored. Parsed the YAML and checked event, permission, pin, matrix, timeout, and command settings. Verified the checkout v7.0.1 commit against upstream tags and reviewed workflow syntax against official documentation. No hosted workflow run has yet been observed.
