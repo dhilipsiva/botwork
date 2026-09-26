@@ -2,6 +2,26 @@
 
 This reference records implemented behavior as language TODOs are completed. It is not yet the complete language specification required by the roadmap.
 
+## Binary Operator Precedence
+
+These levels run from weakest to strongest binding:
+
+| Level | Operators |
+| --- | --- |
+| 1 | `or` |
+| 2 | `and` |
+| 3 | `==`, `!=` |
+| 4 | `<`, `<=`, `>`, `>=` |
+| 5 | `+`, binary `-` |
+| 6 | `*`, `/`, `%` |
+| 7 | `^` |
+
+Thus `1 + 2 == 3` means `(1 + 2) == 3`, and `1 < 2 == 3 < 4` compares two boolean comparison results. `true or false and false` evaluates to `true`; `(true or false) and false` evaluates to `false`. Parentheses select grouping explicitly.
+
+Addition/subtraction and multiplication/division/remainder associate left within their respective levels: `20 - 5 - 2` gives `13`, and `12 / 3 / 2` gives `2.0`. Unary minus and logical negation remain supported, including `3 - -2` and `!(1 > 2)`. Invalid operand combinations produce type errors rather than implicit boolean/numeric coercion.
+
+Run `cargo run -- --file examples/03-precedence.botwork` for an executable example. Exponent-chain associativity, the complete unary/power precedence contract, comparison-chain semantics, and boolean short-circuiting remain separate roadmap work. In particular, `and` and `or` still evaluate both operands at this stage.
+
 ## Strings
 
 Double quotes delimit a string; they are not part of its value. `"a" + "b"` produces the same value as `"ab"`. Strings preserve Unicode text without normalization and may contain literal newlines, pipes, comment markers, and braces.

@@ -74,7 +74,6 @@ fn invocation_preserves_caller_variables() {
 }
 
 #[test]
-#[ignore = "known defect: comparison binds more tightly than addition"]
 fn arithmetic_binds_before_comparison() {
     let result = evaluate("|answer| = |1 + 2 == 3|").unwrap();
     assert!(matches!(result, Literal::Bool(true)), "{result:?}");

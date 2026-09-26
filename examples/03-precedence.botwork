@@ -1,0 +1,11 @@
+# Arithmetic is evaluated before comparison and equality.
+Log |1 + 2 == 3|
+Log |1 < 2 == 3 < 4|
+
+# and binds more tightly than or; parentheses override grouping.
+Log |true or false and false|
+Log |(true or false) and false|
+
+# Subtraction associates left, and minus can also negate an operand.
+Log |20 - 5 - 2|
+Log |3 - -2|

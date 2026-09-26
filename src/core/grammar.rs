@@ -12,19 +12,20 @@ lazy_static::lazy_static! {
     pub static ref PRATT_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::{Assoc::*, Op};
         use Rule::*;
+        // Successive levels bind more tightly; unary pairs are evaluated separately.
         PrattParser::new()
-            .op(Op::infix(plus, Left) | Op::infix(minus, Left) | Op::infix(logical_or, Left) )
-            .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulus, Left) |Op::infix(logical_and, Left) )
-            .op(Op::prefix(minus) | Op::prefix(logical_not))
+            .op(Op::infix(logical_or, Left))
+            .op(Op::infix(logical_and, Left))
+            .op(Op::infix(equal, Left) | Op::infix(not_equal, Left))
             .op(
-            Op::infix(less_than, Left)
-            | Op::infix(less_than_or_equal, Left)
-            | Op::infix(greater_than, Left)
-            | Op::infix(greater_than_or_equal, Left)
-            | Op::infix(not_equal, Left)
-            | Op::infix(equal, Left)
-            | Op::infix(exponent, Left)
-        )
+                Op::infix(less_than, Left)
+                | Op::infix(less_than_or_equal, Left)
+                | Op::infix(greater_than, Left)
+                | Op::infix(greater_than_or_equal, Left)
+            )
+            .op(Op::infix(plus, Left) | Op::infix(minus, Left))
+            .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulus, Left))
+            .op(Op::infix(exponent, Left))
     };
 }
 

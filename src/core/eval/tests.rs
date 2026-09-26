@@ -29,6 +29,131 @@ fn parentheses_override_arithmetic_precedence() {
 }
 
 #[test]
+fn binary_precedence_orders_arithmetic_comparisons_equality_and_logic() {
+    for expression in [
+        "1 + 2 == 3",
+        "3 == 1 + 2",
+        "1 + 2 * 3 > 6",
+        "6 < 1 + 2 * 3",
+        "9 - 3 * 2 >= 3",
+        "9 % 4 + 1 <= 2",
+        "8 / 2 + 1 == 5",
+        "2 ^ 3 * 2 == 16",
+        "1 < 2 == 3 > 2",
+        "false == 2 < 1",
+        "true != 2 < 1",
+        "true or true != true",
+        "true or false and false",
+        "1 + 2 == 3 and 4 > 3 or false",
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Bool(true))),
+            "{expression}: {result:?}"
+        );
+    }
+    let result = evaluate(
+        "|answer| = |false and false == false|",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::Bool(false))), "{result:?}");
+}
+
+#[test]
+fn additive_and_multiplicative_operators_associate_left() {
+    for (expression, expected) in [("20 - 5 - 2", 13), ("11 % 7 % 5", 4), ("20 % 6 * 2", 4)] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+    let result = evaluate("|answer| = |12 / 3 / 2|", &mut Context::default());
+    assert!(matches!(result, Ok(Literal::Float(2.0))), "{result:?}");
+}
+
+#[test]
+fn parentheses_override_binary_precedence_and_association() {
+    for (expression, expected) in [
+        ("false and (false == false)", false),
+        ("(false and false) == false", true),
+        ("(true or false) and false", false),
+        ("20 - (5 - 2) == 17", true),
+        ("(1 + 2) * 3 == 9", true),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Bool(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn subtraction_and_unary_operators_work_in_the_same_expression() {
+    for (expression, expected) in [("3 - -2", 5), ("-2 * 3", -6), ("-(2 + 3) - 1", -6)] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+    let result = evaluate("|answer| = |!false and !(1 > 2)|", &mut Context::default());
+    assert!(matches!(result, Ok(Literal::Bool(true))), "{result:?}");
+}
+
+#[test]
+fn mixed_precedence_works_in_conditions_and_collections() {
+    let mut context = Context::default();
+    evaluate(
+        "If |1 + 2 == 3 and 9 > 3| {\n |picked| = |7|\n} Else {\n |picked| = |missing|\n}\n\
+         |values| = |[1 + 2 == 3, 3 > 2 == true, true or false and false]|",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "picked"), Literal::Int(7)));
+    assert!(
+        matches!(variable(&context, "values"), Literal::Array(values)
+        if values.len() == 3 && values.iter().all(|value| matches!(value, Literal::Bool(true))))
+    );
+}
+
+#[test]
+fn mixed_precedence_does_not_coerce_invalid_operand_types() {
+    for expression in [
+        "1 and 2",
+        "true + false",
+        "1 < true",
+        "1 + 2 == true",
+        "!1",
+        "-true",
+    ] {
+        assert!(
+            matches!(
+                evaluate(
+                    &format!("|answer| = |{expression}|"),
+                    &mut Context::default()
+                ),
+                Err(BWErr::OperationIncompatibleError(_))
+            ),
+            "{expression}"
+        );
+    }
+}
+
+#[test]
 fn undefined_variables_and_statements_return_typed_errors() {
     let mut context = Context::default();
     assert!(matches!(

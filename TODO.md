@@ -77,7 +77,7 @@ The following defects were reproduced during the DSL review. Relevant implementa
 
 ### Confirmed Expression and Parser Defects
 
-- [ ] **Correct operator precedence.** `1 + 2 == 3` must evaluate to `true`, rather than attempting to add an integer to a boolean. Give arithmetic, comparisons, equality, `and`, and `or` distinct documented precedence levels.
+- [x] **Correct operator precedence.** Arithmetic, ordering comparisons, equality, `and`, and `or` have distinct [documented levels](docs/language.md#binary-operator-precedence). The active regression verifies `1 + 2 == 3`; evaluator and example tests cover mixed levels, parentheses, left association, and binary/unary minus without the former operator-registration panic.
 - [ ] **Define exponentiation and unary precedence.** Make `2 ^ 3 ^ 2` evaluate as `2 ^ (3 ^ 2)` to produce `512`. Specify and test unary minus, negative exponents, and nested unary expressions.
 - [ ] **Implement boolean short-circuiting.** `false and undefined` must return `false`; `true or undefined` must return `true`, without evaluating the unused operand.
 - [x] **Decode strings into values.** Remove delimiters and process supported escapes. `("a" + "b") == "ab"` evaluates to `true`; escaped newlines, quotes, and backslashes have consistent runtime meanings. See [string semantics](docs/language.md#strings) and active regression tests.

@@ -230,9 +230,22 @@ fn pratt_parse(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
     let result = PRATT_PARSER
         .map_primary(|primary| botwork(primary, &mut globals.borrow_mut()))
         .map_infix(|lhs, op, rhs| op.as_rule().operate_binary(lhs?, rhs?))
-        .map_prefix(|op, rhs| op.as_rule().operate_unary(rhs?))
         .parse(pair.into_inner());
     result
+}
+
+fn unary(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
+    let mut inner = pair.into_inner();
+    let operator = inner
+        .next()
+        .ok_or_else(|| BWErr::ParsingError("Missing unary operator".into()))?;
+    let operand = inner
+        .next()
+        .ok_or_else(|| BWErr::ParsingError("Missing unary operand".into()))?;
+    if inner.next().is_some() {
+        return Err(BWErr::ParsingError("Unexpected unary operand".into()));
+    }
+    operator.as_rule().operate_unary(botwork(operand, globals)?)
 }
 
 fn integer(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
@@ -537,7 +550,7 @@ pub fn botwork(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
         Rule::stmt_assign => stmt_assign,
         Rule::param_invoke => pratt_parse,
         Rule::expression => pratt_parse,
-        Rule::unary => pratt_parse,
+        Rule::unary => unary,
         Rule::array => array,
         Rule::ident => ident,
         Rule::dot_path => dot_path,

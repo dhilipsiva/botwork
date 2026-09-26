@@ -44,6 +44,14 @@ fn expressions_example_produces_expected_values() {
 }
 
 #[test]
+fn precedence_example_produces_expected_values() {
+    assert_example(
+        "03-precedence.botwork",
+        &["true", "true", "true", "false", "13", "5"],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

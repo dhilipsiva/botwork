@@ -5,11 +5,11 @@ Run `cargo test` from the repository root. Run `cargo test --release` to check t
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
 - `src/core/eval/tests.rs` checks evaluation, state, conditions, collections, and error handling.
 - `tests/cli.rs` invokes Cargo's built CLI and checks exit status, stdout, and stderr independently. Inputs live under `tests/fixtures/`.
-- `tests/examples.rs` checks the exact expected stdout of both bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
+- `tests/examples.rs` checks the exact expected stdout of the bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
 
 Tests assert language behavior and error categories rather than Rust source line numbers or map iteration order. No external services or extra testing crates are required for the initial suite. Add a minimal regression before fixing a known defect; do not preserve defective behavior as an expected result.
 
-Run `cargo test --test examples` to check the expression and syntax demonstrations alone. The syntax check includes every intended `While` iteration (`3`, `4`, `5`, `6` before the break), both `For` behaviors, and handled errors. The expression check preserves intentional whitespace inside strings and verifies deterministic map display without relying on internal hash-map iteration order.
+Run `cargo test --test examples` to check the expression, syntax, and precedence demonstrations alone. The syntax check includes every intended `While` iteration (`3`, `4`, `5`, `6` before the break), both `For` behaviors, and handled errors. The expression check preserves intentional whitespace inside strings and verifies deterministic map display without relying on internal hash-map iteration order. The precedence example checks mixed arithmetic/comparisons, boolean grouping, parentheses, and subtraction with unary minus.
 
 The initial suite does not establish complete language conformance or the roadmap's final coverage targets. Track unfinished regression and validation work in [TODO.md](../TODO.md).
 
