@@ -7,6 +7,9 @@ use super::{
     grammar::{BWErr, Literal},
 };
 
+mod ownership;
+pub(crate) use ownership::OwnedDiagnostic;
+pub use ownership::{DiagnosticLimits, DiagnosticSize, MAX_DIAGNOSTIC_DEPTH};
 mod value;
 pub use value::DiagnosticValueLimits;
 
@@ -166,7 +169,7 @@ pub struct RelatedLocation {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Diagnostic {
     /// Shared immutable identity lets rethrow retain the original error without self-causes.
     pub error: Arc<BWErr>,
@@ -238,8 +241,21 @@ impl Diagnostic {
     }
 
     /// Discard source/stack information for the original error-category API.
-    pub fn into_error(self) -> BWErr {
+    pub fn into_error(mut self) -> BWErr {
+        ownership::discard_causes(std::mem::take(&mut self.causes));
         Arc::try_unwrap(self.error).unwrap_or_else(|error| (*error).clone())
+    }
+
+    /// Destroy an arbitrarily deep owned cause tree without recursive destruction.
+    /// Host-built diagnostics retain ordinary field ownership; use this for unadmitted trees.
+    pub fn discard(mut self) {
+        ownership::discard_causes(std::mem::take(&mut self.causes));
+    }
+
+    /// Admit retained diagnostic shape and source owners before copying mutable metadata.
+    pub fn try_clone_with_limits(&self, limits: &DiagnosticLimits) -> DiagnosticResult<Self> {
+        limits.check(self)?;
+        Ok(self.clone())
     }
 
     /// Full owned metadata for host-managed use, without resource admission.

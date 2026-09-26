@@ -58,6 +58,40 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn checked_diagnostic_clone_rejects_large_context_and_width_before_copying() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{CallFrame, Diagnostic, DiagnosticLimits},
+        grammar::BWErr,
+    };
+    let length = 64 * 1024;
+    let program = Program::parse("context", "|x| = |1|").unwrap();
+    let mut diagnostic = Diagnostic::new(BWErr::NativeError("".into()));
+    diagnostic.call_stack.push(CallFrame {
+        signature: "x".repeat(length),
+        call_site: program.statements[0].span.clone(),
+        definition_site: None,
+    });
+    let limits = DiagnosticLimits {
+        text_bytes: 128,
+        ..DiagnosticLimits::default()
+    };
+    let (result, large) = observe(length, || diagnostic.try_clone_with_limits(&limits));
+    assert!(result.is_err());
+    assert_eq!(large, 0);
+    diagnostic.call_stack.clear();
+    diagnostic.causes = (0..4096)
+        .map(|_| Diagnostic::new(BWErr::NativeError("".into())))
+        .collect();
+    let (result, large) = observe(4096, || {
+        diagnostic.try_clone_with_limits(&DiagnosticLimits::default())
+    });
+    assert!(result.is_err());
+    assert_eq!(large, 0);
+    diagnostic.discard();
+}
+
+#[test]
 fn diagnostic_message_and_help_are_rejected_before_owned_string_formatting() {
     use botwork::core::{
         diagnostic::{Diagnostic, DiagnosticValueLimits},

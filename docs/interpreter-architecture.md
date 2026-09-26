@@ -501,3 +501,22 @@ assert_eq!(original.to_value_with_limits(&tight).unwrap_err().code(), Diagnostic
 assert_eq!(original.code(), DiagnosticCode::Native);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Host Diagnostic Ownership
+
+Checked cloning admits logical tree and source ownership before copying mutable context. Errors and sources retain shared identity. Use explicit disposal for unadmitted host trees; ordinary field access and ownership remain compatible.
+
+```rust
+use botwork::core::{diagnostic::{Diagnostic, DiagnosticLimits}, grammar::BWErr};
+use std::sync::Arc;
+let original = Diagnostic::new(BWErr::NativeError("offline".into()));
+let limits = DiagnosticLimits { text_bytes: 13, source_bytes: 0, ..DiagnosticLimits::default() };
+let size = limits.check(&original)?;
+assert_eq!(size.diagnostics, 1);
+assert_eq!(size.text_bytes, 13); // label "source" plus error detail "offline"
+let copy = original.try_clone_with_limits(&limits)?;
+assert!(Arc::ptr_eq(&original.error, &copy.error));
+original.discard();
+assert_eq!(copy.into_error().code().as_str(), "BW4002");
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

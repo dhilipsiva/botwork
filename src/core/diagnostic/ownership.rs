@@ -1,0 +1,296 @@
+//! Checked diagnostic ownership and iterative host-tree lifecycle helpers.
+
+use super::Diagnostic;
+use crate::core::{
+    ast::{SourceFile, Span},
+    grammar::BWErr,
+};
+use std::{collections::HashSet, sync::Arc};
+
+#[cfg(test)]
+mod tests;
+
+pub const MAX_DIAGNOSTIC_DEPTH: usize = 64;
+
+/// Logical limits for a single borrowed diagnostic tree, including retained sources.
+#[derive(Clone, Debug)]
+pub struct DiagnosticLimits {
+    pub diagnostics: usize,
+    pub depth: usize,
+    pub call_frames: usize,
+    pub related_locations: usize,
+    pub text_bytes: usize,
+    pub source_bytes: usize,
+}
+
+impl Default for DiagnosticLimits {
+    fn default() -> Self {
+        Self {
+            diagnostics: 1024,
+            depth: 32,
+            call_frames: 4096,
+            related_locations: 4096,
+            text_bytes: 8 * 1024 * 1024,
+            source_bytes: 8 * 1024 * 1024,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DiagnosticSize {
+    pub diagnostics: usize,
+    pub depth: usize,
+    pub call_frames: usize,
+    pub related_locations: usize,
+    pub text_bytes: usize,
+    pub source_bytes: usize,
+}
+
+fn add(
+    current: &mut usize,
+    amount: usize,
+    maximum: usize,
+    resource: &'static str,
+) -> Result<(), BWErr> {
+    *current = current
+        .checked_add(amount)
+        .filter(|value| *value <= maximum)
+        .ok_or(BWErr::ResourceLimit {
+            resource,
+            limit: maximum as u64,
+        })?;
+    Ok(())
+}
+
+fn error_text(error: &BWErr) -> [&str; 3] {
+    match error {
+        BWErr::DuplicateStatement {
+            signature,
+            original,
+            duplicate,
+        } => [signature, original, duplicate],
+        BWErr::DuplicateParameter {
+            name,
+            original,
+            duplicate,
+        } => [name, original, duplicate],
+        BWErr::CollectionAccessError {
+            path,
+            segment,
+            reason,
+        } => [path, segment, reason],
+        BWErr::DuplicateNamespace {
+            namespace,
+            original,
+            duplicate,
+        } => [namespace, original, duplicate],
+        BWErr::ResourceLimit { resource, .. } => [resource, "", ""],
+        BWErr::VariableNotDefined(text)
+        | BWErr::StatementNotDefined(text)
+        | BWErr::ParameterMissingError(text)
+        | BWErr::ParsingError(text)
+        | BWErr::SignatureError(text)
+        | BWErr::ParsingIntegerError(text)
+        | BWErr::OperationIncompatibleError(text)
+        | BWErr::ControlFlowError(text)
+        | BWErr::ArithmeticError(text)
+        | BWErr::OutputError(text)
+        | BWErr::NativeError(text)
+        | BWErr::Cancelled(text)
+        | BWErr::Timeout(text)
+        | BWErr::AsyncRuntime(text)
+        | BWErr::ImportRead(text)
+        | BWErr::ImportCycle(text)
+        | BWErr::NativePanic(text)
+        | BWErr::InputError(text)
+        | BWErr::RunConfiguration(text)
+        | BWErr::SourceRead(text) => [text, "", ""],
+    }
+}
+
+struct Measurement<'a> {
+    limits: &'a DiagnosticLimits,
+    size: DiagnosticSize,
+    sources: HashSet<*const SourceFile>,
+}
+
+impl Measurement<'_> {
+    fn text(&mut self, text: &str) -> Result<(), BWErr> {
+        add(
+            &mut self.size.text_bytes,
+            text.len(),
+            self.limits.text_bytes,
+            "diagnostic text bytes",
+        )
+    }
+
+    fn source(&mut self, span: &Span) -> Result<(), BWErr> {
+        let source = span.source();
+        let pointer = Arc::as_ptr(source);
+        if !self.sources.contains(&pointer) {
+            add(
+                &mut self.size.source_bytes,
+                source.name().len(),
+                self.limits.source_bytes,
+                "diagnostic source bytes",
+            )?;
+            add(
+                &mut self.size.source_bytes,
+                source.text().len(),
+                self.limits.source_bytes,
+                "diagnostic source bytes",
+            )?;
+            self.sources.insert(pointer);
+        }
+        Ok(())
+    }
+
+    fn node(&mut self, diagnostic: &Diagnostic, depth: usize) -> Result<(), BWErr> {
+        add(
+            &mut self.size.diagnostics,
+            1,
+            self.limits.diagnostics,
+            "diagnostic nodes",
+        )?;
+        if depth > self.limits.depth {
+            return Err(BWErr::ResourceLimit {
+                resource: "diagnostic depth",
+                limit: self.limits.depth as u64,
+            });
+        }
+        self.size.depth = self.size.depth.max(depth);
+        // Reject known width before walking frame/location payloads.
+        add(
+            &mut self.size.call_frames,
+            diagnostic.call_stack.len(),
+            self.limits.call_frames,
+            "diagnostic call frames",
+        )?;
+        add(
+            &mut self.size.related_locations,
+            diagnostic.related.len(),
+            self.limits.related_locations,
+            "diagnostic related locations",
+        )?;
+        if diagnostic.causes.len() > self.limits.diagnostics - self.size.diagnostics {
+            return Err(BWErr::ResourceLimit {
+                resource: "diagnostic nodes",
+                limit: self.limits.diagnostics as u64,
+            });
+        }
+        self.text(diagnostic.label)?;
+        for text in error_text(&diagnostic.error) {
+            self.text(text)?;
+        }
+        if let Some(span) = &diagnostic.span {
+            self.source(span)?;
+        }
+        for frame in &diagnostic.call_stack {
+            self.text(&frame.signature)?;
+            self.source(&frame.call_site)?;
+            if let Some(span) = &frame.definition_site {
+                self.source(span)?;
+            }
+        }
+        for related in &diagnostic.related {
+            self.text(&related.message)?;
+            self.source(&related.span)?;
+        }
+        Ok(())
+    }
+}
+
+impl DiagnosticLimits {
+    /// Inspect without recursion, formatting strings, scanning source positions, or copying payloads.
+    /// Source allocations are deduplicated by identity; other metrics count occurrences.
+    pub fn check(&self, diagnostic: &Diagnostic) -> Result<DiagnosticSize, BWErr> {
+        if self.depth > MAX_DIAGNOSTIC_DEPTH {
+            return Err(BWErr::RunConfiguration(format!(
+                "Diagnostic depth cannot exceed {MAX_DIAGNOSTIC_DEPTH}"
+            )));
+        }
+        let mut measurement = Measurement {
+            limits: self,
+            size: DiagnosticSize::default(),
+            sources: HashSet::new(),
+        };
+        let mut pending = vec![(std::slice::from_ref(diagnostic).iter(), 1)];
+        while let Some((nodes, depth)) = pending.last_mut() {
+            if let Some(node) = nodes.next() {
+                let depth = *depth;
+                measurement.node(node, depth)?;
+                if !node.causes.is_empty() {
+                    pending.push((node.causes.iter(), depth + 1));
+                }
+            } else {
+                pending.pop();
+            }
+        }
+        Ok(measurement.size)
+    }
+}
+
+fn shallow_clone(value: &Diagnostic) -> Diagnostic {
+    Diagnostic {
+        error: Arc::clone(&value.error),
+        span: value.span.clone(),
+        label: value.label,
+        call_stack: value.call_stack.clone(),
+        related: value.related.clone(),
+        causes: Vec::with_capacity(value.causes.len()),
+    }
+}
+
+/// Infallible host-owned copying has no admission; checked callers preflight first.
+impl Clone for Diagnostic {
+    fn clone(&self) -> Self {
+        let mut pending = vec![(self.causes.iter(), shallow_clone(self))];
+        loop {
+            let (children, _) = pending.last_mut().expect("diagnostic root");
+            if let Some(child) = children.next() {
+                pending.push((child.causes.iter(), shallow_clone(child)));
+            } else {
+                let (_, finished) = pending.pop().expect("completed diagnostic");
+                match pending.last_mut() {
+                    Some((_, parent)) => parent.causes.push(finished),
+                    None => return finished,
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn discard_causes(causes: Vec<Diagnostic>) {
+    if causes.is_empty() {
+        return;
+    }
+    let mut pending = vec![causes.into_iter()];
+    while let Some(children) = pending.last_mut() {
+        if let Some(mut child) = children.next() {
+            let causes = std::mem::take(&mut child.causes);
+            if !causes.is_empty() {
+                pending.push(causes.into_iter());
+            }
+        } else {
+            pending.pop();
+        }
+    }
+}
+
+/// Results abandoned inside runtime-owned worker handles must not recursively drop host trees.
+pub(crate) struct OwnedDiagnostic(Option<Diagnostic>);
+impl OwnedDiagnostic {
+    pub(crate) fn new(value: Diagnostic) -> Self {
+        Self(Some(value))
+    }
+    pub(crate) fn into_inner(mut self) -> Diagnostic {
+        self.0.take().expect("owned diagnostic")
+    }
+}
+impl Drop for OwnedDiagnostic {
+    fn drop(&mut self) {
+        if let Some(value) = self.0.take() {
+            value.discard();
+        }
+    }
+}

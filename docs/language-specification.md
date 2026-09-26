@@ -144,6 +144,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R16 — Diagnostic conversion admission.** Before constructing a Catch binding, measure its complete diagnostic metadata, formatted message/help, cause depth, and source-position scan work; reserve its live temporary allowance before copying. Apply the tighter of diagnostic conversion and ordinary value budgets, preserve the original failure as a cause on rejection, and leave the previous binding intact. Resource failures latch and bypass handlers. Checked host conversion borrows the unchanged original; full infallible conversion remains explicitly host-owned. Preserve exact metadata and coordinate strings without truncation. [Conversion rules](diagnostic-value-limits.md) define defaults, conservative scan accounting, iterative construction, ownership, and remaining construction/rendering limits.
 
+## Host Diagnostic Ownership
+
+**R17 — Diagnostic lifecycle helpers.** Measure borrowed diagnostic trees without copying, recursively calling, or formatting text. Bound diagnostic count/depth, call/related counts, raw text, and distinct source-owner bytes before checked cloning. Preserve error/source identities and independently copy mutable metadata. Provide iterative full Clone, explicit disposal, and category extraction for deep host trees; guard runtime-owned abandoned worker errors. [Ownership rules](diagnostic-ownership.md) define exact metrics, compatibility ownership, and pending runtime retention enforcement.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -222,3 +226,5 @@ R14 evidence in `tests/result_limits.rs`, result-budget/export unit tests, and a
 R15 evidence in `tests/temporary_limits.rs`, temporary reservation unit tests, allocation observations, and existing completion/native contracts covers live/cumulative distinctions, exact/default/zero budgets, overlap, placeholder admission/refunds, child merging, duplicate keys, required/skipped effects, custom/native/imported calls, cancellation, iterator/handler cleanup, concurrent clones, public ownership transfer, and CLI rejection/recovery. Two host corpus cases and a Rust example pin concatenation headroom.
 
 R16 evidence in diagnostic conversion unit/contract tests, the 25-code catalog, and allocation observations covers exact/zero/raised budgets, overflow, deep/wide causes, Unicode coordinates, native failures, temporary admission, original identity, handler restoration, and clone stop isolation. Two host corpus cases and a Rust example pin checked conversion and original preservation.
+
+R17 evidence in diagnostic ownership unit/contract tests, all-category checks, and allocation observations covers exact/zero/raised bounds, overflow, distinct/shared sources, metadata isolation, deep cloning/rejection/disposal, async and blocking delivery, abandoned worker cleanup, and cancellation causes. Two host corpus cases and a Rust example pin checked ownership and identity preservation.

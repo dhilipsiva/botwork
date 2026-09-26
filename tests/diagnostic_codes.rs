@@ -1,6 +1,6 @@
 use botwork::core::{
     ast::Program,
-    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticValueLimits},
+    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLimits, DiagnosticValueLimits},
     eval::{evaluate_program_detailed, Context},
     grammar::{BWErr, Literal},
 };
@@ -144,6 +144,11 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "document {code}"
         );
         let diagnostic = Diagnostic::new(error);
+        let ownership = DiagnosticLimits::default();
+        assert_eq!(ownership.check(&diagnostic).unwrap().diagnostics, 1);
+        let copy = diagnostic.try_clone_with_limits(&ownership).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&copy.error, &diagnostic.error));
+        assert_eq!(copy.code(), category);
         let limits = DiagnosticValueLimits::default();
         let checked = diagnostic.to_value_with_limits(&limits).unwrap();
         assert_eq!(

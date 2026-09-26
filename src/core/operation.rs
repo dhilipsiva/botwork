@@ -12,7 +12,7 @@ use tokio::{sync::Semaphore, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    diagnostic::{Diagnostic, DiagnosticResult},
+    diagnostic::{Diagnostic, DiagnosticResult, OwnedDiagnostic},
     grammar::{validate_value, BWErr, Literal},
     signature::{StatementOrigin, StatementSignature},
     value_limits::{Owned, ValueLimits},
@@ -234,7 +234,7 @@ impl NativeOperation {
                 tokio::select! {
                     biased;
                     error = child.stopped() => return Err(error),
-                    value = future => value?,
+                    value = future => value.map_err(OwnedDiagnostic::into_inner)?,
                 }
             }
             Implementation::Blocking { callback, capacity } => {
@@ -249,7 +249,7 @@ impl NativeOperation {
                 let signature = Arc::clone(&self.signature);
                 let mut worker = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
-                    worker_control.checkpoint()?;
+                    worker_control.checkpoint().map_err(OwnedDiagnostic::new)?;
                     catch_unwind(AssertUnwindSafe(|| {
                         callback(values.into_inner(), worker_control)
                     }))
@@ -257,6 +257,7 @@ impl NativeOperation {
                         Err(BWErr::NativePanic(signature.normalized().into()).into())
                     })
                     .map(Owned::new)
+                    .map_err(OwnedDiagnostic::new)
                 });
                 tokio::select! {
                     biased;
@@ -264,7 +265,7 @@ impl NativeOperation {
                         child.cancel();
                         worker.abort(); // Cancels queued work; started callbacks must cooperate.
                         match worker.await {
-                            Ok(Err(cause)) => error.causes.push(cause.at(self.signature.header())),
+                            Ok(Err(cause)) => error.causes.push(cause.into_inner().at(self.signature.header())),
                             Err(cause) if !cause.is_cancelled() => error.causes.push(
                                 Diagnostic::new(BWErr::AsyncRuntime(format!("Blocking worker ended during cleanup: {cause}"))).at(self.signature.header())
                             ),
@@ -272,7 +273,7 @@ impl NativeOperation {
                         }
                         return Err(error);
                     }
-                    value = &mut worker => value.map_err(|error| BWErr::AsyncRuntime(format!("Blocking worker ended unexpectedly: {error}")))??,
+                    value = &mut worker => value.map_err(|error| BWErr::AsyncRuntime(format!("Blocking worker ended unexpectedly: {error}")))?.map_err(OwnedDiagnostic::into_inner)?,
                 }
             }
         };
@@ -294,7 +295,7 @@ struct GuardedFuture {
 }
 
 impl Future for GuardedFuture {
-    type Output = DiagnosticResult<Owned<Literal>>;
+    type Output = Result<Owned<Literal>, OwnedDiagnostic>;
     fn poll(mut self: Pin<&mut Self>, context: &mut TaskContext<'_>) -> Poll<Self::Output> {
         catch_unwind(AssertUnwindSafe(|| self.future.as_mut().poll(context)))
             .unwrap_or_else(|_| {
@@ -302,6 +303,6 @@ impl Future for GuardedFuture {
                     BWErr::NativePanic(self.signature.normalized().into()).into()
                 ))
             })
-            .map(|result| result.map(Owned::new))
+            .map(|result| result.map(Owned::new).map_err(OwnedDiagnostic::new))
     }
 }

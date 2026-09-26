@@ -90,3 +90,7 @@ For BW6003, `details` contains string fields `namespace`, `original`, and `dupli
 ## Bounded Metadata Conversion
 
 Catch bindings use [diagnostic conversion limits](diagnostic-value-limits.md) before copying metadata and reserve complete temporary storage before construction. Rejection returns BW8001 with the original error as a cause, skips the handler, and preserves its previous binding. Checked host conversion uses `Diagnostic::to_value_with_limits`; `value_size_with_limits` reports exact metadata size without copying its payload. Legacy `to_value` remains a full host-managed conversion. Original diagnostic construction/retention and text rendering have separate pending limits; this contract does not bound those allocations.
+
+## Host Ownership Helpers
+
+[Diagnostic ownership](diagnostic-ownership.md) provides borrowed size admission and `try_clone_with_limits` before copying mutable metadata. Full Clone is iterative and shares immutable error/source identity. Use `discard` or `into_error` to release unadmitted deep cause trees without recursive destruction. Runtime-owned blocking-worker errors use an iterative cleanup guard when abandoned; limits on runtime error construction and retained context remain pending.

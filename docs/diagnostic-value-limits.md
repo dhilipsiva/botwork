@@ -14,7 +14,7 @@ Catch uses the smaller value quota in each dimension from `diagnostic_values.val
 
 Conversion failure emits BW8001 at the Catch binding, retains the original category/span/stack as a cause, preserves the previous binding, and skips handler effects. It latches the requesting Context and bypasses enclosing Catch handlers. Modules share runtime limits and stops; Context clones preserve independent stop latches. Binding-free Catch and bare Rethrow do not convert metadata. No fields are silently omitted or truncated.
 
-`Diagnostic::value_size_with_limits` measures without copying payloads; `to_value_with_limits` measures and constructs only on success. Both borrow the original without changing its identity or adding causes to it. Checked host failures return the limit diagnostic separately. Legacy infallible `to_value` preserves full metadata and is an explicit host-managed allocation boundary. Its construction is iterative, but unadmitted deep host diagnostics/returned values still require host-controlled cleanup.
+`Diagnostic::value_size_with_limits` measures without copying payloads; `to_value_with_limits` measures and constructs only on success. Both borrow the original without changing its identity or adding causes to it. Checked host failures return the limit diagnostic separately. Legacy infallible `to_value` preserves full metadata and is an explicit host-managed allocation boundary. Its construction is iterative, but unadmitted deep host diagnostics/returned values still require host-controlled cleanup (`Diagnostic::discard` and `value_limits::discard`). [Checked ownership helpers](diagnostic-ownership.md) cover diagnostic cloning separately.
 
 ## Scope and Evidence
 
