@@ -116,7 +116,6 @@ fn bare_return_returns_none() {
 }
 
 #[test]
-#[ignore = "specified behavior: free variables resolve through the defining environment"]
 fn a_helper_reads_its_lexical_environment_not_its_callers_parameters() {
     let result = evaluate(
         "|x| = |10|\nRead value {\n Return |x|\n}\n\
@@ -127,7 +126,6 @@ fn a_helper_reads_its_lexical_environment_not_its_callers_parameters() {
 }
 
 #[test]
-#[ignore = "specified behavior: unrelated caller-local bindings must not be visible to callees"]
 fn a_helper_cannot_read_an_unrelated_callers_local() {
     let result = evaluate(
         "Read private {\n |copy| = |private|\n}\n\
@@ -137,7 +135,6 @@ fn a_helper_cannot_read_an_unrelated_callers_local() {
 }
 
 #[test]
-#[ignore = "specified behavior: failed argument evaluation must leave caller bindings intact"]
 fn a_failed_argument_does_not_bind_earlier_parameters() {
     let result = evaluate(
         "|x| = |10|\nPair |x| with |y| {}\n\
@@ -147,7 +144,6 @@ fn a_failed_argument_does_not_bind_earlier_parameters() {
 }
 
 #[test]
-#[ignore = "specified behavior: invocation-local assignments must not overwrite caller bindings"]
 fn local_assignments_are_discarded_after_normal_completion_and_error() {
     for ending in ["", "|failure| = |missing|"] {
         let source = format!(
@@ -163,7 +159,6 @@ fn local_assignments_are_discarded_after_normal_completion_and_error() {
 }
 
 #[test]
-#[ignore = "specified behavior: For must restore its previous variable binding on every exit"]
 fn for_restores_its_binding_after_completion_break_and_error() {
     for body in ["", "Break", "|failure| = |missing|"] {
         let source = format!(
@@ -179,7 +174,6 @@ fn for_restores_its_binding_after_completion_break_and_error() {
 }
 
 #[test]
-#[ignore = "specified behavior: nested statement definitions must not escape their invocation"]
 fn nested_definitions_disappear_when_the_defining_invocation_finishes() {
     let result = evaluate("Outer {\n Inner {}\n}\nOuter\nInner");
     assert!(matches!(result, Err(BWErr::StatementNotDefined(name)) if name == "Inner"));

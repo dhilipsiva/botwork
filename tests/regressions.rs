@@ -48,7 +48,6 @@ fn nested_return_skips_remaining_outer_statements() {
 }
 
 #[test]
-#[ignore = "known defect: binding the first parameter changes later argument evaluation"]
 fn all_arguments_are_evaluated_in_caller_scope() {
     assert_int(
         "|x| = |10|\nPair |x| with |y| {\n Return |y|\n |unused| = |0|\n}\n\
@@ -58,7 +57,6 @@ fn all_arguments_are_evaluated_in_caller_scope() {
 }
 
 #[test]
-#[ignore = "known defect: parameter bindings overwrite caller variables"]
 fn invocation_preserves_caller_variables() {
     assert_int(
         "|x| = |10|\nUse value |x| {\n |local| = |x|\n}\n\

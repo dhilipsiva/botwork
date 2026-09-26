@@ -1,0 +1,46 @@
+# Arguments are evaluated before parameters are bound in a fresh invocation.
+|x| = |10|
+Pair |x| with |y| { Return |[x, y]| }
+|pair| = Pair |1| with |x|
+Log |pair|
+Log |x|
+
+# A helper reads the environment where it was defined.
+Read x { Return |x| }
+Caller |x| {
+    Log |x|
+    |value| = Read x
+    Return |value|
+}
+|lexical| = Caller |99|
+Log |lexical|
+
+# Each recursive call retains its own n and previous result.
+Factorial |n| {
+    If |n <= 1| { Return |1| }
+    |previous| = Factorial |n - 1|
+    Return |n * previous|
+}
+|product| = Factorial |5|
+Log |product|
+
+# For restores its temporary iterator even when the body fails.
+|item| = |10|
+Try {
+    For |item| In |[1, 2]| {
+        Log |item|
+        |failure| = |missing|
+    }
+} Catch {
+    Log |item|
+}
+
+# Nested definitions exist only while their defining invocation is running.
+Outer {
+    Inner { Return |7| }
+    |value| = Inner
+    Return |value|
+}
+|nested| = Outer
+Log |nested|
+Try { Inner } Catch { Log |"inner is local"| }

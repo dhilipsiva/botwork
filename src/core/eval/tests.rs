@@ -26,6 +26,268 @@ fn evaluate_unvalidated_statement(source: &str, context: &mut Context) -> Litera
 }
 
 #[test]
+fn recursive_calls_keep_their_parameters_and_locals() {
+    let mut context = Context::default();
+    let result = evaluate(
+        "|n| = |99|\nFactorial |n| {\n If |n <= 1| { Return |1| }\n\
+         |previous| = Factorial |n - 1|\n Return |n * previous|\n}\n\
+         |answer| = Factorial |5|",
+        &mut context,
+    );
+    assert!(matches!(result, Ok(Literal::Int(120))), "{result:?}");
+    assert!(matches!(variable(&context, "n"), Literal::Int(99)));
+    assert!(matches!(
+        context.get_variable("previous"),
+        Err(BWErr::VariableNotDefined(_))
+    ));
+    assert_eq!(context.frames.len(), 1);
+    assert_eq!(context.current, 0);
+}
+
+#[test]
+fn mutually_recursive_definitions_resolve_through_their_shared_environment() {
+    let result = evaluate(
+        "Even |n| {\n If |n == 0| { Return |true| }\n\
+         |answer| = Odd |n - 1|\n Return |answer|\n}\n\
+         Odd |n| {\n If |n == 0| { Return |false| }\n\
+         |answer| = Even |n - 1|\n Return |answer|\n}\n\
+         |even| = Even |6|\n|odd| = Odd |6|\n|answer| = |[even, odd]|",
+        &mut Context::default(),
+    );
+    assert!(
+        matches!(&result, Ok(Literal::Array(values))
+        if matches!(values.as_slice(), [Literal::Bool(true), Literal::Bool(false)])),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn nested_helpers_read_live_lexical_ancestors_and_skip_caller_shadows() {
+    let result = evaluate(
+        "|root| = |1|\nOuter |value| {\n |parent| = |2|\n\
+         Read { Return |root + value + parent| }\n\
+         Middle {\n |parent| = |90|\n |root| = |99|\n\
+         |answer| = Read\n Return |answer|\n}\n\
+         |parent| = |3|\n |answer| = Middle\n Return |answer|\n}\n\
+         |answer| = Outer |4|",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::Int(8))), "{result:?}");
+}
+
+#[test]
+fn statement_lookup_uses_lexical_frames_and_local_definitions_shadow_outer_ones() {
+    let mut context = Context::default();
+    let result = evaluate(
+        "Helper { Return |10| }\nBridge {\n |value| = Helper\n Return |value|\n}\n\
+         Outer {\n Helper { Return |20| }\n |global| = Bridge\n\
+         |local| = Helper\n Return |[global, local]|\n}\n|answer| = Outer",
+        &mut context,
+    );
+    assert!(
+        matches!(&result, Ok(Literal::Array(values))
+        if matches!(values.as_slice(), [Literal::Int(10), Literal::Int(20)])),
+        "{result:?}"
+    );
+    assert!(matches!(
+        evaluate("Helper", &mut context),
+        Ok(Literal::Int(10))
+    ));
+    let result = evaluate(
+        "Call private { Private }\nCaller {\n Private {}\n Call private\n}\nCaller",
+        &mut context,
+    );
+    assert!(
+        matches!(&result, Err(BWErr::StatementNotDefined(name)) if name.trim() == "Private"),
+        "{result:?}"
+    );
+    assert!(context.get_statement("private").is_none());
+    assert_eq!(context.frames.len(), 1);
+}
+
+#[test]
+fn invocation_frames_discard_bindings_and_definitions_on_every_exit() {
+    for ending in [
+        "",
+        "Return",
+        "Return |7|",
+        "|failure| = |missing|",
+        "Return |missing|",
+    ] {
+        let mut context = Context::default();
+        let source = format!(
+            "|x| = |10|\nWork |x| {{\n |private| = |1|\n Hidden {{}}\n {ending}\n}}\nWork |2|"
+        );
+        let result = evaluate(&source, &mut context);
+        assert_eq!(
+            result.is_err(),
+            ending.contains("missing"),
+            "{source}: {result:?}"
+        );
+        assert!(matches!(variable(&context, "x"), Literal::Int(10)));
+        assert!(context.get_variable("private").is_err());
+        assert!(context.get_statement("hidden").is_none());
+        assert_eq!(context.frames.len(), 1);
+        assert_eq!(context.current, 0);
+        assert!(matches!(
+            evaluate("|after| = |x + 1|", &mut context),
+            Ok(Literal::Int(11))
+        ));
+    }
+}
+
+#[test]
+fn failed_arguments_install_no_frame_or_partial_bindings_and_stop_in_order() {
+    let mut context = Context::default();
+    evaluate(
+        "|x| = |10|\n|y| = |20|\nTriple |x| with |y| and |z| {}",
+        &mut context,
+    )
+    .unwrap();
+    context.expression_visits.clear();
+    let result = evaluate("Triple |x + 1| with |missing| and |1 / 0|", &mut context);
+    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+    let visits: Vec<_> = context
+        .expression_visits
+        .iter()
+        .map(|text| text.trim())
+        .collect();
+    assert_eq!(visits, ["x + 1", "x", "1", "missing"]);
+    assert!(matches!(variable(&context, "x"), Literal::Int(10)));
+    assert!(matches!(variable(&context, "y"), Literal::Int(20)));
+    assert!(context.get_variable("z").is_err());
+    assert_eq!(context.frames.len(), 1);
+}
+
+#[test]
+fn for_restores_present_absent_and_none_bindings_on_every_completion() {
+    use super::{evaluate_statement, Completion, StatementKind};
+
+    for previous in [None, Some(Literal::None), Some(Literal::Int(10))] {
+        for (body, expected) in [
+            ("", "normal"),
+            ("Continue", "normal"),
+            ("Break", "normal"),
+            ("Return |7|", "return"),
+            ("|failure| = |missing|", "error"),
+            (
+                "Try { |failure| = |missing| } Catch { Return |7| }",
+                "return",
+            ),
+        ] {
+            let mut context = Context::default();
+            if let Some(value) = &previous {
+                context.set_variable("item".into(), value.clone());
+            }
+            let program = Program::parse(
+                "loop.botwork",
+                &format!("Holder {{ For |item| In |[1, 2]| {{\n {body}\n}} }}"),
+            )
+            .unwrap();
+            let StatementKind::Define(definition) = program.statements[0].kind() else {
+                panic!("definition");
+            };
+            // Inspect loop cleanup before the enclosing invocation would be discarded.
+            let result = evaluate_statement(&definition.body.statements[0], &mut context);
+            assert!(
+                match expected {
+                    "normal" => matches!(result, Ok(Completion::Normal(Literal::None))),
+                    "return" => matches!(result, Ok(Completion::Return(Literal::Int(7)))),
+                    "error" => matches!(result, Err(BWErr::VariableNotDefined(_))),
+                    _ => unreachable!(),
+                },
+                "{body}: {result:?}"
+            );
+            let restored = context.get_variable("item");
+            assert!(
+                match &previous {
+                    None => matches!(restored, Err(BWErr::VariableNotDefined(_))),
+                    Some(Literal::None) => matches!(restored, Ok(Literal::None)),
+                    Some(Literal::Int(10)) => matches!(restored, Ok(Literal::Int(10))),
+                    _ => unreachable!(),
+                },
+                "{body}: {restored:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn for_bindings_restore_inherited_values_and_nested_iterators() {
+    let result = evaluate(
+        "|item| = |10|\nRead {\n For |item| In |[1, 2]| {}\n Return |item|\n}\n\
+         |inherited| = Read\n|sum| = |0|\nFor |item| In |[1, 2]| {\n\
+         |sum| = |sum + item|\nFor |item| In |[3, 4]| { |sum| = |sum + item| }\n\
+         |sum| = |sum + item|\n}\n|answer| = |[inherited, sum, item]|",
+        &mut Context::default(),
+    );
+    assert!(
+        matches!(&result, Ok(Literal::Array(values))
+        if matches!(values.as_slice(), [Literal::Int(10), Literal::Int(20), Literal::Int(10)])),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn empty_and_failed_for_iterables_preserve_the_previous_binding() {
+    for iterable in ["[]", "missing", "1"] {
+        let mut context = Context::default();
+        let source =
+            format!("|item| = |10|\nFor |item| In |{iterable}| {{ |failure| = |missing_body| }}");
+        let result = evaluate(&source, &mut context);
+        assert_eq!(result.is_err(), iterable != "[]");
+        assert!(matches!(variable(&context, "item"), Literal::Int(10)));
+    }
+}
+
+#[test]
+fn cloned_contexts_keep_lexical_definitions_but_do_not_share_bindings() {
+    let mut original = Context::default();
+    evaluate("|x| = |10|\nRead { Return |x| }", &mut original).unwrap();
+    let mut cloned = original.clone();
+    evaluate("|x| = |20|", &mut cloned).unwrap();
+    assert!(matches!(
+        evaluate("Read", &mut original),
+        Ok(Literal::Int(10))
+    ));
+    assert!(matches!(
+        evaluate("Read", &mut cloned),
+        Ok(Literal::Int(20))
+    ));
+    assert_eq!(original.frames.len(), 1);
+    assert_eq!(cloned.frames.len(), 1);
+}
+
+#[test]
+fn recursive_failures_restore_the_callers_frame_before_its_handler_runs() {
+    let mut context = Context::default();
+    let result = evaluate(
+        "|n| = |99|\nFail |n| {\n If |n == 0| { |failure| = |missing| }\n\
+         Fail |n - 1|\n}\nRecover |n| {\n\
+         Try { Fail |3| } Catch { |n| = |n + 1| }\n Return |n|\n}\n\
+         |answer| = Recover |7|",
+        &mut context,
+    );
+    assert!(matches!(result, Ok(Literal::Int(8))), "{result:?}");
+    assert!(matches!(variable(&context, "n"), Literal::Int(99)));
+    assert_eq!(context.frames.len(), 1);
+    assert_eq!(context.current, 0);
+}
+
+#[test]
+fn ordinary_blocks_share_their_invocation_frame_without_changing_the_caller() {
+    let mut context = Context::default();
+    let result = evaluate(
+        "|x| = |10|\nWork {\n |x| = |0|\n If |true| { |x| = |1| }\n\
+         While |x < 3| { |x| = |x + 1| }\n\
+         Try { |failure| = |missing| } Catch { |x| = |x + 1| }\n Return |x|\n}\nWork",
+        &mut context,
+    );
+    assert!(matches!(result, Ok(Literal::Int(4))), "{result:?}");
+    assert!(matches!(variable(&context, "x"), Literal::Int(10)));
+}
+
+#[test]
 fn normally_completed_controls_do_not_collect_body_results() {
     for source in [
         "If |true| { |value| = |7| }",
@@ -415,7 +677,7 @@ fn custom_calls_reuse_the_same_definition_and_original_source_spans() {
         };
         let weak = Arc::downgrade(definition);
         evaluate_program(&program, &mut context).unwrap();
-        let StmtType::UserDefined(stored) = &context.statements["double|param|"] else {
+        let StmtType::UserDefined(stored) = &context.frames[0].statements["double|param|"] else {
             panic!("stored definition")
         };
         assert!(Arc::ptr_eq(definition, stored));
@@ -425,7 +687,7 @@ fn custom_calls_reuse_the_same_definition_and_original_source_spans() {
     for value in [2, 5, 9] {
         let result = evaluate(&format!("|answer| = Double |{value}|"), &mut context);
         assert!(matches!(result, Ok(Literal::Int(answer)) if answer == value * 2));
-        let StmtType::UserDefined(stored) = &context.statements["double|param|"] else {
+        let StmtType::UserDefined(stored) = &context.frames[0].statements["double|param|"] else {
             panic!("stored definition")
         };
         assert!(Arc::ptr_eq(&weak_definition.upgrade().unwrap(), stored));

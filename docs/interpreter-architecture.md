@@ -26,7 +26,15 @@ The first invalid placement returns `ControlFlowError` with the offending statem
 
 Executing a definition registers its `Arc<Definition>` in the context. Each invocation shares the same parsed parameter list and body. No invocation reparses the definition, reconstructs its expressions, or clones its whole syntax tree. The definition and its original source locations remain usable after the caller drops the defining program and input string.
 
-Retained definitions keep their complete source file alive. Dropping the context releases them unless another program/context owns a reference. Invocation-local binding and definition visibility still await the scope implementation specified in the [core contract](language-specification.md).
+Retained definitions keep their complete source file alive. Dropping the context releases them unless another program/context owns a reference. Local registration follows the defining invocation's lifetime; the immutable nested syntax can remain part of its outer definition's shared body.
+
+## Invocation Frames
+
+`Context` owns a stack of frames with separate variable and statement maps. The root frame persists across programs executed in that context. Each invocation adds a fresh frame whose parent index points to the frame containing its resolved definition. Lookup follows those lexical parents, skipping unrelated caller locals. Assignment and definition registration write only the current frame. Reads observe current bindings in that environment, not declaration-time snapshots.
+
+Calls resolve their statement first and evaluate all arguments left to right in the caller before creating the new frame. On normal completion, Return, or an evaluation error, the frame is removed and execution resumes in the saved caller frame. Nested definitions cannot escape as first-class values, so their defining frames stay alive for every valid call. Parent indexes avoid reference cycles; cloning a context copies bindings and frame links while sharing immutable syntax.
+
+If, While, and Try/Catch bodies share their enclosing frame. For evaluates its iterable first, saves only the iterator's binding in the current frame, and restores it on every completion path. If no local binding existed, it removes the iterator so a lexical ancestor's value becomes visible again. The body can still change other bindings in its enclosing frame.
 
 ## Execution API
 
@@ -54,6 +62,6 @@ Runtime boundaries retain defensive checks for escaping controls, including a ca
 
 ## Remaining Interpreter Work
 
-Invocation scopes and resource limits retain their own roadmap items. Parameter binding still uses shared context variables, and For bindings are not yet restored. The completion and placement changes do not establish those scope guarantees or complete language conformance.
+Resource limits, the complete value/naming contracts, imports, structured runtime diagnostics, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Scope and completion checks do not establish complete language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

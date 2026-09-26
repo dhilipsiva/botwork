@@ -93,11 +93,19 @@ Arrays use brackets and maps use braces. Nested strings and map keys are quoted 
 
 Output failures become evaluation errors. Errors are reported on stderr with a nonzero process status when uncaught. Pass `--debug` to the CLI to add top-level statement locations and kinds on stderr; it does not copy statement contents or trace nested execution. Normal logging remains on stdout.
 
+## Variables and Invocation Scope
+
+Every custom call gets fresh parameter and local bindings. Its arguments evaluate once, left to right, in the caller before parameters are installed. If an argument fails, no parameters or invocation locals are installed. With caller `x = 10`, `Pair |1| with |x|` therefore receives `1, 10` even when its parameters are named `x` and `y`.
+
+Variables and statement names resolve from the current invocation through the environment where its definition was registered. Reads see the latest values there. An unrelated caller's private variables and definitions are invisible. Assignments create or update a binding in the current frame, shadowing outer bindings without changing them. Each recursive call has its own parameters and locals; nested definitions disappear when their defining invocation finishes. See [the scopes example](../examples/09-scopes.botwork).
+
+If, While, and Try/Catch bodies share their enclosing invocation or script frame. A For iterator is temporary in that frame: after normal completion, Break, Return, or an error, its previous local value is restored, or the temporary binding is removed if none existed. An inherited value then becomes visible again. Continue retains the iterator for the next iteration, and empty iteration leaves existing bindings unchanged. Other loop-body assignments persist in the enclosing frame.
+
 ## While Loops
 
 `While |condition| { ... }` evaluates its boolean condition before each iteration, including the first. A false condition skips the body. Normal completion and `Continue` reevaluate the condition; `Continue` skips the rest of the current body. `Break` exits the loop immediately. A condition that is not boolean raises an evaluation error, including when its type changes during execution.
 
-`Return` inside a loop exits its containing custom statement. Loops consume only their own `Break` and `Continue`; a custom call cannot transfer those controls to its caller's loop. For-variable restoration remains part of the pending scope work.
+`Return` inside a loop exits its containing custom statement. Loops consume only their own `Break` and `Continue`; a custom call cannot transfer those controls to its caller's loop.
 
 ## Returns and Control Flow
 
@@ -105,7 +113,7 @@ Output failures become evaluation errors. Errors are reported on stderr with a n
 
 Bare `Return` and custom statements that finish without returning a value produce `None` (displayed as `none`). Normally completed definitions and control constructs also produce `None`. Blocks and loops do not collect their statements' results into arrays; an explicit array or map return preserves that value. Assignment and native `Log` retain their value results. See [the control-flow example](../examples/08-control-flow.botwork).
 
-No pending control state survives an invocation. Invocation-local variables and definitions remain separate scope TODOs.
+No pending control state survives an invocation, and its local variables and definitions are discarded on completion, return, or error.
 
 ## Control-Placement Validation
 
@@ -137,6 +145,6 @@ This contract covers evaluation errors, including the arithmetic failures descri
 
 Dot access such as `m.a`, `items.0`, or `m.items.0` is accepted syntax but is not implemented yet. Evaluating it returns `UnsupportedAccessError` with a diagnostic such as `Collection access is unsupported: m.items.0`. No base-variable lookup or index conversion is attempted, so an undefined base receives the same unsupported-feature error.
 
-The error propagates through expressions, collections, conditions, and call arguments. A direct assignment such as `|answer| = |m.a|` preserves the destination's previous value when access fails; caller-state preservation during custom calls remains a separate defect. `Try/Catch` can handle the error; an uncaught error stops execution with CLI status `1`. Access in an unselected `If` branch is not evaluated. Malformed paths remain syntax errors.
+The error propagates through expressions, collections, conditions, and call arguments. A failed assignment preserves its destination's previous value; failed custom invocations discard their local frame. `Try/Catch` can handle the error; an uncaught error stops execution with CLI status `1`. Access in an unselected `If` branch is not evaluated. Malformed paths remain syntax errors.
 
 This temporary contract prevents interpreter panics. Actual key/index lookup and its missing-key, bounds, and type errors remain planned work; its implementation must replace the temporary unsupported-access expectations in the tests.

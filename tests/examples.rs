@@ -107,6 +107,24 @@ fn control_flow_example_returns_exact_values_and_resumes_at_the_correct_boundary
 }
 
 #[test]
+fn scope_example_preserves_callers_and_restores_loop_bindings() {
+    assert_example(
+        "09-scopes.botwork",
+        &[
+            "[1, 10]",
+            "10",
+            "99",
+            "10",
+            "120",
+            "1",
+            "10",
+            "7",
+            "inner is local",
+        ],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

@@ -33,27 +33,79 @@ enum StmtType {
 }
 
 #[derive(Clone, Default)]
-pub struct Context {
+struct Frame {
     variables: HashMap<String, Literal>,
     statements: HashMap<String, StmtType>,
+    // Definitions are not first-class values, so lexical owners remain on the stack.
+    parent: Option<usize>,
+}
+
+#[derive(Clone)]
+pub struct Context {
+    frames: Vec<Frame>,
+    current: usize,
     #[cfg(test)]
     expression_visits: Vec<String>,
 }
 
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            frames: vec![Frame::default()],
+            current: 0,
+            #[cfg(test)]
+            expression_visits: Vec::new(),
+        }
+    }
+}
+
 impl Context {
     fn get_variable(&self, name: &str) -> LiteralResult {
-        self.variables
-            .get(name)
-            .cloned()
-            .ok_or_else(|| BWErr::VariableNotDefined(name.to_owned()))
+        let mut index = Some(self.current);
+        while let Some(frame_index) = index {
+            let frame = &self.frames[frame_index];
+            if let Some(value) = frame.variables.get(name) {
+                return Ok(value.clone());
+            }
+            index = frame.parent;
+        }
+        Err(BWErr::VariableNotDefined(name.to_owned()))
     }
 
     fn set_variable(&mut self, name: String, literal: Literal) -> Option<Literal> {
-        self.variables.insert(name, literal)
+        self.frames[self.current].variables.insert(name, literal)
+    }
+
+    fn get_statement(&self, signature: &str) -> Option<(StmtType, usize)> {
+        let mut index = Some(self.current);
+        while let Some(frame_index) = index {
+            let frame = &self.frames[frame_index];
+            if let Some(statement) = frame.statements.get(signature) {
+                return Some((statement.clone(), frame_index));
+            }
+            index = frame.parent;
+        }
+        None
+    }
+
+    fn with_invocation(
+        &mut self,
+        frame: Frame,
+        body: impl FnOnce(&mut Self) -> CompletionResult,
+    ) -> CompletionResult {
+        let caller = self.current;
+        self.current = self.frames.len();
+        self.frames.push(frame);
+        // All language outcomes, including errors, restore the dynamic caller.
+        let result = body(self);
+        self.frames.pop();
+        self.current = caller;
+        result
     }
 
     pub fn init_statements(&mut self) {
-        self.statements
+        self.frames[self.current]
+            .statements
             .insert("log|param|".into(), StmtType::Native(log_param));
     }
 }
@@ -74,10 +126,8 @@ fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
 }
 
 fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
-    let definition = context
-        .statements
-        .get(&call.signature)
-        .cloned()
+    let (definition, owner) = context
+        .get_statement(&call.signature)
         .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
     match definition {
         StmtType::Native(callback) => callback(call, context),
@@ -87,12 +137,24 @@ fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
                     "The call does not match the definition's parameter count".into(),
                 ));
             }
-            // Argument binding and invocation frames have their own remaining TODO.
-            for (parameter, argument) in definition.parameters.iter().zip(&call.arguments) {
-                let value = evaluate_expression(argument, context)?;
-                context.set_variable(parameter.text.clone(), value);
-            }
-            match evaluate_block(&definition.body, context)? {
+            let arguments = call
+                .arguments
+                .iter()
+                .map(|argument| evaluate_expression(argument, context))
+                .collect::<Result<Vec<_>, _>>()?;
+            let frame = Frame {
+                variables: definition
+                    .parameters
+                    .iter()
+                    .zip(arguments)
+                    .map(|(parameter, value)| (parameter.text.clone(), value))
+                    .collect(),
+                parent: Some(owner),
+                ..Frame::default()
+            };
+            match context
+                .with_invocation(frame, |context| evaluate_block(&definition.body, context))?
+            {
                 Completion::Return(value) => Ok(value),
                 // Reject unconsumed loop controls here so they cannot reach a caller's loop.
                 completion => finish_script(completion),
@@ -188,15 +250,24 @@ fn evaluate_for(
             "For requires an array to iterate over".into(),
         ));
     };
-    for value in values {
-        context.set_variable(binding.to_owned(), value);
-        match evaluate_block(body, context)? {
-            Completion::Normal(_) | Completion::Continue => (),
-            Completion::Break => break,
-            returned @ Completion::Return(_) => return Ok(returned),
+    let previous = context.frames[context.current].variables.remove(binding);
+    let result = (|| {
+        for value in values {
+            context.set_variable(binding.to_owned(), value);
+            match evaluate_block(body, context)? {
+                Completion::Normal(_) | Completion::Continue => (),
+                Completion::Break => break,
+                returned @ Completion::Return(_) => return Ok(returned),
+            }
         }
+        Ok(Completion::Normal(Literal::None))
+    })();
+    if let Some(value) = previous {
+        context.set_variable(binding.to_owned(), value);
+    } else {
+        context.frames[context.current].variables.remove(binding);
     }
-    Ok(Completion::Normal(Literal::None))
+    result
 }
 
 fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> CompletionResult {
@@ -231,7 +302,7 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
             Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {
-            context.statements.insert(
+            context.frames[context.current].statements.insert(
                 definition.signature.clone(),
                 StmtType::UserDefined(Arc::clone(definition)),
             );
