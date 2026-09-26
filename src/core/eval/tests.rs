@@ -2013,3 +2013,36 @@ fn while_reports_a_condition_that_becomes_non_boolean() {
         Err(BWErr::OperationIncompatibleError(_))
     ));
 }
+
+#[test]
+fn internal_oversized_bindings_are_checked_before_variable_or_access_copying() {
+    use super::evaluate_program_detailed;
+    use crate::core::{run::RunLimits, value_limits::ValueLimits};
+    for source in ["|x| = |payload|", "|x| = |container.key|"] {
+        let mut context = Context::with_limits(RunLimits {
+            values: ValueLimits {
+                string_bytes: 3,
+                ..ValueLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        context.set_variable("payload".into(), Literal::String("large".into()));
+        context.set_variable(
+            "container".into(),
+            Literal::Map(
+                [("key".into(), Literal::String("large".into()))]
+                    .into_iter()
+                    .collect(),
+            ),
+        );
+        let result =
+            evaluate_program_detailed(&Program::parse("copy", source).unwrap(), &mut context);
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("value string bytes"));
+        assert!(context.get_variable_ref("x").is_err());
+        assert!(context.checkpoint().is_err());
+    }
+}

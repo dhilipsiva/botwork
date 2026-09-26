@@ -29,8 +29,18 @@ Engine/Context input maps, raw operator operands, native results, and operation 
 
 Rust callers checking borrowed data retain ownership. Use `core::value_limits::discard(value)` to release an arbitrarily deep rejected value safely. Cleanup work remains proportional to already supplied data. Arbitrary callback/future captures and direct host calls to Literal's Clone/Debug/Display remain the host's responsibility.
 
+## Checks before Construction and Copying
+
+Admit string-literal bytes before cloning decoded AST text. Check borrowed variables and selected collection values before cloning them. Concatenation still evaluates its required operands once in order, then checks combined string length or array width/nodes/payload before growing storage. Accepted concatenation extends the owned left string/vector and moves array elements. Successful operators do not build unused incompatibility-message payloads.
+
+For arrays, check known width and minimum node/depth requirements before allocating the vector or visiting children. For maps, preflight distinct decoded keys, key lengths, minimum nodes/depth, and aggregate key bytes before evaluating values or cloning keys. Static shape failures therefore precede child effects/errors. Duplicate keys reserve one retained key; all their value expressions still execute in source order. Each constructed prefix must fit the budgets even if a later duplicate would replace it.
+
+After each required child evaluates, account for its nodes, depth, and payload before inserting it into the parent. A failure stops before later children. Replacing a duplicate key removes its old node/payload contribution; completed values are measured again for exact depth. These checks avoid building an oversized parent, while a child may still construct its own admitted temporary value.
+
+Allocator-observation tests count large allocations on the calling thread. They verify that rejected concatenation and oversized source-string/key copies avoid payload-sized allocations, and that accepted concatenation reuses owned storage without formatting an unused error. Separate effect traces cover static preflight, incremental growth, duplicates, and stopping before assignment.
+
 ## Remaining Allocation Work
 
-Admission cannot undo allocations already made by a host, parser, JSON converter, expression constructor, or diagnostic conversion. Current expression/operator result checks run after constructing those results. Preallocation checks for concatenation, container construction, copies, and input decoding are the next task. Aggregate binding/argument/temporary state, cache/result snapshots, diagnostic size, and serialization remain separate bounds. These per-value budgets are not a process-memory sandbox.
+Admission cannot undo allocations already made by a host, parser, JSON converter, or diagnostic conversion. Expression containers, concatenation, and copies now have construction checks; aggregate JSON/file/flag input admission is the next task. Arbitrary callback allocations still require host cooperation or the planned worker boundary. Aggregate binding/argument/temporary state, cache/result snapshots, diagnostic size, and serialization remain separate bounds. These per-value budgets are not a process-memory sandbox.
 
 Tests cover exact metrics, every bound, Unicode, 100,000-level host values, rejected and cancelled owned inputs/results, unpolled operations, blocking cleanup, recursive calls with accepted deep values, persistent stops, and Catch/iterator restoration. R6 corpus cases pin exact root input admission and failure before effects.

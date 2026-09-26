@@ -389,8 +389,11 @@ impl Rule {
     ) -> LiteralResult {
         let lhs = super::value_limits::Owned::new(lhs);
         let rhs = super::value_limits::Owned::new(rhs);
-        limits.check(&lhs)?;
-        limits.check(&rhs)?;
+        let left_size = limits.check(&lhs)?;
+        let right_size = limits.check(&rhs)?;
+        if *self == Rule::plus {
+            limits.check_concatenation(&lhs, &rhs, left_size, right_size)?;
+        }
         let result = super::value_limits::Owned::new(
             self.operate_binary_unchecked(lhs.into_inner(), rhs.into_inner())?,
         );
@@ -420,8 +423,6 @@ impl Rule {
                 !are_equal
             }));
         }
-        let err = format!("{:?} {:?} {:?}", lhs, self, rhs);
-        let err = Err(BWErr::OperationIncompatibleError(err));
         use Literal::*;
         use Rule::*;
         let numeric_operands = match self {
@@ -439,6 +440,13 @@ impl Rule {
             }
             _ => false,
         };
+        let compatible = numeric_operands
+            || (matches!(self, plus)
+                && matches!((&lhs, &rhs), (String(_), String(_)) | (Array(_), Array(_))))
+            || (matches!(self, logical_and | logical_or)
+                && matches!((&lhs, &rhs), (Bool(_), Bool(_))));
+        let error = (!compatible)
+            .then(|| BWErr::OperationIncompatibleError(format!("{lhs:?} {self:?} {rhs:?}")));
         if numeric_operands {
             validate_numeric_operand(&lhs)?;
             validate_numeric_operand(&rhs)?;
@@ -460,14 +468,14 @@ impl Rule {
                 (Float(a), Int(b)) => finite_float(a * b as f32, "Multiplication"),
                 (Int(a), Float(b)) => finite_float(a as f32 * b, "Multiplication"),
                 (Float(a), Float(b)) => finite_float(a * b, "Multiplication"),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
             divide => match (lhs, rhs) {
                 (Int(a), Int(b)) => finite_float(a as f32 / b as f32, "Division"),
                 (Float(a), Int(b)) => finite_float(a / b as f32, "Division"),
                 (Int(a), Float(b)) => finite_float(a as f32 / b, "Division"),
                 (Float(a), Float(b)) => finite_float(a / b, "Division"),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
             modulus => match (lhs, rhs) {
                 (Int(i32::MIN), Int(-1)) => Ok(Int(0)),
@@ -475,25 +483,29 @@ impl Rule {
                 (Float(a), Int(b)) => finite_float(a % b as f32, "Remainder"),
                 (Int(a), Float(b)) => finite_float(a as f32 % b, "Remainder"),
                 (Float(a), Float(b)) => finite_float(a % b, "Remainder"),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
             plus => match (lhs, rhs) {
                 (Int(a), Int(b)) => checked_integer(a.checked_add(b), "Addition"),
                 (Float(a), Int(b)) => finite_float(a + b as f32, "Addition"),
                 (Int(a), Float(b)) => finite_float(a as f32 + b, "Addition"),
                 (Float(a), Float(b)) => finite_float(a + b, "Addition"),
-                (String(a), String(b)) => Ok(String(format!("{}{}", a, b))),
-                (Array(a), Array(b)) => {
-                    Ok(Array(a.iter().cloned().chain(b.iter().cloned()).collect()))
+                (String(mut a), String(b)) => {
+                    a.push_str(&b);
+                    Ok(String(a))
                 }
-                _ => err,
+                (Array(mut a), Array(b)) => {
+                    a.extend(b);
+                    Ok(Array(a))
+                }
+                _ => Err(error.expect("incompatible operands")),
             },
             minus => match (lhs, rhs) {
                 (Int(a), Int(b)) => checked_integer(a.checked_sub(b), "Subtraction"),
                 (Float(a), Int(b)) => finite_float(a - b as f32, "Subtraction"),
                 (Int(a), Float(b)) => finite_float(a as f32 - b, "Subtraction"),
                 (Float(a), Float(b)) => finite_float(a - b, "Subtraction"),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
 
             // Binary Operations
@@ -505,7 +517,7 @@ impl Rule {
                         greater_than => left > right,
                         _ => left >= right,
                     })),
-                    Option::None => err,
+                    Option::None => Err(error.expect("incompatible operands")),
                 }
             }
 
@@ -515,17 +527,17 @@ impl Rule {
                 }
                 (Int(a), Int(b)) => float_power(f64::from(a), b),
                 (Float(a), Int(b)) => float_power(f64::from(a), b),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
             logical_and => match (lhs, rhs) {
                 (Bool(a), Bool(b)) => Ok(Bool(a && b)),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
             logical_or => match (lhs, rhs) {
                 (Bool(a), Bool(b)) => Ok(Bool(a || b)),
-                _ => err,
+                _ => Err(error.expect("incompatible operands")),
             },
-            _ => err,
+            _ => Err(error.expect("incompatible operands")),
         }
     }
 
@@ -533,19 +545,24 @@ impl Rule {
         if matches!(self, Rule::minus) && matches!(rhs, Literal::Int(_) | Literal::Float(_)) {
             validate_numeric_operand(&rhs)?;
         }
-        let err = format!("{:?} {:?}", self, rhs);
-        let err = Err(BWErr::OperationIncompatibleError(err));
+        let compatible = matches!(
+            (self, &rhs),
+            (Rule::minus, Literal::Int(_) | Literal::Float(_))
+                | (Rule::logical_not, Literal::Bool(_))
+        );
+        let error =
+            (!compatible).then(|| BWErr::OperationIncompatibleError(format!("{self:?} {rhs:?}")));
         match self {
             Rule::minus => match rhs {
                 Literal::Int(a) => checked_integer(a.checked_neg(), "Negation"),
                 Literal::Float(a) => finite_float(-a, "Negation"),
-                _ => err,
+                _ => Err(error.expect("incompatible operand")),
             },
             Rule::logical_not => match rhs {
                 Literal::Bool(a) => Ok(Literal::Bool(!a)),
-                _ => err,
+                _ => Err(error.expect("incompatible operand")),
             },
-            _ => err,
+            _ => Err(error.expect("incompatible operand")),
         }
     }
 }

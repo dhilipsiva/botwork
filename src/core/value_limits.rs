@@ -55,6 +55,117 @@ enum Cursor<'a> {
 }
 
 impl ValueLimits {
+    pub(crate) fn check_size(&self, size: ValueSize) -> Result<(), BWErr> {
+        if size.nodes > self.nodes {
+            return Err(exceeded("value nodes", self.nodes));
+        }
+        if size.depth > self.depth {
+            return Err(exceeded("value depth", self.depth));
+        }
+        if size.payload_bytes > self.payload_bytes {
+            return Err(exceeded("value payload bytes", self.payload_bytes));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn string_size(&self, bytes: usize) -> Result<ValueSize, BWErr> {
+        if bytes > self.string_bytes {
+            return Err(exceeded("value string bytes", self.string_bytes));
+        }
+        let size = ValueSize {
+            nodes: 1,
+            depth: 1,
+            payload_bytes: bytes,
+        };
+        self.check_size(size)?;
+        Ok(size)
+    }
+
+    pub(crate) fn key_size(&self, bytes: usize) -> Result<(), BWErr> {
+        if bytes > self.key_bytes {
+            return Err(exceeded("value key bytes", self.key_bytes));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn container_header(&self, entries: usize) -> Result<ValueSize, BWErr> {
+        if entries > self.entries {
+            return Err(exceeded("value container entries", self.entries));
+        }
+        let minimum_nodes = entries
+            .checked_add(1)
+            .ok_or_else(|| exceeded("value nodes", self.nodes))?;
+        self.check_size(ValueSize {
+            nodes: minimum_nodes,
+            depth: if entries == 0 { 1 } else { 2 },
+            payload_bytes: 0,
+        })?;
+        Ok(ValueSize {
+            nodes: 1,
+            depth: 1,
+            payload_bytes: 0,
+        })
+    }
+
+    pub(crate) fn add_child(&self, parent: &mut ValueSize, child: ValueSize) -> Result<(), BWErr> {
+        let next = ValueSize {
+            nodes: parent
+                .nodes
+                .checked_add(child.nodes)
+                .ok_or_else(|| exceeded("value nodes", self.nodes))?,
+            depth: parent.depth.max(
+                child
+                    .depth
+                    .checked_add(1)
+                    .ok_or_else(|| exceeded("value depth", self.depth))?,
+            ),
+            payload_bytes: parent
+                .payload_bytes
+                .checked_add(child.payload_bytes)
+                .ok_or_else(|| exceeded("value payload bytes", self.payload_bytes))?,
+        };
+        self.check_size(next)?;
+        *parent = next;
+        Ok(())
+    }
+
+    pub(crate) fn check_concatenation(
+        &self,
+        left: &Literal,
+        right: &Literal,
+        left_size: ValueSize,
+        right_size: ValueSize,
+    ) -> Result<(), BWErr> {
+        match (left, right) {
+            (Literal::String(left), Literal::String(right)) => {
+                self.string_size(
+                    left.len()
+                        .checked_add(right.len())
+                        .ok_or_else(|| exceeded("value string bytes", self.string_bytes))?,
+                )?;
+            }
+            (Literal::Array(left), Literal::Array(right)) => {
+                self.container_header(
+                    left.len()
+                        .checked_add(right.len())
+                        .ok_or_else(|| exceeded("value container entries", self.entries))?,
+                )?;
+                self.check_size(ValueSize {
+                    nodes: left_size
+                        .nodes
+                        .checked_add(right_size.nodes - 1)
+                        .ok_or_else(|| exceeded("value nodes", self.nodes))?,
+                    depth: left_size.depth.max(right_size.depth),
+                    payload_bytes: left_size
+                        .payload_bytes
+                        .checked_add(right_size.payload_bytes)
+                        .ok_or_else(|| exceeded("value payload bytes", self.payload_bytes))?,
+                })?;
+            }
+            _ => (),
+        }
+        Ok(())
+    }
     pub(crate) fn validate(&self) -> Result<(), BWErr> {
         if self.depth > MAX_VALUE_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
@@ -126,7 +237,7 @@ impl ValueLimits {
         Ok(size)
     }
 
-    fn add_bytes(&self, size: &mut ValueSize, bytes: usize) -> Result<(), BWErr> {
+    pub(crate) fn add_bytes(&self, size: &mut ValueSize, bytes: usize) -> Result<(), BWErr> {
         size.payload_bytes = size
             .payload_bytes
             .checked_add(bytes)

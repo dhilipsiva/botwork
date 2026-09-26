@@ -217,6 +217,7 @@ impl Context {
     }
 
     fn check_value(&self, value: &Literal) -> DiagnosticResult<()> {
+        self.checkpoint()?;
         self.limits()
             .values
             .check(value)
@@ -323,6 +324,7 @@ impl Context {
                 )))
             })?;
         }
+        self.checkpoint()?;
         self.frames[0].variables.extend(
             variables
                 .into_inner()
@@ -333,7 +335,9 @@ impl Context {
     }
 
     fn get_variable(&self, name: &str) -> LiteralResult {
-        self.get_variable_ref(name).cloned()
+        let value = self.get_variable_ref(name)?;
+        self.check_value(value).map_err(Diagnostic::into_error)?;
+        Ok(value.clone())
     }
 
     fn get_variable_ref(&self, name: &str) -> Result<&Literal, BWErr> {
@@ -732,19 +736,73 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Runtim
             finite_float(value, "Float literal").map_err(Into::into)
         }
         ExprKind::Bool(value) => Ok(Literal::Bool(*value)),
-        ExprKind::String(value) => Ok(Literal::String(value.clone())),
+        ExprKind::String(value) => {
+            context
+                .limits()
+                .values
+                .string_size(value.len())
+                .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+            Ok(Literal::String(value.clone()))
+        }
         ExprKind::Variable(name) => context.get_variable(name).map_err(Into::into),
         ExprKind::Call(call) => invoke(call, context),
         ExprKind::Access { base, segments } => evaluate_access(base, segments, context),
-        ExprKind::Array(elements) => elements
-            .iter()
-            .map(|element| evaluate_expression(element, context))
-            .collect::<Result<Vec<_>, _>>()
-            .map(Literal::Array),
+        ExprKind::Array(elements) => {
+            let limits = context.limits().values;
+            let admit = |error| context.retain_limit(Diagnostic::new(error));
+            let mut size = limits.container_header(elements.len()).map_err(admit)?;
+            let mut values = Vec::with_capacity(elements.len());
+            for element in elements {
+                let value = evaluate_expression(element, context)?;
+                let child = limits
+                    .check(&value)
+                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                limits
+                    .add_child(&mut size, child)
+                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                values.push(value);
+            }
+            Ok(Literal::Array(values))
+        }
         ExprKind::Map(entries) => {
+            let limits = context.limits().values;
+            let mut size = limits
+                .container_header(0)
+                .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+            let mut keys = HashSet::new();
+            for (key, _) in entries {
+                limits
+                    .key_size(key.text.len())
+                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                if !keys.contains(key.text.as_str()) {
+                    limits
+                        .container_header(keys.len() + 1)
+                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                    limits
+                        .add_bytes(&mut size, key.text.len())
+                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                    keys.insert(key.text.as_str());
+                }
+            }
             let mut values = HashMap::new();
             for (key, expression) in entries {
-                values.insert(key.text.clone(), evaluate_expression(expression, context)?);
+                let value = evaluate_expression(expression, context)?;
+                let child = limits
+                    .check(&value)
+                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                if let Some(previous) = values.get(&key.text) {
+                    let old = limits
+                        .check(previous)
+                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                    size.nodes -= old.nodes;
+                    size.payload_bytes -= old.payload_bytes;
+                    // Keeping a previous maximum depth is safe within this map;
+                    // the completed value is measured afresh by its caller.
+                }
+                limits
+                    .add_child(&mut size, child)
+                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                values.insert(key.text.clone(), value);
             }
             Ok(Literal::Map(values))
         }
@@ -901,6 +959,7 @@ fn evaluate_access(
             _ => return Err(error(segment, "value is neither a map nor an array".into())),
         };
     }
+    context.check_value(value)?;
     Ok(value.clone())
 }
 

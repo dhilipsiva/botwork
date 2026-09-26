@@ -414,6 +414,65 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::ConstructionBoundary | Input::ConstructionLimit => {
+                use botwork::core::{
+                    run::{Engine, RunLimits, RunOptions},
+                    value_limits::ValueLimits,
+                };
+                use std::sync::{
+                    atomic::{AtomicUsize, Ordering},
+                    Arc,
+                };
+                let count = Arc::new(AtomicUsize::new(0));
+                let observed = count.clone();
+                let mut engine = Engine::default();
+                engine
+                    .register_native("Mark |value|", move |values, _| {
+                        observed.fetch_add(1, Ordering::SeqCst);
+                        Ok(values[0].clone())
+                    })
+                    .unwrap();
+                let (source, limits) = if case.error.is_some() {
+                    (
+                        "|x| = |[@{Mark |1|},@{Mark |2|},@{Mark |3|}]|",
+                        ValueLimits {
+                            entries: 2,
+                            ..ValueLimits::default()
+                        },
+                    )
+                } else {
+                    (
+                        "|x| = |{k:@{Mark |1|},k:@{Mark |2|}}|",
+                        ValueLimits {
+                            nodes: 2,
+                            entries: 1,
+                            payload_bytes: 5,
+                            ..ValueLimits::default()
+                        },
+                    )
+                };
+                let run = engine.run_source(
+                    "construction-corpus",
+                    source,
+                    RunOptions {
+                        limits: RunLimits {
+                            values: limits,
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(count.load(Ordering::SeqCst), 0);
+                } else {
+                    assert_eq!(run.result.unwrap().to_string(), "{\"k\": 2}");
+                    assert_eq!(count.load(Ordering::SeqCst), 2);
+                }
+                continue;
+            }
             Input::ValueBoundary | Input::ValueLimit => {
                 use botwork::core::{
                     run::{Engine, RunLimits, RunOptions},

@@ -104,6 +104,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R6 — Value admission.** Bound each explicit value's nodes, depth, string/key bytes, container entries, and total payload. Apply local admission at root input, native/operation argument/result, expression-result, Catch-binding, and operator boundaries. Validate all root inputs before installation; latch Context/Engine resource stops and retain cancellation priority. Release rejected owned host data iteratively, including early failures and unpolled operations. Preserve interpreter cleanup and original failures when Catch binding admission fails. [Value rules](value-limits.md) define exact accounting, defaults, public APIs, implicit None completion, finite/kind validation, ownership, and remaining preallocation/aggregate limits.
 
+## Value Construction Bounds
+
+**R7 — Construction admission.** Check decoded strings and borrowed values before copying. Preflight concatenated results after ordered operand evaluation; reuse owned storage without cloning array elements. Check known array width/minimum shape and distinct map keys before child effects or container allocation. Admit each required child's metrics before parent insertion, replace duplicate-key node/payload contributions, and stop before later children on failure. Keep all duplicate value effects in source order and preserve previous assignments on rejection. [Construction rules](value-limits.md#checks-before-construction-and-copying) define resource-failure priority, temporary-value scope, allocation evidence, and remaining aggregate/input bounds.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -162,3 +166,5 @@ R4 evidence in `src/core/ast_limits/tests.rs` and `tests/ast_limits.rs` covers e
 R5 evidence in `tests/import_limits.rs` covers exact/zero/configuration budgets, retries, cache aliases/removal, nested calls, context clones, cold/cached/empty dependency chains, exponential fanout, metadata, and CLI load limits. Reservation/qualification unit tests cover arithmetic, atomicity, and Unicode; two host corpus cases pin cached source reuse and binding failures.
 
 R6 evidence in `tests/value_limits.rs` and `src/core/value_limits/tests.rs` covers exact resource metrics, checked arithmetic, Unicode, adversarial depth, all owned boundaries, async/blocking cancellation, dropped futures, local configuration, operator inputs/results, and Catch/call/iterator cleanup. Two host corpus cases and an executed Rust example verify admission before publication.
+
+R7 evidence in `tests/value_preallocation.rs` and value/evaluator unit tests uses thread-local allocator observations, owned-data pointer checks, exact metrics, overflow assertions, duplicate-key/effect traces, and assignment preservation. Two host corpus cases pin duplicate replacement and static rejection before callback effects.

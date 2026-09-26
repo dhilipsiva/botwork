@@ -21,6 +21,8 @@ pub enum Input {
     ImportBudgetLimit,
     ValueBoundary,
     ValueLimit,
+    ConstructionBoundary,
+    ConstructionLimit,
 }
 
 #[derive(Clone)]
@@ -165,5 +167,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::ValueBoundary, stdout: "", code: None, error: None },
         Case { id: "value-limit", positive: &[], invalid: &["R6"], boundary: &[],
             input: Input::ValueLimit, stdout: "", code: Some("BW8001"), error: Some("value container entries") },
+        Case { id: "construction-boundary", positive: &["R7"], invalid: &[], boundary: &["R7"],
+            input: Input::ConstructionBoundary, stdout: "", code: None, error: None },
+        Case { id: "construction-limit", positive: &[], invalid: &["R7"], boundary: &[],
+            input: Input::ConstructionLimit, stdout: "", code: Some("BW8001"), error: Some("value container entries") },
     ]
 }

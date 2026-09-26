@@ -57,3 +57,56 @@ fn clearing_root_collections_empties_them_without_changing_live_ownership() {
     assert_eq!(variables.remove("x").unwrap().to_string(), "true");
     assert!(variables.into_inner().is_empty());
 }
+
+#[test]
+fn construction_accounting_is_atomic_on_each_overflow() {
+    let limits = ValueLimits {
+        nodes: usize::MAX,
+        payload_bytes: usize::MAX,
+        entries: usize::MAX,
+        ..ValueLimits::default()
+    };
+    for (mut parent, child) in [
+        (
+            ValueSize {
+                nodes: usize::MAX,
+                depth: 1,
+                payload_bytes: 0,
+            },
+            ValueSize {
+                nodes: 1,
+                depth: 1,
+                payload_bytes: 0,
+            },
+        ),
+        (
+            ValueSize {
+                nodes: 1,
+                depth: 1,
+                payload_bytes: 0,
+            },
+            ValueSize {
+                nodes: 1,
+                depth: usize::MAX,
+                payload_bytes: 0,
+            },
+        ),
+        (
+            ValueSize {
+                nodes: 1,
+                depth: 1,
+                payload_bytes: usize::MAX,
+            },
+            ValueSize {
+                nodes: 1,
+                depth: 1,
+                payload_bytes: 1,
+            },
+        ),
+    ] {
+        let original = parent;
+        assert!(limits.add_child(&mut parent, child).is_err());
+        assert_eq!(parent, original);
+    }
+    assert!(limits.container_header(usize::MAX).is_err());
+}
