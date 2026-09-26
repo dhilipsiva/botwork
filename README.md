@@ -30,6 +30,10 @@ script errors return a nonzero exit status. Add `--debug` after `cargo run --`
 to trace top-level statement locations on stderr. See [language behavior](docs/language.md)
 and [testing instructions](docs/testing.md) for the implemented contracts.
 
+Use `cargo run -- --list-statements` to list built-ins, or
+`cargo run -- --statement-help 'Log |value|'` for parameter/return kinds and errors.
+Rust hosts can [register statements with checked signatures](docs/interpreter-architecture.md#shared-signature-metadata).
+
 Or you can create a file from below sample and pass the path to cargo run
 
 

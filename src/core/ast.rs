@@ -316,6 +316,7 @@ pub struct Block {
 #[derive(Clone, Debug)]
 pub struct Definition {
     pub span: Span,
+    pub header: Span,
     pub signature: String,
     pub parameters: Vec<Name>,
     pub body: Block,
@@ -544,6 +545,7 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
         }
         Rule::stmt_define => {
             let header = required(&mut inner)?;
+            let header_span = Span::of(&header, source);
             let signature = signature(&header)?;
             let parameters = header
                 .into_inner()
@@ -553,6 +555,7 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
             let body = block(required(&mut inner)?, source)?;
             StatementKind::Define(Arc::new(Definition {
                 span: span.clone(),
+                header: header_span,
                 signature,
                 parameters,
                 body,
@@ -644,13 +647,7 @@ fn signature(pair: &Pair<Rule>) -> Result<String, BWErr> {
     for part in pair.clone().into_inner() {
         match part.as_rule() {
             Rule::part => {
-                for character in part
-                    .as_str()
-                    .chars()
-                    .filter(|character| !matches!(character, ' ' | '\t'))
-                {
-                    signature.extend(character.to_lowercase());
-                }
+                signature.push_str(&normalize_sentence(part.as_str()));
             }
             Rule::ident | Rule::param_invoke => signature.push_str("|param|"),
             Rule::continuation => (),
@@ -658,6 +655,13 @@ fn signature(pair: &Pair<Rule>) -> Result<String, BWErr> {
         }
     }
     Ok(signature)
+}
+
+pub(crate) fn normalize_sentence(text: &str) -> String {
+    text.chars()
+        .filter(|character| !matches!(character, ' ' | '\t'))
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 fn parse_error(error: pest::error::Error<Rule>, source: &Arc<SourceFile>) -> Diagnostic {

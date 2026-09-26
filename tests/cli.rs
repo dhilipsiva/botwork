@@ -14,6 +14,50 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+#[test]
+fn statement_listing_and_help_use_registered_metadata_without_a_file() {
+    use botwork::core::eval::Context;
+    let output = run(&["--list-statements"]);
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"Log |value|\n");
+    assert!(output.stderr.is_empty());
+    let output = run(&["--statement-help", "l O g |input|"]);
+    assert_eq!(output.status.code(), Some(0));
+    let mut context = Context::default();
+    context.init_statements();
+    let expected = format!(
+        "{}\n",
+        context
+            .statement_signature("Log |x|")
+            .unwrap()
+            .unwrap()
+            .help()
+    );
+    assert_eq!(output.stdout, expected.as_bytes());
+    assert!(output.stderr.is_empty());
+    assert!(expected.contains("value: Any\n  returns: Any\n  BW4001:"));
+}
+
+#[test]
+fn statement_help_rejects_invalid_unknown_and_conflicting_requests() {
+    for (header, code) in [("Unknown", "BW2002"), ("Log |1|", "BW1001")] {
+        let output = run(&["--statement-help", header]);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8(output.stderr).unwrap().contains(code));
+    }
+    for args in [
+        vec!["--list-statements", "--file", "missing.botwork"],
+        vec!["--statement-help", "Log |x|", "--debug"],
+        vec!["--list-statements", "--statement-help", "Log |x|"],
+        vec![],
+    ] {
+        let output = run(&args);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+    }
+}
+
 fn assert_control_placement_failure(name: &str, line: usize, column: usize, keyword: &str) {
     let path = fixture(name);
     // Validation also precedes debug tracing: no statement is executed or traced.

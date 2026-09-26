@@ -1,7 +1,7 @@
 use pest::iterators::Pair;
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     io::{self, Write},
     panic::{catch_unwind, AssertUnwindSafe},
     sync::Arc,
@@ -10,10 +10,11 @@ use std::{
 use super::{
     ast::{
         self, AccessSegment, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr,
-        ExprKind, Name, NativeSignature, Node, Program, Span, Statement, StatementKind, UnaryOp,
+        ExprKind, Name, Node, Program, Span, Statement, StatementKind, UnaryOp,
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Operate, Rule},
+    signature::{StatementOrigin, StatementSignature},
 };
 
 #[cfg(test)]
@@ -40,9 +41,20 @@ type RuntimeResult = DiagnosticResult<Literal>;
 enum StmtType {
     Native {
         callback: Callback,
-        declaration: Arc<NativeSignature>,
+        metadata: Arc<StatementSignature>,
     },
-    UserDefined(Arc<Definition>),
+    UserDefined {
+        definition: Arc<Definition>,
+        metadata: Arc<StatementSignature>,
+    },
+}
+
+impl StmtType {
+    fn metadata(&self) -> &StatementSignature {
+        match self {
+            Self::Native { metadata, .. } | Self::UserDefined { metadata, .. } => metadata,
+        }
+    }
 }
 
 #[derive(Clone, Default)]
@@ -104,11 +116,16 @@ impl Context {
     }
 
     fn get_statement(&self, signature: &str) -> Option<(StmtType, usize)> {
+        self.get_statement_ref(signature)
+            .map(|(statement, owner)| (statement.clone(), owner))
+    }
+
+    fn get_statement_ref(&self, signature: &str) -> Option<(&StmtType, usize)> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
             if let Some(statement) = frame.statements.get(signature) {
-                return Some((statement.clone(), frame_index));
+                return Some((statement, frame_index));
             }
             index = frame.parent;
         }
@@ -140,26 +157,88 @@ impl Context {
         header: &str,
         callback: impl Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static,
     ) -> DiagnosticResult<()> {
-        self.register_callback(
-            "<native>",
-            header,
-            Arc::new(move |values, _| callback(values)),
-        )
+        self.register_native_with_signature(StatementSignature::native(header)?, callback)
     }
 
+    /// Register a validated signature whose kinds are enforced before callback entry
+    /// and before publishing the return value. Error documentation is advisory.
+    pub fn register_native_with_signature(
+        &mut self,
+        signature: StatementSignature,
+        callback: impl Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static,
+    ) -> DiagnosticResult<()> {
+        if signature.origin() != StatementOrigin::Native {
+            return Err(Diagnostic::new(BWErr::SignatureError(
+                "Native registration requires a native signature".into(),
+            ))
+            .at(signature.header()));
+        }
+        self.insert_native(signature, Arc::new(move |values, _| callback(values)))
+    }
+
+    /// Visible metadata in normalized order, with lexical shadowing resolved.
+    pub fn statement_signatures(&self) -> Vec<&StatementSignature> {
+        let mut visible = BTreeMap::new();
+        let mut index = Some(self.current);
+        while let Some(owner) = index {
+            let frame = &self.frames[owner];
+            for (key, statement) in &frame.statements {
+                visible.entry(key).or_insert_with(|| statement.metadata());
+            }
+            index = frame.parent;
+        }
+        visible.into_values().collect()
+    }
+
+    /// Resolve metadata for a complete header, using normal sentence matching.
+    pub fn statement_signature(
+        &self,
+        header: &str,
+    ) -> DiagnosticResult<Option<&StatementSignature>> {
+        let query = ast::native_signature("<signature query>", header)?;
+        Ok(self
+            .get_statement_ref(&query.signature)
+            .map(|(statement, _)| statement.metadata()))
+    }
+
+    /// Metadata for hover at a parsed call in the current lexical environment.
+    pub fn signature_for_call(&self, call: &Call) -> Option<&StatementSignature> {
+        self.get_statement_ref(&call.signature)
+            .map(|(statement, _)| statement.metadata())
+    }
+
+    /// Complete an initial sentence prefix before its first parameter.
+    /// Results use the same normalized ordering and shadowing as registry lookup.
+    pub fn complete_statements(&self, prefix: &str) -> Vec<&StatementSignature> {
+        let prefix = ast::normalize_sentence(prefix.split('|').next().unwrap_or_default());
+        self.statement_signatures()
+            .into_iter()
+            .filter(|signature| signature.normalized().starts_with(&prefix))
+            .collect()
+    }
+
+    #[cfg(test)]
     fn register_callback(
         &mut self,
         name: &str,
         header: &str,
         callback: Callback,
     ) -> DiagnosticResult<()> {
-        let declaration = Arc::new(ast::native_signature(name, header)?);
+        self.insert_native(StatementSignature::native_at(name, header)?, callback)
+    }
+
+    fn insert_native(
+        &mut self,
+        signature: StatementSignature,
+        callback: Callback,
+    ) -> DiagnosticResult<()> {
+        let metadata = Arc::new(signature);
         self.insert_statement(
-            &declaration.signature,
-            &declaration.span,
+            metadata.normalized(),
+            metadata.header(),
             StmtType::Native {
                 callback,
-                declaration: Arc::clone(&declaration),
+                metadata: Arc::clone(&metadata),
             },
         )
     }
@@ -173,11 +252,13 @@ impl Context {
         let statements = &mut self.frames[self.current].statements;
         if let Some(original) = statements.get(signature) {
             let (origin, origin_span) = match original {
-                StmtType::Native { declaration, .. } => (
-                    declaration.span.source().name().to_owned(),
-                    &declaration.span,
+                StmtType::Native { metadata, .. } => (
+                    metadata.header().source().name().to_owned(),
+                    metadata.header(),
                 ),
-                StmtType::UserDefined(definition) => (definition.span.location(), &definition.span),
+                StmtType::UserDefined { definition, .. } => {
+                    (definition.span.location(), &definition.span)
+                }
             };
             return Err(Diagnostic::new(BWErr::DuplicateStatement {
                 signature: signature.into(),
@@ -197,12 +278,16 @@ impl Context {
             .statements
             .contains_key("log|param|")
         {
-            self.register_callback(
-                "<builtin Log>",
-                "Log |value|",
-                Arc::new(|values, _| log_param(values)),
-            )
-            .expect("the built-in Log signature is valid and vacant");
+            let signature = StatementSignature::native_at("<builtin Log>", "Log |value|")
+                .expect("valid built-in header")
+                .description("Write the value to stdout followed by a newline; return that value.")
+                .documents_error(
+                    super::diagnostic::DiagnosticCode::Output,
+                    "The destination rejected output; some bytes may already be written.",
+                )
+                .expect("valid built-in error documentation");
+            self.insert_native(signature, Arc::new(|values, _| log_param(values)))
+                .expect("the built-in Log signature is valid and vacant");
         }
     }
 
@@ -238,10 +323,8 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
     let (definition, owner) = context
         .get_statement(&call.signature)
         .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
-    let parameter_count = match &definition {
-        StmtType::Native { declaration, .. } => declaration.parameters.len(),
-        StmtType::UserDefined(definition) => definition.parameters.len(),
-    };
+    let metadata = definition.metadata();
+    let parameter_count = metadata.parameters().len();
     if parameter_count != call.arguments.len() {
         return Err(BWErr::ParameterMissingError(
             "The call does not match the definition's parameter count".into(),
@@ -251,15 +334,19 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
     let arguments = call
         .arguments
         .iter()
-        .map(|argument| {
+        .enumerate()
+        .map(|(index, argument)| {
             let value = evaluate_expression(argument, context)?;
             validate_value(&value)
+                .map_err(|error| Diagnostic::new(error).at_expression(&argument.span))?;
+            metadata
+                .validate_argument(index, &value)
                 .map_err(|error| Diagnostic::new(error).at_expression(&argument.span))?;
             Ok(value)
         })
         .collect::<DiagnosticResult<Vec<_>>>()?;
     match definition {
-        StmtType::Native { callback, .. } => context.with_call(
+        StmtType::Native { callback, metadata } => context.with_call(
             CallFrame {
                 signature: call.signature.clone(),
                 call_site: call.span.clone(),
@@ -269,10 +356,14 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
                 let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
                     .map_err(|_| BWErr::NativePanic(call.signature.clone()))??;
                 validate_value(&result)?;
+                metadata.validate_return(&result)?;
                 Ok(result)
             },
         ),
-        StmtType::UserDefined(definition) => {
+        StmtType::UserDefined {
+            definition,
+            metadata,
+        } => {
             let frame = Frame {
                 variables: definition
                     .parameters
@@ -292,10 +383,14 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
                 |context| {
                     context
                         .with_invocation(frame, |context| evaluate_block(&definition.body, context))
-                        .and_then(|completion| match completion {
-                            Completion::Return(value) => Ok(value),
-                            // Reject unconsumed loop controls at their invocation boundary.
-                            completion => finish_script(completion),
+                        .and_then(|completion| {
+                            let value = match completion {
+                                Completion::Return(value) => value,
+                                // Reject unconsumed controls at their invocation boundary.
+                                completion => finish_script(completion)?,
+                            };
+                            metadata.validate_return(&value)?;
+                            Ok(value)
                         })
                 },
             )
@@ -602,7 +697,10 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             context.insert_statement(
                 &definition.signature,
                 &definition.span,
-                StmtType::UserDefined(Arc::clone(definition)),
+                StmtType::UserDefined {
+                    definition: Arc::clone(definition),
+                    metadata: Arc::new(definition.signature_metadata()),
+                },
             )?;
             Ok(Completion::Normal(Literal::None))
         }

@@ -4,6 +4,8 @@ pub enum Input {
     NonFiniteHost,
     NativeReturn,
     NativeInvalidReturn,
+    SignatureValid,
+    SignatureInvalid,
 }
 
 #[derive(Clone)]
@@ -108,5 +110,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::NativeReturn, stdout: "", code: None, error: None },
         Case { id: "native-invalid-return", positive: &[], invalid: &["F5"], boundary: &[],
             input: Input::NativeInvalidReturn, stdout: "", code: Some("BW3002"), error: Some("Non-finite floating-point operand") },
+        Case { id: "signature-valid", positive: &["F6"], invalid: &[], boundary: &["F6"],
+            input: Input::SignatureValid, stdout: "", code: None, error: None },
+        Case { id: "signature-invalid", positive: &[], invalid: &["F6"], boundary: &[],
+            input: Input::SignatureInvalid, stdout: "", code: Some("BW3003"), error: Some("Parameter `value` (argument 1)") },
     ]
 }

@@ -2,6 +2,7 @@ use botwork::core::{
     ast::Program,
     diagnostic::Diagnostic,
     eval::{execute_statement_detailed, Context},
+    grammar::BWErr,
 };
 use clap::Parser as Clap;
 use std::{
@@ -16,8 +17,14 @@ use std::{
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Name of the botwork file to run
-    #[arg(short, long)]
-    file: PathBuf,
+    #[arg(short, long, required_unless_present_any = ["list_statements", "statement_help"])]
+    file: Option<PathBuf>,
+    /// List built-in statement headers without executing a file
+    #[arg(long, conflicts_with_all = ["file", "statement_help", "debug"])]
+    list_statements: bool,
+    /// Show a built-in's parameters, return kinds, and documented errors
+    #[arg(long, value_name = "HEADER", conflicts_with_all = ["file", "list_statements", "debug"])]
+    statement_help: Option<String>,
     /// Trace top-level statement locations on stderr
     #[arg(long)]
     debug: bool,
@@ -31,6 +38,8 @@ enum CliError {
     Script(#[from] Diagnostic),
     #[error("Writing debug trace failed: {0}")]
     Trace(io::Error),
+    #[error("Writing statement help failed: {0}")]
+    Help(io::Error),
 }
 
 fn run(file: &Path, debug: bool) -> Result<(), CliError> {
@@ -59,11 +68,39 @@ fn run(file: &Path, debug: bool) -> Result<(), CliError> {
 
 fn main() -> ExitCode {
     let args = Args::parse();
-    match run(&args.file, args.debug) {
+    let result = if args.list_statements || args.statement_help.is_some() {
+        statement_help(args.statement_help.as_deref())
+    } else {
+        run(
+            args.file
+                .as_deref()
+                .expect("clap requires a file for execution"),
+            args.debug,
+        )
+    };
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             let _ = writeln!(io::stderr().lock(), "{error}");
             ExitCode::FAILURE
         }
     }
+}
+
+fn statement_help(header: Option<&str>) -> Result<(), CliError> {
+    let mut context = Context::default();
+    context.init_statements();
+    let text = match header {
+        Some(header) => context
+            .statement_signature(header)?
+            .ok_or_else(|| Diagnostic::new(BWErr::StatementNotDefined(header.into())))?
+            .help(),
+        None => context
+            .statement_signatures()
+            .iter()
+            .map(|signature| signature.header().text().trim())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    };
+    writeln!(io::stdout().lock(), "{text}").map_err(CliError::Help)
 }

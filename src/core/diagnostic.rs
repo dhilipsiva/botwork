@@ -16,6 +16,7 @@ pub enum DiagnosticCode {
     Syntax,
     InvalidControl,
     DuplicateParameter,
+    Signature,
     UndefinedVariable,
     UndefinedStatement,
     DuplicateStatement,
@@ -35,6 +36,7 @@ impl DiagnosticCode {
             Self::Syntax => "BW1001",
             Self::InvalidControl => "BW1002",
             Self::DuplicateParameter => "BW1003",
+            Self::Signature => "BW1004",
             Self::UndefinedVariable => "BW2001",
             Self::UndefinedStatement => "BW2002",
             Self::DuplicateStatement => "BW2003",
@@ -62,6 +64,7 @@ impl BWErr {
             Self::ParsingError(_) => DiagnosticCode::Syntax,
             Self::ControlFlowError(_) => DiagnosticCode::InvalidControl,
             Self::DuplicateParameter { .. } => DiagnosticCode::DuplicateParameter,
+            Self::SignatureError(_) => DiagnosticCode::Signature,
             Self::VariableNotDefined(_) => DiagnosticCode::UndefinedVariable,
             Self::StatementNotDefined(_) => DiagnosticCode::UndefinedStatement,
             Self::DuplicateStatement { .. } => DiagnosticCode::DuplicateStatement,
@@ -82,6 +85,7 @@ impl BWErr {
             Self::ParsingError(_) => "Check the indicated token and close every pipe, bracket, brace, quote, and block comment.".into(),
             Self::ControlFlowError(_) => "Return needs a custom body; Break/Continue need a loop and Rethrow needs a Catch in the same invocation.".into(),
             Self::DuplicateParameter { .. } => "Give each parameter a distinct, case-sensitive name.".into(),
+            Self::SignatureError(_) => "Use declared parameter names and document each error code once with a nonempty description.".into(),
             Self::StatementNotDefined(_) => "Define the statement before calling it; check sentence punctuation and parameter positions/count.".into(),
             Self::DuplicateStatement { .. } => "Rename this declaration or remove the duplicate in this scope; the original remains registered.".into(),
             Self::ParameterMissingError(_) => "Supply one argument for each parameter in the registered signature.".into(),
@@ -221,6 +225,7 @@ impl Diagnostic {
             ]),
             BWErr::ParameterMissingError(reason)
             | BWErr::ParsingError(reason)
+            | BWErr::SignatureError(reason)
             | BWErr::ParsingIntegerError(reason)
             | BWErr::OperationIncompatibleError(reason)
             | BWErr::ControlFlowError(reason)

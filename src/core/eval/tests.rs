@@ -1207,7 +1207,10 @@ fn custom_calls_reuse_the_same_definition_and_original_source_spans() {
         };
         let weak = Arc::downgrade(definition);
         evaluate_program(&program, &mut context).unwrap();
-        let StmtType::UserDefined(stored) = &context.frames[0].statements["double|param|"] else {
+        let StmtType::UserDefined {
+            definition: stored, ..
+        } = &context.frames[0].statements["double|param|"]
+        else {
             panic!("stored definition")
         };
         assert!(Arc::ptr_eq(definition, stored));
@@ -1217,7 +1220,10 @@ fn custom_calls_reuse_the_same_definition_and_original_source_spans() {
     for value in [2, 5, 9] {
         let result = evaluate(&format!("|answer| = Double |{value}|"), &mut context);
         assert!(matches!(result, Ok(Literal::Int(answer)) if answer == value * 2));
-        let StmtType::UserDefined(stored) = &context.frames[0].statements["double|param|"] else {
+        let StmtType::UserDefined {
+            definition: stored, ..
+        } = &context.frames[0].statements["double|param|"]
+        else {
             panic!("stored definition")
         };
         assert!(Arc::ptr_eq(&weak_definition.upgrade().unwrap(), stored));

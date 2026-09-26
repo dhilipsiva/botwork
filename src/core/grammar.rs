@@ -52,6 +52,8 @@ pub enum BWErr {
     ParameterMissingError(String),
     #[error("Parsing error: {0}")]
     ParsingError(String),
+    #[error("Invalid signature metadata: {0}")]
+    SignatureError(String),
     #[error("Parsing number failed: {0}")]
     ParsingIntegerError(String),
     #[error("Operation performed on incompatible types: {0}")]

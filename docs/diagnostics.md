@@ -11,6 +11,7 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW1001 | Syntax | Check the indicated token and matching delimiters/comment fences |
 | BW1002 | Invalid control placement | Move Return into a custom body or loop control into its own invocation's loop |
 | BW1003 | Duplicate parameter | Give parameters distinct case-sensitive names |
+| BW1004 | Invalid signature metadata | Use declared parameter names and unique, nonempty error documentation |
 | BW2001 | Undefined variable | Define the correctly spelled/cased name in its lexical scope before use |
 | BW2002 | Undefined statement | Define it before use and match punctuation, argument positions, and count |
 | BW2003 | Duplicate statement | Rename/remove the same-scope duplicate; the original remains registered |

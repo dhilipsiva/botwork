@@ -132,7 +132,7 @@ assert_eq!(evaluate_program_detailed(&program, &mut context)?.to_string(), "HELL
 # Ok::<(), botwork::core::diagnostic::Diagnostic>(())
 ```
 
-Callbacks implement `Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static`. Resolution and arity checks precede argument evaluation; every argument evaluates once, left to right, in the caller. All values must be finite, including nested floats in arrays/maps. The callback receives immutable values in parameter order and cannot access the interpreter context. Until shared typed signatures are implemented, the callback checks operation-specific kinds before performing effects.
+Callbacks implement `Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static`. Resolution and arity checks precede argument evaluation; every argument evaluates once, left to right, in the caller. All values must be finite, including nested floats in arrays/maps. The callback receives immutable values in parameter order and cannot access the interpreter context. Declare accepted kinds with the shared metadata below; callbacks still check operation-specific shapes/ranges before performing effects.
 
 Return an owned `Literal` for assignment or further calls; return `Literal::None` explicitly when there is no result. Every value kind is supported, with no coercion or host-reference aliasing. Returned non-finite values fail with BW3002 before assignment. Log uses this same registration/invocation path and returns its input after writing it.
 
@@ -140,4 +140,45 @@ Return a suitable `BWErr` for expected failures, including `NativeError(reason)`
 
 Unwinding callback panics become BW4003 and unwind language frames/bindings through normal error handling. The Rust panic hook still runs; Botwork does not alter process-global hooks. Process aborts, fatal signals, blocking callbacks, and corrupted or poisoned captured state are outside this recovery guarantee. Callbacks must restore their own host resources/state and return errors for expected failures. These are trusted in-process extensions with the host process's capabilities.
 
-Cloning a context copies DSL bindings/registries and shares callback closures through Arc. Synchronize intentionally shared captured state, or register separate closures in fresh contexts for independent host state. `Send + Sync` bounds permit that sharing; execution remains synchronous. Async cancellation, operation deadlines, typed signatures, and adapter conversion/cause contracts retain separate roadmap tasks.
+Cloning a context copies DSL bindings/registries and shares callback closures through Arc. Synchronize intentionally shared captured state, or register separate closures in fresh contexts for independent host state. `Send + Sync` bounds permit that sharing; execution remains synchronous. Async cancellation, operation deadlines, and adapter conversion/cause contracts retain separate roadmap tasks.
+
+## Shared Signature Metadata
+
+`core::signature::StatementSignature` is the contract used by both native and DSL registrations. It retains the normalized key, original header span, origin, ordered parameter names/kinds, return kinds, description, and documented errors. `Definition::signature_metadata()` exposes a parsed DSL declaration without executing it. DSL parameters and results are `Any`; their bodies are dynamic, so return types and possible failures are not inferred. Empty error documentation never promises error-free execution.
+
+Native hosts can constrain kinds before registration:
+
+```rust
+use botwork::core::{
+    ast::Program,
+    diagnostic::DiagnosticCode,
+    eval::{evaluate_program_detailed, Context},
+    grammar::Literal,
+    signature::{StatementSignature, ValueKind},
+};
+
+let signature = StatementSignature::native("Uppercase |text|")?
+    .parameter("text", ValueKind::String)?
+    .returns(ValueKind::String)
+    .description("Return the Unicode uppercase text.");
+let mut context = Context::default();
+context.register_native_with_signature(signature, |arguments| {
+    let Literal::String(text) = &arguments[0] else { unreachable!("checked before entry") };
+    Ok(Literal::String(text.to_uppercase()))
+})?;
+let program = Program::parse_detailed("typed.botwork", "Uppercase |1|")?;
+let error = evaluate_program_detailed(&program, &mut context).unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::IncompatibleType);
+assert!(error.call_stack.is_empty()); // The callback never ran.
+let metadata = context.statement_signature("u p p e r c a s e |value|")?.unwrap();
+assert!(metadata.help().contains("text: String"));
+# Ok::<(), botwork::core::diagnostic::Diagnostic>(())
+```
+
+`ValueKind` names None, Int, Float, Bool, String, Array, and Map. `ValueKinds::one(kind).union(other.into())` accepts several kinds; `ValueKinds::ANY` accepts all seven. These are top-level kinds, with no implicit conversion or structural schema for collections. Finite checks still traverse every nested value. Sets cannot be empty; displays and iteration have a fixed order. Metadata builders preserve normalized names; unknown case-sensitive parameter labels or duplicate/empty error descriptions return BW1004. `documents_error(code, description)` adds sorted operation documentation without restricting which errors can propagate.
+
+For both entry kinds, the interpreter resolves/checks arity first, then evaluates and validates each argument in order. A kind mismatch is BW3003 at that argument, skips later arguments, and adds no unentered callee frame. Return validation happens after completion but before assignment; a mismatch is BW3003 with the entered frame and preserves the destination. Completed callback effects remain completed. Ordinary `register_native` defaults to Any; operation authors should declare narrower kinds when known. Log documents Any input/result and output failure BW4001 through the same schema.
+
+`statement_signatures()` lists visible signatures in normalized order, resolving lexical shadowing. `statement_signature(header)` looks up a complete header; `signature_for_call(call)` gives a hover consumer the same metadata in the current lexical environment. `complete_statements(prefix)` matches normalized initial sentence text before the first parameter and returns the same records; it does not parse incomplete expressions. `help()` renders those records. These queries never invoke callbacks or execute definitions. Metadata clones own their retained source and are independent of registry mutations.
+
+CLI `--list-statements` and `--statement-help 'Log |value|'` use the initialized built-in registry and require no script. They cannot be combined with file execution/debug flags. Unknown headers return BW2002 and malformed headers return syntax diagnostics. Static analysis of unexecuted modules, editor protocol wiring, inferred DSL types, and incomplete-edit recovery remain tooling work; registry queries alone do not resolve arbitrary nested source scopes.

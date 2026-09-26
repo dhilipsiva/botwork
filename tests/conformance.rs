@@ -210,6 +210,66 @@ fn check_native_case(case: &Case) {
     }
 }
 
+fn check_signature_case(case: &Case) {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        signature::{StatementSignature, ValueKind, ValueKinds},
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let count = Arc::new(AtomicUsize::new(0));
+    let invoked = Arc::clone(&count);
+    let mut context = Context::default();
+    let signature = StatementSignature::native("Host |value|")
+        .unwrap()
+        .parameter(
+            "value",
+            ValueKinds::one(ValueKind::Int).union(ValueKind::Float.into()),
+        )
+        .unwrap()
+        .returns(ValueKind::Int);
+    let expected_help = signature.help();
+    context
+        .register_native_with_signature(signature, move |_| {
+            invoked.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::Int(7))
+        })
+        .unwrap();
+    assert_eq!(
+        context
+            .statement_signature("h o s t |other|")
+            .unwrap()
+            .unwrap()
+            .help(),
+        expected_help
+    );
+    let source = if case.error.is_some() {
+        "Host |true|"
+    } else {
+        "Host |1.0|"
+    };
+    let result = evaluate_program_detailed(
+        &Program::parse("signature-corpus.botwork", source).unwrap(),
+        &mut context,
+    );
+    match case.error {
+        Some(expected) => {
+            let error = result.unwrap_err();
+            assert_eq!(error.code().as_str(), case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+            assert_eq!(count.load(Ordering::SeqCst), 0);
+            assert!(error.call_stack.is_empty());
+        }
+        None => {
+            assert!(matches!(result, Ok(Literal::Int(7))));
+            assert_eq!(count.load(Ordering::SeqCst), 1);
+        }
+    }
+}
+
 #[test]
 fn conformance_inputs_match_status_stdout_and_error_contracts() {
     let cases = cases();
@@ -224,6 +284,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             }
             Input::NativeReturn | Input::NativeInvalidReturn => {
                 check_native_case(&case);
+                continue;
+            }
+            Input::SignatureValid | Input::SignatureInvalid => {
+                check_signature_case(&case);
                 continue;
             }
         };

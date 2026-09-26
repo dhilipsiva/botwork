@@ -70,3 +70,62 @@ fn invalid_nested_host_arguments_never_reach_native_or_custom_bodies() {
         assert!(events(&context).is_empty());
     }
 }
+
+#[test]
+fn signature_queries_observe_lexical_shadowing_and_restore_parent_visibility() {
+    let mut context = Context::default();
+    context
+        .register_native("Value |value|", |values| Ok(values[0].clone()))
+        .unwrap();
+    context
+        .register_native("Parent", |_| Ok(Literal::None))
+        .unwrap();
+    let parent = context
+        .statement_signature("Value |x|")
+        .unwrap()
+        .unwrap()
+        .help();
+    context
+        .with_invocation(
+            Frame {
+                parent: Some(0),
+                ..Frame::default()
+            },
+            |context| {
+                let program = Program::parse(
+                    "local.botwork",
+                    "Value |local| { Return |local| }\nChild {}",
+                )
+                .unwrap();
+                evaluate_program_detailed(&program, context)?;
+                let signatures = context.statement_signatures();
+                assert_eq!(
+                    signatures
+                        .iter()
+                        .map(|signature| signature.normalized())
+                        .collect::<Vec<_>>(),
+                    ["child", "parent", "value|param|"]
+                );
+                let signature = context.statement_signature("Value |x|")?.unwrap();
+                assert_eq!(signature.origin(), StatementOrigin::Dsl);
+                assert_eq!(signature.parameters()[0].name, "local");
+                assert_eq!(context.complete_statements("Value").len(), 1);
+                let call = parsed_call("Value |1|");
+                assert_eq!(
+                    context.signature_for_call(&call).unwrap().help(),
+                    signature.help()
+                );
+                Ok(Completion::Normal(Literal::None))
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        context
+            .statement_signature("Value |x|")
+            .unwrap()
+            .unwrap()
+            .help(),
+        parent
+    );
+    assert!(context.statement_signature("Child").unwrap().is_none());
+}
