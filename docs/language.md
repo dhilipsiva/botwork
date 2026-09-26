@@ -2,6 +2,34 @@
 
 This reference records implemented behavior as language TODOs are completed. The [core language specification](language-specification.md) defines the intended semantics and identifies pending implementation work.
 
+## Values and Supported Operations
+
+The seven value kinds are None, boolean, `i32` integer, finite `f32` float, Unicode string, ordered array, and string-keyed map. A variable or map entry bound to None is present; an absent variable or key raises its lookup error. None has no source literal: a bare `Return` or custom-statement fallthrough produces it. Its displayed spelling `none` is an ordinary variable name in source, not a reserved literal.
+
+Only booleans are accepted by `If`, `While`, `!`, `and`, and `or`; no value has implicit truthiness. `For` accepts arrays only, including empty arrays. Empty strings/maps/arrays and numeric zero do not turn into false. Conversion is limited to the [numeric rules](#numeric-precision-and-comparison); strings are not parsed as numbers and booleans are not integers.
+
+| Operation | Accepted operands | Result |
+| --- | --- | --- |
+| `+` | Two numbers; two strings; two arrays | Numeric sum; concatenated string; concatenated array |
+| Binary `-`, `*`, `/`, `%` | Two numbers | Number under the numeric contract |
+| `^` | Numeric base and integer exponent | Number under the power contract |
+| Unary `-` | Number | Same numeric kind, with overflow checks |
+| `<`, `<=`, `>`, `>=` | Two numbers | Boolean |
+| `==`, `!=` | Any two finite values | Boolean under structural equality |
+| `!` | Boolean | Boolean |
+| `and`, `or` | Boolean left and, when evaluated, boolean right | Boolean with short-circuiting |
+| Dot/bracket access | Map/string key or array/nonnegative integer index | Selected value under the access contract |
+
+All other operator/value-kind combinations produce catchable `OperationIncompatibleError`, except access failures use `CollectionAccessError`. There is no map merge, string/array repetition, implicit string concatenation with numbers, collection ordering, or unary plus. Invalid arithmetic values have their specified range/divisor errors. Operator precedence and comparison chains follow ordinary binary grouping: `1 == 1 == 1` is false because `(1 == 1)` is a boolean, unequal to integer `1`.
+
+## Collection Ownership and Map Order
+
+Arrays and maps are owned values. Variable reads, assignment copies, argument binding, explicit returns, and exported Rust results do not share mutable collection storage. Reassigning a copy or a callee's parameter does not change the original; concatenation creates a replacement array. Nested elements follow the same copy rules. Indexed assignment is unsupported, and future collection-update statements will return replacement values. A For iterable is evaluated once, so reassigning its source during the loop does not replace the iteration sequence.
+
+Map literals evaluate all values in source order, including duplicate entries. If multiple keys decode to the same exact string, the last value wins: `{a: 1, "a": 2}` contains `a: 2`. An error in any earlier or overwritten value still stops evaluation; a failed assignment preserves its old destination. Quoted escapes are decoded before key matching, with no Unicode normalization or case folding.
+
+Maps have no insertion-order contract. Direct `For` iteration over a map is a type error; use an explicit ordered key array, such as `For |key| In |["z", "a"]| { Log |map[key]| }`, when order matters. Rust `Literal::Map` iteration inherits `HashMap`'s unspecified order. Map equality ignores order, while displayed map keys are sorted lexicographically.
+
 ## Keywords and Names
 
 Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation: a Unicode letter, Unicode number, or underscore. This also prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
@@ -131,7 +159,7 @@ Escapes are decoded once. For example, `"\\n"` contains a backslash followed by 
 
 ## Log Output
 
-`Log |value|` writes the value followed by a newline to stdout and returns that value. Top-level strings are printed as their contents, including literal newlines. Numbers and booleans use plain text; the internal absent value displays as `none`.
+`Log |value|` writes the value followed by a newline to stdout and returns that value. Top-level strings are printed as their contents, including literal newlines. Numbers and booleans use plain text; the None value displays as `none`.
 
 Arrays use brackets and maps use braces. Nested strings and map keys are quoted with escaped newlines, quotes, backslashes, and other control characters. Map keys are sorted lexicographically for stable output: `Log |{z: 2, a: 1}|` prints `{"a": 1, "z": 2}`. This is a human-readable display format, not a serialization contract or a promise that every displayed value can be parsed as DSL source.
 
