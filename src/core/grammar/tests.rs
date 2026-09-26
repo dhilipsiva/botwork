@@ -2,6 +2,113 @@ use super::{BWErr, BWParser, Literal, Operate, Rule};
 use pest::Parser;
 
 #[test]
+fn operator_error_formatting_occurs_only_after_value_checks_and_incompatibility() {
+    use crate::core::{
+        diagnostic::{Diagnostic, DiagnosticCode},
+        value_limits::ValueLimits,
+    };
+    use std::cell::Cell;
+    let calls = Cell::new(0);
+    let fail = |message: std::fmt::Arguments<'_>| {
+        calls.set(calls.get() + 1);
+        Diagnostic::new(BWErr::OperationIncompatibleError(message.to_string()))
+    };
+    assert_eq!(
+        Rule::plus
+            .operate_binary_with_error(
+                Literal::Int(1),
+                Literal::Int(2),
+                &ValueLimits::default(),
+                fail
+            )
+            .unwrap()
+            .to_string(),
+        "3"
+    );
+    assert_eq!(
+        Rule::equal
+            .operate_binary_with_error(
+                Literal::Array(vec![]),
+                Literal::Bool(true),
+                &ValueLimits::default(),
+                fail
+            )
+            .unwrap()
+            .to_string(),
+        "false"
+    );
+    assert_eq!(
+        Rule::minus
+            .operate_unary_with_error(Literal::Int(1), &ValueLimits::default(), fail)
+            .unwrap()
+            .to_string(),
+        "-1"
+    );
+    assert_eq!(
+        Rule::plus
+            .operate_binary_with_error(
+                Literal::Float(f32::NAN),
+                Literal::Int(1),
+                &ValueLimits::default(),
+                fail
+            )
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::Arithmetic
+    );
+    assert_eq!(
+        Rule::plus
+            .operate_binary_with_error(
+                Literal::None,
+                Literal::None,
+                &ValueLimits {
+                    nodes: 0,
+                    ..ValueLimits::default()
+                },
+                fail
+            )
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::ResourceLimit
+    );
+    assert_eq!(calls.get(), 0);
+    assert_eq!(
+        Rule::minus
+            .operate_binary_with_error(
+                Literal::Bool(true),
+                Literal::Int(1),
+                &ValueLimits::default(),
+                fail
+            )
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::IncompatibleType
+    );
+    assert_eq!(
+        Rule::logical_not
+            .operate_unary_with_error(Literal::Int(1), &ValueLimits::default(), fail)
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::IncompatibleType
+    );
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn unsupported_operator_rules_return_typed_errors_without_reaching_checked_branches() {
+    for rule in [Rule::botwork, Rule::stmt_assign, Rule::literal] {
+        assert!(matches!(
+            rule.operate_binary(Literal::Int(1), Literal::Bool(true)),
+            Err(BWErr::OperationIncompatibleError(_))
+        ));
+        assert!(matches!(
+            rule.operate_unary(Literal::Int(1)),
+            Err(BWErr::OperationIncompatibleError(_))
+        ));
+    }
+}
+
+#[test]
 fn parses_assignments_collections_and_custom_statements() {
     let source = r#"
         |values| = |[1, 2.5, true, {name: "sample"}]|

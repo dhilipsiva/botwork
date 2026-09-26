@@ -1,3 +1,4 @@
+use super::diagnostic::{Diagnostic, DiagnosticLimits, DiagnosticResult};
 use pest::pratt_parser::PrattParser;
 use std::collections::HashMap;
 use std::fmt;
@@ -387,6 +388,17 @@ impl Rule {
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
     ) -> LiteralResult {
+        self.operate_binary_with_error(lhs, rhs, limits, incompatible_detail)
+            .map_err(Diagnostic::into_error)
+    }
+
+    pub(crate) fn operate_binary_with_error(
+        &self,
+        lhs: Literal,
+        rhs: Literal,
+        limits: &super::value_limits::ValueLimits,
+        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+    ) -> DiagnosticResult<Literal> {
         let lhs = super::value_limits::Owned::new(lhs);
         let rhs = super::value_limits::Owned::new(rhs);
         let left_size = limits.check(&lhs)?;
@@ -394,9 +406,11 @@ impl Rule {
         if *self == Rule::plus {
             limits.check_concatenation(&lhs, &rhs, left_size, right_size)?;
         }
-        let result = super::value_limits::Owned::new(
-            self.operate_binary_unchecked(lhs.into_inner(), rhs.into_inner())?,
-        );
+        let result = super::value_limits::Owned::new(self.operate_binary_unchecked(
+            lhs.into_inner(),
+            rhs.into_inner(),
+            incompatible,
+        )?);
         limits.check(&result)?;
         Ok(result.into_inner())
     }
@@ -406,15 +420,31 @@ impl Rule {
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
     ) -> LiteralResult {
+        self.operate_unary_with_error(rhs, limits, incompatible_detail)
+            .map_err(Diagnostic::into_error)
+    }
+
+    pub(crate) fn operate_unary_with_error(
+        &self,
+        rhs: Literal,
+        limits: &super::value_limits::ValueLimits,
+        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+    ) -> DiagnosticResult<Literal> {
         let rhs = super::value_limits::Owned::new(rhs);
         limits.check(&rhs)?;
-        let result =
-            super::value_limits::Owned::new(self.operate_unary_unchecked(rhs.into_inner())?);
+        let result = super::value_limits::Owned::new(
+            self.operate_unary_unchecked(rhs.into_inner(), incompatible)?,
+        );
         limits.check(&result)?;
         Ok(result.into_inner())
     }
 
-    fn operate_binary_unchecked(&self, lhs: Literal, rhs: Literal) -> LiteralResult {
+    fn operate_binary_unchecked(
+        &self,
+        lhs: Literal,
+        rhs: Literal,
+        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+    ) -> DiagnosticResult<Literal> {
         if matches!(self, Rule::equal | Rule::not_equal) {
             let are_equal = values_equal(&lhs, &rhs)?;
             return Ok(Literal::Bool(if *self == Rule::equal {
@@ -445,8 +475,9 @@ impl Rule {
                 && matches!((&lhs, &rhs), (String(_), String(_)) | (Array(_), Array(_))))
             || (matches!(self, logical_and | logical_or)
                 && matches!((&lhs, &rhs), (Bool(_), Bool(_))));
-        let error = (!compatible)
-            .then(|| BWErr::OperationIncompatibleError(format!("{lhs:?} {self:?} {rhs:?}")));
+        if !compatible {
+            return Err(incompatible(format_args!("{lhs:?} {self:?} {rhs:?}")));
+        }
         if numeric_operands {
             validate_numeric_operand(&lhs)?;
             validate_numeric_operand(&rhs)?;
@@ -459,23 +490,23 @@ impl Rule {
                 _ => false,
             }
         {
-            return Err(BWErr::ArithmeticError(format!("{self:?} by zero")));
+            return Err(BWErr::ArithmeticError(format!("{self:?} by zero")).into());
         }
-        match self {
-            // Arithmetic operations
+        let result = match self {
+            // Arithmetic operations; incompatible combinations returned above.
             multiply => match (lhs, rhs) {
                 (Int(a), Int(b)) => checked_integer(a.checked_mul(b), "Multiplication"),
                 (Float(a), Int(b)) => finite_float(a * b as f32, "Multiplication"),
                 (Int(a), Float(b)) => finite_float(a as f32 * b, "Multiplication"),
                 (Float(a), Float(b)) => finite_float(a * b, "Multiplication"),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
             divide => match (lhs, rhs) {
                 (Int(a), Int(b)) => finite_float(a as f32 / b as f32, "Division"),
                 (Float(a), Int(b)) => finite_float(a / b as f32, "Division"),
                 (Int(a), Float(b)) => finite_float(a as f32 / b, "Division"),
                 (Float(a), Float(b)) => finite_float(a / b, "Division"),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
             modulus => match (lhs, rhs) {
                 (Int(i32::MIN), Int(-1)) => Ok(Int(0)),
@@ -483,7 +514,7 @@ impl Rule {
                 (Float(a), Int(b)) => finite_float(a % b as f32, "Remainder"),
                 (Int(a), Float(b)) => finite_float(a as f32 % b, "Remainder"),
                 (Float(a), Float(b)) => finite_float(a % b, "Remainder"),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
             plus => match (lhs, rhs) {
                 (Int(a), Int(b)) => checked_integer(a.checked_add(b), "Addition"),
@@ -498,14 +529,14 @@ impl Rule {
                     a.extend(b);
                     Ok(Array(a))
                 }
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
             minus => match (lhs, rhs) {
                 (Int(a), Int(b)) => checked_integer(a.checked_sub(b), "Subtraction"),
                 (Float(a), Int(b)) => finite_float(a - b as f32, "Subtraction"),
                 (Int(a), Float(b)) => finite_float(a as f32 - b, "Subtraction"),
                 (Float(a), Float(b)) => finite_float(a - b, "Subtraction"),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
 
             // Binary Operations
@@ -517,7 +548,7 @@ impl Rule {
                         greater_than => left > right,
                         _ => left >= right,
                     })),
-                    Option::None => Err(error.expect("incompatible operands")),
+                    Option::None => unreachable!("operands passed compatibility checks"),
                 }
             }
 
@@ -527,21 +558,26 @@ impl Rule {
                 }
                 (Int(a), Int(b)) => float_power(f64::from(a), b),
                 (Float(a), Int(b)) => float_power(f64::from(a), b),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
             logical_and => match (lhs, rhs) {
                 (Bool(a), Bool(b)) => Ok(Bool(a && b)),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
             logical_or => match (lhs, rhs) {
                 (Bool(a), Bool(b)) => Ok(Bool(a || b)),
-                _ => Err(error.expect("incompatible operands")),
+                _ => unreachable!("operands passed compatibility checks"),
             },
-            _ => Err(error.expect("incompatible operands")),
-        }
+            _ => unreachable!("operands passed compatibility checks"),
+        };
+        result.map_err(Diagnostic::from)
     }
 
-    fn operate_unary_unchecked(&self, rhs: Literal) -> LiteralResult {
+    fn operate_unary_unchecked(
+        &self,
+        rhs: Literal,
+        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+    ) -> DiagnosticResult<Literal> {
         if matches!(self, Rule::minus) && matches!(rhs, Literal::Int(_) | Literal::Float(_)) {
             validate_numeric_operand(&rhs)?;
         }
@@ -550,19 +586,31 @@ impl Rule {
             (Rule::minus, Literal::Int(_) | Literal::Float(_))
                 | (Rule::logical_not, Literal::Bool(_))
         );
-        let error =
-            (!compatible).then(|| BWErr::OperationIncompatibleError(format!("{self:?} {rhs:?}")));
-        match self {
+        if !compatible {
+            return Err(incompatible(format_args!("{self:?} {rhs:?}")));
+        }
+        let result = match self {
             Rule::minus => match rhs {
                 Literal::Int(a) => checked_integer(a.checked_neg(), "Negation"),
                 Literal::Float(a) => finite_float(-a, "Negation"),
-                _ => Err(error.expect("incompatible operand")),
+                _ => unreachable!("operand passed compatibility checks"),
             },
             Rule::logical_not => match rhs {
                 Literal::Bool(a) => Ok(Literal::Bool(!a)),
-                _ => Err(error.expect("incompatible operand")),
+                _ => unreachable!("operand passed compatibility checks"),
             },
-            _ => Err(error.expect("incompatible operand")),
-        }
+            _ => unreachable!("operand passed compatibility checks"),
+        };
+        result.map_err(Diagnostic::from)
     }
+}
+
+fn incompatible_detail(message: fmt::Arguments<'_>) -> Diagnostic {
+    DiagnosticLimits::default().formatted_detail(
+        BWErr::OperationIncompatibleError,
+        message,
+        None,
+        false,
+        std::iter::empty(),
+    )
 }

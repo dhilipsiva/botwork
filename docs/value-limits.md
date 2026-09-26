@@ -2,6 +2,8 @@
 
 `RunLimits::values` configures per-value budgets for Engine and Context. NativeOperation uses the same defaults; `with_value_limits(limits)` changes one operation. Public Rust operators use defaults, or accept explicit limits through `Rule::operate_binary_bounded` and `operate_unary_bounded`.
 
+[Incompatible-operator diagnostic construction](diagnostic-construction.md#incompatible-operators) additionally measures formatted operand descriptions before allocation. Runtime diagnostics use local run settings; raw public operators use default DiagnosticLimits and retain their primary-category BWErr return type.
+
 ## Budgets
 
 | ValueLimits field | Default | Count |

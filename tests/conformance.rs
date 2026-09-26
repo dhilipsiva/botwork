@@ -514,6 +514,45 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::OperatorDiagnosticBoundary | Input::OperatorDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let message = "Bool(true) plus Int(1)";
+                let error = Engine::default()
+                    .run_source(
+                        case.id,
+                        "|out| = |true + 1|",
+                        RunOptions {
+                            limits: RunLimits {
+                                diagnostics: DiagnosticLimits {
+                                    text_bytes: "expression".len() + message.len()
+                                        - usize::from(case.error.is_some()),
+                                    ..DiagnosticLimits::default()
+                                },
+                                ..RunLimits::default()
+                            },
+                            ..RunOptions::default()
+                        },
+                    )
+                    .result
+                    .unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW3003");
+                    assert!(error.causes[0].omissions.is_some());
+                } else {
+                    assert_eq!(error.code().as_str(), "BW3003");
+                    let BWErr::OperationIncompatibleError(detail) = error.error.as_ref() else {
+                        panic!("category")
+                    };
+                    assert_eq!(detail, message);
+                    assert!(error.omissions.is_none());
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

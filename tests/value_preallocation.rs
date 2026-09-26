@@ -58,6 +58,55 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn incompatible_operator_messages_reject_large_debug_details_before_allocation() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    for expression in ["value - 1", "-value", "value and true"] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 32,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        context
+            .set_input_variables(BTreeMap::from([(
+                "value".into(),
+                Literal::String("x".repeat(length)),
+            )]))
+            .unwrap();
+        let program = Program::parse("operator", &format!("|out| = |{expression}|")).unwrap();
+        let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+        let error = result.unwrap_err();
+        assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+        assert!(error.causes[0].omissions.is_some());
+        assert_eq!(large, 1); // required value snapshot; no large diagnostic detail buffer
+    }
+}
+
+#[test]
+fn legacy_operator_default_diagnostic_budget_bounds_escaped_debug_expansion() {
+    use botwork::core::grammar::BWErr;
+    let length = 1024 * 1024;
+    let left = Literal::String("\u{1b}".repeat(length));
+    let right = Literal::String("\u{1b}".repeat(length));
+    let (result, large) = observe(64 * 1024, || Rule::minus.operate_binary(left, right));
+    assert!(matches!(
+        result,
+        Err(BWErr::ResourceLimit {
+            resource: "diagnostic text bytes",
+            limit: 8_388_608
+        })
+    ));
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn access_error_admission_rejects_the_complete_group_before_copying_large_path_or_segment() {
     use botwork::core::{
         ast::Program,

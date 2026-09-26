@@ -639,3 +639,19 @@ assert_eq!(error.causes[0].code(), DiagnosticCode::CollectionAccess);
 assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
 assert!(!run.variables.contains_key("out"));
 ```
+
+## Incompatible Operator Diagnostic Construction
+
+Operand descriptions are measured before formatting their owned error message. Runtime rejection preserves the original incompatible-type category and source-byte evidence.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, run::{Engine, RunLimits, RunOptions}};
+let run = Engine::default().run_source("operator", "|out| = |true + 1|", RunOptions {
+    limits: RunLimits { diagnostics: DiagnosticLimits { text_bytes: 0, ..DiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+let error = run.result.unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
+```

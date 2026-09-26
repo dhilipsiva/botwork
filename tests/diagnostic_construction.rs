@@ -437,3 +437,186 @@ fn admitted_access_details_remain_available_to_catch_and_restore_the_previous_bi
         "map key does not exist"
     );
 }
+
+#[test]
+fn operator_errors_preserve_exact_details_and_context_before_one_byte_rejection() {
+    for expression in [
+        "\"é\" - 1",
+        "\"a\" + true",
+        "[1] < [2]",
+        "-[]",
+        "!1",
+        "1 and true",
+        "true and 1",
+        "false or 1",
+    ] {
+        let source = format!("Outer {{ |out| = |{expression}| }}\nOuter");
+        let engine = Engine::default();
+        let baseline = engine
+            .run_source("operator", &source, RunOptions::default())
+            .result
+            .unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::IncompatibleType);
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        for fits in [false, true] {
+            let error = engine
+                .run_source(
+                    "operator",
+                    &source,
+                    options(DiagnosticLimits {
+                        text_bytes: size.text_bytes - usize::from(!fits),
+                        source_bytes: size.source_bytes,
+                        call_frames: size.call_frames,
+                        ..DiagnosticLimits::default()
+                    }),
+                )
+                .result
+                .unwrap_err();
+            if fits {
+                assert_eq!(
+                    error.to_value().to_string(),
+                    baseline.to_value().to_string()
+                );
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+                assert_eq!(error.causes[0].omissions.as_ref().unwrap().call_frames, 1);
+                assert_eq!(
+                    error.causes[0]
+                        .omissions
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .as_ref()
+                        .unwrap()
+                        .start_byte,
+                    baseline.span.as_ref().unwrap().start()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn operator_construction_preserves_required_operands_and_short_circuit_type_order() {
+    use botwork::core::grammar::Literal;
+    use std::sync::{Arc, Mutex};
+    for (expression, expected) in [
+        ("@{ Left } + @{ Right }", vec!["left", "right"]),
+        ("-@{ Left }", vec!["left"]),
+        ("@{ Left } and @{ Right }", vec!["left"]),
+    ] {
+        let events = Arc::new(Mutex::new(vec![]));
+        let left_events = events.clone();
+        let right_events = events.clone();
+        let mut engine = Engine::default();
+        engine
+            .register_native("Left", move |_, _| {
+                left_events.lock().unwrap().push("left");
+                Ok(Literal::String("value".into()))
+            })
+            .unwrap();
+        engine
+            .register_native("Right", move |_, _| {
+                right_events.lock().unwrap().push("right");
+                Ok(Literal::Bool(true))
+            })
+            .unwrap();
+        let source = format!("|before| = |1|\nTry {{ |out| = |{expression}| }} Catch {{ |caught| = |true| }}\n|after| = |2|");
+        let run = engine.run_source(
+            "effects",
+            &source,
+            options(DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            }),
+        );
+        assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+        assert_eq!(*events.lock().unwrap(), expected);
+        assert_eq!(run.variables["before"].to_string(), "1");
+        assert!(!run.variables.contains_key("caught") && !run.variables.contains_key("after"));
+        assert_eq!(
+            run.result.unwrap_err().causes[0].code(),
+            DiagnosticCode::IncompatibleType
+        );
+    }
+}
+
+#[test]
+fn operator_error_debug_formatting_handles_admitted_deep_values_during_recursive_calls() {
+    use botwork::core::{grammar::Literal, value_limits::MAX_VALUE_DEPTH};
+    use std::collections::BTreeMap;
+    let source = "Read |n| { If |n > 0| { Return |@{ Read |n-1| }| } Else { Return |value + true| } }\nRead |20|";
+    for text_bytes in [32, DiagnosticLimits::default().text_bytes] {
+        let value =
+            (1..MAX_VALUE_DEPTH).fold(Literal::None, |value, _| Literal::Array(vec![value]));
+        let mut configuration = options(DiagnosticLimits {
+            text_bytes,
+            ..DiagnosticLimits::default()
+        });
+        configuration.variables = BTreeMap::from([("value".into(), value)]);
+        let run = Engine::default().run_source("deep", source, configuration);
+        let error = run.result.unwrap_err();
+        if text_bytes == 32 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::IncompatibleType);
+            assert_eq!(error.call_stack.len(), 21);
+        }
+        assert!(run.snapshot_error.is_none());
+    }
+}
+
+#[test]
+fn operator_rejection_releases_temporaries_and_valid_equality_needs_no_diagnostic_budget() {
+    use botwork::core::{grammar::Literal, run::TemporaryLimits};
+    use std::collections::BTreeMap;
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        },
+        temporaries: TemporaryLimits {
+            values: 2,
+            ..TemporaryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .set_input_variables(BTreeMap::from([(
+            "value".into(),
+            Literal::String("value".into()),
+        )]))
+        .unwrap();
+    let mut sibling = context.clone();
+    let program = Program::parse("reject", "|out| = |value + true|").unwrap();
+    assert_eq!(
+        evaluate_program_detailed(&program, &mut context)
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::ResourceLimit
+    );
+    let next = Program::parse("reuse", "|out| = |value|").unwrap();
+    evaluate_program_detailed(&next, &mut sibling).unwrap();
+    assert!(evaluate_program_detailed(&next, &mut context).is_err());
+    for expression in [
+        "[1, {a: true}] == [1, {a: true}]",
+        "[1] != true",
+        "1+2 == 3",
+        "false and 1",
+        "true or 1",
+    ] {
+        let run = Engine::default().run_source(
+            "valid",
+            &format!("|out| = |{expression}|"),
+            options(DiagnosticLimits {
+                diagnostics: 0,
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            }),
+        );
+        assert_eq!(run.outcome(), RunOutcome::Succeeded);
+    }
+}

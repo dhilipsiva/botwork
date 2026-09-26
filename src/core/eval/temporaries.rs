@@ -56,6 +56,7 @@ impl Context {
         operator: BinaryOp,
         left: TemporaryValue,
         right: TemporaryValue,
+        span: &Span,
     ) -> DiagnosticResult<TemporaryValue> {
         let limits = self.limits().values;
         let left_size = limits
@@ -91,8 +92,10 @@ impl Context {
         let (right, _right_reservation) = right.into_parts();
         let result = operator
             .to_rule()
-            .operate_binary_bounded(left, right, &limits)
-            .map_err(|error| self.retain_limit(Diagnostic::new(error)))?;
+            .operate_binary_with_error(left, right, &limits, |message| {
+                self.formatted_error(BWErr::OperationIncompatibleError, message, Some(span), true)
+            })
+            .map_err(|error| self.retain_limit(error))?;
         match reserved {
             Some(reservation) => Ok(TemporaryValue::new(result, reservation)),
             None => self.temporary(result),
@@ -103,12 +106,15 @@ impl Context {
         &self,
         operator: UnaryOp,
         operand: TemporaryValue,
+        span: &Span,
     ) -> DiagnosticResult<TemporaryValue> {
         let (value, _reservation) = operand.into_parts();
         let result = operator
             .to_rule()
-            .operate_unary_bounded(value, &self.limits().values)
-            .map_err(|error| self.retain_limit(Diagnostic::new(error)))?;
+            .operate_unary_with_error(value, &self.limits().values, |message| {
+                self.formatted_error(BWErr::OperationIncompatibleError, message, Some(span), true)
+            })
+            .map_err(|error| self.retain_limit(error))?;
         self.temporary(result)
     }
 }

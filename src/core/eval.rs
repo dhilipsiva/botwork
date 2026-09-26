@@ -1096,7 +1096,7 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
             }
             _ => {
                 let operand = evaluate_expression(operand, context)?;
-                context.temporary_unary(*operator, operand)
+                context.temporary_unary(*operator, operand, &expression.span)
             }
         },
         ExprKind::Binary {
@@ -1113,17 +1113,19 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                     } else {
                         "or"
                     };
-                    return Err(BWErr::OperationIncompatibleError(format!(
-                        "The left operand of `{name}` must be a boolean"
-                    ))
-                    .into());
+                    return Err(context.formatted_error(
+                        BWErr::OperationIncompatibleError,
+                        format_args!("The left operand of `{name}` must be a boolean"),
+                        Some(&expression.span),
+                        true,
+                    ));
                 };
                 if (*operator == BinaryOp::And && !value) || (*operator == BinaryOp::Or && *value) {
                     return Ok(left);
                 }
             }
             let right = evaluate_expression(right, context)?;
-            context.temporary_binary(*operator, left, right)
+            context.temporary_binary(*operator, left, right, &expression.span)
         }
     }
 }

@@ -1,6 +1,6 @@
 # Diagnostic Detail Construction
 
-Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Signature argument/return and collection-access failures measure their formatted details first. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
+Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Signature, collection-access, and incompatible-operator failures measure their formatted details first. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
 
 ## Admission Before Copying
 
@@ -34,12 +34,22 @@ Stream path text from the original base span and each literal/computed segment, 
 
 Evaluate the current computed key before testing its receiver/key type or reporting a missing element. A failed lookup stops before later keys; including their source spelling in the error path does not execute them. Quota rejection latches the Context and bypasses Catch while preserving completed key effects and normal binding/frame cleanup.
 
+## Incompatible Operators
+
+After value admission and compatibility checks, stream incompatible unary/binary operand Debug descriptions through the same counter before allocating the detail message. This includes escaped-string expansion: count the bytes actually formatted, not just input payload length. Operands already satisfy the fixed value-depth ceiling; counters and prefix writers avoid intermediate message buffers. Preserve accepted detail wording, operator names, expression spans, and call context. Map Debug ordering retains its existing behavior.
+
+Compatible operations and structural equality construct no incompatible-operand diagnostic. Preserve arithmetic/finiteness validation and concatenation/value admission order. Ordinary binary operands finish left then right before an incompatible-type failure; unary operators evaluate their operand once. Logical operators retain short-circuit behavior and reject a non-boolean left operand before evaluating the right. Their short-circuit type-error messages also pass construction admission.
+
+Operand temporary reservations remain live during formatting and release on failure. Runtime rejection latches the Context and retains bounded incompatible-type/source evidence. Public `Operate` and `operate_*_bounded` preserve their legacy LiteralResult signatures and use default DiagnosticLimits for incompatible descriptions; an over-budget description returns BW8001. Legacy results expose the primary BWErr only, so detailed omitted-cause evidence remains available through Context/Engine detailed execution. Explicit value limits on raw operators do not change this default diagnostic quota.
+
 ## Scope and Evidence
 
-This contract covers the named borrowed details, formatted signature failures, and grouped collection-access fields. Other formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
+This contract covers the named borrowed details, formatted signature failures, grouped collection-access fields, and incompatible-operator descriptions. Other formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
 
 Unit checks compare constructed and ordinary diagnostics at exact quotas and exercise prospective dimensions, invalid/zero limits, Unicode caps, source release, and omitted-frame counts. Integration checks cover normal catchability, exact contexts, handler restoration, prior effects, Pair entry, independent clone latches, all operation panic stages, repeated worker use, and cancellation with panic. Allocation observations verify zero large copies for rejected missing names and operation factory/poll signatures, plus no extra synchronous panic-detail copy beyond the admitted active-call signature. R21 host corpus cases and an executed Rust example pin byte boundaries.
 
 Formatted-message checks cover exact raw bytes and context, counter overflow, Unicode chunk boundaries, early formatter stopping, empty messages, synchronous/async/blocking argument and return errors, required effects, skipped later arguments/callbacks, and stop priority. Four large-parameter/return allocation observations, two additional R21 cases, and a Rust example pin admission before initial message allocation.
 
 Grouped-field checks cover exact metrics, late-field rejection without earlier copies, three-field Unicode truncation, source release, every collection failure reason, full call/location preservation, computed-key order, and accepted Catch metadata/restoration. Four large literal/computed-key allocation observations, two R21 cases, and a Rust example pin the path/segment boundary.
+
+Operator checks cover exact details/context, every existing operator/kind combination, unused formatting on compatible/equality/value-check paths, unsupported raw rules, required effects and short-circuit order, independent clone latches, released temporaries, and depth-64 values during 21 entered calls. Four allocation observations include default-quota rejection of large escaped Debug descriptions. Two R21 cases and a Rust example pin the incompatible-operator byte boundary.
