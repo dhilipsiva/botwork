@@ -149,6 +149,30 @@ fn unknown_keyword_prefix_is_reported_as_a_complete_statement_name() {
 }
 
 #[test]
+fn an_invalid_left_boolean_type_fails_before_the_right_operand() {
+    let path = fixture("boolean-left-type-error.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("boolean-left-type-error.botwork"));
+    assert!(diagnostic.contains("Operation performed on incompatible types"));
+    assert!(diagnostic.contains("left operand of `and` must be a boolean"));
+    assert!(!diagnostic.contains("Variable not defined"));
+}
+
+#[test]
+fn skipped_boolean_operands_still_require_valid_syntax_before_execution() {
+    let path = fixture("boolean-skipped-syntax-error.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("boolean-skipped-syntax-error.botwork"));
+    assert!(diagnostic.contains("expected"));
+}
+
+#[test]
 fn runtime_error_reports_file_and_variable_and_stops_execution() {
     let path = fixture("runtime-error.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);

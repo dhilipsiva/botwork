@@ -34,12 +34,12 @@ context.init_statements(); // Register native Log.
 let result = evaluate_program(&program, &mut context).expect("successful execution");
 ```
 
-`evaluate_program` runs owned statements in order. `execute_statement` permits the CLI to emit its existing trace before each statement. Neither entry point invokes the parser. An expression failure returns immediately, before later operands are visited. Boolean short-circuiting remains pending: a successfully evaluated left boolean still proceeds to the right operand at this stage.
+`evaluate_program` runs owned statements in order. `execute_statement` permits the CLI to emit its existing trace before each statement. Neither entry point invokes the parser. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.
 
 The existing `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Prefer the program API when executing a whole file; separate compatibility calls otherwise allocate separate source owners.
 
 ## Remaining Interpreter Work
 
-Explicit completion outcomes, invocation scopes, lazy booleans, control-placement validation, and resource limits retain their own roadmap items. Parser-only `Else`/`Catch` wrappers are flattened in the tree; implicit block-result arrays remain transitional behavior, not the specified custom-return contract. The AST refactor does not establish complete language conformance.
+Explicit completion outcomes, invocation scopes, control-placement validation, and resource limits retain their own roadmap items. Parser-only `Else`/`Catch` wrappers are flattened in the tree; implicit block-result arrays remain transitional behavior, not the specified custom-return contract. The AST refactor does not establish complete language conformance.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

@@ -30,7 +30,24 @@ Thus `1 + 2 == 3` means `(1 + 2) == 3`, and `1 < 2 == 3 < 4` compares two boolea
 
 Addition/subtraction and multiplication/division/remainder associate left within their respective levels: `20 - 5 - 2` gives `13`, and `12 / 3 / 2` gives `2.0`. Unary minus and logical negation remain supported, including `3 - -2` and `!(1 > 2)`. Invalid operand combinations produce type errors rather than implicit boolean/numeric coercion.
 
-Comparisons at the same level associate left as ordinary binary operators: `1 < 2 < 3` fails when comparing a boolean with an integer, while `1 == 2 == false` evaluates to `true`. Run `cargo run -- --file examples/03-precedence.botwork` for an executable precedence example. Boolean short-circuiting remains pending; `and` and `or` still evaluate both operands at this stage.
+Comparisons at the same level associate left as ordinary binary operators: `1 < 2 < 3` fails when comparing a boolean with an integer, while `1 == 2 == false` evaluates to `true`. Run `cargo run -- --file examples/03-precedence.botwork` for an executable precedence example.
+
+## Boolean Short-Circuiting
+
+`and` and `or` evaluate their left operand once and require a boolean. They evaluate the right operand only when it can affect the result:
+
+| Expression | Evaluate `rhs`? | Result |
+| --- | --- | --- |
+| `false and rhs` | No | `false` |
+| `true and rhs` | Yes | The boolean value of `rhs` |
+| `true or rhs` | No | `true` |
+| `false or rhs` | Yes | The boolean value of `rhs` |
+
+A skipped operand is neither evaluated nor type-checked: `false and missing`, `false and 1`, and `true or (1 / 0)` all succeed. A required operand still raises its usual evaluation or type error. The left type is checked first, so `1 and missing` reports an incompatible left type without looking up `missing`. There is no truthiness conversion.
+
+Grouping controls selection: `true or false and missing` is `true`, but `(true or false) and missing` fails. These rules apply inside collections, calls, conditions, and other expressions. A loop guarded by `i < 3 and 6 / (3 - i) > 0` can stop at `i = 3` without dividing by zero. A skipped error never triggers `Catch`; a required operand's error remains catchable. See [the short-circuit example](../examples/07-short-circuit.botwork).
+
+The entire file is still parsed before execution. Invalid syntax such as `true or (1 +)` prevents all execution, including earlier statements; short-circuiting skips runtime evaluation only.
 
 ## Powers and Unary Operators
 

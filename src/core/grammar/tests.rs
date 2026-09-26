@@ -227,6 +227,16 @@ fn complete_control_keywords_preserve_their_statement_layout() {
 }
 
 #[test]
+fn value_level_boolean_operators_require_both_values_to_be_booleans() {
+    for (operator, left) in [(Rule::logical_and, false), (Rule::logical_or, true)] {
+        assert!(matches!(
+            operator.operate_binary(Literal::Bool(left), Literal::Int(1)),
+            Err(BWErr::OperationIncompatibleError(_))
+        ));
+    }
+}
+
+#[test]
 fn integer_operators_produce_expected_values() {
     for (operator, lhs, rhs, expected) in [
         (Rule::plus, 5, 3, 8),

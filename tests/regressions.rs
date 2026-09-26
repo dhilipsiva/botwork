@@ -81,14 +81,12 @@ fn exponentiation_is_right_associative() {
 }
 
 #[test]
-#[ignore = "known defect: and eagerly evaluates its right operand"]
 fn false_and_does_not_evaluate_the_right_operand() {
     let result = evaluate("|answer| = |false and missing|").unwrap();
     assert!(matches!(result, Literal::Bool(false)), "{result:?}");
 }
 
 #[test]
-#[ignore = "known defect: or eagerly evaluates its right operand"]
 fn true_or_does_not_evaluate_the_right_operand() {
     let result = evaluate("|answer| = |true or missing|").unwrap();
     assert!(matches!(result, Literal::Bool(true)), "{result:?}");

@@ -1,0 +1,17 @@
+Log |false and missing|
+Log |true or missing|
+
+# At i = 3, the left comparison is false, so division is skipped.
+|i| = |0|
+While |i < 3 and 6 / (3 - i) > 0| {
+    |i| = |i + 1|
+}
+Log |i|
+
+# A required operand still raises a catchable error.
+Try {
+    Log |true and missing|
+    Log |"must not execute"|
+} Catch {
+    Log |"caught required operand"|
+}

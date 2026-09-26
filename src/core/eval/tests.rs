@@ -10,6 +10,230 @@ fn variable(context: &Context, name: &str) -> Literal {
 }
 
 #[test]
+fn boolean_operators_skip_irrelevant_values_and_failures() {
+    let huge_integer = "9".repeat(50);
+    let huge_float = format!("{huge_integer}.0");
+    for (left, operator, expected) in [("false", "and", false), ("true", "or", true)] {
+        for right in [
+            "missing",
+            "1 / 0",
+            "2 ^ 31",
+            "m.a",
+            "1",
+            "1.5",
+            "\"text\"",
+            "[missing]",
+            "{a: missing}",
+            "no_result",
+            &huge_integer,
+            &huge_float,
+        ] {
+            let mut context = Context::default();
+            context.set_variable("no_result".into(), Literal::None);
+            let source = format!("|answer| = |{left} {operator} {right}|");
+            let result = evaluate(&source, &mut context);
+            assert!(
+                matches!(result, Ok(Literal::Bool(value)) if value == expected),
+                "{source}: {result:?}"
+            );
+            assert_eq!(
+                context.expression_visits.len(),
+                2,
+                "{source}: only root and left may be evaluated"
+            );
+            assert_eq!(context.expression_visits[1].trim(), left);
+        }
+    }
+}
+
+#[test]
+fn boolean_operators_reject_the_left_type_before_visiting_the_right() {
+    for operator in ["and", "or"] {
+        for left in ["1", "1.5", "\"text\"", "[]", "{}", "no_result"] {
+            let mut context = Context::default();
+            context.set_variable("no_result".into(), Literal::None);
+            let source = format!("|answer| = |{left} {operator} missing|");
+            let result = evaluate(&source, &mut context);
+            assert!(
+                matches!(result, Err(BWErr::OperationIncompatibleError(_))),
+                "{source}: {result:?}"
+            );
+            assert_eq!(
+                context.expression_visits.len(),
+                2,
+                "{source}: invalid left must stop evaluation"
+            );
+        }
+    }
+}
+
+#[test]
+fn boolean_truth_tables_evaluate_required_operands_once_in_order() {
+    for operator in ["and", "or"] {
+        for left in [false, true] {
+            for right in [false, true] {
+                let mut context = Context::default();
+                context.set_variable("left".into(), Literal::Bool(left));
+                context.set_variable("right".into(), Literal::Bool(right));
+                let source = format!("|answer| = |left {operator} right|");
+                let expected = if operator == "and" {
+                    left && right
+                } else {
+                    left || right
+                };
+                let result = evaluate(&source, &mut context);
+                assert!(
+                    matches!(result, Ok(Literal::Bool(value)) if value == expected),
+                    "{source}: {result:?}"
+                );
+                let visits = context
+                    .expression_visits
+                    .iter()
+                    .skip(1)
+                    .map(|text| text.trim())
+                    .collect::<Vec<_>>();
+                if (operator == "and" && !left) || (operator == "or" && left) {
+                    assert_eq!(visits, ["left"]);
+                } else {
+                    assert_eq!(visits, ["left", "right"]);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn required_boolean_operands_preserve_errors_and_type_requirements() {
+    for expression in [
+        "true and missing",
+        "false or missing",
+        "missing and false",
+        "missing or true",
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"),
+            "{expression}"
+        );
+    }
+    for expression in [
+        "true and (1 / 0)",
+        "false or (1 / 0)",
+        "(1 / 0) and false",
+        "(1 / 0) or true",
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Err(BWErr::ArithmeticError(_))),
+            "{expression}: {result:?}"
+        );
+    }
+    for (left, operator) in [("true", "and"), ("false", "or")] {
+        for right in ["1", "1.5", "\"text\"", "[]", "{}", "no_result"] {
+            let mut context = Context::default();
+            context.set_variable("no_result".into(), Literal::None);
+            let source = format!("|answer| = |{left} {operator} {right}|");
+            let result = evaluate(&source, &mut context);
+            assert!(
+                matches!(result, Err(BWErr::OperationIncompatibleError(_))),
+                "{source}: {result:?}"
+            );
+            assert_eq!(
+                context.expression_visits.len(),
+                3,
+                "{source}: both operands must be evaluated once"
+            );
+        }
+    }
+}
+
+#[test]
+fn short_circuiting_follows_precedence_parentheses_and_unary_grouping() {
+    for (expression, expected) in [
+        ("true or false and missing", true),
+        ("false and missing or true", true),
+        ("false and (missing or true)", false),
+        ("!(false and missing)", true),
+        ("(true or missing) == true", true),
+        ("false or true and false", false),
+        ("true and (false or true)", true),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Bool(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+    assert!(
+        matches!(evaluate("|answer| = |(true or false) and missing|", &mut Context::default()),
+        Err(BWErr::VariableNotDefined(name)) if name == "missing")
+    );
+}
+
+#[test]
+fn lazy_conditions_and_catches_execute_only_required_paths() {
+    let mut context = Context::default();
+    evaluate(
+        "|i| = |0|\n|answer| = |7|\n|caught| = |0|\n\
+         Try {\n If |true or missing| { |answer| = |8| }\n\
+         While |i < 3 and 6 / (3 - i) > 0| { |i| = |i + 1| }\n\
+         } Catch { |caught| = |99| }\n\
+         Try {\n |answer| = |true and missing|\n |i| = |99|\n\
+         } Catch { |caught| = |caught + 1| }",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "i"), Literal::Int(3)));
+    assert!(matches!(variable(&context, "answer"), Literal::Int(8)));
+    assert!(matches!(variable(&context, "caught"), Literal::Int(1)));
+}
+
+#[test]
+fn ordinary_binary_operators_still_evaluate_the_right_operand() {
+    for expression in ["false == missing", "true != missing", "1 + missing"] {
+        let mut context = Context::default();
+        let result = evaluate(&format!("|answer| = |{expression}|"), &mut context);
+        assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+        assert_eq!(context.expression_visits.len(), 3);
+        assert_eq!(context.expression_visits[2].trim(), "missing");
+    }
+}
+
+#[test]
+fn short_circuiting_composes_in_collections_and_custom_arguments() {
+    let result = evaluate(
+        "|answer| = |[false and missing, {value: true or missing}]|",
+        &mut Context::default(),
+    )
+    .unwrap();
+    let Literal::Array(values) = result else {
+        panic!("expected array")
+    };
+    assert!(matches!(values[0], Literal::Bool(false)));
+    let Literal::Map(map) = &values[1] else {
+        panic!("expected map")
+    };
+    assert!(matches!(map.get("value"), Some(Literal::Bool(true))));
+
+    // Keep argument selection independent of the pending final-Return correction.
+    let result = evaluate(
+        "Identity |value| {\n Return |value|\n |unreachable| = |missing|\n}\n\
+         |answer| = Identity |true or missing|",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::Bool(true))), "{result:?}");
+}
+
+#[test]
 fn binary_evaluation_does_not_visit_the_right_operand_after_a_left_error() {
     let mut context = Context::default();
     let error = evaluate("|answer| = |missing_left + (1 / 0)|", &mut context).unwrap_err();

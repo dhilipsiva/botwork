@@ -91,6 +91,14 @@ fn keyword_example_preserves_identifier_and_statement_names() {
 }
 
 #[test]
+fn short_circuit_example_skips_errors_and_handles_required_operands() {
+    assert_example(
+        "07-short-circuit.botwork",
+        &["false", "true", "3", "caught required operand"],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

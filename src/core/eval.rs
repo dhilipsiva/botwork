@@ -7,8 +7,8 @@ use std::{
 
 use super::{
     ast::{
-        self, AssignmentValue, Block, Call, Definition, ElseBranch, Expr, ExprKind, Node, Program,
-        Statement, StatementKind,
+        self, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr, ExprKind, Node,
+        Program, Statement, StatementKind,
     },
     grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
 };
@@ -193,6 +193,21 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
             ..
         } => {
             let left = evaluate_expression(left, context)?;
+            if matches!(operator, BinaryOp::And | BinaryOp::Or) {
+                let Literal::Bool(value) = &left else {
+                    let name = if *operator == BinaryOp::And {
+                        "and"
+                    } else {
+                        "or"
+                    };
+                    return Err(BWErr::OperationIncompatibleError(format!(
+                        "The left operand of `{name}` must be a boolean"
+                    )));
+                };
+                if (*operator == BinaryOp::And && !value) || (*operator == BinaryOp::Or && *value) {
+                    return Ok(Literal::Bool(*value));
+                }
+            }
             let right = evaluate_expression(right, context)?;
             operator.to_rule().operate_binary(left, right)
         }
