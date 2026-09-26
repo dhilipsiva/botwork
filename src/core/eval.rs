@@ -3,16 +3,17 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     io::{self, Write},
+    panic::{catch_unwind, AssertUnwindSafe},
     sync::Arc,
 };
 
 use super::{
     ast::{
         self, AccessSegment, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr,
-        ExprKind, Name, Node, Program, Statement, StatementKind, UnaryOp,
+        ExprKind, Name, NativeSignature, Node, Program, Span, Statement, StatementKind, UnaryOp,
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
-    grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
+    grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Operate, Rule},
 };
 
 #[cfg(test)]
@@ -20,6 +21,9 @@ mod tests;
 
 #[cfg(test)]
 mod execution_contract;
+
+#[cfg(test)]
+mod native_contract;
 
 #[derive(Debug)]
 enum Completion {
@@ -36,7 +40,7 @@ type RuntimeResult = DiagnosticResult<Literal>;
 enum StmtType {
     Native {
         callback: Callback,
-        name: &'static str,
+        declaration: Arc<NativeSignature>,
     },
     UserDefined(Arc<Definition>),
 }
@@ -126,14 +130,80 @@ impl Context {
         result
     }
 
+    /// Register a native sentence header such as `Read |path|` in this scope.
+    /// Arguments are evaluated once in caller order before the callback runs.
+    /// Callbacks return an owned finite value (including None) or a typed error.
+    /// Invalid headers and collisions leave the existing registry unchanged.
+    /// Cloning a context shares callback captures but copies DSL bindings.
+    pub fn register_native(
+        &mut self,
+        header: &str,
+        callback: impl Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static,
+    ) -> DiagnosticResult<()> {
+        self.register_callback(
+            "<native>",
+            header,
+            Arc::new(move |values, _| callback(values)),
+        )
+    }
+
+    fn register_callback(
+        &mut self,
+        name: &str,
+        header: &str,
+        callback: Callback,
+    ) -> DiagnosticResult<()> {
+        let declaration = Arc::new(ast::native_signature(name, header)?);
+        self.insert_statement(
+            &declaration.signature,
+            &declaration.span,
+            StmtType::Native {
+                callback,
+                declaration: Arc::clone(&declaration),
+            },
+        )
+    }
+
+    fn insert_statement(
+        &mut self,
+        signature: &str,
+        span: &Span,
+        statement: StmtType,
+    ) -> DiagnosticResult<()> {
+        let statements = &mut self.frames[self.current].statements;
+        if let Some(original) = statements.get(signature) {
+            let (origin, origin_span) = match original {
+                StmtType::Native { declaration, .. } => (
+                    declaration.span.source().name().to_owned(),
+                    &declaration.span,
+                ),
+                StmtType::UserDefined(definition) => (definition.span.location(), &definition.span),
+            };
+            return Err(Diagnostic::new(BWErr::DuplicateStatement {
+                signature: signature.into(),
+                original: origin,
+                duplicate: span.location(),
+            })
+            .at(span)
+            .with_related("first definition", origin_span));
+        }
+        statements.insert(signature.into(), statement);
+        Ok(())
+    }
+
+    /// Fill vacant built-in slots, preserving existing registrations.
     pub fn init_statements(&mut self) {
-        self.frames[self.current]
+        if !self.frames[self.current]
             .statements
-            .entry("log|param|".into())
-            .or_insert(StmtType::Native {
-                callback: log_param,
-                name: "Log",
-            });
+            .contains_key("log|param|")
+        {
+            self.register_callback(
+                "<builtin Log>",
+                "Log |value|",
+                Arc::new(|values, _| log_param(values)),
+            )
+            .expect("the built-in Log signature is valid and vacant");
+        }
     }
 
     fn with_call(
@@ -148,15 +218,12 @@ impl Context {
     }
 }
 
-type Callback = fn(&Call, &mut Context) -> RuntimeResult;
+type Callback = Arc<dyn Fn(&[Literal], &mut Context) -> LiteralResult + Send + Sync>;
 
-fn log_param(call: &Call, context: &mut Context) -> RuntimeResult {
-    let expression = call.arguments.last().ok_or_else(|| {
-        BWErr::ParameterMissingError("`Log {param}` requires at least 1 parameter".into())
-    })?;
-    let value = evaluate_expression(expression, context)?;
-    write_log(&value, &mut io::stdout().lock())?;
-    Ok(value)
+fn log_param(values: &[Literal]) -> LiteralResult {
+    let value = &values[0]; // Arity was checked before entering the callback.
+    write_log(value, &mut io::stdout().lock())?;
+    Ok(value.clone())
 }
 
 fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
@@ -171,6 +238,26 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
     let (definition, owner) = context
         .get_statement(&call.signature)
         .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
+    let parameter_count = match &definition {
+        StmtType::Native { declaration, .. } => declaration.parameters.len(),
+        StmtType::UserDefined(definition) => definition.parameters.len(),
+    };
+    if parameter_count != call.arguments.len() {
+        return Err(BWErr::ParameterMissingError(
+            "The call does not match the definition's parameter count".into(),
+        )
+        .into());
+    }
+    let arguments = call
+        .arguments
+        .iter()
+        .map(|argument| {
+            let value = evaluate_expression(argument, context)?;
+            validate_value(&value)
+                .map_err(|error| Diagnostic::new(error).at_expression(&argument.span))?;
+            Ok(value)
+        })
+        .collect::<DiagnosticResult<Vec<_>>>()?;
     match definition {
         StmtType::Native { callback, .. } => context.with_call(
             CallFrame {
@@ -178,20 +265,14 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
                 call_site: call.span.clone(),
                 definition_site: None,
             },
-            |context| callback(call, context),
+            |context| {
+                let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
+                    .map_err(|_| BWErr::NativePanic(call.signature.clone()))??;
+                validate_value(&result)?;
+                Ok(result)
+            },
         ),
         StmtType::UserDefined(definition) => {
-            if definition.parameters.len() != call.arguments.len() {
-                return Err(BWErr::ParameterMissingError(
-                    "The call does not match the definition's parameter count".into(),
-                )
-                .into());
-            }
-            let arguments = call
-                .arguments
-                .iter()
-                .map(|argument| evaluate_expression(argument, context))
-                .collect::<Result<Vec<_>, _>>()?;
             let frame = Frame {
                 variables: definition
                     .parameters
@@ -518,31 +599,11 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {
-            let statements = &mut context.frames[context.current].statements;
-            if let Some(original) = statements.get(&definition.signature) {
-                let origin_span = match original {
-                    StmtType::UserDefined(definition) => Some(&definition.span),
-                    StmtType::Native { .. } => None,
-                };
-                let original = match original {
-                    StmtType::Native { name, .. } => format!("<builtin {name}>"),
-                    StmtType::UserDefined(original) => original.span.location(),
-                };
-                let mut diagnostic = Diagnostic::new(BWErr::DuplicateStatement {
-                    signature: definition.signature.clone(),
-                    original,
-                    duplicate: definition.span.location(),
-                })
-                .at(&definition.span);
-                if let Some(span) = origin_span {
-                    diagnostic = diagnostic.with_related("first definition", span);
-                }
-                return Err(diagnostic);
-            }
-            statements.insert(
-                definition.signature.clone(),
+            context.insert_statement(
+                &definition.signature,
+                &definition.span,
                 StmtType::UserDefined(Arc::clone(definition)),
-            );
+            )?;
             Ok(Completion::Normal(Literal::None))
         }
         StatementKind::Invoke(call) => invoke(call, context).map(Completion::Normal),

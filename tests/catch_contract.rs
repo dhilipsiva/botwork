@@ -297,11 +297,15 @@ fn unicode_catch_metadata_preserves_exact_byte_and_scalar_coordinate_strings() {
 #[test]
 fn native_call_metadata_uses_none_for_a_missing_dsl_definition_site() {
     let mut context = Context::default();
-    context.init_statements();
-    let value = execute("Try { Log |missing| } Catch |error| {\n\
+    context
+        .register_native("Fail |value|", |_| {
+            Err(BWErr::NativeError("offline".into()))
+        })
+        .unwrap();
+    let value = execute("Try { Fail |1| } Catch |error| {\n\
         |answer| = |[error.call_stack[0].signature, error.call_stack[0].definition_site, error.call_stack[0].call_site.line]|\n\
         }\n|result| = |answer|", &mut context).unwrap();
-    assert_eq!(value.to_string(), "[\"log|param|\", none, \"1\"]");
+    assert_eq!(value.to_string(), "[\"fail|param|\", none, \"1\"]");
 }
 
 #[test]

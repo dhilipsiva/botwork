@@ -68,6 +68,10 @@ pub enum BWErr {
     },
     #[error("Writing output failed: {0}")]
     OutputError(String),
+    #[error("Native operation failed: {0}")]
+    NativeError(String),
+    #[error("Native callback panicked: {0}")]
+    NativePanic(String),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -191,10 +195,8 @@ fn numeric_pair(left: &Literal, right: &Literal) -> Option<(f64, f64)> {
     Some((widen(left)?, widen(right)?))
 }
 
-fn values_equal(left: &Literal, right: &Literal) -> Result<bool, BWErr> {
-    // Validate complete operands before any shape/value mismatch can return
-    // false, including host-provided non-finite values nested in collections.
-    let mut pending = vec![right, left];
+pub(crate) fn validate_value(value: &Literal) -> Result<(), BWErr> {
+    let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         validate_numeric_operand(value)?;
         match value {
@@ -203,6 +205,13 @@ fn values_equal(left: &Literal, right: &Literal) -> Result<bool, BWErr> {
             _ => (),
         }
     }
+    Ok(())
+}
+
+fn values_equal(left: &Literal, right: &Literal) -> Result<bool, BWErr> {
+    // Validate complete operands before any shape/value mismatch can return false.
+    validate_value(left)?;
+    validate_value(right)?;
 
     // Use a work list rather than adding recursive comparison stack frames.
     let mut pairs = vec![(left, right)];

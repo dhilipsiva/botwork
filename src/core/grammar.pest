@@ -43,6 +43,7 @@ stmt_try      =  { TRY ~ line_end* ~ stmt_block ~ line_end* ~ stmt_catch }
 stmt_catch    =  { CATCH ~ line_end* ~ (param_define ~ line_end*)? ~ stmt_block }
 stmt_define   =  { stmt_header ~ line_end* ~ stmt_block }
 stmt_header   =  { !reserved_parts ~ part ~ (continuation? ~ (param_define | part))* }
+native_signature = _{ SOI ~ stmt_header ~ EOI }
 stmt_invoke   =  { !reserved_parts ~ part ~ (continuation? ~ (param_invoke | part))* }
 stmt_block    =  { "{" ~ statements* ~ "}" }
 stmt_break    =  { BREAK }

@@ -25,6 +25,8 @@ pub enum DiagnosticCode {
     IncompatibleType,
     CollectionAccess,
     Output,
+    Native,
+    NativePanic,
 }
 
 impl DiagnosticCode {
@@ -42,6 +44,8 @@ impl DiagnosticCode {
             Self::IncompatibleType => "BW3003",
             Self::CollectionAccess => "BW3004",
             Self::Output => "BW4001",
+            Self::Native => "BW4002",
+            Self::NativePanic => "BW4003",
         }
     }
 }
@@ -67,6 +71,8 @@ impl BWErr {
             Self::OperationIncompatibleError(_) => DiagnosticCode::IncompatibleType,
             Self::CollectionAccessError { .. } => DiagnosticCode::CollectionAccess,
             Self::OutputError(_) => DiagnosticCode::Output,
+            Self::NativeError(_) => DiagnosticCode::Native,
+            Self::NativePanic(_) => DiagnosticCode::NativePanic,
         }
     }
 
@@ -84,6 +90,8 @@ impl BWErr {
             Self::OperationIncompatibleError(_) => "Use the documented operand kinds; conditions require booleans and For requires an array.".into(),
             Self::CollectionAccessError { .. } => "Check each key/index and container kind; maps use exact string keys and arrays use in-bounds nonnegative indexes.".into(),
             Self::OutputError(_) => "Check the output destination and account for bytes already written before retrying.".into(),
+            Self::NativeError(_) => "Check the registered operation's requirements and reason; account for completed effects before retrying.".into(),
+            Self::NativePanic(_) => "Fix the native callback; return an error for expected failures and inspect captured host state before reuse.".into(),
         }
     }
 }
@@ -109,7 +117,7 @@ pub struct Diagnostic {
     pub error: Arc<BWErr>,
     pub span: Option<Span>,
     pub label: &'static str,
-    /// Entered calls, innermost first. Failed argument binding adds no DSL frame.
+    /// Entered calls, innermost first. Failed argument binding adds no callee frame.
     pub call_stack: Vec<CallFrame>,
     pub related: Vec<RelatedLocation>,
     /// Errors being handled when this error occurred, with their original spans/stacks.
@@ -217,7 +225,9 @@ impl Diagnostic {
             | BWErr::OperationIncompatibleError(reason)
             | BWErr::ControlFlowError(reason)
             | BWErr::ArithmeticError(reason)
-            | BWErr::OutputError(reason) => value_map([("reason", text(reason))]),
+            | BWErr::OutputError(reason)
+            | BWErr::NativeError(reason)
+            | BWErr::NativePanic(reason) => value_map([("reason", text(reason))]),
         };
         value_map([
             ("code", text(self.code().as_str())),

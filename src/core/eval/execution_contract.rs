@@ -7,8 +7,8 @@ fn run(source: &str, context: &mut Context) -> LiteralResult {
     evaluate_program(&program, context)
 }
 
-fn record(call: &Call, context: &mut Context) -> RuntimeResult {
-    let value = evaluate_expression(&call.arguments[0], context)?;
+fn record(values: &[Literal], context: &mut Context) -> LiteralResult {
+    let value = values[0].clone();
     let depth = context.frames.len() as i32;
     for (key, entry) in [
         ("__events", Literal::String(value.to_string())),
@@ -22,22 +22,18 @@ fn record(call: &Call, context: &mut Context) -> RuntimeResult {
     Ok(value)
 }
 
-fn context() -> Context {
+pub(super) fn context() -> Context {
     let mut context = Context::default();
     for key in ["__events", "__depths"] {
         context.set_variable(key.into(), Literal::Array(vec![]));
     }
-    context.frames[0].statements.insert(
-        "record|param|".into(),
-        StmtType::Native {
-            callback: record,
-            name: "Record",
-        },
-    );
+    context
+        .register_callback("<test Record>", "Record |value|", Arc::new(record))
+        .unwrap();
     context
 }
 
-fn events(context: &Context) -> Vec<String> {
+pub(super) fn events(context: &Context) -> Vec<String> {
     let Literal::Array(values) = context.get_variable("__events").unwrap() else {
         panic!("event array");
     };
@@ -50,7 +46,7 @@ fn events(context: &Context) -> Vec<String> {
         .collect()
 }
 
-fn visits(context: &Context) -> Vec<String> {
+pub(super) fn visits(context: &Context) -> Vec<String> {
     context
         .expression_visits
         .borrow()

@@ -107,23 +107,7 @@ impl Program {
             text: source.to_owned(),
         });
         let statements = BWParser::parse(Rule::botwork, &source.text)
-            .map_err(|error| {
-                let (start, end) = match error.location {
-                    pest::error::InputLocation::Pos(start) => {
-                        let length = source.text[start..]
-                            .chars()
-                            .next()
-                            .map_or(0, char::len_utf8);
-                        (start, start + length)
-                    }
-                    pest::error::InputLocation::Span((start, end)) => (start, end),
-                };
-                Diagnostic::new(BWErr::ParsingError(error.to_string())).at(&Span {
-                    source: Arc::clone(&source),
-                    start,
-                    end,
-                })
-            })?
+            .map_err(|error| parse_error(error, &source))?
             .filter(|pair| pair.as_rule() != Rule::EOI)
             .map(|pair| {
                 let span = Span::of(&pair, &source);
@@ -248,18 +232,7 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> DiagnosticR
             "Rethrow requires an enclosing Catch in the same invocation",
         )),
         StatementKind::Define(definition) => {
-            let mut parameters = HashMap::new();
-            for parameter in &definition.parameters {
-                if let Some(original) = parameters.insert(&parameter.text, &parameter.span) {
-                    return Err(Diagnostic::new(BWErr::DuplicateParameter {
-                        name: parameter.text.clone(),
-                        original: original.location(),
-                        duplicate: parameter.span.location(),
-                    })
-                    .at(&parameter.span)
-                    .with_related("first parameter", original));
-                }
-            }
+            validate_parameters(&definition.parameters)?;
             validate_statements(
                 &definition.body.statements,
                 ControlScope {
@@ -685,6 +658,73 @@ fn signature(pair: &Pair<Rule>) -> Result<String, BWErr> {
         }
     }
     Ok(signature)
+}
+
+fn parse_error(error: pest::error::Error<Rule>, source: &Arc<SourceFile>) -> Diagnostic {
+    let (start, end) = match error.location {
+        pest::error::InputLocation::Pos(start) => {
+            let length = source.text[start..]
+                .chars()
+                .next()
+                .map_or(0, char::len_utf8);
+            (start, start + length)
+        }
+        pest::error::InputLocation::Span((start, end)) => (start, end),
+    };
+    Diagnostic::new(BWErr::ParsingError(error.to_string())).at(&Span {
+        source: Arc::clone(source),
+        start,
+        end,
+    })
+}
+
+fn validate_parameters(parameters: &[Name]) -> DiagnosticResult<()> {
+    let mut seen = HashMap::new();
+    for parameter in parameters {
+        if let Some(original) = seen.insert(&parameter.text, &parameter.span) {
+            return Err(Diagnostic::new(BWErr::DuplicateParameter {
+                name: parameter.text.clone(),
+                original: original.location(),
+                duplicate: parameter.span.location(),
+            })
+            .at(&parameter.span)
+            .with_related("first parameter", original));
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone)]
+pub(crate) struct NativeSignature {
+    pub span: Span,
+    pub signature: String,
+    pub parameters: Vec<Name>,
+}
+
+pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<NativeSignature> {
+    let source = Arc::new(SourceFile {
+        name: name.into(),
+        text: text.into(),
+    });
+    let mut pairs = BWParser::parse(Rule::native_signature, &source.text)
+        .map_err(|error| parse_error(error, &source))?;
+    let header = required(&mut pairs)?;
+    let span = Span::of(&header, &source);
+    let signature = signature(&header)?;
+    if signature.is_empty() {
+        return Err(Diagnostic::new(invalid("nonempty native signature")).at(&span));
+    }
+    let parameters = header
+        .into_inner()
+        .filter(|pair| pair.as_rule() == Rule::ident)
+        .map(|pair| lower_name(pair, &source))
+        .collect::<Vec<_>>();
+    validate_parameters(&parameters)?;
+    Ok(NativeSignature {
+        span,
+        signature,
+        parameters,
+    })
 }
 
 fn call(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Call, BWErr> {

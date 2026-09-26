@@ -46,7 +46,7 @@ Each definition also validates exact parameter-name uniqueness before visiting i
 
 Executing a definition registers its `Arc<Definition>` in the context. Each invocation shares the same parsed parameter list and body. No invocation reparses the definition, reconstructs its expressions, or clones its whole syntax tree. The definition and its original source locations remain usable after the caller drops the defining program and input string.
 
-Signatures strip ASCII spaces/tabs and lowercase Unicode characters individually; parameters contribute positional placeholders. Registration checks only the current frame and returns `DuplicateStatement` instead of replacing an existing entry. Both definition locations survive through retained source owners. Native entries carry a display name for their origin; initialization fills vacant slots only. Lexical parent shadowing remains valid, and invocation cleanup applies to collision errors like other runtime failures.
+Signatures strip ASCII spaces/tabs and lowercase Unicode characters individually; parameters contribute positional placeholders. Registration checks only the current frame and returns `DuplicateStatement` instead of replacing an existing entry. Both definition locations survive through retained source owners. Native entries retain a parsed header and named source origin; initialization fills vacant slots only. Lexical parent shadowing remains valid, and invocation cleanup applies to collision errors like other runtime failures.
 
 Retained definitions keep their complete source file alive. Dropping the context releases them unless another program/context owns a reference. Local registration follows the defining invocation's lifetime; the immutable nested syntax can remain part of its outer definition's shared body.
 
@@ -108,3 +108,36 @@ Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones 
 Resource limits, imports, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
+
+## Register Native Statements
+
+`Context::register_native(header, callback)` registers a synchronous Rust closure. The header is a complete DSL sentence header without a body; parameter labels must be valid, distinct identifiers. Registration uses the same grammar, normalization, collision checks, and lexical lookup as custom statements. Invalid headers return source-bearing diagnostics without registering anything or calling the closure. Header diagnostics use `<native>`; built-in Log uses `<builtin Log>`. Repeated `init_statements()` calls fill only vacant slots.
+
+```rust
+use botwork::core::{
+    ast::Program,
+    eval::{evaluate_program_detailed, Context},
+    grammar::{BWErr, Literal},
+};
+
+let mut context = Context::default();
+context.register_native("Uppercase |text|", |arguments| {
+    let Literal::String(text) = &arguments[0] else {
+        return Err(BWErr::OperationIncompatibleError("Uppercase requires a string".into()));
+    };
+    Ok(Literal::String(text.to_uppercase()))
+})?;
+let program = Program::parse_detailed("native.botwork", "|result| = Uppercase |\"hello\"|")?;
+assert_eq!(evaluate_program_detailed(&program, &mut context)?.to_string(), "HELLO");
+# Ok::<(), botwork::core::diagnostic::Diagnostic>(())
+```
+
+Callbacks implement `Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static`. Resolution and arity checks precede argument evaluation; every argument evaluates once, left to right, in the caller. All values must be finite, including nested floats in arrays/maps. The callback receives immutable values in parameter order and cannot access the interpreter context. Until shared typed signatures are implemented, the callback checks operation-specific kinds before performing effects.
+
+Return an owned `Literal` for assignment or further calls; return `Literal::None` explicitly when there is no result. Every value kind is supported, with no coercion or host-reference aliasing. Returned non-finite values fail with BW3002 before assignment. Log uses this same registration/invocation path and returns its input after writing it.
+
+Return a suitable `BWErr` for expected failures, including `NativeError(reason)` (BW4002) for operation failures. Existing error categories keep their codes. The interpreter attaches the call span, native frame, enclosing callers, and any handled cause; Catch inspection and Rethrow work normally. Callback errors do not undo completed effects.
+
+Unwinding callback panics become BW4003 and unwind language frames/bindings through normal error handling. The Rust panic hook still runs; Botwork does not alter process-global hooks. Process aborts, fatal signals, blocking callbacks, and corrupted or poisoned captured state are outside this recovery guarantee. Callbacks must restore their own host resources/state and return errors for expected failures. These are trusted in-process extensions with the host process's capabilities.
+
+Cloning a context copies DSL bindings/registries and shares callback closures through Arc. Synchronize intentionally shared captured state, or register separate closures in fresh contexts for independent host state. `Send + Sync` bounds permit that sharing; execution remains synchronous. Async cancellation, operation deadlines, typed signatures, and adapter conversion/cause contracts retain separate roadmap tasks.

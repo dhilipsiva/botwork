@@ -2,6 +2,8 @@
 pub enum Input {
     Script(&'static str),
     NonFiniteHost,
+    NativeReturn,
+    NativeInvalidReturn,
 }
 
 #[derive(Clone)]
@@ -102,5 +104,9 @@ pub fn cases() -> Vec<Case> {
         Case { boundary: &["F4"], ..failure("rethrow-original", include_str!("../fixtures/rethrow-original.botwork"), "BW3002\n", "BW3002", "rethrow:", &["F4"]) },
         Case { id: "structural-host-invalid", positive: &[], invalid: &["V6"], boundary: &[],
             input: Input::NonFiniteHost, stdout: "", code: Some("BW3002"), error: Some("Non-finite floating-point operand") },
+        Case { id: "native-return", positive: &["F5"], invalid: &[], boundary: &["F5"],
+            input: Input::NativeReturn, stdout: "", code: None, error: None },
+        Case { id: "native-invalid-return", positive: &[], invalid: &["F5"], boundary: &[],
+            input: Input::NativeInvalidReturn, stdout: "", code: Some("BW3002"), error: Some("Non-finite floating-point operand") },
     ]
 }

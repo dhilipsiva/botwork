@@ -20,6 +20,8 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW3003 | Incompatible type | Use supported operand kinds, boolean conditions, and array For iterables |
 | BW3004 | Collection access | Check exact map keys and nonnegative array indexes within bounds |
 | BW4001 | Output failure | Fix the destination and account for any bytes already written before retrying |
+| BW4002 | Native operation failure | Check the operation's requirements and completed effects before retrying |
+| BW4003 | Native callback panic | Fix the callback and inspect captured host state before reuse |
 
 Ordinary source calls with the wrong arity normally fail signature resolution as BW2002; BW2004 represents a resolved signature/count mismatch. Numeric conversion remains a runtime error despite the legacy `ParsingIntegerError` name. CLI argument parsing and file-loading errors are outside this language-error catalog. Hints describe repairs without changing or automatically rerunning the script.
 
@@ -44,7 +46,7 @@ Spans retain shared source ownership after the input, parsed program, or context
 
 ## Calls and Recovery
 
-Call stacks are snapshots captured before unwinding. A custom call that fails during resolution or argument evaluation has not entered its body and adds no frame; enclosing callers remain visible. Native Log evaluates arguments inside its callback, so a failing Log argument includes that native frame. Normal completion, returns, and errors remove active frames; later failures cannot inherit them.
+Call stacks are snapshots captured before unwinding. Any call that fails during resolution or argument evaluation has not entered its body/callback and adds no frame; enclosing callers remain visible. Native callbacks receive validated argument values. A callback error, unwinding panic, or invalid returned value includes its native call site. Normal completion, returns, and errors remove active frames; later failures cannot inherit them.
 
 Try/Catch still handles evaluation failures only. A successful handler consumes its error and emits no diagnostic. If the handler fails, its failure is primary and the handled error remains in `causes`. Nested handler failures retain all original spans/stacks in handling order, innermost first. A captured diagnostic includes the current caller even if Catch handles it before that caller unwinds. `Display` renders causes; `std::error::Error::source()` exposes the first handled cause, or the underlying category error when there is none.
 

@@ -79,6 +79,8 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "BW3004",
         ),
         (BWErr::OutputError("closed".into()), Output, "BW4001"),
+        (BWErr::NativeError("offline".into()), Native, "BW4002"),
+        (BWErr::NativePanic("fail".into()), NativePanic, "BW4003"),
     ];
     let mut unique = BTreeSet::new();
     for (error, category, code) in entries {

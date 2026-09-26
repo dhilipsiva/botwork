@@ -185,10 +185,18 @@ fn native_errors_record_the_call_site_without_a_dsl_definition() {
     let mut context = Context::default();
     context.init_statements();
     let error = execute("Log |missing|", &mut context).unwrap_err();
-    assert_eq!(error.call_stack.len(), 1);
-    assert_eq!(error.call_stack[0].signature, "log|param|");
-    assert!(error.call_stack[0].definition_site.is_none());
+    assert!(error.call_stack.is_empty());
     assert_eq!(error.span.as_ref().unwrap().text(), "missing");
+    context
+        .register_native("Fail |value|", |_| {
+            Err(BWErr::NativeError("offline".into()))
+        })
+        .unwrap();
+    let error = execute("Fail |1|", &mut context).unwrap_err();
+    assert_eq!(error.call_stack.len(), 1);
+    assert_eq!(error.call_stack[0].signature, "fail|param|");
+    assert!(error.call_stack[0].definition_site.is_none());
+    assert_eq!(error.span.as_ref().unwrap().text(), "Fail |1|");
 }
 
 #[test]

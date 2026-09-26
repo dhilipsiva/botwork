@@ -178,6 +178,38 @@ fn check_host_case(case: &Case) {
     }
 }
 
+fn check_native_case(case: &Case) {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let mut context = Context::default();
+    let value = match case.input {
+        Input::NativeReturn => Literal::Array(vec![Literal::None, Literal::Int(i32::MIN)]),
+        Input::NativeInvalidReturn => Literal::Array(vec![Literal::Float(f32::INFINITY)]),
+        _ => unreachable!(),
+    };
+    context
+        .register_native("Host", move |arguments| {
+            assert!(arguments.is_empty());
+            Ok(value.clone())
+        })
+        .unwrap();
+    let result = evaluate_program_detailed(
+        &Program::parse("native-corpus.botwork", "|result| = Host").unwrap(),
+        &mut context,
+    );
+    match case.error {
+        Some(expected) => {
+            let error = result.unwrap_err();
+            assert_eq!(error.code().as_str(), case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+            assert_eq!(error.call_stack[0].signature, "host");
+        }
+        None => assert_eq!(result.unwrap().to_string(), "[none, -2147483648]"),
+    }
+}
+
 #[test]
 fn conformance_inputs_match_status_stdout_and_error_contracts() {
     let cases = cases();
@@ -188,6 +220,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             Input::Script(source) => source,
             Input::NonFiniteHost => {
                 check_host_case(&case);
+                continue;
+            }
+            Input::NativeReturn | Input::NativeInvalidReturn => {
+                check_native_case(&case);
                 continue;
             }
         };
