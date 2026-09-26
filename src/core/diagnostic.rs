@@ -6,6 +6,85 @@ use super::{ast::Span, grammar::BWErr};
 
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
+/// Stable machine-readable categories. Existing string identifiers are never reused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum DiagnosticCode {
+    Syntax,
+    InvalidControl,
+    DuplicateParameter,
+    UndefinedVariable,
+    UndefinedStatement,
+    DuplicateStatement,
+    ParameterCount,
+    InvalidNumber,
+    Arithmetic,
+    IncompatibleType,
+    CollectionAccess,
+    Output,
+}
+
+impl DiagnosticCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Syntax => "BW1001",
+            Self::InvalidControl => "BW1002",
+            Self::DuplicateParameter => "BW1003",
+            Self::UndefinedVariable => "BW2001",
+            Self::UndefinedStatement => "BW2002",
+            Self::DuplicateStatement => "BW2003",
+            Self::ParameterCount => "BW2004",
+            Self::InvalidNumber => "BW3001",
+            Self::Arithmetic => "BW3002",
+            Self::IncompatibleType => "BW3003",
+            Self::CollectionAccess => "BW3004",
+            Self::Output => "BW4001",
+        }
+    }
+}
+
+impl fmt::Display for DiagnosticCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl BWErr {
+    pub fn code(&self) -> DiagnosticCode {
+        match self {
+            Self::ParsingError(_) => DiagnosticCode::Syntax,
+            Self::ControlFlowError(_) => DiagnosticCode::InvalidControl,
+            Self::DuplicateParameter { .. } => DiagnosticCode::DuplicateParameter,
+            Self::VariableNotDefined(_) => DiagnosticCode::UndefinedVariable,
+            Self::StatementNotDefined(_) => DiagnosticCode::UndefinedStatement,
+            Self::DuplicateStatement { .. } => DiagnosticCode::DuplicateStatement,
+            Self::ParameterMissingError(_) => DiagnosticCode::ParameterCount,
+            Self::ParsingIntegerError(_) => DiagnosticCode::InvalidNumber,
+            Self::ArithmeticError(_) => DiagnosticCode::Arithmetic,
+            Self::OperationIncompatibleError(_) => DiagnosticCode::IncompatibleType,
+            Self::CollectionAccessError { .. } => DiagnosticCode::CollectionAccess,
+            Self::OutputError(_) => DiagnosticCode::Output,
+        }
+    }
+
+    pub fn help(&self) -> String {
+        match self {
+            Self::VariableNotDefined(name) => format!("Define `{name}` before reading it in this lexical scope; check spelling and case."),
+            Self::ParsingError(_) => "Check the indicated token and close every pipe, bracket, brace, quote, and block comment.".into(),
+            Self::ControlFlowError(_) => "Return needs a custom body; Break and Continue need a loop in the same invocation.".into(),
+            Self::DuplicateParameter { .. } => "Give each parameter a distinct, case-sensitive name.".into(),
+            Self::StatementNotDefined(_) => "Define the statement before calling it; check sentence punctuation and parameter positions/count.".into(),
+            Self::DuplicateStatement { .. } => "Rename this declaration or remove the duplicate in this scope; the original remains registered.".into(),
+            Self::ParameterMissingError(_) => "Supply one argument for each parameter in the registered signature.".into(),
+            Self::ParsingIntegerError(_) => "Use an i32 integer (-2147483648..2147483647) or a finite f32 decimal; numbers use ASCII digits.".into(),
+            Self::ArithmeticError(_) => "Check zero divisors, intermediate i32 overflow, and whether floating-point operands/results are finite.".into(),
+            Self::OperationIncompatibleError(_) => "Use the documented operand kinds; conditions require booleans and For requires an array.".into(),
+            Self::CollectionAccessError { .. } => "Check each key/index and container kind; maps use exact string keys and arrays use in-bounds nonnegative indexes.".into(),
+            Self::OutputError(_) => "Check the output destination and account for bytes already written before retrying.".into(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CallFrame {
     /// Normalized statement signature, independent of parameter values.
@@ -34,6 +113,14 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    pub fn code(&self) -> DiagnosticCode {
+        self.error.code()
+    }
+
+    pub fn help(&self) -> String {
+        self.error.help()
+    }
+
     pub fn new(error: BWErr) -> Self {
         Self {
             error: Box::new(error),
@@ -96,9 +183,14 @@ impl From<BWErr> for Diagnostic {
 impl fmt::Display for Diagnostic {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(span) = &self.span {
-            write!(formatter, "{}: ", span.location())?;
+            write!(formatter, "{}", span.location())?;
+            if span.start() != span.end() {
+                let (line, column) = span.end_line_column();
+                write!(formatter, "-{line}:{column}")?;
+            }
+            formatter.write_str(": ")?;
         }
-        write!(formatter, "{}", self.error)?;
+        write!(formatter, "[{}] {}", self.code(), self.error)?;
         if let Some(span) = &self.span {
             if !span.text().trim().is_empty() {
                 write!(formatter, "\n  {}: {}", self.label, span.text().trim())?;
@@ -123,6 +215,7 @@ impl fmt::Display for Diagnostic {
                 write!(formatter, " (defined at {})", definition.location())?;
             }
         }
+        write!(formatter, "\n  help: {}", self.help())?;
         for cause in &self.causes {
             write!(formatter, "\nwhile handling: {cause}")?;
         }

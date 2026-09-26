@@ -53,7 +53,16 @@ impl Span {
     /// One-based line and Unicode scalar column; a tab occupies one column.
     /// CRLF is one line ending, and offsets remain UTF-8 byte offsets.
     pub fn line_column(&self) -> (usize, usize) {
-        let before = &self.source.text[..self.start];
+        self.position(self.start)
+    }
+
+    /// Exclusive end in the same one-based Unicode scalar units as the start.
+    pub fn end_line_column(&self) -> (usize, usize) {
+        self.position(self.end)
+    }
+
+    fn position(&self, offset: usize) -> (usize, usize) {
+        let before = &self.source.text[..offset];
         let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
         let column = before
             .rsplit('\n')

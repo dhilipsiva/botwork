@@ -99,6 +99,6 @@ Runtime boundaries retain defensive checks for escaping controls, including a ca
 
 ## Remaining Interpreter Work
 
-Resource limits, imports, stable diagnostic codes, Catch inspection/rethrow, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Resource limits, imports, Catch inspection/rethrow, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

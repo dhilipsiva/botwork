@@ -44,6 +44,9 @@ fn inventory(cases: &[Case], specification: &str) -> Result<(), String> {
         if case.error.is_some() != !case.invalid.is_empty() {
             return Err(format!("{}: invalid cases must expect an error", case.id));
         }
+        if case.error.is_some() != case.code.is_some() {
+            return Err(format!("{}: error expectations require a code", case.id));
+        }
         let mut count = 0;
         for (category, ids) in [case.positive, case.invalid, case.boundary]
             .iter()
@@ -131,6 +134,11 @@ fn inventory_rejects_new_rules_gaps_unknown_tags_duplicates_and_wrong_expectatio
     let mut wrong_status = cases();
     wrong_status[0].error = Some("unexpected");
     assert!(inventory(&wrong_status, SPECIFICATION).is_err());
+    let mut missing_code = cases();
+    missing_code.last_mut().unwrap().code = None;
+    assert!(inventory(&missing_code, SPECIFICATION)
+        .unwrap_err()
+        .contains("require a code"));
     assert!(rule_ids("no rules").is_err());
     assert!(rule_ids("**E1 — First.**\n**E1 — Duplicate.**").is_err());
 }
@@ -157,6 +165,7 @@ fn check_host_case(case: &Case) {
                     (Literal::None, invalid.clone()),
                 ] {
                     let error = operator.operate_binary(left, right).unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
                     assert!(
                         matches!(error, BWErr::ArithmeticError(_)),
                         "{}: {error}",
@@ -193,6 +202,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         assert_eq!(output.stdout, case.stdout.as_bytes(), "{label}");
         match case.error {
             Some(expected) => {
+                assert!(
+                    diagnostic.contains(&format!("[{}]", case.code.unwrap())),
+                    "{label}"
+                );
                 assert_eq!(output.status.code(), Some(1), "{label}");
                 assert!(
                     diagnostic.contains(expected),

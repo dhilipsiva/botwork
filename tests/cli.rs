@@ -114,6 +114,33 @@ fn a_failed_handler_reports_both_failures_at_their_original_locations() {
 }
 
 #[test]
+fn cli_diagnostics_expose_stable_codes_and_actionable_guidance() {
+    for (name, code, hint) in [
+        ("syntax-error.botwork", "BW1001", "close every pipe"),
+        ("runtime-error.botwork", "BW2001", "check spelling and case"),
+        ("arithmetic-failure.botwork", "BW3002", "zero divisors"),
+        ("boolean-left-type-error.botwork", "BW3003", "operand kinds"),
+        (
+            "computed-access-out-of-bounds.botwork",
+            "BW3004",
+            "in-bounds",
+        ),
+        ("duplicate-parameter.botwork", "BW1003", "distinct"),
+    ] {
+        let path = fixture(name);
+        let output = run(&["--file", path.to_str().unwrap()]);
+        assert_eq!(output.status.code(), Some(1));
+        let diagnostic = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            diagnostic.contains(&format!("[{code}]")),
+            "{name}: {diagnostic}"
+        );
+        assert!(diagnostic.contains(hint), "{name}: {diagnostic}");
+        assert!(diagnostic.contains("help:"), "{name}: {diagnostic}");
+    }
+}
+
+#[test]
 fn invalid_control_placement_prevents_all_cli_execution() {
     assert_control_placement_failure("invalid-control.botwork", 2, 13, "Return");
 }

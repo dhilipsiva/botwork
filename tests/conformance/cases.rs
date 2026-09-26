@@ -13,6 +13,7 @@ pub struct Case {
     pub input: Input,
     pub stdout: &'static str,
     pub error: Option<&'static str>,
+    pub code: Option<&'static str>,
 }
 
 fn success(
@@ -30,6 +31,7 @@ fn success(
         input: Input::Script(source),
         stdout,
         error: None,
+        code: None,
     }
 }
 
@@ -37,6 +39,7 @@ fn failure(
     id: &'static str,
     source: &'static str,
     stdout: &'static str,
+    code: &'static str,
     error: &'static str,
     invalid: &'static [&'static str],
 ) -> Case {
@@ -48,6 +51,7 @@ fn failure(
         input: Input::Script(source),
         stdout,
         error: Some(error),
+        code: Some(code),
     }
 }
 
@@ -75,25 +79,25 @@ pub fn cases() -> Vec<Case> {
         success("recovery", include_str!("recovery.botwork"),
             "before\ncompleted effect\n7\nouter handler\nnot hoisted\nregistered later\n[false, true]\n",
             &["F2", "F3"], &["E1", "E2", "E4", "F1", "F2"]),
-        failure("incomplete-continuation", include_str!("../fixtures/invalid-continuation.botwork"), "", "Parsing error:", &["E1", "L1"]),
-        failure("unclosed-comment", include_str!("../fixtures/unclosed-block-comment.botwork"), "", "Parsing error:", &["L2"]),
-        failure("resolve-before-arguments", "Unknown |missing_argument|", "", "Statement not defined: Unknown", &["E3", "S1"]),
-        failure("return-operand-order", "Fail { Return |missing_first + missing_second| }\nLog |\"before\"|\nFail\nLog |\"unreachable\"|", "before\n", "Variable not defined: missing_first", &["E2", "V1", "C2", "F2"]),
-        failure("strict-condition", "If |1| { Log |\"unreachable\"| }", "", "If requires a boolean condition", &["E4"]),
-        failure("comparison-chain", "Log |1 < 2 < 3|", "", "Operation performed on incompatible types:", &["V2", "V5"]),
-        failure("missing-path-key", "Log |{a: 1}.missing|", "", "map key does not exist", &["V3"]),
-        failure("computed-key-type", "Log |{a: 1}[0]|", "", "map key must be a string", &["V4"]),
-        failure("unsupported-operator", "Log |[1] - [1]|", "", "Operation performed on incompatible types:", &["V7"]),
-        failure("duplicate-parameter", include_str!("../fixtures/duplicate-parameter.botwork"), "", "Duplicate parameter `x`", &["L3"]),
-        failure("invalid-unicode", include_str!("../fixtures/invalid-unicode-identifier.botwork"), "", "Parsing error:", &["L4"]),
-        failure("private-caller", "Read { Return |private| }\nOuter { |private| = |7|\nRead\n}\nOuter", "", "Variable not defined: private", &["S1"]),
-        failure("expired-definition", "Outer { Local {} }\nOuter\nLocal", "", "Statement not defined: Local", &["S2"]),
-        failure("non-array-iteration", "For |item| In |{}| { Log |\"unreachable\"| }", "", "For requires an array", &["S3"]),
-        failure("invalid-control", include_str!("../fixtures/invalid-control-unused-break.botwork"), "", "Break requires", &["C1"]),
-        failure("required-catch", include_str!("../fixtures/missing-catch.botwork"), "", "Parsing error:", &["F1"]),
-        failure("diagnostic-stack", include_str!("../fixtures/diagnostic-stack.botwork"), "", "diagnostic-stack.botwork:2:17", &["F3"]),
-        Case { boundary: &["F3"], ..failure("diagnostic-handler", include_str!("../fixtures/diagnostic-handler.botwork"), "", "while handling:", &["F3"]) },
+        failure("incomplete-continuation", include_str!("../fixtures/invalid-continuation.botwork"), "", "BW1001", "Parsing error:", &["E1", "L1"]),
+        failure("unclosed-comment", include_str!("../fixtures/unclosed-block-comment.botwork"), "", "BW1001", "Parsing error:", &["L2"]),
+        failure("resolve-before-arguments", "Unknown |missing_argument|", "", "BW2002", "Statement not defined: Unknown", &["E3", "S1"]),
+        failure("return-operand-order", "Fail { Return |missing_first + missing_second| }\nLog |\"before\"|\nFail\nLog |\"unreachable\"|", "before\n", "BW2001", "Variable not defined: missing_first", &["E2", "V1", "C2", "F2"]),
+        failure("strict-condition", "If |1| { Log |\"unreachable\"| }", "", "BW3003", "If requires a boolean condition", &["E4"]),
+        failure("comparison-chain", "Log |1 < 2 < 3|", "", "BW3003", "Operation performed on incompatible types:", &["V2", "V5"]),
+        failure("missing-path-key", "Log |{a: 1}.missing|", "", "BW3004", "map key does not exist", &["V3"]),
+        failure("computed-key-type", "Log |{a: 1}[0]|", "", "BW3004", "map key must be a string", &["V4"]),
+        failure("unsupported-operator", "Log |[1] - [1]|", "", "BW3003", "Operation performed on incompatible types:", &["V7"]),
+        failure("duplicate-parameter", include_str!("../fixtures/duplicate-parameter.botwork"), "", "BW1003", "Duplicate parameter `x`", &["L3"]),
+        failure("invalid-unicode", include_str!("../fixtures/invalid-unicode-identifier.botwork"), "", "BW1001", "Parsing error:", &["L4"]),
+        failure("private-caller", "Read { Return |private| }\nOuter { |private| = |7|\nRead\n}\nOuter", "", "BW2001", "Variable not defined: private", &["S1"]),
+        failure("expired-definition", "Outer { Local {} }\nOuter\nLocal", "", "BW2002", "Statement not defined: Local", &["S2"]),
+        failure("non-array-iteration", "For |item| In |{}| { Log |\"unreachable\"| }", "", "BW3003", "For requires an array", &["S3"]),
+        failure("invalid-control", include_str!("../fixtures/invalid-control-unused-break.botwork"), "", "BW1002", "Break requires", &["C1"]),
+        failure("required-catch", include_str!("../fixtures/missing-catch.botwork"), "", "BW1001", "Parsing error:", &["F1"]),
+        failure("diagnostic-stack", include_str!("../fixtures/diagnostic-stack.botwork"), "", "BW2001", "diagnostic-stack.botwork:2:17", &["F3"]),
+        Case { boundary: &["F3"], ..failure("diagnostic-handler", include_str!("../fixtures/diagnostic-handler.botwork"), "", "BW2001", "while handling:", &["F3"]) },
         Case { id: "structural-host-invalid", positive: &[], invalid: &["V6"], boundary: &[],
-            input: Input::NonFiniteHost, stdout: "", error: Some("Non-finite floating-point operand") },
+            input: Input::NonFiniteHost, stdout: "", code: Some("BW3002"), error: Some("Non-finite floating-point operand") },
     ]
 }
