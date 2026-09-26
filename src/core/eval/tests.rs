@@ -384,6 +384,131 @@ fn minimum_integer_composes_in_collections_calls_and_float_operations() {
 }
 
 #[test]
+fn collection_paths_read_nested_maps_arrays_and_unicode_keys() {
+    for (path, expected) in [
+        ("data.items.0.value", 7),
+        ("data.items.1.value", 8),
+        ("data.items.01.value", 8),
+        ("data.café.δ", 9),
+        ("data ### ignored.dot ### . items . 0 . value", 7),
+    ] {
+        let source = format!(
+            "|data| = |{{items: [{{value: 7}}, {{value: 8}}], café: {{δ: 9}}}}|\n|answer| = |{path}|"
+        );
+        let result = evaluate(&source, &mut Context::default());
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{path}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn collection_paths_compose_with_scope_operators_calls_and_loops() {
+    let result = evaluate(
+        "|data| = |{items: [1, 2, 3]}|\nTotal |data| {\n |sum| = |0|\n\
+         For |item| In |data.items| { |sum| = |sum + item| }\n\
+         Return |sum + data.items.0|\n}\n|answer| = Total |data|",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::Int(7))), "{result:?}");
+}
+
+#[test]
+fn collection_access_errors_identify_the_first_failing_segment() {
+    for (path, segment, reason) in [
+        ("data.missing.0", "missing", "map key does not exist"),
+        ("data.items.2", "2", "out of bounds"),
+        ("data.items.name", "name", "ASCII decimal digits"),
+        ("data.items.٣", "٣", "ASCII decimal digits"),
+        (
+            "data.items.99999999999999999999999999999",
+            "99999999999999999999999999999",
+            "out of bounds",
+        ),
+        ("data.items.0.field", "field", "neither a map nor an array"),
+        ("data.text.0", "0", "neither a map nor an array"),
+        ("data.flag.field", "field", "neither a map nor an array"),
+        ("data.empty.0", "0", "out of bounds"),
+    ] {
+        let source = format!(
+            "|data| = |{{items: [7, 8], text: \"hello\", flag: true, empty: []}}|\n|answer| = |{path}|"
+        );
+        let error = evaluate(&source, &mut Context::default()).unwrap_err();
+        assert!(
+            matches!(&error, BWErr::CollectionAccessError { path: found, segment: part, reason: detail }
+            if found == path && part == segment && detail.contains(reason)),
+            "{path}: {error}"
+        );
+    }
+    let result = evaluate(
+        "|answer| = |missing.items.99999999999999999999999|",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+}
+
+#[test]
+fn map_paths_use_exact_string_keys_and_distinguish_none_from_absence() {
+    let mut context = Context::default();
+    context.set_variable(
+        "data".into(),
+        Literal::Map(
+            [
+                ("0".into(), Literal::Int(7)),
+                ("00".into(), Literal::Int(8)),
+                ("٣".into(), Literal::Int(9)),
+                ("empty".into(), Literal::None),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    );
+    for (path, value) in [("data.0", 7), ("data.00", 8), ("data.٣", 9)] {
+        assert!(
+            matches!(evaluate(&format!("|answer| = |{path}|"), &mut context),
+            Ok(Literal::Int(found)) if found == value)
+        );
+    }
+    assert!(matches!(
+        evaluate("|answer| = |data.empty|", &mut context),
+        Ok(Literal::None)
+    ));
+    assert!(matches!(
+        evaluate("|answer| = |data.empty.next|", &mut context),
+        Err(BWErr::CollectionAccessError { .. })
+    ));
+    assert!(matches!(
+        evaluate("|answer| = |data.Empty|", &mut context),
+        Err(BWErr::CollectionAccessError { .. })
+    ));
+}
+
+#[test]
+fn collection_reads_return_values_without_mutating_the_original_container() {
+    let result = evaluate(
+        "|data| = |{items: [1, 2]}|\n|copy| = |data.items|\n\
+         |copy| = |copy + [3]|\n|answer| = |[data.items, copy]|",
+        &mut Context::default(),
+    )
+    .unwrap();
+    assert_eq!(result.to_string(), "[[1, 2], [1, 2, 3]]");
+    for source in [
+        "|data.item| = |7|",
+        "|items.0| = |7|",
+        "|answer| = |items.-1|",
+    ] {
+        assert!(
+            matches!(
+                Program::parse("invalid.botwork", source),
+                Err(BWErr::ParsingError(_))
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn normally_completed_controls_do_not_collect_body_results() {
     for source in [
         "If |true| { |value| = |7| }",
@@ -841,7 +966,7 @@ fn keyword_prefix_identifiers_preserve_their_complete_names() {
     assert!(matches!(values.get("trueValue"), Some(Literal::Int(8))));
     assert!(matches!(values.get("android"), Some(Literal::Int(9))));
     assert!(
-        matches!(evaluate("|answer| = |order.trueValue|", &mut Context::default()), Err(BWErr::UnsupportedAccessError(path)) if path == "order.trueValue")
+        matches!(evaluate("|answer| = |order.trueValue|", &mut Context::default()), Err(BWErr::VariableNotDefined(name)) if name == "order")
     );
 }
 
@@ -1210,7 +1335,7 @@ fn nested_unary_expressions_keep_type_errors_and_controlled_failures() {
     );
     assert!(
         matches!(evaluate("|answer| = |2 ^ m.a|", &mut Context::default()),
-        Err(BWErr::UnsupportedAccessError(path)) if path == "m.a")
+        Err(BWErr::VariableNotDefined(name)) if name == "m")
     );
     for expression in ["2 ^ 2 ^ 5", "-2 ^ 31", "2 ^ (1 / 0)", "(2 ^ 31) ^ 0"] {
         assert!(
@@ -1369,20 +1494,24 @@ fn collection_literals_evaluate_nested_expressions() {
 }
 
 #[test]
-fn unsupported_access_reports_the_path_and_preserves_assignment_state() {
+fn invalid_access_reports_the_path_and_preserves_assignment_state() {
     for path in [
         "m.a",
         "m.a.0",
         "items.0",
-        "missing.a",
         "δ.α",
         "items.999999999999999999999",
     ] {
         let mut context = Context::default();
-        evaluate("|answer| = |9|", &mut context).unwrap();
+        evaluate(
+            "|answer| = |9|\n|m| = |{}|\n|items| = |[]|\n|δ| = |{}|",
+            &mut context,
+        )
+        .unwrap();
         let error = evaluate(&format!("|answer| = |{path}|"), &mut context).unwrap_err();
-        assert!(matches!(&error, BWErr::UnsupportedAccessError(found) if found == path));
-        assert!(error.to_string().contains("unsupported"), "{error}");
+        assert!(
+            matches!(&error, BWErr::CollectionAccessError { path: found, .. } if found == path)
+        );
         assert!(error.to_string().contains(path), "{error}");
         assert!(matches!(variable(&context, "answer"), Literal::Int(9)));
         evaluate("|answer| = |10|", &mut context).unwrap();
@@ -1391,7 +1520,7 @@ fn unsupported_access_reports_the_path_and_preserves_assignment_state() {
 }
 
 #[test]
-fn unsupported_access_propagates_through_expression_contexts() {
+fn missing_map_keys_propagate_through_expression_contexts() {
     for source in [
         "|answer| = |1 + m.a|",
         "|answer| = |[m.a]|",
@@ -1404,11 +1533,11 @@ fn unsupported_access_propagates_through_expression_contexts() {
     ] {
         let mut context = Context::default();
         context.init_statements();
-        evaluate("|m| = |{a: 7}|", &mut context).unwrap();
+        evaluate("|m| = |{}|", &mut context).unwrap();
         let error = evaluate(source, &mut context).unwrap_err();
-        assert!(matches!(&error, BWErr::UnsupportedAccessError(path) if path == "m.a"));
+        assert!(matches!(&error, BWErr::CollectionAccessError { path, .. } if path == "m.a"));
         assert!(
-            error.to_string().contains("unsupported"),
+            error.to_string().contains("map key does not exist"),
             "{source}: {error}"
         );
         assert!(error.to_string().contains("m.a"), "{source}: {error}");
@@ -1416,7 +1545,7 @@ fn unsupported_access_propagates_through_expression_contexts() {
 }
 
 #[test]
-fn unsupported_access_is_catchable_and_skipped_branches_do_not_evaluate_it() {
+fn access_failure_is_catchable_and_skipped_branches_do_not_evaluate_it() {
     let mut context = Context::default();
     evaluate(
         "|answer| = |9|\nTry {\n |answer| = |m.a|\n} Catch {\n\

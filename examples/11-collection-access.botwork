@@ -1,0 +1,16 @@
+|data| = |{items: [{name: "first", price: 3}, {name: "second", price: 5}], café: {δ: 7}}|
+Log |data.items.0.name|
+Log |data.items.1.price + data.café.δ|
+
+Sum prices |catalog| {
+    |total| = |0|
+    For |item| In |catalog.items| { |total| = |total + item.price| }
+    Return |total|
+}
+|total| = Sum prices |data|
+Log |total|
+
+Try { Log |data.missing| } Catch { Log |"caught missing key"| }
+Try { Log |data.items.2| } Catch { Log |"caught bounds error"| }
+Try { Log |data.items.0.price.amount| } Catch { Log |"caught non-collection"| }
+Log |false and data.missing|

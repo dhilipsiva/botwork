@@ -149,10 +149,12 @@ A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the 
 
 This contract covers evaluation errors, including the arithmetic failures described above. Valid `Return`, `Break`, and `Continue` pass through Try/Catch without running its handler. An error evaluating a return expression remains catchable, and a handler can return a fallback value or raise another error. Preserving structured error causes remains a separate roadmap item.
 
-## Collection Access Status
+## Collection Access
 
-Dot access such as `m.a`, `items.0`, or `m.items.0` is accepted syntax but is not implemented yet. Evaluating it returns `UnsupportedAccessError` with a diagnostic such as `Collection access is unsupported: m.items.0`. No base-variable lookup or index conversion is attempted, so an undefined base receives the same unsupported-feature error.
+Dot paths start with a variable and visit collection values left to right: `m.a`, `items.0`, and `m.items.0.name`. The base variable uses ordinary lexical lookup. Map segments are exact, case-sensitive string keys; array segments are zero-based ASCII decimal indexes. Leading zeroes are accepted for arrays (`items.01` selects index 1), while map keys retain their spelling (`m.01` means key `"01"`). Numeric map keys can come from host-provided values even though map-literal key syntax is currently limited to identifiers.
 
-The error propagates through expressions, collections, conditions, and call arguments. A failed assignment preserves its destination's previous value; failed custom invocations discard their local frame. `Try/Catch` can handle the error; an uncaught error stops execution with CLI status `1`. Access in an unselected `If` branch is not evaluated. Malformed paths remain syntax errors.
+Segments are literal names/digits, not variable references: `items.index` does not evaluate a variable named `index`. Whitespace and comments between path tokens do not become part of keys. Computed indexes and quoted/arbitrary string-key syntax remain planned work. Negative indexes and indexed assignment such as `|items.0| = |7|` are syntax errors.
 
-This temporary contract prevents interpreter panics. Actual key/index lookup and its missing-key, bounds, and type errors remain planned work; its implementation must replace the temporary unsupported-access expectations in the tests.
+A missing base yields `VariableNotDefined`. Missing keys, invalid array-index tokens, out-of-bounds indexes (including excessively large numbers), and traversal through scalars or None yield `CollectionAccessError` with the canonical path, failing segment, and reason. The first failing segment stops lookup; a key bound to None is a successful lookup, distinct from a missing key. These errors are catchable, preserve a failed assignment's destination, and are skipped in unselected branches/boolean operands.
+
+Reads return values without changing their source container. Access works in expressions, conditions, arguments, return values, and loop iterables. See [the collection-access example](../examples/11-collection-access.botwork).

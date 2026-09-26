@@ -48,8 +48,12 @@ pub enum BWErr {
     ControlFlowError(String),
     #[error("Arithmetic error: {0}")]
     ArithmeticError(String),
-    #[error("Collection access is unsupported: {0}")]
-    UnsupportedAccessError(String),
+    #[error("Collection access failed: {path} at `{segment}`: {reason}")]
+    CollectionAccessError {
+        path: String,
+        segment: String,
+        reason: String,
+    },
     #[error("Writing output failed: {0}")]
     OutputError(String),
 }

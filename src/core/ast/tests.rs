@@ -337,9 +337,9 @@ fn numeric_conversion_remains_deferred_and_strings_decode_once() {
     let string = assigned_expression(r#""é\n\"\\n""#);
     assert!(matches!(string.kind, ExprKind::String(text) if text == "é\n\"\\n"));
     let access = assigned_expression("missing.items.9999999999999999999999999999");
-    assert!(
-        matches!(access.kind, ExprKind::Access(text) if text == "missing.items.9999999999999999999999999999")
-    );
+    assert!(matches!(access.kind, ExprKind::Access { root, segments }
+            if root.text == "missing" && segments[0].text == "items"
+            && segments[1].text == "9999999999999999999999999999"));
 }
 
 #[test]
@@ -361,6 +361,22 @@ fn collection_entries_keep_source_order_duplicate_keys_and_key_spans() {
     };
     assert_eq!(shape(&items[0]), "missing");
     assert_eq!(shape(&items[1]), "2");
+}
+
+#[test]
+fn collection_paths_retain_parsed_segments_and_their_original_spans() {
+    let expression = assigned_expression("data ### ignored.dot ### . café . 00");
+    let ExprKind::Access { root, segments } = &expression.kind else {
+        panic!("access expression");
+    };
+    assert_eq!(root.text, "data");
+    assert_eq!(root.span.text(), "data");
+    assert_eq!(segments.len(), 2);
+    assert_eq!(segments[0].text, "café");
+    assert_eq!(segments[0].span.text(), "café");
+    assert_eq!(segments[1].text, "00");
+    assert_eq!(segments[1].span.text(), "00");
+    assert!(expression.span.text().contains("ignored.dot"));
 }
 
 #[test]

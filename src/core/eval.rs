@@ -7,8 +7,8 @@ use std::{
 
 use super::{
     ast::{
-        self, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr, ExprKind, Node,
-        Program, Statement, StatementKind, UnaryOp,
+        self, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr, ExprKind, Name,
+        Node, Program, Statement, StatementKind, UnaryOp,
     },
     grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
 };
@@ -61,11 +61,15 @@ impl Default for Context {
 
 impl Context {
     fn get_variable(&self, name: &str) -> LiteralResult {
+        self.get_variable_ref(name).cloned()
+    }
+
+    fn get_variable_ref(&self, name: &str) -> Result<&Literal, BWErr> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
             if let Some(value) = frame.variables.get(name) {
-                return Ok(value.clone());
+                return Ok(value);
             }
             index = frame.parent;
         }
@@ -183,7 +187,7 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
         ExprKind::Bool(value) => Ok(Literal::Bool(*value)),
         ExprKind::String(value) => Ok(Literal::String(value.clone())),
         ExprKind::Variable(name) => context.get_variable(name),
-        ExprKind::Access(path) => Err(BWErr::UnsupportedAccessError(path.clone())),
+        ExprKind::Access { root, segments } => evaluate_access(root, segments, context),
         ExprKind::Array(elements) => elements
             .iter()
             .map(|element| evaluate_expression(element, context))
@@ -241,6 +245,49 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
             operator.to_rule().operate_binary(left, right)
         }
     }
+}
+
+fn evaluate_access(root: &Name, segments: &[Name], context: &Context) -> LiteralResult {
+    let error = |segment: &Name, reason: String| BWErr::CollectionAccessError {
+        path: std::iter::once(root.text.as_str())
+            .chain(segments.iter().map(|part| part.text.as_str()))
+            .collect::<Vec<_>>()
+            .join("."),
+        segment: segment.text.clone(),
+        reason,
+    };
+    // Borrow the path's containers and copy only the selected result.
+    let mut value = context.get_variable_ref(&root.text)?;
+    for segment in segments {
+        value = match value {
+            Literal::Map(values) => values
+                .get(&segment.text)
+                .ok_or_else(|| error(segment, "map key does not exist".into()))?,
+            Literal::Array(values) => {
+                if segment.text.is_empty()
+                    || !segment.text.bytes().all(|byte| byte.is_ascii_digit())
+                {
+                    return Err(error(
+                        segment,
+                        "array index must contain ASCII decimal digits".into(),
+                    ));
+                }
+                segment
+                    .text
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|index| values.get(index))
+                    .ok_or_else(|| {
+                        error(
+                            segment,
+                            format!("array index is out of bounds for length {}", values.len()),
+                        )
+                    })?
+            }
+            _ => return Err(error(segment, "value is neither a map nor an array".into())),
+        };
+    }
+    Ok(value.clone())
 }
 
 fn evaluate_block(block: &Block, context: &mut Context) -> CompletionResult {

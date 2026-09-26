@@ -20,6 +20,8 @@ The scopes example checks argument binding, caller preservation, lexical lookup,
 
 The signed-integer example checks both range boundaries, leading zeroes, power grouping, and caught literal/negation errors. The CLI overflow fixture verifies that the valid minimum prints before a later overflow fails the process and skips subsequent output.
 
+The collection-access example checks nested map/array paths, Unicode keys, call/loop composition, catchable failures, and skipped access. Unit tests cover exact map keys, index validation, oversized bounds, None versus absence, first-failure priority, comments between segments, and copy semantics.
+
 ## Coverage Measurement
 
 Use Python 3.9 or newer and the active Rust toolchain's LLVM tools:
@@ -69,7 +71,7 @@ These are baseline measurements, not release-gate results: 13 known regressions 
 
 All current `tests/language_contract.rs` expectations are active, including lexical lookup, invocation-local bindings and definitions, loop-variable restoration, return values, and control propagation. Run both suites with `--release` as well. The specification and roadmap still require broader conformance coverage; passing these cases alone does not satisfy every release gate.
 
-The active collection-access regression temporarily permits the typed `UnsupportedAccessError` until access is implemented; arbitrary errors do not satisfy it. Evaluator and CLI tests verify [catchable unsupported access](language.md#collection-access-status), preserved assignments, and failure status without a panic. A `Try` without `Catch` is rejected during parsing; the active regression, parser cases, and CLI fixture verify this [error-handling contract](language.md#trycatch). Whole-program control validation has AST, library, compatibility, and CLI checks; runtime guard tests deliberately bypass validation internally to exercise the defensive paths. Other regression expectations follow the accepted roadmap.
+The collection-access regression requires the selected value; its former temporary unsupported-error allowance has been removed. Evaluator and CLI tests verify [lookup errors](language.md#collection-access), preserved assignments, and failure status without a panic. A `Try` without `Catch` is rejected during parsing; the active regression, parser cases, and CLI fixture verify this [error-handling contract](language.md#trycatch). Whole-program control validation has AST, library, compatibility, and CLI checks; runtime guard tests deliberately bypass validation internally to exercise the defensive paths. Other regression expectations follow the accepted roadmap.
 
 ## CLI Failure Contract
 

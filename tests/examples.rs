@@ -142,6 +142,22 @@ fn signed_integer_example_handles_boundaries_and_catchable_failures() {
 }
 
 #[test]
+fn collection_access_example_reads_nested_values_and_handles_errors() {
+    assert_example(
+        "11-collection-access.botwork",
+        &[
+            "first",
+            "12",
+            "8",
+            "caught missing key",
+            "caught bounds error",
+            "caught non-collection",
+            "false",
+        ],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

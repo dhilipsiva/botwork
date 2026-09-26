@@ -76,6 +76,18 @@ fn pair_compatibility_uses_original_offsets_and_retains_definitions() {
 }
 
 #[test]
+fn pair_compatibility_reads_collections_from_its_existing_context() {
+    let mut context = Context::default();
+    let setup = Program::parse("setup.botwork", "|data| = |{items: [7]}|").unwrap();
+    evaluate_program(&setup, &mut context).unwrap();
+    let pair = BWParser::parse(Rule::expression, "data.items.0")
+        .unwrap()
+        .next()
+        .unwrap();
+    assert!(matches!(botwork(pair, &mut context), Ok(Literal::Int(7))));
+}
+
+#[test]
 fn pair_compatibility_supports_the_full_signed_integer_range() {
     let pair = BWParser::parse(Rule::expression, "-2147483648")
         .unwrap()

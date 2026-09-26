@@ -6,9 +6,11 @@
 
 The tree represents assignments, calls, definitions, branches, loops, error handlers, and control statements explicitly. Expressions retain their operator, operands, and grouping. The Pratt parser builds this structure; it no longer evaluates values. Map entries stay in source order until evaluation.
 
-Strings are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. Dot access retains its source path and continues to report the temporary unsupported-access error.
+Strings are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. Dot access stores its root and parsed path segments with their source spans; comments and whitespace do not become part of names. Array-index conversion remains deferred until lookup.
 
 Unary syntax retains its operator and operand spans. At runtime, a minus directly wrapping an integer atom converts the signed text together so the minimum `i32` literal is representable. Negation of compound expressions still evaluates the operand first and uses checked arithmetic; power grouping remains unchanged.
+
+Collection lookup borrows each container through lexical variable lookup and clones only the selected value. Maps use exact segment strings; arrays require ASCII digits and check bounds without panicking on index overflow. Access errors include the canonical path, failing segment, and reason. Reads have no mutation operation; computed access and indexed-update syntax remain separate language work.
 
 ## Source Ownership and Locations
 

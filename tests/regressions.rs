@@ -4,7 +4,7 @@
 use botwork::core::{
     ast::Program,
     eval::{evaluate_program, Context},
-    grammar::{BWErr, BWParser, Literal, LiteralResult, Rule},
+    grammar::{BWParser, Literal, LiteralResult, Rule},
 };
 use pest::Parser;
 use std::path::Path;
@@ -118,14 +118,10 @@ fn statement_names_can_begin_with_control_keyword_text() {
 }
 
 #[test]
-fn collection_access_returns_a_value_or_an_explicit_unsupported_error() {
+fn collection_access_returns_the_selected_value() {
     let source = "|m| = |{a: 7}|\n|answer| = |m.a|";
     BWParser::parse(Rule::botwork, source).expect("collection access is accepted syntax");
-    match evaluate(source) {
-        Ok(Literal::Int(7)) => (),
-        Err(BWErr::UnsupportedAccessError(path)) => assert_eq!(path, "m.a"),
-        other => panic!("expected value 7 or unsupported access, got {other:?}"),
-    }
+    assert!(matches!(evaluate(source), Ok(Literal::Int(7))));
 }
 
 #[test]

@@ -290,7 +290,10 @@ pub enum ExprKind {
     Bool(bool),
     String(String),
     Variable(String),
-    Access(String),
+    Access {
+        root: Name,
+        segments: Vec<Name>,
+    },
     Array(Vec<Expr>),
     Map(Vec<(Name, Expr)>),
     Unary {
@@ -589,7 +592,12 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
         Rule::boolean_false => ExprKind::Bool(false),
         Rule::string => ExprKind::String(decode_string(pair)?),
         Rule::ident => ExprKind::Variable(pair.as_str().to_owned()),
-        Rule::dot_path => ExprKind::Access(pair.as_str().to_owned()),
+        Rule::dot_path => {
+            let mut inner = pair.into_inner();
+            let root = lower_name(required(&mut inner)?, source);
+            let segments = inner.map(|part| lower_name(part, source)).collect();
+            ExprKind::Access { root, segments }
+        }
         Rule::keyword => ExprKind::String(pair.as_str().to_owned()),
         Rule::array => ExprKind::Array(
             pair.into_inner()

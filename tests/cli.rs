@@ -175,19 +175,21 @@ fn handler_failure_stops_execution_and_fails_the_cli() {
 }
 
 #[test]
-fn unsupported_access_fails_without_panicking_or_executing_later_statements() {
-    let path = fixture("unsupported-access.botwork");
+fn out_of_bounds_access_fails_without_panicking_or_executing_later_statements() {
+    let path = fixture("access-out-of-bounds.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(output.stdout, b"before\n");
     let diagnostic = String::from_utf8(output.stderr).unwrap();
-    assert!(diagnostic.contains("unsupported-access.botwork"));
-    assert!(diagnostic.contains("Collection access is unsupported: m.items.0"));
+    assert!(diagnostic.contains("access-out-of-bounds.botwork"));
+    assert!(diagnostic.contains(
+        "Collection access failed: m.items.1 at `1`: array index is out of bounds for length 1"
+    ));
     assert!(!diagnostic.contains("panicked"));
 }
 
 #[test]
-fn caught_unsupported_access_resumes_the_script_successfully() {
+fn caught_access_failure_resumes_the_script_successfully() {
     let path = fixture("caught-access.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(0));
