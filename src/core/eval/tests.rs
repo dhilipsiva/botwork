@@ -180,7 +180,7 @@ fn for_restores_present_absent_and_none_bindings_on_every_completion() {
         ] {
             let mut context = Context::default();
             if let Some(value) = &previous {
-                context.set_variable("item".into(), value.clone()).unwrap();
+                context.set_variable("item", value.clone()).unwrap();
             }
             let program = Program::parse(
                 "loop.botwork",
@@ -563,7 +563,7 @@ fn computed_access_requires_exact_key_types_and_checked_array_bounds() {
         ("\"text\"[0]", "[0]", "neither a map nor an array"),
     ] {
         let mut context = Context::default();
-        context.set_variable("none".into(), Literal::None).unwrap();
+        context.set_variable("none", Literal::None).unwrap();
         let source = format!("|data| = |{{items: [7, 8], empty: []}}|\n|answer| = |{path}|");
         let error = evaluate(&source, &mut context).unwrap_err();
         assert!(
@@ -624,7 +624,7 @@ Try { |total| = |data["item list"][-1]| } Catch { |caught| = |true| }
 #[test]
 fn computed_reads_preserve_none_entries_and_return_independent_values() {
     let mut context = Context::default();
-    context.set_variable("none".into(), Literal::None).unwrap();
+    context.set_variable("none", Literal::None).unwrap();
     let result = evaluate(
         r#"|data| = |{"empty": none, "items": [1, 2], "0": 7, "00": 8}|
 |copy| = |data["items"]|
@@ -758,7 +758,7 @@ fn map_paths_use_exact_string_keys_and_distinguish_none_from_absence() {
     let mut context = Context::default();
     context
         .set_variable(
-            "data".into(),
+            "data",
             Literal::Map(
                 [
                     ("0".into(), Literal::Int(7)),
@@ -976,9 +976,7 @@ fn boolean_operators_skip_irrelevant_values_and_failures() {
             &huge_float,
         ] {
             let mut context = Context::default();
-            context
-                .set_variable("no_result".into(), Literal::None)
-                .unwrap();
+            context.set_variable("no_result", Literal::None).unwrap();
             let source = format!("|answer| = |{left} {operator} {right}|");
             let result = evaluate(&source, &mut context);
             assert!(
@@ -1000,9 +998,7 @@ fn boolean_operators_reject_the_left_type_before_visiting_the_right() {
     for operator in ["and", "or"] {
         for left in ["1", "1.5", "\"text\"", "[]", "{}", "no_result"] {
             let mut context = Context::default();
-            context
-                .set_variable("no_result".into(), Literal::None)
-                .unwrap();
+            context.set_variable("no_result", Literal::None).unwrap();
             let source = format!("|answer| = |{left} {operator} missing|");
             let result = evaluate(&source, &mut context);
             assert!(
@@ -1024,12 +1020,8 @@ fn boolean_truth_tables_evaluate_required_operands_once_in_order() {
         for left in [false, true] {
             for right in [false, true] {
                 let mut context = Context::default();
-                context
-                    .set_variable("left".into(), Literal::Bool(left))
-                    .unwrap();
-                context
-                    .set_variable("right".into(), Literal::Bool(right))
-                    .unwrap();
+                context.set_variable("left", Literal::Bool(left)).unwrap();
+                context.set_variable("right", Literal::Bool(right)).unwrap();
                 let source = format!("|answer| = |left {operator} right|");
                 let expected = if operator == "and" {
                     left && right
@@ -1093,9 +1085,7 @@ fn required_boolean_operands_preserve_errors_and_type_requirements() {
     for (left, operator) in [("true", "and"), ("false", "or")] {
         for right in ["1", "1.5", "\"text\"", "[]", "{}", "no_result"] {
             let mut context = Context::default();
-            context
-                .set_variable("no_result".into(), Literal::None)
-                .unwrap();
+            context.set_variable("no_result", Literal::None).unwrap();
             let source = format!("|answer| = |{left} {operator} {right}|");
             let result = evaluate(&source, &mut context);
             assert!(

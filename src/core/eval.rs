@@ -19,7 +19,7 @@ use super::{
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Rule},
     operation::OperationControl,
     run::{
-        DefinitionReservation, EvaluationGuard, RunBudget, RunEnvironment, RunLimits,
+        DefinitionReservation, EvaluationGuard, RetainedName, RunBudget, RunEnvironment, RunLimits,
         SourceFailure, StoredValue, ValueReservation,
     },
     signature::{StatementOrigin, StatementSignature},
@@ -77,7 +77,7 @@ impl StmtType {
 
 #[derive(Clone, Default)]
 struct Frame {
-    variables: HashMap<String, Arc<StoredValue>>,
+    variables: HashMap<RetainedName, Arc<StoredValue>>,
     statements: HashMap<String, StmtType>,
     namespaces: HashMap<String, Span>,
     dependency_depth: usize,
@@ -151,7 +151,7 @@ impl Context {
         self.frames[0]
             .variables
             .iter()
-            .map(|(name, value)| (name.clone(), value.value.clone()))
+            .map(|(name, value)| (name.as_str().to_owned(), value.value.clone()))
             .collect()
     }
 
@@ -248,6 +248,21 @@ impl Context {
         Ok(Arc::new(StoredValue::new(value.into_inner(), reservation)))
     }
 
+    fn retain_name(&self, name: &str) -> DiagnosticResult<RetainedName> {
+        self.budget.as_ref().map_or_else(
+            || Ok(RetainedName::untracked(name)),
+            |budget| budget.retain_name(name),
+        )
+    }
+
+    fn variable_key(&self, name: &str, frame: usize) -> DiagnosticResult<RetainedName> {
+        self.checkpoint()?;
+        match self.frames[frame].variables.get_key_value(name) {
+            Some((key, _)) => Ok(key.clone()),
+            None => self.retain_name(name),
+        }
+    }
+
     pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
         let limits = self
             .budget
@@ -339,6 +354,9 @@ impl Context {
         let variables = Owned::new(variables);
         self.checkpoint()?;
         for (name, value) in variables.iter() {
+            if let Some(budget) = &self.budget {
+                budget.check_name_length(name.len())?;
+            }
             super::input::validate_name("host variables", name)?;
             self.check_value(value)?;
             validate_value(value).map_err(|_| {
@@ -348,10 +366,15 @@ impl Context {
             })?;
         }
         self.checkpoint()?;
+        // RetainedName hashes only immutable text; its counters are lifetime metadata.
+        #[allow(clippy::mutable_key_type)]
         let bindings = variables
             .into_inner()
             .into_iter()
-            .map(|(name, value)| self.store_value(value).map(|value| (name, value)))
+            .map(|(name, value)| {
+                let value = self.store_value(value)?;
+                self.variable_key(&name, 0).map(|name| (name, value))
+            })
             .collect::<DiagnosticResult<HashMap<_, _>>>()?;
         self.checkpoint()?;
         self.frames[0].variables.extend(bindings);
@@ -383,10 +406,11 @@ impl Context {
 
     fn set_variable(
         &mut self,
-        name: String,
+        name: &str,
         literal: Literal,
     ) -> DiagnosticResult<Option<Arc<StoredValue>>> {
         let value = self.store_value(literal)?;
+        let name = self.variable_key(name, self.current)?;
         Ok(self.frames[self.current].variables.insert(name, value))
     }
 
@@ -705,9 +729,10 @@ fn invoke_resolved(
                     .iter()
                     .zip(arguments)
                     .map(|(parameter, value)| {
+                        let value = context.store_value(value)?;
                         context
-                            .store_value(value)
-                            .map(|value| (parameter.text.clone(), value))
+                            .retain_name(&parameter.text)
+                            .map(|name| (name, value))
                     })
                     .collect::<DiagnosticResult<HashMap<_, _>>>()?,
                 parent: Some(owner),
@@ -1028,11 +1053,20 @@ fn evaluate_for(
         ))
         .at_expression(&iterable.span));
     };
-    let previous = context.frames[context.current].variables.remove(binding);
+    let previous = context.frames[context.current]
+        .variables
+        .remove_entry(binding);
+    let mut iterator_name = previous.as_ref().map(|(name, _)| name.clone());
     let result = (|| {
         for value in values {
             context.tick()?;
-            context.set_variable(binding.to_owned(), value)?;
+            let stored = context.store_value(value)?;
+            if iterator_name.is_none() {
+                iterator_name = Some(context.retain_name(binding)?);
+            }
+            context.frames[context.current]
+                .variables
+                .insert(iterator_name.as_ref().unwrap().clone(), stored);
             match evaluate_block(body, context)? {
                 Completion::Normal(_) | Completion::Continue => (),
                 Completion::Break => break,
@@ -1041,10 +1075,10 @@ fn evaluate_for(
         }
         Ok(Completion::Normal(Literal::None))
     })();
-    if let Some(value) = previous {
+    if let Some((name, value)) = previous {
         context.frames[context.current]
             .variables
-            .insert(binding.to_owned(), value);
+            .insert(name, value);
     } else {
         context.frames[context.current].variables.remove(binding);
     }
@@ -1084,11 +1118,19 @@ fn evaluate_handler(
             .check_value(&value)
             .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
         context
-            .set_variable(name.text.clone(), value.into_inner())
+            .set_variable(&name.text, value.into_inner())
             .map_err(|error| error.at(&name.span).while_handling(original.clone()))?
     } else {
         None
     };
+    let handler_name = binding.map(|name| {
+        context.frames[owner]
+            .variables
+            .get_key_value(name.text.as_str())
+            .expect("installed handler binding")
+            .0
+            .clone()
+    });
     context.handlers.push(HandledError {
         invocation: owner,
         diagnostic: original.clone(),
@@ -1096,11 +1138,13 @@ fn evaluate_handler(
     let result = evaluate_block(handler, context).map_err(|error| error.while_handling(original));
     context.handlers.pop();
     if let Some(name) = binding {
+        // Reservation counters never participate in key equality or hashing.
+        #[allow(clippy::mutable_key_type)]
         let variables = &mut context.frames[owner].variables;
         if let Some(value) = previous {
-            variables.insert(name.text.clone(), value);
+            variables.insert(handler_name.expect("handler name"), value);
         } else {
-            variables.remove(&name.text);
+            variables.remove(name.text.as_str());
         }
     }
     result
@@ -1126,10 +1170,11 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             };
             // Reserve the stored copy before cloning its potentially large payload.
             let reservation = context.reserve_value(&value)?;
+            let name = context.variable_key(&name.text, context.current)?;
             let stored = Arc::new(StoredValue::new(value.clone(), reservation));
             context.frames[context.current]
                 .variables
-                .insert(name.text.clone(), stored);
+                .insert(name, stored);
             Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {

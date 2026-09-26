@@ -34,6 +34,9 @@ pub(crate) use retained_values::{StoredValue, ValueReservation};
 mod retained_definitions;
 pub(crate) use retained_definitions::DefinitionReservation;
 pub use retained_definitions::RetainedDefinitionLimits;
+mod retained_names;
+pub(crate) use retained_names::RetainedName;
+pub use retained_names::RetainedNameLimits;
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
@@ -55,6 +58,7 @@ pub struct RunLimits {
     pub values: ValueLimits,
     pub retained_values: RetainedValueLimits,
     pub retained_definitions: RetainedDefinitionLimits,
+    pub retained_names: RetainedNameLimits,
 }
 
 impl Default for RunLimits {
@@ -71,6 +75,7 @@ impl Default for RunLimits {
             values: ValueLimits::default(),
             retained_values: RetainedValueLimits::default(),
             retained_definitions: RetainedDefinitionLimits::default(),
+            retained_names: RetainedNameLimits::default(),
         }
     }
 }
@@ -354,6 +359,7 @@ struct BudgetState {
     imports: Mutex<[usize; 5]>,
     retained_values: Arc<retained_values::RetainedValues>,
     retained_definitions: Arc<retained_definitions::RetainedDefinitions>,
+    retained_names: Arc<retained_names::RetainedNames>,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -371,6 +377,7 @@ impl Clone for RunBudget {
             imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
             retained_values: Arc::clone(&self.0.retained_values),
             retained_definitions: Arc::clone(&self.0.retained_definitions),
+            retained_names: Arc::clone(&self.0.retained_names),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -385,6 +392,9 @@ impl Clone for RunBudget {
 impl RunBudget {
     pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
+            retained_names: Arc::new(retained_names::RetainedNames::new(
+                limits.retained_names.clone(),
+            )),
             retained_definitions: Arc::new(retained_definitions::RetainedDefinitions::new(
                 limits.retained_definitions.clone(),
             )),

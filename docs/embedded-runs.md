@@ -29,6 +29,7 @@ Neither directory nor environment configuration mutates process-global state. Na
 | `values` | 65,536 nodes, depth 64, 1 MiB strings, 64 KiB keys, 16,384 entries, 8 MiB payload | [Per-value admission and owned cleanup](value-limits.md) |
 | `retained_values` | 65,536 stored values, 262,144 nodes, 32 MiB payload | [Live variable-value reservations](retained-values.md), released with the final shared owner |
 | `retained_definitions` | 16,384 definitions, 262,144 nodes, 8 MiB source text/names | [Live DSL definition reservations](retained-definitions.md), sharing definition and source identities |
+| `retained_names` | 65,536 names, 64 KiB per name, 4 MiB aggregate | [Shared variable-name storage](retained-names.md), including scope and snapshot ownership |
 
 Zero is permitted: an empty run needs no steps/calls, and nonempty source exceeds a zero byte budget. Signed integer negation counts its operand even though conversion handles sign/magnitude together. Short-circuited operands consume no steps. Loops revisit their condition/body expressions; empty For bodies still charge iterations. Initializations and calls across modules share the run's counter. Call depth is checked after signature/arity resolution and before argument effects.
 

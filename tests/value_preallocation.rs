@@ -111,6 +111,51 @@ fn definition_retention_failure_precedes_signature_parameter_copies() {
 }
 
 #[test]
+fn variable_name_failure_precedes_key_and_assignment_copying() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::RetainedNameLimits,
+    };
+    let length = 64 * 1024;
+    let program = Program::parse(
+        "name",
+        &format!("|{}| = |\"{}\"|", "x".repeat(length), "y".repeat(length)),
+    )
+    .unwrap();
+    let mut context = Context::with_limits(RunLimits {
+        retained_names: RetainedNameLimits {
+            name_bytes: 4,
+            ..RetainedNameLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("variable name bytes"));
+    assert_eq!(
+        large, 1,
+        "Only evaluating the string RHS copies its payload"
+    );
+}
+
+#[test]
+fn context_snapshots_share_variable_name_text_without_payload_copies() {
+    use botwork::core::eval::Context;
+    let length = 64 * 1024;
+    let mut context = Context::default();
+    context
+        .set_input_variables(BTreeMap::from([("x".repeat(length), Literal::None)]))
+        .unwrap();
+    let (clone, large) = observe(length, || context.clone());
+    assert_eq!(large, 0);
+    assert!(clone.checkpoint().is_ok());
+}
+
+#[test]
 fn rejected_concatenation_does_not_allocate_result_or_format_operand_payloads() {
     let length = 64 * 1024;
     let left = Literal::String("a".repeat(length));

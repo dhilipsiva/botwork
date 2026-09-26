@@ -414,6 +414,48 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::NameBoundary | Input::NameLimit => {
+                use botwork::core::run::{Engine, RetainedNameLimits, RunLimits, RunOptions};
+                let source = if case.error.is_some() {
+                    "|é| = |1|\n|e\u{301}| = |2|"
+                } else {
+                    "|é| = |1|\n|é| = |2|"
+                };
+                let run = Engine::default().run_source(
+                    case.id,
+                    source,
+                    RunOptions {
+                        limits: RunLimits {
+                            retained_names: if case.error.is_some() {
+                                RetainedNameLimits {
+                                    names: 2,
+                                    name_bytes: 3,
+                                    total_bytes: 4,
+                                }
+                            } else {
+                                RetainedNameLimits {
+                                    names: 1,
+                                    name_bytes: 2,
+                                    total_bytes: 2,
+                                }
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(run.variables["é"].to_string(), "1");
+                    assert_eq!(run.variables.len(), 1);
+                } else {
+                    assert_eq!(run.result.unwrap().to_string(), "2");
+                    assert_eq!(run.variables["é"].to_string(), "2");
+                }
+                continue;
+            }
             Input::DefinitionBoundary | Input::DefinitionLimit => {
                 use botwork::core::{
                     ast::Program,

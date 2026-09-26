@@ -120,6 +120,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R10 — Definition ownership admission.** Bound distinct installed DSL definitions, their AST subtree costs, and unique reachable source text/name bytes across repeated evaluations. Preserve collision priority and earlier registrations/effects; reserve atomically before metadata copies and publication, and latch BW8001 on rejection. Share accounting across modules and Context clones, release on final runtime ownership, and start fresh Engine trackers. [Definition rules](retained-definitions.md) specify identity deduplication, conservative nested-subtree counts, exact defaults, source discovery, concurrency, and remaining metadata/snapshot scope.
 
+## Retained Variable-Name Bounds
+
+**R11 — Variable-name admission.** Bound per-name UTF-8 bytes and aggregate live name counts/bytes before copying new variable keys. Preserve exact identifier identity, reuse existing assignment/input keys, and share names across Context/module snapshots. Atomically admit input batches, unwind call/loop/handler/module ownership, and restore saved names without new admission after a stop. Preserve required RHS effects, previous destinations, Catch causes, independent clone latches, and fresh Engine trackers. [Name rules](retained-names.md) define exact counts, zero/raised limits, error ordering, concurrency, and remaining metadata/table/result scope.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -186,3 +190,5 @@ R8 evidence in `tests/input_limits.rs`, input-limit unit tests, the original inp
 R9 evidence in `tests/retained_values.rs`, reservation/evaluator unit tests, and allocation observations covers exact/zero/default counters, atomic root batches, overflow, pre-copy rejection, call/module/loop/handler cleanup, shared snapshots/clones, concurrent reservations, and independent failures/runs. Two host corpus cases and a Rust example pin peak replacement and destination preservation.
 
 R10 evidence in `tests/retained_definitions.rs` and reservation/AST unit tests covers exact/default/zero/raised limits, source names/hidden owners, atomicity/overflow, repeated evaluation, collisions, local/recursive/module cleanup, cached aliases, cloned/concurrent ownership, and source release. Two host corpus cases and a Rust example pin shared-source budgets and admission failures.
+
+R11 evidence in `tests/retained_names.rs`, name reservation unit tests, and allocation observations covers UTF-8 identity/counts, exact/default/zero/raised limits, atomic host batches, bounded name errors, safe rejected host-value cleanup, replacement, calls/modules, iterator/handler cleanup, concurrent clones, and required effects. Two host corpus cases and a Rust example pin name reuse and aggregate rejection.

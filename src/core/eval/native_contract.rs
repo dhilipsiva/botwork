@@ -51,7 +51,7 @@ fn invalid_nested_host_arguments_never_reach_native_or_custom_bodies() {
     let mut context = context();
     context
         .set_variable(
-            "invalid".into(),
+            "invalid",
             Literal::Map([("x".into(), Literal::Array(vec![Literal::Float(f32::NAN)]))].into()),
         )
         .unwrap();
@@ -136,7 +136,7 @@ fn signature_queries_observe_lexical_shadowing_and_restore_parent_visibility() {
 fn collection_access_retains_the_original_base_across_effectful_index_calls() {
     let mut context = Context::default();
     context
-        .set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]))
+        .set_variable("data", Literal::Array(vec![Literal::Int(1)]))
         .unwrap();
     context
         .register_callback(
@@ -149,7 +149,7 @@ fn collection_access_retains_the_original_base_across_effectful_index_calls() {
                     2
                 );
                 context
-                    .set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]))
+                    .set_variable("data", Literal::Array(vec![Literal::Int(2)]))
                     .unwrap();
                 Ok(Literal::Int(0))
             }),
@@ -171,7 +171,7 @@ fn collection_access_retains_the_original_base_across_effectful_index_calls() {
 fn context_clones_share_immutable_value_storage_and_isolate_replacement_bindings() {
     let mut original = Context::default();
     original
-        .set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]))
+        .set_variable("data", Literal::Array(vec![Literal::Int(1)]))
         .unwrap();
     let mut cloned = original.clone();
     assert!(Arc::ptr_eq(
@@ -179,7 +179,7 @@ fn context_clones_share_immutable_value_storage_and_isolate_replacement_bindings
         cloned.get_variable_binding("data").unwrap()
     ));
     cloned
-        .set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]))
+        .set_variable("data", Literal::Array(vec![Literal::Int(2)]))
         .unwrap();
     assert_eq!(original.get_variable("data").unwrap().to_string(), "[1]");
     assert_eq!(cloned.get_variable("data").unwrap().to_string(), "[2]");
@@ -197,7 +197,7 @@ fn effectful_access_keeps_the_old_value_reservation_until_lookup_finishes() {
     })
     .unwrap();
     context
-        .set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]))
+        .set_variable("data", Literal::Array(vec![Literal::Int(1)]))
         .unwrap();
     context
         .register_callback(
@@ -205,11 +205,11 @@ fn effectful_access_keeps_the_old_value_reservation_until_lookup_finishes() {
             "Swap",
             Arc::new(|_, context| {
                 context
-                    .set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]))
+                    .set_variable("data", Literal::Array(vec![Literal::Int(2)]))
                     .unwrap();
                 // The original access snapshot still occupies the other stored allocation.
                 context
-                    .set_variable("extra".into(), Literal::None)
+                    .set_variable("extra", Literal::None)
                     .map_err(Diagnostic::into_error)?;
                 Ok(Literal::Int(0))
             }),

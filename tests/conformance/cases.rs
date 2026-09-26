@@ -29,6 +29,8 @@ pub enum Input {
     RetentionLimit,
     DefinitionBoundary,
     DefinitionLimit,
+    NameBoundary,
+    NameLimit,
 }
 
 #[derive(Clone)]
@@ -189,5 +191,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::DefinitionBoundary, stdout: "", code: None, error: None },
         Case { id: "definition-limit", positive: &[], invalid: &["R10"], boundary: &[],
             input: Input::DefinitionLimit, stdout: "", code: Some("BW8001"), error: Some("retained definitions") },
+        Case { id: "name-boundary", positive: &["R11"], invalid: &[], boundary: &["R11"],
+            input: Input::NameBoundary, stdout: "", code: None, error: None },
+        Case { id: "name-limit", positive: &[], invalid: &["R11"], boundary: &[],
+            input: Input::NameLimit, stdout: "", code: Some("BW8001"), error: Some("retained variable name bytes") },
     ]
 }

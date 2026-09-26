@@ -384,3 +384,20 @@ let run = Engine::default().run_source("source", source, RunOptions {
 });
 assert_eq!(run.outcome(), RunOutcome::Succeeded);
 ```
+
+## Configure Variable Names
+
+Replacing a binding reuses its immutable name allocation. Value storage retains its separate overlap rule.
+
+```rust
+use botwork::core::run::{Engine, RetainedNameLimits, RunLimits, RunOptions, RunOutcome};
+let run = Engine::default().run_source("names", "|é| = |1|\n|é| = |2|", RunOptions {
+    limits: RunLimits {
+        retained_names: RetainedNameLimits { names: 1, name_bytes: 2, total_bytes: 2 },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::Succeeded);
+assert_eq!(run.variables["é"].to_string(), "2");
+```

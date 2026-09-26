@@ -27,9 +27,7 @@ fn record(values: &[Literal], context: &mut Context) -> LiteralResult {
 pub(super) fn context() -> Context {
     let mut context = Context::default();
     for key in ["__events", "__depths"] {
-        context
-            .set_variable(key.into(), Literal::Array(vec![]))
-            .unwrap();
+        context.set_variable(key, Literal::Array(vec![])).unwrap();
     }
     context
         .register_callback("<test Record>", "Record |value|", Arc::new(record))
@@ -125,13 +123,11 @@ fn nested_collection_entries_keep_source_order_even_for_overwritten_keys() {
         for (index, name) in names.iter().enumerate() {
             if Some(*name) != failing {
                 context
-                    .set_variable((*name).into(), Literal::Int(index as i32 + 1))
+                    .set_variable(name, Literal::Int(index as i32 + 1))
                     .unwrap();
             }
         }
-        context
-            .set_variable("answer".into(), Literal::Int(99))
-            .unwrap();
+        context.set_variable("answer", Literal::Int(99)).unwrap();
         let result = run(
             "|answer| = |[first, {z: second, a: third, z: fourth}, fifth]|",
             &mut context,
@@ -165,11 +161,9 @@ fn branch_conditions_run_once_and_only_until_a_branch_is_selected() {
         (false, false, "else", vec!["first", "second"]),
     ] {
         let mut context = context();
+        context.set_variable("first", Literal::Bool(first)).unwrap();
         context
-            .set_variable("first".into(), Literal::Bool(first))
-            .unwrap();
-        context
-            .set_variable("second".into(), Literal::Bool(second))
+            .set_variable("second", Literal::Bool(second))
             .unwrap();
         run("If |first| { Record |\"first\"| } Else If |second| { Record |\"second\"| } Else { Record |\"else\"| }", &mut context).unwrap();
         let observed: Vec<_> = visits(&context)
@@ -190,9 +184,7 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
         ] {
             for in_handler in [false, true] {
                 let mut context = context();
-                context
-                    .set_variable("item".into(), Literal::Int(99))
-                    .unwrap();
+                context.set_variable("item", Literal::Int(99)).unwrap();
                 let mut frame = Frame {
                     parent: Some(0),
                     ..Frame::default()
@@ -376,10 +368,10 @@ fn recursive_traces_preserve_each_frame_and_unwind_before_the_callers_handler() 
         .unwrap();
         for _ in 0..2 {
             context
-                .set_variable("__events".into(), Literal::Array(vec![]))
+                .set_variable("__events", Literal::Array(vec![]))
                 .unwrap();
             context
-                .set_variable("__depths".into(), Literal::Array(vec![]))
+                .set_variable("__depths", Literal::Array(vec![]))
                 .unwrap();
             run(
                 "Try { |answer| = Walk |3| } Catch { Record |[\"caught\", n]| }",
@@ -429,9 +421,7 @@ fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_dis
             ("rethrow", "Rethrow"),
         ] {
             let mut context = context();
-            context
-                .set_variable("error".into(), Literal::Int(99))
-                .unwrap();
+            context.set_variable("error", Literal::Int(99)).unwrap();
             let mut frame = Frame {
                 parent: Some(0),
                 ..Frame::default()

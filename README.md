@@ -55,6 +55,8 @@ cargo run -- --file examples/20-input-variables.botwork \
 modules, and cloned contexts, releasing capacity when stored values are dropped.
 [Definition budgets](docs/retained-definitions.md) also account for installed DSL
 definitions and shared source text across repeated evaluations.
+[Variable-name budgets](docs/retained-names.md) bound key storage and share it
+across Context and module snapshots.
 
 Or you can create a file from below sample and pass the path to cargo run
 
