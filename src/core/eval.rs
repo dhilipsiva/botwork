@@ -17,6 +17,9 @@ use super::{
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod execution_contract;
+
 #[derive(Debug)]
 enum Completion {
     Normal(Literal),

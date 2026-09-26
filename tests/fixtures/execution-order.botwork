@@ -1,0 +1,47 @@
+|n| = |99|
+Walk |n| {
+    Read local { Return |n| }
+    Log |["enter", n]|
+    If |n == 0| { Return |0| }
+    |child| = Walk |n - 1|
+    |own| = Read local
+    Log |["leave", own]|
+    Return |child + own|
+}
+|answer| = Walk |3|
+Log |[answer, n]|
+
+Pair |n| with |other| {
+    Log |"pair body"|
+    Return |[n, other]|
+}
+Try {
+    Pair |missing_first| with |missing_second|
+} Catch { Log |"arguments failed before body"| }
+|pair| = Pair |1| with |n|
+Log |pair|
+
+|item| = |99|
+For |item| In |[1, 2]| {
+    Try {
+        For |item| In |[10, 20]| {
+            Log |["inner", item]|
+            |failure| = |missing_body|
+        }
+    } Catch { Log |["restored outer", item]| }
+}
+Log |["restored root", item]|
+
+Exit early {
+    For |item| In |[1]| {
+        Try {
+            Return |7|
+            Log |"unreachable after return"|
+        } Catch { Log |"unreachable handler"| }
+    }
+    Log |"unreachable after loop"|
+}
+For |run| In |[1, 2]| {
+    |value| = Exit early
+    Log |["caller resumes", run, value]|
+}

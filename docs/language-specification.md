@@ -83,6 +83,8 @@ Test names below are executable expectations, not a claim that every clause has 
 
 [Contract tests](../tests/language_contract.rs), [regressions](../tests/regressions.rs), [unit tests](../src/core/eval/tests.rs), and [CLI tests](../tests/cli.rs) provide the named evidence. Ignored cases are visible unfinished work and must not count as passing conformance.
 
+The [combined execution matrix](execution-conformance.md) adds source-order visit traces for E2–E4, 56 nested-loop completion/restoration combinations for S3/C1/F1, and recursive event/frame traces for S1/S2/C2. CLI fixtures assert exact observable output, first-error priority, failure status, and skipped call tails. Arguments are currently pure expressions; effectful call composition and future native adapters must extend this evidence.
+
 ## Deliberately Separate Contracts
 
 Imports, resource limits, structured diagnostics, public native registration, and async execution remain separate tasks. The core value contract does not implement the planned collection library, serialization, or cross-language value conversions; those additions must extend the specification and conformance evidence explicitly.

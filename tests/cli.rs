@@ -41,6 +41,38 @@ fn assert_control_placement_failure(name: &str, line: usize, column: usize, keyw
 }
 
 #[test]
+fn execution_trace_preserves_recursive_order_skips_failed_calls_and_restores_scopes() {
+    let path = fixture("execution-order.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty(), "{:?}", output.stderr);
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "[\"enter\", 3]\n[\"enter\", 2]\n[\"enter\", 1]\n[\"enter\", 0]\n",
+            "[\"leave\", 1]\n[\"leave\", 2]\n[\"leave\", 3]\n[6, 99]\n",
+            "arguments failed before body\npair body\n[1, 99]\n",
+            "[\"inner\", 10]\n[\"restored outer\", 1]\n",
+            "[\"inner\", 10]\n[\"restored outer\", 2]\n[\"restored root\", 99]\n",
+            "[\"caller resumes\", 1, 7]\n[\"caller resumes\", 2, 7]\n"
+        )
+    );
+}
+
+#[test]
+fn native_argument_failure_preserves_prior_output_and_skips_the_entire_call_tail() {
+    let path = fixture("execution-order-error.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\ncallee entered\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("execution-order-error.botwork"));
+    assert!(diagnostic.contains("missing_first"));
+    assert!(!diagnostic.contains("missing_second"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn invalid_control_placement_prevents_all_cli_execution() {
     assert_control_placement_failure("invalid-control.botwork", 2, 13, "Return");
 }

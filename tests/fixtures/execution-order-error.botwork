@@ -1,0 +1,8 @@
+Before failure {
+    Log |"callee entered"|
+    Log |[missing_first, missing_second]|
+    Log |"unreachable callee"|
+}
+Log |"before"|
+Before failure
+Log |"unreachable caller"|

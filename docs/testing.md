@@ -5,6 +5,7 @@ Run `cargo test` from the repository root. Run `cargo test --release` to check t
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
 - `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, original byte/line/column spans, and control-placement validation.
 - `src/core/eval/tests.rs` checks evaluation, state, conditions, collections, and error handling.
+- `src/core/eval/execution_contract.rs` checks ordered argument/collection visits, branch selection, 56 nested-loop completion/restoration combinations, While condition timing, and recursive frame traces. [Execution evidence](execution-conformance.md) explains the test-only recorder and companion CLI fixtures.
 - `tests/ast_execution.rs` checks execution after source/program ownership ends, deferred numeric errors, parser-pair compatibility, and validation before effects for extracted/assembled syntax.
 - `tests/cli.rs` invokes Cargo's built CLI and checks exit status, stdout, and stderr independently. Inputs live under `tests/fixtures/`.
 - `tests/examples.rs` checks the exact expected stdout of the bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
