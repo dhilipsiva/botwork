@@ -1,7 +1,8 @@
 WHITESPACE = _{ (" " | "\t")+ }
 line_end   = _{ "\r\n" | "\n" }
 botwork    = _{ SOI ~ statements* ~ EOI }
-ident_continue = _{ LETTER | NUMBER | "_" }
+ident_start    = _{ XID_START | "_" }
+ident_continue = _{ XID_CONTINUE }
 reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
 
 // Special statements. Can cause changes to program behaviour.
@@ -55,19 +56,20 @@ braced_expression =  { "(" ~ expression ~ ")" }
 unary             =  { unary_operator ~ line_end* ~ expression_inner }
 power             =  { primary ~ (line_end* ~ exponent ~ line_end* ~ expression_inner)? }
 primary           =  { (literal | ident | braced_expression) ~ (line_end* ~ (named_access | computed_access))* }
-named_access      =  { "." ~ line_end* ~ (ident | integer) }
+named_access      =  { "." ~ line_end* ~ (ident | path_index) }
+path_index        = @{ NUMBER+ }
 computed_access   =  { "[" ~ expression ~ "]" }
 literal           = _{ map | array | string | float | integer | boolean }
 array             =  { "[" ~ line_end* ~ (expression ~ ("," ~ expression)* ~ ","?)? ~ line_end* ~ "]" }
-ident             = @{ !reserved ~ LETTER ~ ident_continue* }
+ident             = @{ !reserved ~ ident_start ~ ident_continue* }
 
 map       =  { "{" ~ line_end* ~ (map_pair ~ ("," ~ line_end* ~ map_pair)* ~ ","?)? ~ line_end* ~ "}" }
 map_pair  =  { (keyword | string) ~ line_end* ~ seperator ~ expression }
 keyword   = @{ ident }
 seperator = _{ ":" }
 
-integer = @{ NUMBER+ }
-float   = @{ NUMBER+ ~ "." ~ NUMBER+ }
+integer = @{ ASCII_DIGIT+ }
+float   = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 
 string           = ${ string_delimiter ~ string_content ~ string_delimiter }
 string_content   = ${ (string_escape | !(string_delimiter | "\\") ~ ANY)* }

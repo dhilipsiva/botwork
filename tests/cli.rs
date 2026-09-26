@@ -86,6 +86,19 @@ fn signed_integer_overflow_fails_after_printing_the_valid_minimum() {
 }
 
 #[test]
+fn invalid_unicode_identifiers_are_rejected_before_output() {
+    let path = fixture("invalid-unicode-identifier.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("invalid-unicode-identifier.botwork"));
+    assert!(diagnostic.contains("Parsing error:"));
+    assert!(diagnostic.contains("🙂"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn duplicate_statements_report_both_locations_and_stop_after_prior_output() {
     let path = fixture("duplicate-statement.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);

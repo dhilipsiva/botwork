@@ -55,13 +55,13 @@ Outside strings, `|` delimits parameters/expressions, braces delimit blocks or m
 
 ## Keywords and Names
 
-Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation: a Unicode letter, Unicode number, or underscore. This also prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
+Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation, including a combining mark. This prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
 
 Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, and `Catch`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
 
 `In` follows the same keyword rules within `For |item| In |items| { ... }`, but remains available in custom names such as `In order`. Comments may separate complete tokens. Parentheses can delimit boolean operators: `(true)and(false)` is valid. See [the keyword example](../examples/06-keywords.botwork).
 
-Identifier characters and complete multilingual authoring remain separate specification work. Statement matching and collision behavior follow the rules below; layout follows the whitespace rules above.
+Identifier characters follow the Unicode rules below. Statement matching and collision behavior follow the signature rules; layout follows the whitespace rules above.
 
 ### Statement Signatures and Definition Collisions
 
@@ -74,6 +74,24 @@ A definition becomes available when executed. Registering the same normalized si
 The CLI registers native `Log` first; redefining its signature in that frame reports the native origin as `<builtin Log>`. Library `init_statements()` is idempotent and fills only unoccupied native slots, preserving custom definitions registered beforehand. Initialize natives first when they should own their signatures. Future imports must use the same collision rules rather than replacing existing definitions.
 
 Repeated parameter labels within one definition raise `DuplicateParameter` during whole-program validation, even in unused/unreachable definitions. Both parameter locations are reported before any statement executes; this validation error cannot be caught by the script. Distinct case-sensitive labels such as `|x|` and `|X|` remain valid. See [the naming example](../examples/15-statement-names.botwork).
+
+## Multilingual Authoring
+
+Source files are UTF-8. Variable names, parameter labels, unquoted map keys, and named dot segments start with a Unicode `XID_START` character or `_`, followed by zero or more `XID_CONTINUE` characters. These properties come from the locked Pest dependency. Combining marks are accepted after a valid start, supporting Tamil, Hindi, and decomposed accented names. Digits cannot start identifiers; emoji, spaces, and punctuation are not identifier characters. Quote arbitrary map keys and read them with brackets.
+
+Custom sentence names accept broader Unicode text and punctuation, subject to the reserved delimiters and line rules above. For example:
+
+```botwork
+கூட்டு |முதல்| உடன் |இரண்டாம்| { Return |முதல் + இரண்டாம்| }
+|விடை| = கூட்டு |2| உடன் |3|
+Log |விடை|
+```
+
+Variables, parameters, strings, and map keys preserve exact code points and case: composed `café`, decomposed `café`, and `Café` are distinct names. No NFC/NFKC normalization or transliteration occurs. Statement names use the per-character lowercase rule above, so `Écho` and `écho` collide in the same frame, but composed/decomposed spellings remain distinct. Re-run Unicode conformance cases when upgrading Pest or Rust, whose Unicode tables govern identifiers and lowercase matching.
+
+Syntax tokens remain fixed: English control keywords, lowercase `true`/`false`/`and`/`or`, ASCII numeric digits `0`–`9`, decimal `.`, and the documented operators/delimiters. A translated boolean word is an ordinary identifier until bound. ASCII spaces/tabs and LF/CRLF delimit syntax; other Unicode spacing remains literal sentence/string text. Existing Unicode numeric dot segments preserve their spelling as map keys (`map.٣`); arrays still require ASCII indexes. This does not make Unicode digits numeric literals.
+
+Collection display preserves combining marks in quoted text while escaping quotes, backslashes, controls, and other nonprinting characters. It is readable output, not a serialization format. Source spans retain UTF-8 byte ranges; reported columns count Unicode scalars, not visual glyphs. See [the multilingual example](../examples/16-multilingual.botwork) for Tamil variables/parameters/maps/loops and accented-name collisions.
 
 ## Binary Operator Precedence
 

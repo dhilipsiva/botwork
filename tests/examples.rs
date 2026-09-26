@@ -142,6 +142,21 @@ fn signed_integer_example_handles_boundaries_and_catchable_failures() {
 }
 
 #[test]
+fn multilingual_example_uses_tamil_identifiers_and_preserves_combining_marks() {
+    assert_example(
+        "16-multilingual.botwork",
+        &[
+            "5",
+            "தமிழ்",
+            "[\"தமிழ்\", 5]",
+            "3",
+            "[7, 8]",
+            "duplicate accented statement",
+        ],
+    );
+}
+
+#[test]
 fn statement_name_example_matches_calls_and_preserves_definitions_after_collisions() {
     assert_example(
         "15-statement-names.botwork",

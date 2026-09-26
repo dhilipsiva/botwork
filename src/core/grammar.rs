@@ -84,10 +84,28 @@ pub enum Literal {
 
 struct CollectionValue<'a>(&'a Literal);
 
+struct QuotedString<'a>(&'a str);
+
+impl fmt::Display for QuotedString<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("\"")?;
+        for character in self.0.chars() {
+            // Preserve combining marks needed to read scripts such as Tamil.
+            // Single quotes need no escape inside a double-quoted value.
+            if character == '\'' || pest::unicode::MARK(character) {
+                write!(formatter, "{character}")?;
+            } else {
+                write!(formatter, "{}", character.escape_debug())?;
+            }
+        }
+        formatter.write_str("\"")
+    }
+}
+
 impl fmt::Display for CollectionValue<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Literal::String(value) => write!(formatter, "{value:?}"),
+            Literal::String(value) => write!(formatter, "{}", QuotedString(value)),
             value => write!(formatter, "{value}"),
         }
     }
@@ -119,7 +137,12 @@ impl fmt::Display for Literal {
                     if index != 0 {
                         formatter.write_str(", ")?;
                     }
-                    write!(formatter, "{key:?}: {}", CollectionValue(value))?;
+                    write!(
+                        formatter,
+                        "{}: {}",
+                        QuotedString(key),
+                        CollectionValue(value)
+                    )?;
                 }
                 formatter.write_str("}")
             }

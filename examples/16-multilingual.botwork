@@ -1,0 +1,24 @@
+# Custom statements, variables, parameters, and map keys can use Tamil.
+# Control keywords, booleans, operators, and numeric digits keep their fixed syntax.
+கூட்டு |முதல்| உடன் |இரண்டாம்| {
+    Return |முதல் + இரண்டாம்|
+}
+பதிவு |செய்தி| { Log |செய்தி| }
+
+|எண்| = கூட்டு |2| உடன் |3|
+பதிவு |எண்|
+|தரவு| = |{பெயர்: "தமிழ்", மதிப்பு: எண்}|
+பதிவு |தரவு.பெயர்|
+பதிவு |[தரவு["பெயர்"], தரவு.மதிப்பு]|
+|மொத்தம்| = |0|
+For |உருப்பு| In |[1, 2]| {
+    |மொத்தம்| = |மொத்தம் + உருப்பு|
+}
+If |மொத்தம் == 3 and true| { பதிவு |மொத்தம்| }
+
+# Accented statement names lowercase; variable spelling remains exact.
+Écho |entrée| { Return |entrée| }
+|café| = éCHO |7|
+|café| = |8|
+Log |[café, café]|
+Try { ÉCHO |autre| {} } Catch { Log |"duplicate accented statement"| }

@@ -8,6 +8,8 @@ The tree represents assignments, calls, definitions, branches, loops, error hand
 
 The grammar keeps horizontal whitespace separate from explicit LF/CRLF rules. Delimited expressions and fixed syntax can span lines; custom sentences require explicit continuation outside expressions. Atomic sentence parts and comments preserve token boundaries. Continuation pairs remain in source spans but are excluded from signatures and Return operands. Triple-hash comments cannot fall back to single-line comments if their closing fence is missing.
 
+Identifiers use Unicode `XID_START` plus underscore, then `XID_CONTINUE`, including combining marks. Keyword boundaries use the same continuation rule. Numeric literals use ASCII digits, while a separate `path_index` rule retains existing Unicode numeric map-key segments. No Unicode normalization occurs during parsing, matching, or lookup.
+
 Strings and quoted map keys are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. `ExprKind::Access` stores a base expression and ordered `AccessSegment` values: literal names or computed expressions with bracket spans. Comments and whitespace do not become part of dot names. Array-index conversion remains deferred until lookup. Postfix access binds before power and unary operators; grouped bases preserve their parentheses in source spans.
 
 Unary syntax retains its operator and operand spans. At runtime, a minus directly wrapping an integer atom converts the signed text together so the minimum `i32` literal is representable. Negation of compound expressions still evaluates the operand first and uses checked arithmetic; power grouping remains unchanged.
@@ -21,6 +23,8 @@ Maps use exact string keys; arrays require ASCII digits for dot segments or nonn
 `numeric_pair` widens integers and stored binary32 floats exactly to binary64 for all numeric comparisons. Arithmetic retains its separate binary32 conversion policy. `values_equal` first validates both complete value trees for non-finite host floats, then compares structural values using an explicit work list. Arrays compare positions; maps compare key sets and associated values independently of iteration order. Distinct nonnumeric kinds are unequal. Neither pass adds recursive comparison frames; source/value nesting and resource limits still require their own work.
 
 Equality runs before constructing generic incompatible-operator diagnostics, avoiding unnecessary formatting of entire collections on successful comparisons. Both operands have already evaluated before the value operator runs, so structural mismatches do not suppress expression errors or effects.
+
+`QuotedString` formats collection strings and map keys with visible combining marks; quotes, backslashes, controls, and other nonprinting characters retain escapes. Top-level string display emits its raw contents. Display is human-readable and is not a source or serialization round trip.
 
 ## Source Ownership and Locations
 
@@ -80,6 +84,6 @@ Runtime boundaries retain defensive checks for escaping controls, including a ca
 
 ## Remaining Interpreter Work
 
-Resource limits, complete multilingual authoring, imports, structured runtime diagnostics, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Resource limits, imports, structured runtime diagnostics, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

@@ -1,6 +1,6 @@
 # botwork
 
-botwork is a single-binary, generic and open-source automation framework written in Rust for acceptance testing, acceptance test driven development (ATDD), and robotic process automation (RPA). The syntax is basically plain text (in any human lanuage) with parameters. Easily extendible with Rust, Python & JavaScript. An efficient, fast alternative to Robot Framework.
+botwork is a single-binary, generic and open-source automation framework written in Rust for acceptance testing, acceptance test driven development (ATDD), and robotic process automation (RPA). The syntax uses sentence names with parameters. Custom names, identifiers, and text support Unicode; control keywords, operators, and numeric syntax remain fixed. See [multilingual authoring](docs/language.md#multilingual-authoring) and the [Tamil/accented-text example](examples/16-multilingual.botwork). Easily extendible with Rust, Python & JavaScript. An efficient, fast alternative to Robot Framework.
 
 # Why botwork?
 
