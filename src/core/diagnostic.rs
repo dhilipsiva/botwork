@@ -7,6 +7,7 @@ use super::{
     grammar::{BWErr, Literal},
 };
 
+mod construction;
 mod rejection;
 pub use rejection::{
     DiagnosticOmissions, OmittedSource, SUMMARY_DETAIL_BYTES, SUMMARY_SOURCE_NAME_BYTES,

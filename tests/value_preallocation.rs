@@ -58,6 +58,53 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn runtime_name_and_panic_construction_rejects_before_copying_borrowed_details() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    let name = "x".repeat(length);
+    for (source, native, category) in [
+        (
+            format!("|out| = |{name}|"),
+            false,
+            DiagnosticCode::UndefinedVariable,
+        ),
+        (
+            format!("|out| = |{name}.field|"),
+            false,
+            DiagnosticCode::UndefinedVariable,
+        ),
+        (name.clone(), false, DiagnosticCode::UndefinedStatement),
+        (name.clone(), true, DiagnosticCode::NativePanic),
+    ] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 32,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        if native {
+            context
+                .register_native(&name, |_| panic!("callback"))
+                .unwrap();
+        }
+        let program = Program::parse("construction", &source).unwrap();
+        let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+        let error = result.unwrap_err();
+        assert_eq!(error.causes[0].code(), category);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
+        // The accepted active native call still owns one signature copy.
+        assert_eq!(large, usize::from(native));
+    }
+}
+
+#[test]
 fn operation_rejects_large_host_error_details_without_copying_them() {
     use botwork::core::{
         diagnostic::{Diagnostic, DiagnosticLimits},

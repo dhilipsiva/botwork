@@ -443,17 +443,24 @@ impl Context {
 
     #[cfg(test)]
     fn get_variable(&self, name: &str) -> LiteralResult {
-        let value = self.get_variable_ref(name)?;
+        let value = self
+            .get_variable_ref(name)
+            .map_err(Diagnostic::into_error)?;
         self.check_value(value).map_err(Diagnostic::into_error)?;
         Ok(value.clone())
     }
 
-    fn get_variable_ref(&self, name: &str) -> Result<&Literal, BWErr> {
-        self.get_variable_binding(name)
+    #[cfg(test)]
+    fn get_variable_ref(&self, name: &str) -> DiagnosticResult<&Literal> {
+        self.get_variable_binding(name, None)
             .map(|binding| &binding.value)
     }
 
-    fn get_variable_binding(&self, name: &str) -> Result<&Arc<StoredValue>, BWErr> {
+    fn get_variable_binding(
+        &self,
+        name: &str,
+        span: Option<&Span>,
+    ) -> DiagnosticResult<&Arc<StoredValue>> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
@@ -462,7 +469,7 @@ impl Context {
             }
             index = frame.parent;
         }
-        Err(BWErr::VariableNotDefined(name.to_owned()))
+        Err(self.detail_error(BWErr::VariableNotDefined, name, span, true))
     }
 
     fn set_variable(
@@ -764,9 +771,14 @@ fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {
 }
 
 fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
-    let (definition, owner) = context
-        .get_statement(&call.signature)
-        .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
+    let (definition, owner) = context.get_statement(&call.signature).ok_or_else(|| {
+        context.detail_error(
+            BWErr::StatementNotDefined,
+            call.span.text(),
+            Some(&call.span),
+            false,
+        )
+    })?;
     let metadata = definition.metadata();
     let parameter_count = metadata.parameters().len();
     if parameter_count != call.arguments.len() {
@@ -836,10 +848,18 @@ fn invoke_resolved(
                 None
             };
             let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
-                .map_err(|_| BWErr::NativePanic(call.signature.clone()))
-                .and_then(|result| result)
-                .map_err(|error| {
-                    context.diagnostic(Diagnostic::new(error), Some(&call.span), false)
+                .map_err(|_| {
+                    context.detail_error(
+                        BWErr::NativePanic,
+                        &call.signature,
+                        Some(&call.span),
+                        false,
+                    )
+                })
+                .and_then(|result| {
+                    result.map_err(|error| {
+                        context.diagnostic(Diagnostic::new(error), Some(&call.span), false)
+                    })
                 });
             let result = context.after_operation(result.map(Owned::new))?;
             context.check_value(&result)?;
@@ -927,7 +947,11 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
         }
         ExprKind::Bool(value) => context.temporary(Literal::Bool(*value)),
         ExprKind::String(value) => context.temporary_string(value),
-        ExprKind::Variable(name) => context.copy_temporary(context.get_variable_ref(name)?),
+        ExprKind::Variable(name) => context.copy_temporary(
+            &context
+                .get_variable_binding(name, Some(&expression.span))?
+                .value,
+        ),
         ExprKind::Call(call) => invoke(call, context),
         ExprKind::Access { base, segments } => evaluate_access(base, segments, context),
         ExprKind::Array(elements) => {
@@ -1100,11 +1124,7 @@ fn evaluate_access(
             .expression_visits
             .borrow_mut()
             .push(base.span.text().to_owned());
-        binding = Arc::clone(
-            context
-                .get_variable_binding(name)
-                .map_err(|error| Diagnostic::new(error).at_expression(&base.span))?,
-        );
+        binding = Arc::clone(context.get_variable_binding(name, Some(&base.span))?);
         &binding.value
     } else {
         temporary = evaluate_expression(base, context)?;

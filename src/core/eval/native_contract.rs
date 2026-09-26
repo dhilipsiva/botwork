@@ -145,7 +145,7 @@ fn collection_access_retains_the_original_base_across_effectful_index_calls() {
             Arc::new(|_, context| {
                 // One root binding and one access snapshot; the value tree was not copied.
                 assert_eq!(
-                    Arc::strong_count(context.get_variable_binding("data").unwrap()),
+                    Arc::strong_count(context.get_variable_binding("data", None).unwrap()),
                     2
                 );
                 context
@@ -162,7 +162,7 @@ fn collection_access_retains_the_original_base_across_effectful_index_calls() {
     ));
     assert_eq!(context.get_variable("data").unwrap().to_string(), "[2]");
     assert_eq!(
-        Arc::strong_count(context.get_variable_binding("data").unwrap()),
+        Arc::strong_count(context.get_variable_binding("data", None).unwrap()),
         1
     );
 }
@@ -175,8 +175,8 @@ fn context_clones_share_immutable_value_storage_and_isolate_replacement_bindings
         .unwrap();
     let mut cloned = original.clone();
     assert!(Arc::ptr_eq(
-        original.get_variable_binding("data").unwrap(),
-        cloned.get_variable_binding("data").unwrap()
+        original.get_variable_binding("data", None).unwrap(),
+        cloned.get_variable_binding("data", None).unwrap()
     ));
     cloned
         .set_variable("data", Literal::Array(vec![Literal::Int(2)]))

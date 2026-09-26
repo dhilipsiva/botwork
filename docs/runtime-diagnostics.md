@@ -8,7 +8,7 @@ Measure each complete error and any prospective call snapshot before cloning fra
 
 Apply checks at expression, statement, call, native-result, and public program/statement/Pair boundaries, including validation failures. Engine finalization also admits errors from parsing, source reads, inputs, and setup. Configured quotas apply after valid run/environment preparation installs the run budget; earlier control/configuration/environment failures use the fresh Context's default diagnostic quotas. Invalid diagnostic depth is rejected before script effects.
 
-Initial BWErr strings and active call frames already exist when this per-tree admission runs. [Retained call/handler limits](retained-diagnostics.md) separately reserve live records before call-signature copies and handler storage. Original error-message allocation and small related/cause attachments remain construction tasks.
+Most initial BWErr strings and active call frames already exist when this per-tree admission runs. [Borrowed detail construction](diagnostic-construction.md) additionally checks missing names and synchronous native-panic details before their first copy. [Retained call/handler limits](retained-diagnostics.md) reserve live records before call-signature copies and handler storage. Other original message allocations and small related/cause attachments remain construction tasks.
 
 ## Failures, Cleanup, and Stops
 

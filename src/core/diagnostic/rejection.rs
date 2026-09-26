@@ -185,3 +185,21 @@ fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> 
     diagnostic.discard();
     Diagnostic::new(violation).while_handling(summary)
 }
+
+pub(super) fn reject_borrowed_detail(
+    mut skeleton: Diagnostic,
+    category: fn(String) -> BWErr,
+    detail: &str,
+    violation: BWErr,
+    pending_frames: usize,
+) -> Diagnostic {
+    let (detail, shortened) = prefix(detail, SUMMARY_DETAIL_BYTES);
+    skeleton.error = std::sync::Arc::new(category(detail));
+    let mut error = rejected(skeleton, violation, pending_frames);
+    error.causes[0]
+        .omissions
+        .as_mut()
+        .expect("bounded original")
+        .detail_fields += usize::from(shortened);
+    error
+}

@@ -5,6 +5,29 @@ mod tests;
 use crate::core::diagnostic::DiagnosticCode;
 
 impl Context {
+    pub(super) fn detail_error(
+        &self,
+        category: fn(String) -> BWErr,
+        detail: &str,
+        span: Option<&Span>,
+        expression: bool,
+    ) -> Diagnostic {
+        let stopped = self.checkpoint().err();
+        let error = self.limits().diagnostics.borrowed_detail(
+            category,
+            detail,
+            span,
+            expression,
+            self.calls.iter().map(|record| &record.frame),
+        );
+        if let Some(stopped) = stopped {
+            // Preserve a prior observed stop before a construction quota can latch.
+            self.diagnostic(stopped.while_handling(error), span, expression)
+        } else {
+            self.diagnostic(self.retain_limit(error), None, false)
+        }
+    }
+
     /// Admit a complete error and its prospective call snapshot before metadata copies.
     /// Emergency evidence uses fixed independent bounds and must survive unwinding intact.
     pub(crate) fn diagnostic(

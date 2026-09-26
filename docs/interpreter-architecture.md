@@ -588,3 +588,20 @@ assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
 assert!(error.causes[0].omissions.is_some());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Borrowed Diagnostic Details
+
+Missing names and synchronous native-panic details pass [construction admission](diagnostic-construction.md) before their first string copy. Count complete context plus raw detail bytes; accepted errors retain their original category and source.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, run::{Engine, RunLimits, RunOptions}};
+let run = Engine::default().run_source("detail", "Missing", RunOptions {
+    limits: RunLimits { diagnostics: DiagnosticLimits { text_bytes: 12, ..DiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+// Label "source" plus "Missing" needs 13 UTF-8 bytes.
+let error = run.result.unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::UndefinedStatement);
+assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
+```
