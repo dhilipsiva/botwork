@@ -58,6 +58,86 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn unique_engine_input_payload_moves_into_results_without_copying() {
+    let length = 64 * 1024;
+    let value = "x".repeat(length);
+    let pointer = value.as_ptr();
+    let options = RunOptions {
+        inherit_environment: false,
+        variables: BTreeMap::from([("x".into(), Literal::String(value))]),
+        ..RunOptions::default()
+    };
+    let engine = Engine::default();
+    let (run, large) = observe(length, || engine.run_source("move", "", options));
+    assert_eq!(run.outcome(), RunOutcome::Succeeded);
+    assert!(run.snapshot_error.is_none());
+    let Literal::String(value) = &run.variables["x"] else {
+        panic!()
+    };
+    assert_eq!(value.as_ptr(), pointer);
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn result_rejection_avoids_root_payload_copies() {
+    use botwork::core::run::ResultLimits;
+    let length = 64 * 1024;
+    let options = RunOptions {
+        inherit_environment: false,
+        variables: BTreeMap::from([("x".into(), Literal::String("x".repeat(length)))]),
+        limits: RunLimits {
+            results: ResultLimits {
+                payload_bytes: 0,
+                ..ResultLimits::default()
+            },
+            ..RunLimits::default()
+        },
+        ..RunOptions::default()
+    };
+    let engine = Engine::default();
+    let (run, large) = observe(length, || engine.run_source("reject", "", options));
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert!(run.variables.is_empty());
+    assert!(run
+        .snapshot_error
+        .unwrap()
+        .to_string()
+        .contains("result payload bytes"));
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn assignment_export_has_only_native_and_stored_payload_allocations() {
+    use botwork::core::run::ResultLimits;
+    let length = 64 * 1024;
+    let mut engine = Engine::default();
+    engine
+        .register_native("Host", move |_, _| Ok(Literal::String("x".repeat(length))))
+        .unwrap();
+    for payload_bytes in [length, 2 * length] {
+        let options = RunOptions {
+            inherit_environment: false,
+            limits: RunLimits {
+                results: ResultLimits {
+                    payload_bytes,
+                    ..ResultLimits::default()
+                },
+                ..RunLimits::default()
+            },
+            ..RunOptions::default()
+        };
+        let (run, large) = observe(length, || {
+            engine.run_source("assignment", "|x| = Host", options)
+        });
+        assert_eq!(run.snapshot_error.is_some(), payload_bytes == length);
+        assert_eq!(
+            large, 2,
+            "Native return and stored assignment; no final root copy"
+        );
+    }
+}
+
+#[test]
 fn checked_context_copy_rejects_before_allocating_variable_table() {
     use botwork::core::{eval::Context, run::SnapshotLimits};
     let mut context = Context::with_limits(RunLimits {

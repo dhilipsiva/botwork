@@ -86,6 +86,13 @@ pub(crate) struct StoredValue {
 }
 
 impl StoredValue {
+    // Called only after aggregate result admission; preserve live shared owners.
+    pub(crate) fn into_value(value: Arc<Self>) -> Literal {
+        match Arc::try_unwrap(value) {
+            Ok(owned) => owned.value,
+            Err(shared) => shared.value.clone(),
+        }
+    }
     pub(crate) fn new(value: Literal, reservation: Option<ValueReservation>) -> Self {
         Self {
             value,

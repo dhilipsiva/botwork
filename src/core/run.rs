@@ -43,6 +43,8 @@ pub(crate) use retained_registry::{RegistryPlan, RegistryReservation};
 mod snapshot_limits;
 pub use snapshot_limits::SnapshotLimits;
 pub(crate) use snapshot_limits::SnapshotSize;
+mod result_limits;
+pub use result_limits::ResultLimits;
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
@@ -67,6 +69,7 @@ pub struct RunLimits {
     pub retained_names: RetainedNameLimits,
     pub retained_registry: RetainedRegistryLimits,
     pub snapshots: SnapshotLimits,
+    pub results: ResultLimits,
 }
 
 impl Default for RunLimits {
@@ -86,6 +89,7 @@ impl Default for RunLimits {
             retained_names: RetainedNameLimits::default(),
             retained_registry: RetainedRegistryLimits::default(),
             snapshots: SnapshotLimits::default(),
+            results: ResultLimits::default(),
         }
     }
 }
@@ -241,8 +245,12 @@ pub enum RunOutcome {
 #[derive(Debug)]
 pub struct RunResult {
     pub result: DiagnosticResult<Literal>,
-    /// Completed root assignments, including inputs; invocation locals never escape.
+    /// Completed root assignments, including inputs, unless snapshot_error is Some.
+    /// Invocation locals never escape.
     pub variables: BTreeMap<String, Literal>,
+    /// Some means aggregate export admission failed and variables were omitted.
+    /// An earlier execution error remains primary; otherwise result is this error.
+    pub snapshot_error: Option<Diagnostic>,
     pub steps: u64,
     pub elapsed: Duration,
 }
@@ -351,6 +359,7 @@ impl Engine {
         let start = Instant::now();
         let control_start = tokio::time::Instant::now();
         let mut context = Context::default();
+        let result_limits = options.limits.results.clone();
         let variables = Owned::new(std::mem::take(&mut options.variables));
         let result = (|| {
             options.control.checkpoint()?;
@@ -365,10 +374,13 @@ impl Engine {
             let result = execute(&mut context);
             context.after_operation(result)
         })();
+        let steps = context.budget.as_ref().map_or(0, |budget| budget.used());
+        let (result, variables, snapshot_error) = context.finish_result(result, &result_limits);
         RunResult {
             result,
-            variables: context.root_variables(),
-            steps: context.budget.as_ref().map_or(0, |budget| budget.used()),
+            variables,
+            snapshot_error,
+            steps,
             elapsed: start.elapsed(),
         }
     }

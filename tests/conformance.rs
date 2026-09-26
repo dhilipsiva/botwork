@@ -414,6 +414,41 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::ResultBoundary | Input::ResultLimit => {
+                use botwork::core::run::{Engine, ResultLimits, RunLimits, RunOptions, RunOutcome};
+                let run = Engine::default().run_source(
+                    case.id,
+                    "|é| = |[1, {\"κ\": true}]|",
+                    RunOptions {
+                        limits: RunLimits {
+                            results: ResultLimits {
+                                values: 2,
+                                nodes: 8,
+                                name_bytes: 2,
+                                payload_bytes: if case.error.is_some() { 13 } else { 14 },
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+                    assert!(run.variables.is_empty());
+                    let error = run.snapshot_error.unwrap();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(run.result.is_err());
+                } else {
+                    assert_eq!(run.outcome(), RunOutcome::Succeeded);
+                    assert!(run.snapshot_error.is_none());
+                    assert_eq!(
+                        run.result.unwrap().to_string(),
+                        run.variables["é"].to_string()
+                    );
+                }
+                continue;
+            }
             Input::SnapshotBoundary | Input::SnapshotLimit => {
                 use botwork::core::run::{
                     Engine, RunLimits, RunOptions, RunOutcome, SnapshotLimits,

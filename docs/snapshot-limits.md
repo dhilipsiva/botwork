@@ -29,7 +29,7 @@ The caller is suspended during isolated module execution. Transfer the child's c
 
 Use `Context::try_clone()` when a host copy must pass admission. It charges the source, then copies the updated work counters into the result. Failure stops the source. Subsequent source/result work counters are independent, while their stored payload reservations remain shared. Host-owned copies are not an aggregate process-memory ceiling.
 
-These logical counts exclude allocator overhead, call-stack/handler diagnostic copies, expression temporaries, owned run results, environment snapshots, and serialized output. Those retain separate contracts and roadmap tasks. Admission does not make allocation fallible at the OS level.
+These logical counts exclude allocator overhead, call-stack/handler diagnostic copies, expression temporaries, environment snapshots, and serialized output. [Owned run results](result-limits.md) have separate export admission and transfer rules; the other allocations retain their own contracts and roadmap tasks. Admission does not make allocation fallible at the OS level.
 
 ## Evidence
 

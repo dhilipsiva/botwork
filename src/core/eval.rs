@@ -8,6 +8,7 @@ use std::{
 };
 
 mod imports;
+mod results;
 mod snapshots;
 use imports::{LoadedModule, ModuleCache};
 
@@ -165,14 +166,6 @@ impl Context {
 
     fn enter_evaluation(&self) -> DiagnosticResult<Option<EvaluationGuard>> {
         self.budget.as_ref().map(RunBudget::enter).transpose()
-    }
-
-    pub(crate) fn root_variables(&self) -> BTreeMap<String, Literal> {
-        self.frames[0]
-            .variables
-            .iter()
-            .map(|(name, value)| (name.as_str().to_owned(), value.value.clone()))
-            .collect()
     }
 
     /// Observe cancellation/deadline/latched limit failures without consuming a step.

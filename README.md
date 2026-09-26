@@ -60,6 +60,8 @@ across Context and module snapshots.
 [Registry budgets](docs/retained-registry.md) cover statement/namespace metadata,
 including native templates and imported wrappers. [Snapshot budgets](docs/snapshot-limits.md)
 admit frame/cache copies before table allocation and define host Clone ownership.
+[Result budgets](docs/result-limits.md) admit owned terminal/root exports, transfer
+unique payloads, and report omitted snapshots explicitly.
 
 Or you can create a file from below sample and pass the path to cargo run
 

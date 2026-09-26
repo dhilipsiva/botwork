@@ -441,3 +441,21 @@ assert!(context.try_clone().is_err());
 assert!(copy.checkpoint().is_ok());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Bound Owned Result Exports
+
+An export failure omits the entire root map and exposes a separate snapshot diagnostic.
+
+```rust
+use botwork::core::run::{Engine, ResultLimits, RunLimits, RunOptions, RunOutcome};
+let run = Engine::default().run_source("result", "|x| = |7|", RunOptions {
+    limits: RunLimits {
+        results: ResultLimits { values: 1, ..ResultLimits::default() },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+assert!(run.variables.is_empty());
+assert!(run.snapshot_error.is_some());
+```

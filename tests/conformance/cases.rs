@@ -35,6 +35,8 @@ pub enum Input {
     RegistryLimit,
     SnapshotBoundary,
     SnapshotLimit,
+    ResultBoundary,
+    ResultLimit,
 }
 
 #[derive(Clone)]
@@ -207,5 +209,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::SnapshotBoundary, stdout: "", code: None, error: None },
         Case { id: "snapshot-limit", positive: &[], invalid: &["R13"], boundary: &[],
             input: Input::SnapshotLimit, stdout: "", code: Some("BW8001"), error: Some("snapshot table entries") },
+        Case { id: "result-boundary", positive: &["R14"], invalid: &[], boundary: &["R14"],
+            input: Input::ResultBoundary, stdout: "", code: None, error: None },
+        Case { id: "result-limit", positive: &[], invalid: &["R14"], boundary: &[],
+            input: Input::ResultLimit, stdout: "", code: Some("BW8001"), error: Some("result payload bytes") },
     ]
 }

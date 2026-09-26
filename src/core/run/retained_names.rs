@@ -99,6 +99,13 @@ struct NameData {
 pub(crate) struct RetainedName(Arc<NameData>);
 
 impl RetainedName {
+    // Called only after aggregate result admission; shared names require a copy.
+    pub(crate) fn into_string(self) -> String {
+        match Arc::try_unwrap(self.0) {
+            Ok(owned) => owned.text,
+            Err(shared) => shared.text.clone(),
+        }
+    }
     pub(crate) fn as_str(&self) -> &str {
         &self.0.text
     }
