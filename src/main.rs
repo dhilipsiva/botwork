@@ -3,6 +3,7 @@ use botwork::core::{
     diagnostic::Diagnostic,
     eval::{execute_statement_detailed, Context},
     grammar::BWErr,
+    input::load_variables,
 };
 use clap::Parser as Clap;
 use std::{
@@ -20,14 +21,20 @@ struct Args {
     #[arg(short, long, required_unless_present_any = ["list_statements", "statement_help"])]
     file: Option<PathBuf>,
     /// List built-in statement headers without executing a file
-    #[arg(long, conflicts_with_all = ["file", "statement_help", "debug"])]
+    #[arg(long, conflicts_with_all = ["file", "statement_help", "debug", "variables", "variable_files"])]
     list_statements: bool,
     /// Show a built-in's parameters, return kinds, and documented errors
-    #[arg(long, value_name = "HEADER", conflicts_with_all = ["file", "list_statements", "debug"])]
+    #[arg(long, value_name = "HEADER", conflicts_with_all = ["file", "list_statements", "debug", "variables", "variable_files"])]
     statement_help: Option<String>,
     /// Trace top-level statement locations on stderr
     #[arg(long)]
     debug: bool,
+    /// Set a root variable from JSON (repeatable; overrides all variable files)
+    #[arg(long = "var", value_name = "NAME=JSON")]
+    variables: Vec<String>,
+    /// Read root variables from a JSON object (repeatable; later files override earlier)
+    #[arg(long = "vars-file", value_name = "PATH")]
+    variable_files: Vec<PathBuf>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +49,8 @@ enum CliError {
     Help(io::Error),
 }
 
-fn run(file: &Path, debug: bool) -> Result<(), CliError> {
+fn run(file: &Path, debug: bool, files: &[PathBuf], settings: &[String]) -> Result<(), CliError> {
+    let variables = load_variables(files, settings)?;
     let source = read_to_string(file).map_err(|source| CliError::Read {
         file: file.to_owned(),
         source,
@@ -50,6 +58,7 @@ fn run(file: &Path, debug: bool) -> Result<(), CliError> {
     let program = Program::parse_detailed(&file.display().to_string(), &source)?;
     let mut context = Context::default();
     context.init_statements();
+    context.set_input_variables(variables)?;
     for statement in &program.statements {
         if debug {
             let (line, column) = statement.span.line_column();
@@ -76,6 +85,8 @@ fn main() -> ExitCode {
                 .as_deref()
                 .expect("clap requires a file for execution"),
             args.debug,
+            &args.variable_files,
+            &args.variables,
         )
     };
     match result {

@@ -10,6 +10,8 @@ pub enum Input {
     AsyncExpired,
     ImportSuccess,
     ImportCycle,
+    VariablesSuccess,
+    VariablesInvalid,
 }
 
 #[derive(Clone)]
@@ -129,5 +131,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::ImportSuccess, stdout: "14\n[1, 2]\nBW6003\n10\n", code: None, error: None },
         Case { id: "import-cycle", positive: &[], invalid: &["M1"], boundary: &[],
             input: Input::ImportCycle, stdout: "", code: Some("BW6002"), error: Some("Import cycle:") },
+        Case { id: "variables-success", positive: &["I1"], invalid: &[], boundary: &["I1"],
+            input: Input::VariablesSuccess, stdout: "[2, -2147483648, 2147483647, none, true]\n", code: None, error: None },
+        Case { id: "variables-invalid", positive: &[], invalid: &["I1"], boundary: &[],
+            input: Input::VariablesInvalid, stdout: "", code: Some("BW7001"), error: Some("integer is outside") },
     ]
 }

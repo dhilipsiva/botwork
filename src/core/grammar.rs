@@ -80,6 +80,8 @@ pub enum BWErr {
     Timeout(String),
     #[error("Async runtime failure: {0}")]
     AsyncRuntime(String),
+    #[error("Invalid input variables: {0}")]
+    InputError(String),
     #[error("Loading module failed: {0}")]
     ImportRead(String),
     #[error("Import cycle: {0}")]

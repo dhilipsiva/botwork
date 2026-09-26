@@ -17,10 +17,15 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "target" / "coverage"
 TOOL_VERSION = "cargo-llvm-cov 0.9.1"
-EXCLUSIONS = r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
+EXCLUSIONS = (r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
+              r"|[/\\]src[/\\]core[/\\]eval[/\\](execution_contract|native_contract)\.rs$")
 # Review these lists whenever adding executable source files. Module declarations
 # have no executable lines; the generated Pest parser is excluded deliberately.
-LIBRARY_FILES = {"src/core/ast.rs", "src/core/eval.rs", "src/core/grammar.rs"}
+LIBRARY_FILES = {
+    "src/core/ast.rs", "src/core/diagnostic.rs", "src/core/eval.rs",
+    "src/core/eval/imports.rs", "src/core/grammar.rs", "src/core/input.rs",
+    "src/core/operation.rs", "src/core/signature.rs",
+}
 EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs"}}
 
 
@@ -127,7 +132,8 @@ def main():
         "llvm_profdata": capture(str(llvm_bin / f"llvm-profdata{executable_suffix}"), "--version"),
         "profile": "debug",
         "metric": "executable line coverage of maintained Rust source files",
-        "excluded": ["tests/**", "src/**/tests.rs", "src/core/parser.rs (generated Pest parser)"],
+        "excluded": ["tests/**", "src/**/tests.rs", "src/core/eval/execution_contract.rs",
+                     "src/core/eval/native_contract.rs", "src/core/parser.rs (generated Pest parser)"],
         "unmeasured": ["branch coverage", "grammar-rule coverage", "ignored regressions", "doctests"],
         "scopes": {},
     }

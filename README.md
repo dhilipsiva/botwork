@@ -38,6 +38,13 @@ to compose statement results inside other expressions.
 [Local modules](docs/language.md#local-modules) use `Import |"helpers.botwork"| As |helpers|`
 and qualified calls such as `helpers::Double |3|`.
 
+Supply [input variables](docs/input-variables.md) from JSON files and repeatable overrides:
+
+```sh
+cargo run -- --file examples/20-input-variables.botwork \
+  --vars-file examples/inputs/defaults.json --var 'name="Ada"' --var 'attempts=3'
+```
+
 Or you can create a file from below sample and pass the path to cargo run
 
 
@@ -109,7 +116,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] Javascript extention support (via neon)
   - [ ] WASM extention support (via WASI)
 - [ ] CLI
-  - [ ] Ability to pass variables from CLI / Files
+  - [x] Ability to pass variables from CLI / Files
   - [ ] Run in parallel
 - [ ] Fully async, non-blocking operations
 - [ ] Refactor my crappy code :P 

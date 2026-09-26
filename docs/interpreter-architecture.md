@@ -233,3 +233,24 @@ Each loaded module retains an immutable root Frame snapshot, containing initiali
 Contexts own cache maps and requested-to-canonical path mappings. Isolated initialization/call contexts copy those maps and merge successful dependency additions back even after a parent fails. Completed module Frames reference only dependency modules and source owners, never a Context/cache, avoiding ownership cycles. Context clones copy cache maps and share immutable completed modules. A Weak-source test checks that dropping the final context releases cached sources. Cache lifetime and native captures do not establish future parallel-run isolation guarantees.
 
 Namespace registration checks the whole prefix before module initialization and publishes exports/alias only on success. Same-frame aliases protect their prefix from later declaration writes. Lookup stops at the nearest namespace owner if an export is absent, and listing/completion apply the same whole-namespace shadowing. Qualified metadata uses `display_header()` for labels while retaining the actual definition's header span for source navigation. See [module semantics](language.md#local-modules) for cache/retry and capability rules.
+
+## Input Variables
+
+`core::input` parses JSON files/settings without evaluating expressions. Borrowed raw JSON tokens retain their original numeric spelling for direct checked i32/f32 conversion; object keys remain ordinary strings. A preliminary scan caps container nesting at 128, including discarded duplicate values, before recursive conversion. JSON payload size and broader runtime budgets remain separate work.
+
+```rust
+use botwork::core::{
+    ast::Program,
+    eval::{evaluate_program_detailed, Context},
+    input::parse_variables,
+};
+
+let mut context = Context::default();
+context.set_input_variables(parse_variables("settings.json", r#"{"count":3,"name":"Ada"}"#)?)?;
+let program = Program::parse_detailed("inputs.botwork", "|result| = |[name, count + 1]|")?;
+let result = evaluate_program_detailed(&program, &mut context)?;
+assert_eq!(result.to_string(), "[\"Ada\", 4]");
+# Ok::<(), botwork::core::diagnostic::Diagnostic>(())
+```
+
+`set_input_variables` validates the entire batch before updating root bindings. Its input map is ordered, making name-validation error priority deterministic. Host-created values receive recursive finite checks; imported module roots remain independent. Input errors use BW7001 without echoing whole payloads or inventing DSL spans. The [input contract](input-variables.md) defines file/flag precedence, number ranges, duplicate keys, and scope.

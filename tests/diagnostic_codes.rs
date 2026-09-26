@@ -84,6 +84,11 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
         (BWErr::Cancelled("stopped".into()), Cancelled, "BW5001"),
         (BWErr::Timeout("deadline".into()), Timeout, "BW5002"),
         (
+            BWErr::InputError("invalid variable".into()),
+            Input,
+            "BW7001",
+        ),
+        (
             BWErr::ImportRead("missing file".into()),
             ImportRead,
             "BW6001",

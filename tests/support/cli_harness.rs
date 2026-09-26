@@ -50,6 +50,16 @@ impl Harness {
     }
 
     pub fn run(&self, id: &str, source: &str, timeout: Duration) -> Result<Output, String> {
+        self.run_with_args(id, source, &[], timeout)
+    }
+
+    pub fn run_with_args(
+        &self,
+        id: &str,
+        source: &str,
+        arguments: &[&str],
+        timeout: Duration,
+    ) -> Result<Output, String> {
         assert!(
             !id.is_empty()
                 && id
@@ -64,6 +74,7 @@ impl Harness {
             .current_dir(&self.workspace)
             .arg("--file")
             .arg(path)
+            .args(arguments)
             .stdin(Stdio::null())
             .stdout(fs::File::create(&stdout).unwrap())
             .stderr(fs::File::create(&stderr).unwrap())

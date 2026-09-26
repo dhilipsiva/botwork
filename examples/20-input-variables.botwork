@@ -1,0 +1,6 @@
+# Supply examples/inputs/defaults.json and optional --var overrides.
+Describe |name| {
+    Return |[name, attempts, options.enabled, options.labels]|
+}
+Log |@{ Describe |name| }|
+Log |nothing|

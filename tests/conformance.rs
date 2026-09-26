@@ -320,6 +320,7 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
     inventory(&cases, SPECIFICATION).unwrap();
     let harness = Harness::new();
     for case in cases {
+        let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
             Input::NonFiniteHost => {
@@ -355,10 +356,31 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 "Import |\"cycle.botwork\"| As |cycle|"
             }
+            Input::VariablesSuccess => {
+                fs::write(
+                    harness.workspace.join("variables.json"),
+                    r#"{"x":1,"min":-2147483648,"max":2147483647,"nothing":null,"yes":true}"#,
+                )
+                .unwrap();
+                arguments = vec!["--var", "x=2", "--vars-file", "variables.json"];
+                "Log |[x, min, max, nothing, yes]|"
+            }
+            Input::VariablesInvalid => {
+                fs::write(
+                    harness.workspace.join("variables-invalid.json"),
+                    r#"{"x":2147483648}"#,
+                )
+                .unwrap();
+                arguments = vec!["--vars-file", "variables-invalid.json", "--debug"];
+                "Log |\"unreachable\"|"
+            }
         };
-        let output = harness
-            .run(case.id, source, Duration::from_secs(5))
-            .unwrap_or_else(|error| panic!("{error}"));
+        let output = if arguments.is_empty() {
+            harness.run(case.id, source, Duration::from_secs(5))
+        } else {
+            harness.run_with_args(case.id, source, &arguments, Duration::from_secs(5))
+        }
+        .unwrap_or_else(|error| panic!("{error}"));
         let diagnostic = String::from_utf8(output.stderr).unwrap();
         let label = format!(
             "{}; {}; timeout=5s\n{source}\n{diagnostic}",
@@ -376,8 +398,13 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                     diagnostic.contains(expected),
                     "expected {expected}: {label}"
                 );
+                let extension = if matches!(case.input, Input::VariablesInvalid) {
+                    "json"
+                } else {
+                    "botwork"
+                };
                 assert!(
-                    diagnostic.contains(&format!("{}.botwork", case.id)),
+                    diagnostic.contains(&format!("{}.{extension}", case.id)),
                     "{label}"
                 );
                 assert!(!diagnostic.contains("panicked"), "{label}");

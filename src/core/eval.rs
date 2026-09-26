@@ -113,6 +113,29 @@ impl Default for Context {
 }
 
 impl Context {
+    /// Validate and install owned values in the entry script's root scope.
+    /// Replaces matching root bindings only after every input is valid.
+    /// Imported modules keep independent globals; local bindings can shadow inputs.
+    pub fn set_input_variables(
+        &mut self,
+        variables: BTreeMap<String, Literal>,
+    ) -> DiagnosticResult<()> {
+        for (name, value) in &variables {
+            super::input::validate_name("host variables", name)?;
+            validate_value(value).map_err(|_| {
+                Diagnostic::new(BWErr::InputError(format!(
+                    "host variables: {name:?}: values must contain only finite floats"
+                )))
+            })?;
+        }
+        self.frames[0].variables.extend(
+            variables
+                .into_iter()
+                .map(|(name, value)| (name, Arc::new(value))),
+        );
+        Ok(())
+    }
+
     fn get_variable(&self, name: &str) -> LiteralResult {
         self.get_variable_ref(name).cloned()
     }
