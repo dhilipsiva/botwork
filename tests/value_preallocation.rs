@@ -156,6 +156,111 @@ fn context_snapshots_share_variable_name_text_without_payload_copies() {
 }
 
 #[test]
+fn registry_failure_precedes_dsl_parameter_metadata_copying() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::RetainedRegistryLimits,
+    };
+    let length = 64 * 1024;
+    let program =
+        Program::parse("registry", &format!("Read |{}| {{}}", "x".repeat(length))).unwrap();
+    let mut context = Context::with_limits(RunLimits {
+        retained_registry: RetainedRegistryLimits {
+            entries: 0,
+            ..RetainedRegistryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result.unwrap_err().to_string().contains("registry entries"));
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn context_clones_share_registry_keys_and_metadata_payloads() {
+    use botwork::core::{eval::Context, signature::StatementSignature};
+    let length = 64 * 1024;
+    let header = "x".repeat(length);
+    let signature = StatementSignature::native(&header)
+        .unwrap()
+        .description("y".repeat(length));
+    let mut context = Context::default();
+    context
+        .register_native_with_signature(signature, |_| Ok(Literal::None))
+        .unwrap();
+    let (clone, large) = observe(length, || context.clone());
+    assert_eq!(large, 0);
+    assert_eq!(clone.statement_signatures().len(), 1);
+}
+
+#[test]
+fn completion_normalization_does_not_copy_oversized_host_prefixes() {
+    use botwork::core::eval::Context;
+    let length = 64 * 1024;
+    let mut context = Context::default();
+    context
+        .register_native("Read", |_| Ok(Literal::None))
+        .unwrap();
+    for prefix in ["x".repeat(length), " \t".repeat(length), "İ".repeat(length)] {
+        let (matches, large) = observe(length, || context.complete_statements(&prefix));
+        assert_eq!(large, 0);
+        assert_eq!(matches.len(), usize::from(prefix.starts_with(' ')));
+    }
+}
+
+#[test]
+fn fresh_engine_admission_shares_template_documentation_storage() {
+    use botwork::core::signature::StatementSignature;
+    let length = 64 * 1024;
+    let mut engine = Engine::default();
+    engine
+        .register_native_with_signature(
+            StatementSignature::native("Host")
+                .unwrap()
+                .description("x".repeat(length)),
+            |_, _| Ok(Literal::None),
+        )
+        .unwrap();
+    let (result, large) = observe(length, || {
+        engine.run_source("host", "Host", RunOptions::default())
+    });
+    assert_eq!(result.outcome(), RunOutcome::Succeeded);
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn imported_native_bindings_share_the_original_registry_key() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    let mut context = Context::default();
+    context
+        .register_native(&"x".repeat(length), |_| Ok(Literal::None))
+        .unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "botwork-registry-allocation-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let module = directory.join("empty.botwork");
+    std::fs::write(&module, "").unwrap();
+    let source = format!(
+        "Import |{}| As |empty|",
+        serde_json::to_string(module.to_str().unwrap()).unwrap()
+    );
+    let program = Program::parse("import", &source).unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    std::fs::remove_file(module).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+    result.unwrap();
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn rejected_concatenation_does_not_allocate_result_or_format_operand_payloads() {
     let length = 64 * 1024;
     let left = Literal::String("a".repeat(length));

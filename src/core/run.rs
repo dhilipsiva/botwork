@@ -37,6 +37,9 @@ pub use retained_definitions::RetainedDefinitionLimits;
 mod retained_names;
 pub(crate) use retained_names::RetainedName;
 pub use retained_names::RetainedNameLimits;
+mod retained_registry;
+pub use retained_registry::RetainedRegistryLimits;
+pub(crate) use retained_registry::{RegistryPlan, RegistryReservation};
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
@@ -59,6 +62,7 @@ pub struct RunLimits {
     pub retained_values: RetainedValueLimits,
     pub retained_definitions: RetainedDefinitionLimits,
     pub retained_names: RetainedNameLimits,
+    pub retained_registry: RetainedRegistryLimits,
 }
 
 impl Default for RunLimits {
@@ -76,6 +80,7 @@ impl Default for RunLimits {
             retained_values: RetainedValueLimits::default(),
             retained_definitions: RetainedDefinitionLimits::default(),
             retained_names: RetainedNameLimits::default(),
+            retained_registry: RetainedRegistryLimits::default(),
         }
     }
 }
@@ -267,6 +272,18 @@ impl Default for Engine {
 }
 
 impl Engine {
+    /// Configure reusable native registration storage. RunOptions still supplies
+    /// each execution's independent registry budgets, checked before input/effects.
+    pub fn with_registry_limits(retained_registry: RetainedRegistryLimits) -> Self {
+        let mut template = Context::with_limits(RunLimits {
+            retained_registry,
+            ..RunLimits::default()
+        })
+        .expect("registry budgets have no fixed ceilings");
+        template.init_statements();
+        Self { template }
+    }
+
     pub fn register_native(
         &mut self,
         header: &str,
@@ -337,6 +354,7 @@ impl Engine {
             context.working_directory = Ok(environment.directory.clone());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
             context.environment = Some(environment);
+            context.admit_native_registry()?;
             context.set_input_variables(variables.into_inner())?;
             context.checkpoint()?;
             let result = execute(&mut context);
@@ -360,6 +378,7 @@ struct BudgetState {
     retained_values: Arc<retained_values::RetainedValues>,
     retained_definitions: Arc<retained_definitions::RetainedDefinitions>,
     retained_names: Arc<retained_names::RetainedNames>,
+    retained_registry: Arc<retained_registry::RetainedRegistry>,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -378,6 +397,7 @@ impl Clone for RunBudget {
             retained_values: Arc::clone(&self.0.retained_values),
             retained_definitions: Arc::clone(&self.0.retained_definitions),
             retained_names: Arc::clone(&self.0.retained_names),
+            retained_registry: Arc::clone(&self.0.retained_registry),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -392,6 +412,9 @@ impl Clone for RunBudget {
 impl RunBudget {
     pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
+            retained_registry: Arc::new(retained_registry::RetainedRegistry::new(
+                limits.retained_registry.clone(),
+            )),
             retained_names: Arc::new(retained_names::RetainedNames::new(
                 limits.retained_names.clone(),
             )),

@@ -124,6 +124,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R11 — Variable-name admission.** Bound per-name UTF-8 bytes and aggregate live name counts/bytes before copying new variable keys. Preserve exact identifier identity, reuse existing assignment/input keys, and share names across Context/module snapshots. Atomically admit input batches, unwind call/loop/handler/module ownership, and restore saved names without new admission after a stop. Preserve required RHS effects, previous destinations, Catch causes, independent clone latches, and fresh Engine trackers. [Name rules](retained-names.md) define exact counts, zero/raised limits, error ordering, concurrency, and remaining metadata/table/result scope.
 
+## Retained Registry Bounds
+
+**R12 — Registry metadata admission.** Bound statement/namespace records, descriptor nodes, lookup keys, owned metadata strings, and unique source text/name bytes before publication and owned copies. Preserve collision priority; stage complete imported namespaces atomically after initialization in normalized order. Share immutable metadata across clones/modules and release final-owner reservations. Admit native templates against each fresh Engine run's budgets before inputs/effects; exempt only fixed built-in initialization. Bound borrowed metadata-query result counts and completion normalization without changing spelling rules. [Registry rules](retained-registry.md) define defaults, counts, ownership/order, configuration, stop behavior, and remaining table/output/host scope.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -192,3 +196,5 @@ R9 evidence in `tests/retained_values.rs`, reservation/evaluator unit tests, and
 R10 evidence in `tests/retained_definitions.rs` and reservation/AST unit tests covers exact/default/zero/raised limits, source names/hidden owners, atomicity/overflow, repeated evaluation, collisions, local/recursive/module cleanup, cached aliases, cloned/concurrent ownership, and source release. Two host corpus cases and a Rust example pin shared-source budgets and admission failures.
 
 R11 evidence in `tests/retained_names.rs`, name reservation unit tests, and allocation observations covers UTF-8 identity/counts, exact/default/zero/raised limits, atomic host batches, bounded name errors, safe rejected host-value cleanup, replacement, calls/modules, iterator/handler cleanup, concurrent clones, and required effects. Two host corpus cases and a Rust example pin name reuse and aggregate rejection.
+
+R12 evidence in `tests/retained_registry.rs`, registry unit tests, allocation observations, and the combined import/parser stress test covers descriptor/source metrics, zero/raised/default budgets, collision priority, atomic namespaces, module/cloned/concurrent ownership, template admission/order, metadata queries, source release, pre-copy rejection, and shared payloads. Two host corpus cases and a Rust example pin exact native metadata and text-limit rejection.

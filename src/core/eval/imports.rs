@@ -35,8 +35,12 @@ pub(super) fn evaluate_import(
 ) -> RuntimeResult {
     let normalized = ast::normalize_sentence(&namespace.text);
     let frame = &context.frames[context.current];
-    if let Some(original) = frame.namespaces.get(&normalized) {
-        return Err(namespace_collision(&normalized, original, &namespace.span));
+    if let Some(original) = frame.namespaces.get(normalized.as_str()) {
+        return Err(namespace_collision(
+            &normalized,
+            &original.span,
+            &namespace.span,
+        ));
     }
     let prefix = format!("{normalized}::");
     if let Some((_, statement)) = frame
@@ -53,29 +57,73 @@ pub(super) fn evaluate_import(
     }
     let module = load_module(path, path_span, context)
         .map_err(|error| error.with_related("imported here", import_site))?;
-    admit_namespace(&module, namespace, &normalized, context)
+    publish_namespace(&module, namespace, &normalized, import_site, context)
+}
+
+// Keep publication scratch storage off the recursive module-loading stack.
+#[inline(never)]
+fn publish_namespace(
+    module: &Arc<LoadedModule>,
+    namespace: &Name,
+    normalized: &str,
+    import_site: &Span,
+    context: &mut Context,
+) -> RuntimeResult {
+    admit_namespace(module, namespace, normalized, context)
         .map_err(|error| error.at(import_site))?;
-    let frame = &mut context.frames[context.current];
-    // Publish the complete namespace only after initialization succeeds.
-    for (exported, statement) in &module.frame.statements {
+    let namespace_registry = context
+        .reserve_registry(RegistryPlan::namespace(normalized, import_site))
+        .map_err(|error| error.at(import_site))?;
+    let namespace_key = namespace_registry.as_ref().map_or_else(
+        || Arc::from(normalized),
+        |reservation| Arc::clone(&reservation.key),
+    );
+    let mut exports = Vec::new();
+    // Admit every wrapper before copying metadata or publishing the namespace.
+    let mut declarations: Vec<_> = module.frame.statements.iter().collect();
+    declarations.sort_unstable_by_key(|(left, _)| *left);
+    for (exported, statement) in declarations {
         if matches!(statement, StmtType::Native { .. }) {
             continue;
         }
-        let metadata = Arc::new(statement.metadata().qualified(&namespace.text, &normalized));
+        let registry = context
+            .reserve_registry(RegistryPlan::qualified(
+                statement.metadata(),
+                &namespace.text,
+                normalized,
+                import_site,
+            ))
+            .map_err(|error| error.at(import_site))?;
+        exports.push((Arc::clone(exported), statement, registry));
+    }
+    let frame = &mut context.frames[context.current];
+    for (exported, statement, registry) in exports {
+        let metadata = Arc::new(statement.metadata().qualified(&namespace.text, normalized));
+        let key = registry.as_ref().map_or_else(
+            || Arc::from(metadata.normalized()),
+            |reservation| Arc::clone(&reservation.key),
+        );
         frame.statements.insert(
-            metadata.normalized().into(),
+            key,
             StmtType::Imported {
-                module: Arc::clone(&module),
-                exported: exported.clone(),
+                module: Arc::clone(module),
+                exported,
                 metadata,
                 import_site: import_site.clone(),
+                _registry: registry,
             },
         );
     }
     frame.dependency_depth = frame
         .dependency_depth
         .max(module.frame.dependency_depth + 1);
-    frame.namespaces.insert(normalized, import_site.clone());
+    frame.namespaces.insert(
+        namespace_key,
+        StoredNamespace {
+            span: import_site.clone(),
+            _registry: namespace_registry,
+        },
+    );
     Ok(Literal::None)
 }
 
@@ -238,9 +286,11 @@ fn load_module(
             .get_statement(metadata.normalized())
             .expect("visible entry");
         if matches!(statement, StmtType::Native { .. }) {
-            module_context.frames[0]
-                .statements
-                .insert(metadata.normalized().into(), statement);
+            let key = statement.registry().map_or_else(
+                || Arc::from(metadata.normalized()),
+                |reservation| Arc::clone(&reservation.key),
+            );
+            module_context.frames[0].statements.insert(key, statement);
         }
     }
     module_context.loading.push(canonical.clone());

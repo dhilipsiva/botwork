@@ -401,3 +401,25 @@ let run = Engine::default().run_source("names", "|é| = |1|\n|é| = |2|", RunOpt
 assert_eq!(run.outcome(), RunOutcome::Succeeded);
 assert_eq!(run.variables["é"].to_string(), "2");
 ```
+
+## Configure Registry Metadata
+
+Native documentation and source ownership are admitted alongside lookup keys and parameter descriptors.
+
+```rust
+use botwork::core::{
+    diagnostic::DiagnosticCode, eval::Context, grammar::Literal,
+    run::{RetainedRegistryLimits, RunLimits}, signature::StatementSignature,
+};
+let mut context = Context::with_limits(RunLimits {
+    retained_registry: RetainedRegistryLimits {
+        entries: 1, nodes: 3, name_bytes: 11, text_bytes: 32, source_bytes: 20
+    },
+    ..RunLimits::default()
+})?;
+let signature = StatementSignature::native("Read |value|")?
+    .description("é").documents_error(DiagnosticCode::Native, "bad")?;
+context.register_native_with_signature(signature, |_| Ok(Literal::None))?;
+assert_eq!(context.statement_signatures().len(), 1);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

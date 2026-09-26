@@ -31,6 +31,8 @@ pub enum Input {
     DefinitionLimit,
     NameBoundary,
     NameLimit,
+    RegistryBoundary,
+    RegistryLimit,
 }
 
 #[derive(Clone)]
@@ -195,5 +197,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::NameBoundary, stdout: "", code: None, error: None },
         Case { id: "name-limit", positive: &[], invalid: &["R11"], boundary: &[],
             input: Input::NameLimit, stdout: "", code: Some("BW8001"), error: Some("retained variable name bytes") },
+        Case { id: "registry-boundary", positive: &["R12"], invalid: &[], boundary: &["R12"],
+            input: Input::RegistryBoundary, stdout: "", code: None, error: None },
+        Case { id: "registry-limit", positive: &[], invalid: &["R12"], boundary: &[],
+            input: Input::RegistryLimit, stdout: "", code: Some("BW8001"), error: Some("registry text bytes") },
     ]
 }

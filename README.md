@@ -57,6 +57,8 @@ modules, and cloned contexts, releasing capacity when stored values are dropped.
 definitions and shared source text across repeated evaluations.
 [Variable-name budgets](docs/retained-names.md) bound key storage and share it
 across Context and module snapshots.
+[Registry budgets](docs/retained-registry.md) cover statement/namespace metadata,
+native templates, and imported wrappers before publication.
 
 Or you can create a file from below sample and pass the path to cargo run
 

@@ -414,6 +414,52 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::RegistryBoundary | Input::RegistryLimit => {
+                use botwork::core::{
+                    ast::Program,
+                    diagnostic::DiagnosticCode,
+                    eval::{evaluate_program_detailed, Context},
+                    run::{RetainedRegistryLimits, RunLimits},
+                    signature::StatementSignature,
+                };
+                let mut context = Context::with_limits(RunLimits {
+                    retained_registry: RetainedRegistryLimits {
+                        entries: 1,
+                        nodes: 3,
+                        name_bytes: 11,
+                        text_bytes: if case.error.is_some() { 31 } else { 32 },
+                        source_bytes: 20,
+                    },
+                    ..RunLimits::default()
+                })
+                .unwrap();
+                let signature = StatementSignature::native("Read |value|")
+                    .unwrap()
+                    .description("é")
+                    .documents_error(DiagnosticCode::Native, "bad")
+                    .unwrap();
+                let result = context
+                    .register_native_with_signature(signature, |values| Ok(values[0].clone()));
+                if let Some(expected) = case.error {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(context.statement_signatures().is_empty());
+                } else {
+                    result.unwrap();
+                    assert_eq!(context.statement_signatures().len(), 1);
+                    assert_eq!(
+                        evaluate_program_detailed(
+                            &Program::parse(case.id, "Read |7|").unwrap(),
+                            &mut context
+                        )
+                        .unwrap()
+                        .to_string(),
+                        "7"
+                    );
+                }
+                continue;
+            }
             Input::NameBoundary | Input::NameLimit => {
                 use botwork::core::run::{Engine, RetainedNameLimits, RunLimits, RunOptions};
                 let source = if case.error.is_some() {

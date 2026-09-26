@@ -269,6 +269,23 @@ impl StatementSignature {
         Some(bytes)
     }
 
+    /// Signature strings plus its independently owned registry lookup key.
+    pub(crate) fn retained_bytes(&self) -> Option<usize> {
+        let mut bytes = self
+            .normalized
+            .len()
+            .checked_mul(2)?
+            .checked_add(self.namespace.as_ref().map_or(0, String::len))?
+            .checked_add(self.description.len())?;
+        for parameter in &self.parameters {
+            bytes = bytes.checked_add(parameter.name.len())?;
+        }
+        for error in &self.errors {
+            bytes = bytes.checked_add(error.description.len())?;
+        }
+        Some(bytes)
+    }
+
     pub(crate) fn qualified(&self, namespace: &str, normalized: &str) -> Self {
         Self {
             normalized: format!("{normalized}::{}", self.normalized),

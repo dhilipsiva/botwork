@@ -19,8 +19,8 @@ use super::{
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Rule},
     operation::OperationControl,
     run::{
-        DefinitionReservation, EvaluationGuard, RetainedName, RunBudget, RunEnvironment, RunLimits,
-        SourceFailure, StoredValue, ValueReservation,
+        DefinitionReservation, EvaluationGuard, RegistryPlan, RegistryReservation, RetainedName,
+        RunBudget, RunEnvironment, RunLimits, SourceFailure, StoredValue, ValueReservation,
     },
     signature::{StatementOrigin, StatementSignature},
     value_limits::Owned,
@@ -51,21 +51,31 @@ enum StmtType {
     Native {
         callback: Callback,
         metadata: Arc<StatementSignature>,
+        _registry: Option<Arc<RegistryReservation>>,
     },
     UserDefined {
         definition: Arc<Definition>,
         metadata: Arc<StatementSignature>,
         _reservation: Option<Arc<DefinitionReservation>>,
+        _registry: Option<Arc<RegistryReservation>>,
     },
     Imported {
         module: Arc<LoadedModule>,
-        exported: String,
+        exported: Arc<str>,
         metadata: Arc<StatementSignature>,
         import_site: Span,
+        _registry: Option<Arc<RegistryReservation>>,
     },
 }
 
 impl StmtType {
+    fn registry(&self) -> Option<&Arc<RegistryReservation>> {
+        match self {
+            Self::Native { _registry, .. }
+            | Self::UserDefined { _registry, .. }
+            | Self::Imported { _registry, .. } => _registry.as_ref(),
+        }
+    }
     fn metadata(&self) -> &StatementSignature {
         match self {
             Self::Native { metadata, .. }
@@ -75,11 +85,17 @@ impl StmtType {
     }
 }
 
+#[derive(Clone)]
+struct StoredNamespace {
+    span: Span,
+    _registry: Option<Arc<RegistryReservation>>,
+}
+
 #[derive(Clone, Default)]
 struct Frame {
     variables: HashMap<RetainedName, Arc<StoredValue>>,
-    statements: HashMap<String, StmtType>,
-    namespaces: HashMap<String, Span>,
+    statements: HashMap<Arc<str>, StmtType>,
+    namespaces: HashMap<Arc<str>, StoredNamespace>,
     dependency_depth: usize,
     // Definitions are not first-class values, so lexical owners remain on the stack.
     parent: Option<usize>,
@@ -261,6 +277,47 @@ impl Context {
             Some((key, _)) => Ok(key.clone()),
             None => self.retain_name(name),
         }
+    }
+
+    fn reserve_registry(
+        &self,
+        plan: RegistryPlan<'_>,
+    ) -> DiagnosticResult<Option<Arc<RegistryReservation>>> {
+        self.budget
+            .as_ref()
+            .map(|budget| budget.reserve_registry(plan))
+            .transpose()
+    }
+
+    /// Native templates are host-owned; each Engine run admits them locally.
+    pub(crate) fn admit_native_registry(&mut self) -> DiagnosticResult<()> {
+        let mut admitted = Vec::new();
+        let mut entries: Vec<_> = self.frames[0].statements.iter().collect();
+        entries.sort_unstable_by_key(|(left, _)| *left);
+        for (name, statement) in entries {
+            if let StmtType::Native {
+                metadata,
+                _registry: Some(_),
+                ..
+            } = statement
+            {
+                let reservation = self
+                    .reserve_registry(RegistryPlan::signature(metadata).with_key(Arc::clone(name)))
+                    .map_err(|error| error.at(metadata.header()))?;
+                admitted.push((Arc::clone(name), reservation));
+            }
+        }
+        self.checkpoint()?;
+        for (name, reservation) in admitted {
+            if let StmtType::Native { _registry, .. } = self.frames[0]
+                .statements
+                .get_mut(name.as_ref())
+                .expect("native template")
+            {
+                *_registry = reservation;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
@@ -497,7 +554,7 @@ impl Context {
                 }
                 visible.entry(key).or_insert_with(|| statement.metadata());
             }
-            hidden.extend(frame.namespaces.keys().map(String::as_str));
+            hidden.extend(frame.namespaces.keys().map(AsRef::as_ref));
             index = frame.parent;
         }
         visible.into_values().collect()
@@ -523,10 +580,36 @@ impl Context {
     /// Complete an initial sentence prefix before its first parameter.
     /// Results use the same normalized ordering and shadowing as registry lookup.
     pub fn complete_statements(&self, prefix: &str) -> Vec<&StatementSignature> {
-        let prefix = ast::normalize_sentence(prefix.split('|').next().unwrap_or_default());
+        // Normalize without copying an unbounded host prefix. A normalized
+        // prefix longer than every registered key cannot match any statement.
+        let maximum = self
+            .frames
+            .iter()
+            .flat_map(|frame| frame.statements.keys())
+            .map(|key| key.len())
+            .max()
+            .unwrap_or(0);
+        let mut normalized = String::new();
+        for character in prefix
+            .split('|')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .filter(|character| !matches!(character, ' ' | '\t'))
+            .flat_map(char::to_lowercase)
+        {
+            if normalized
+                .len()
+                .checked_add(character.len_utf8())
+                .is_none_or(|length| length > maximum)
+            {
+                return vec![];
+            }
+            normalized.push(character);
+        }
         self.statement_signatures()
             .into_iter()
-            .filter(|signature| signature.normalized().starts_with(&prefix))
+            .filter(|signature| signature.normalized().starts_with(&normalized))
             .collect()
     }
 
@@ -545,6 +628,10 @@ impl Context {
         signature: StatementSignature,
         callback: Callback,
     ) -> DiagnosticResult<()> {
+        self.check_statement_collision(signature.normalized(), signature.header())?;
+        let registry = self
+            .reserve_registry(RegistryPlan::signature(&signature))
+            .map_err(|error| error.at(signature.header()))?;
         let metadata = Arc::new(signature);
         self.insert_statement(
             metadata.normalized(),
@@ -552,6 +639,7 @@ impl Context {
             StmtType::Native {
                 callback,
                 metadata: Arc::clone(&metadata),
+                _registry: registry,
             },
         )
     }
@@ -563,16 +651,22 @@ impl Context {
         statement: StmtType,
     ) -> DiagnosticResult<()> {
         self.check_statement_collision(signature, span)?;
-        self.frames[self.current]
-            .statements
-            .insert(signature.into(), statement);
+        let key = statement.registry().map_or_else(
+            || Arc::from(signature),
+            |reservation| Arc::clone(&reservation.key),
+        );
+        self.frames[self.current].statements.insert(key, statement);
         Ok(())
     }
 
     fn check_statement_collision(&self, signature: &str, span: &Span) -> DiagnosticResult<()> {
         if let Some((namespace, _)) = signature.split_once("::") {
             if let Some(original) = self.frames[self.current].namespaces.get(namespace) {
-                return Err(imports::namespace_collision(namespace, original, span));
+                return Err(imports::namespace_collision(
+                    namespace,
+                    &original.span,
+                    span,
+                ));
             }
         }
         let statements = &self.frames[self.current].statements;
@@ -614,8 +708,19 @@ impl Context {
                     "The destination rejected output; some bytes may already be written.",
                 )
                 .expect("valid built-in error documentation");
-            self.insert_native(signature, Arc::new(|values, _| log_param(values)))
-                .expect("the built-in Log signature is valid and vacant");
+            // The single fixed builtin is outside user registry admission. This
+            // keeps infallible initialization usable with zero registry budgets.
+            let metadata = Arc::new(signature);
+            self.insert_statement(
+                metadata.normalized(),
+                metadata.header(),
+                StmtType::Native {
+                    callback: Arc::new(|values, _| log_param(values)),
+                    metadata: Arc::clone(&metadata),
+                    _registry: None,
+                },
+            )
+            .expect("the built-in Log signature is valid and vacant");
         }
     }
 
@@ -696,7 +801,9 @@ fn invoke_resolved(
             import_site,
             ..
         } => imports::invoke_imported(call, &module, &exported, arguments, &import_site, context),
-        StmtType::Native { callback, metadata } => context.with_call(
+        StmtType::Native {
+            callback, metadata, ..
+        } => context.with_call(
             CallFrame {
                 signature: call.signature.clone(),
                 call_site: call.span.clone(),
@@ -1158,6 +1265,31 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
         .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))
 }
 
+// Declaration admission runs only for definitions; its scratch state must not
+// increase every active import/control frame's stack requirements.
+#[inline(never)]
+fn evaluate_definition(definition: &Arc<Definition>, context: &mut Context) -> CompletionResult {
+    context.check_statement_collision(&definition.signature, &definition.span)?;
+    let reservation = context
+        .budget
+        .as_ref()
+        .map(|budget| budget.reserve_definition(definition))
+        .transpose()
+        .map_err(|error| context.retain_limit(error))?;
+    let registry = context.reserve_registry(RegistryPlan::definition(definition))?;
+    context.insert_statement(
+        &definition.signature,
+        &definition.span,
+        StmtType::UserDefined {
+            definition: Arc::clone(definition),
+            metadata: Arc::new(definition.signature_metadata()),
+            _reservation: reservation,
+            _registry: registry,
+        },
+    )?;
+    Ok(Completion::Normal(Literal::None))
+}
+
 fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> CompletionResult {
     context.tick()?;
     match &statement.kind {
@@ -1177,25 +1309,7 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
                 .insert(name, stored);
             Ok(Completion::Normal(value))
         }
-        StatementKind::Define(definition) => {
-            context.check_statement_collision(&definition.signature, &definition.span)?;
-            let reservation = context
-                .budget
-                .as_ref()
-                .map(|budget| budget.reserve_definition(definition))
-                .transpose()
-                .map_err(|error| context.retain_limit(error))?;
-            context.insert_statement(
-                &definition.signature,
-                &definition.span,
-                StmtType::UserDefined {
-                    definition: Arc::clone(definition),
-                    metadata: Arc::new(definition.signature_metadata()),
-                    _reservation: reservation,
-                },
-            )?;
-            Ok(Completion::Normal(Literal::None))
-        }
+        StatementKind::Define(definition) => evaluate_definition(definition, context),
         StatementKind::Invoke(call) => invoke(call, context).map(Completion::Normal),
         StatementKind::Import {
             path,
