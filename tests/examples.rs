@@ -142,6 +142,14 @@ fn signed_integer_example_handles_boundaries_and_catchable_failures() {
 }
 
 #[test]
+fn multiline_layout_example_preserves_delimiters_and_statement_boundaries() {
+    assert_example(
+        "14-multiline-layout.botwork",
+        &["[2, 3]", "é🙂 | # { }", "5", "recovered"],
+    );
+}
+
+#[test]
 fn comparison_example_preserves_precision_and_checks_structural_values() {
     assert_example(
         "13-value-comparisons.botwork",

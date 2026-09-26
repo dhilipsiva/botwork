@@ -1,4 +1,5 @@
 WHITESPACE = _{ (" " | "\t")+ }
+line_end   = _{ "\r\n" | "\n" }
 botwork    = _{ SOI ~ statements* ~ EOI }
 ident_continue = _{ LETTER | NUMBER | "_" }
 reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
@@ -9,7 +10,7 @@ reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
 control_keyword = @{
     (^"if" | ^"in" | ^"else" | ^"for" | ^"break" | ^"return"
         | ^"continue" | ^"while" | ^"try" | ^"catch")
-    ~ &(" " | "\t" | "\r" | "\n" | "|" | "{" | "}" | "#" | EOI)
+    ~ &(" " | "\t" | "\r" | "\n" | "|" | "{" | "}" | "#" | "\\" | EOI)
 }
 IF       = _{ &^"if" ~ &control_keyword ~ ^"if" }
 IN       = _{ &^"in" ~ &control_keyword ~ ^"in" }
@@ -26,42 +27,42 @@ reserved_parts = _{ IF | ELSE | FOR | BREAK | RETURN | CONTINUE | WHILE | TRY | 
 
 COMMENT       = _{ comment_block | comment_line }
 comment_block = @{ "###" ~ (!"###" ~ ANY)* ~ "###" }
-comment_line  = @{ "#" ~ (!NEWLINE ~ ANY)* }
+comment_line  = @{ !"###" ~ "#" ~ (!("\r" | "\n") ~ ANY)* }
 
-part          =  { (!("|" | "{" | "}" | "\r" | "\n" | "#") ~ ANY)+ }
-statements    = _{ stmt_break | stmt_continue | stmt_return | stmt_if | stmt_for | stmt_while | stmt_try | stmt_define | stmt_assign | stmt_invoke | NEWLINE }
-stmt_assign   =  { param_define ~ "=" ~ (stmt_invoke | param_invoke) }
-stmt_if       =  { IF ~ param_invoke ~ stmt_block ~ stmt_else? }
-stmt_else     =  { ELSE ~ ( stmt_block | stmt_if) }
-stmt_for      =  { FOR ~ param_define ~ IN ~ param_invoke ~ stmt_block }
-stmt_while    =  { WHILE ~ param_invoke ~ stmt_block }
-stmt_try      =  { TRY ~ stmt_block ~ stmt_catch }
-stmt_catch    =  { CATCH ~ stmt_block }
-stmt_define   =  { stmt_header ~ stmt_block }
-stmt_header   =  { !reserved_parts ~ part ~ (param_define | part)*}
-stmt_invoke   =  { !reserved_parts ~ part ~ (param_invoke | part)* }
+continuation  = @{ "\\" ~ (" " | "\t")* ~ line_end }
+part          = @{ (!("|" | "{" | "}" | "\r" | "\n" | "#" | "\\") ~ ANY)+ }
+statements    = _{ stmt_break | stmt_continue | stmt_return | stmt_if | stmt_for | stmt_while | stmt_try | stmt_define | stmt_assign | stmt_invoke | line_end }
+stmt_assign   =  { param_define ~ line_end* ~ "=" ~ line_end* ~ (stmt_invoke | param_invoke) }
+stmt_if       =  { IF ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block ~ (line_end* ~ stmt_else)? }
+stmt_else     =  { ELSE ~ line_end* ~ (stmt_block | stmt_if) }
+stmt_for      =  { FOR ~ line_end* ~ param_define ~ line_end* ~ IN ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block }
+stmt_while    =  { WHILE ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block }
+stmt_try      =  { TRY ~ line_end* ~ stmt_block ~ line_end* ~ stmt_catch }
+stmt_catch    =  { CATCH ~ line_end* ~ stmt_block }
+stmt_define   =  { stmt_header ~ line_end* ~ stmt_block }
+stmt_header   =  { !reserved_parts ~ part ~ (continuation? ~ (param_define | part))* }
+stmt_invoke   =  { !reserved_parts ~ part ~ (continuation? ~ (param_invoke | part))* }
 stmt_block    =  { "{" ~ statements* ~ "}" }
 stmt_break    =  { BREAK }
 stmt_continue =  { CONTINUE }
-stmt_return   =  { RETURN ~ param_invoke? }
+stmt_return   =  { RETURN ~ (continuation? ~ param_invoke)? }
 param_invoke  =  { "|" ~ expression ~ "|" }
 param_define  = _{ "|" ~ ident ~ "|" }
 
-expression        =  { infix | expression_inner }
-infix             = _{ expression_inner ~ (binary_operator ~ expression_inner)+ }
+expression        =  { line_end* ~ expression_inner ~ (line_end* ~ binary_operator ~ line_end* ~ expression_inner)* ~ line_end* }
 expression_inner  = _{ unary | power }
 braced_expression =  { "(" ~ expression ~ ")" }
-unary             =  { unary_operator ~ expression_inner }
-power             =  { primary ~ (exponent ~ expression_inner)? }
-primary           =  { (literal | ident | braced_expression) ~ (named_access | computed_access)* }
-named_access      =  { "." ~ (ident | integer) }
+unary             =  { unary_operator ~ line_end* ~ expression_inner }
+power             =  { primary ~ (line_end* ~ exponent ~ line_end* ~ expression_inner)? }
+primary           =  { (literal | ident | braced_expression) ~ (line_end* ~ (named_access | computed_access))* }
+named_access      =  { "." ~ line_end* ~ (ident | integer) }
 computed_access   =  { "[" ~ expression ~ "]" }
 literal           = _{ map | array | string | float | integer | boolean }
-array             =  { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
+array             =  { "[" ~ line_end* ~ (expression ~ ("," ~ expression)* ~ ","?)? ~ line_end* ~ "]" }
 ident             = @{ !reserved ~ LETTER ~ ident_continue* }
 
-map       =  { "{" ~ (map_pair ~ ("," ~ map_pair)*)? ~ "}" }
-map_pair  =  { (keyword | string) ~ seperator ~ expression }
+map       =  { "{" ~ line_end* ~ (map_pair ~ ("," ~ line_end* ~ map_pair)* ~ ","?)? ~ line_end* ~ "}" }
+map_pair  =  { (keyword | string) ~ line_end* ~ seperator ~ expression }
 keyword   = @{ ident }
 seperator = _{ ":" }
 

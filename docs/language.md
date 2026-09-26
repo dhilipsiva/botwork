@@ -30,6 +30,29 @@ Map literals evaluate all values in source order, including duplicate entries. I
 
 Maps have no insertion-order contract. Direct `For` iteration over a map is a type error; use an explicit ordered key array, such as `For |key| In |["z", "a"]| { Log |map[key]| }`, when order matters. Rust `Literal::Map` iteration inherits `HashMap`'s unspecified order. Map equality ignores order, while displayed map keys are sorted lexicographically.
 
+## Whitespace, Lines, and Comments
+
+ASCII spaces and tabs separate syntax tokens; indentation has no semantic meaning. LF and CRLF are supported line endings. Bare CR outside strings/comments is invalid. Other Unicode whitespace is not syntax whitespace; Unicode text inside strings or sentence names is preserved under the naming rules. Empty files, blank lines, and comment-only files are valid.
+
+Expressions inside `|...|` may span lines, including around binary/unary operators, parentheses, map colons, and dot/bracket access. Arrays and maps allow line breaks, comments, and an optional trailing comma. Commas remain mandatory between entries. A complete operator token cannot be split: `<` followed by a newline and `=` is invalid.
+
+Assignment tokens, required control-header tokens, and opening braces may be on separate lines. `Else` and `Catch` may follow their preceding closing brace on the same line or after blank/comment lines; they attach to that preceding construct. An orphaned handler/branch remains a syntax error. One-line blocks with self-delimiting statements, such as `{ |x| = |7| Return |x| }`, remain valid. Write each statement on its own line for readability.
+
+Outside open expressions, a newline ends a custom sentence. `First Second` is one call name; `First` and `Second` on separate lines are two calls. Continue a call or definition header explicitly with `\`, followed only by optional spaces/tabs and LF/CRLF, then the next sentence part or parameter:
+
+```botwork
+Pair |first| with \
+    |second| { Return |[first, second]| }
+|answer| = Pair |1| with \
+    |2|
+```
+
+Continuation markers do not enter the statement signature. A trailing marker without another part, a comment after the marker, or an intervening blank/comment-only line is invalid. Backslash outside strings is reserved for this continuation syntax. Bare `Return` ends at its line boundary; open its parameter pipe before breaking the line, or use explicit `Return \` followed by `|value|`. It never silently consumes the next line's assignment.
+
+`#` starts a line comment, including `##`; `###` exclusively opens a block comment ending at the next `###`. Block comments do not nest and must close, including at EOF. Comments separate tokens but cannot split identifiers, keywords, or multi-character operators. Newlines inside block comments belong to that whitespace token and do not end a sentence. Comment markers and delimiters inside quoted strings remain literal contents.
+
+Outside strings, `|` delimits parameters/expressions, braces delimit blocks or maps by context, brackets delimit arrays/access, and parentheses group expressions. `#` and `\` have the comment/continuation meanings above. There is no semicolon statement separator; punctuation otherwise belongs to sentence text or the expression grammar. String escapes are limited to the [three documented forms](#strings). Literal strings preserve their exact line endings and Unicode text. See [the multiline example](../examples/14-multiline-layout.botwork).
+
 ## Keywords and Names
 
 Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation: a Unicode letter, Unicode number, or underscore. This also prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
@@ -38,7 +61,7 @@ Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `
 
 `In` follows the same keyword rules within `For |item| In |items| { ... }`, but remains available in custom names such as `In order`. Comments may separate complete tokens. Parentheses can delimit boolean operators: `(true)and(false)` is valid. See [the keyword example](../examples/06-keywords.botwork).
 
-Identifier characters, multilingual normalization, statement-name collisions, and full whitespace/line-termination rules remain separate specification work. This change preserves the existing identifier alphabet and fixes prefix matching.
+Identifier characters, multilingual normalization, and statement-name collisions remain separate specification work. The existing identifier alphabet and complete-keyword matching are preserved; layout follows the whitespace rules above.
 
 ## Binary Operator Precedence
 
@@ -197,7 +220,7 @@ Invalid placement produces `ControlFlowError` with the offending source file and
 
 ## Try/Catch
 
-`Try` requires exactly one `Catch` block. Use the existing `} Catch {` layout: `Catch` starts on the same line as the try block's closing brace. Both blocks may be empty; keywords are case-insensitive, and complete `Try/Catch` statements may nest.
+`Try` requires exactly one `Catch` block. `Catch` can start on the same line as the try block's closing brace or after blank/comment lines. Both blocks may be empty; keywords are case-insensitive, and complete `Try/Catch` statements may nest.
 
 ```botwork
 Try {

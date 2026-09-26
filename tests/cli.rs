@@ -86,6 +86,30 @@ fn signed_integer_overflow_fails_after_printing_the_valid_minimum() {
 }
 
 #[test]
+fn unclosed_block_comments_and_continuations_prevent_all_output() {
+    for name in [
+        "unclosed-block-comment.botwork",
+        "invalid-continuation.botwork",
+    ] {
+        let path = fixture(name);
+        for debug in [false, true] {
+            let mut arguments = vec!["--file", path.to_str().unwrap()];
+            if debug {
+                arguments.push("--debug");
+            }
+            let output = run(&arguments);
+            assert_eq!(output.status.code(), Some(1), "{name}");
+            assert!(output.stdout.is_empty(), "{name}");
+            let diagnostic = String::from_utf8(output.stderr).unwrap();
+            assert!(diagnostic.contains(name));
+            assert!(diagnostic.contains("Parsing error:"));
+            assert!(!diagnostic.contains("panicked"));
+            assert!(!diagnostic.contains("debug:"));
+        }
+    }
+}
+
+#[test]
 fn collection_ordering_fails_after_valid_equality_output() {
     let path = fixture("invalid-collection-ordering.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);
@@ -310,7 +334,8 @@ fn syntax_error_reports_source_location_on_stderr() {
     assert!(output.stdout.is_empty());
     let diagnostic = String::from_utf8(output.stderr).unwrap();
     assert!(diagnostic.contains("syntax-error.botwork"));
-    assert!(diagnostic.contains("1:14"));
+    // Newlines are valid in expressions; the missing closing pipe fails at EOF.
+    assert!(diagnostic.contains("2:1"));
     assert!(diagnostic.contains("expected"));
 }
 

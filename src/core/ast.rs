@@ -463,7 +463,9 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
             kind: StatementKind::Invoke(call(pair, source)?),
         });
     }
-    let mut inner = pair.into_inner();
+    let mut inner = pair
+        .into_inner()
+        .filter(|part| part.as_rule() != Rule::continuation);
     let kind = match rule {
         Rule::stmt_assign => {
             let name = lower_name(required(&mut inner)?, source);
@@ -568,6 +570,7 @@ fn signature(pair: &Pair<Rule>) -> Result<String, BWErr> {
         match part.as_rule() {
             Rule::part => signature.push_str(&part.as_str().replace(' ', "").to_lowercase()),
             Rule::ident | Rule::param_invoke => signature.push_str("|param|"),
+            Rule::continuation => (),
             _ => return Err(invalid("statement signature")),
         }
     }

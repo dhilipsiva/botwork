@@ -1,0 +1,44 @@
+### A block comment may contain newlines, pipes |, and braces {}.
+Its first closing fence ends the comment. ###
+Pair |first| with \
+    |second|
+{
+    Return |
+        [first, second,]
+    |
+}
+
+|data| = |
+    {
+        "item list": [
+            {name: "é🙂 | # { }", value: 2},
+            {name: "second", value: 3},
+        ],
+    }
+|
+|pair| = Pair |
+    data["item list"][0].value
+| with \
+    |data["item list"][1].value|
+Log |pair|
+Log |data["item list"][0].name|
+
+If |false|
+{
+    Log |"must not execute"|
+}
+Else
+{
+    Log |
+        pair[0]
+        + pair[1]
+    |
+}
+Try
+{
+    Log |missing|
+}
+Catch
+{
+    Log |"recovered"|
+}

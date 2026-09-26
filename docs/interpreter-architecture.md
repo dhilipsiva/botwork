@@ -6,6 +6,8 @@
 
 The tree represents assignments, calls, definitions, branches, loops, error handlers, and control statements explicitly. Expressions retain their operator, operands, and grouping. The Pratt parser builds this structure; it no longer evaluates values. Map entries stay in source order until evaluation.
 
+The grammar keeps horizontal whitespace separate from explicit LF/CRLF rules. Delimited expressions and fixed syntax can span lines; custom sentences require explicit continuation outside expressions. Atomic sentence parts and comments preserve token boundaries. Continuation pairs remain in source spans but are excluded from signatures and Return operands. Triple-hash comments cannot fall back to single-line comments if their closing fence is missing.
+
 Strings and quoted map keys are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. `ExprKind::Access` stores a base expression and ordered `AccessSegment` values: literal names or computed expressions with bracket spans. Comments and whitespace do not become part of dot names. Array-index conversion remains deferred until lookup. Postfix access binds before power and unary operators; grouped bases preserve their parentheses in source spans.
 
 Unary syntax retains its operator and operand spans. At runtime, a minus directly wrapping an integer atom converts the signed text together so the minimum `i32` literal is representable. Negation of compound expressions still evaluates the operand first and uses checked arithmetic; power grouping remains unchanged.
