@@ -1,6 +1,6 @@
 use botwork::core::{
     ast::Program,
-    diagnostic::{Diagnostic, DiagnosticCode},
+    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticValueLimits},
     eval::{evaluate_program_detailed, Context},
     grammar::{BWErr, Literal},
 };
@@ -144,7 +144,14 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "document {code}"
         );
         let diagnostic = Diagnostic::new(error);
-        let Literal::Map(metadata) = diagnostic.to_value() else {
+        let limits = DiagnosticValueLimits::default();
+        let checked = diagnostic.to_value_with_limits(&limits).unwrap();
+        assert_eq!(
+            diagnostic.value_size_with_limits(&limits).unwrap(),
+            limits.values.check(&checked).unwrap()
+        );
+        assert_eq!(checked.to_string(), diagnostic.to_value().to_string());
+        let Literal::Map(metadata) = checked else {
             panic!("metadata map")
         };
         assert_eq!(metadata["code"].to_string(), code);

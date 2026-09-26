@@ -86,3 +86,7 @@ A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `l
 Metadata copies have no mutable connection to the active error. Rethrow uses that error's shared identity, retains its original span/stack/causes, and adds a related rethrow location. The same error is not appended as its own cause. Fresh errors, even at identical source locations, remain distinct. The Rust diagnostic error field now uses `Arc<BWErr>` so cloning a diagnostic preserves identity; legacy `BWErr` APIs retain their return types and categories.
 
 For BW6003, `details` contains string fields `namespace`, `original`, and `duplicate`. BW6001/BW6002 use `reason`. An importer can catch an imported module's parse/validation error during runtime loading; the module itself executes no statements before successful validation. Related import sites and original module locations remain available through inspection/rethrow.
+
+## Bounded Metadata Conversion
+
+Catch bindings use [diagnostic conversion limits](diagnostic-value-limits.md) before copying metadata and reserve complete temporary storage before construction. Rejection returns BW8001 with the original error as a cause, skips the handler, and preserves its previous binding. Checked host conversion uses `Diagnostic::to_value_with_limits`; `value_size_with_limits` reports exact metadata size without copying its payload. Legacy `to_value` remains a full host-managed conversion. Original diagnostic construction/retention and text rendering have separate pending limits; this contract does not bound those allocations.

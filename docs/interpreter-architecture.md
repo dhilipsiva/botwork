@@ -476,3 +476,28 @@ let run = Engine::default().run_source("temporary", "|x| = |\"ab\" + \"cd\"|", R
 assert_eq!(run.outcome(), RunOutcome::Succeeded);
 assert_eq!(run.variables["x"].to_string(), "abcd");
 ```
+
+## Checked Diagnostic Metadata
+
+Measure or convert a borrowed diagnostic with explicit limits. Checked conversion preserves the original when it rejects; the host can retain its category and choose how to report it. Engine Catch bindings additionally intersect ordinary value limits and reserve live temporary storage before constructing metadata.
+
+```rust
+use botwork::core::{
+    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticValueLimits},
+    grammar::{BWErr, Literal},
+    value_limits::ValueLimits,
+};
+let original = Diagnostic::new(BWErr::NativeError("offline".into()));
+let limits = DiagnosticValueLimits::default();
+let size = original.value_size_with_limits(&limits)?;
+let value = original.to_value_with_limits(&limits)?;
+assert_eq!(limits.values.check(&value)?, size);
+assert!(matches!(value, Literal::Map(_)));
+let tight = DiagnosticValueLimits {
+    values: ValueLimits { nodes: size.nodes - 1, ..ValueLimits::default() },
+    ..limits
+};
+assert_eq!(original.to_value_with_limits(&tight).unwrap_err().code(), DiagnosticCode::ResourceLimit);
+assert_eq!(original.code(), DiagnosticCode::Native);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

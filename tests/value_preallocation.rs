@@ -58,6 +58,89 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn diagnostic_message_and_help_are_rejected_before_owned_string_formatting() {
+    use botwork::core::{
+        diagnostic::{Diagnostic, DiagnosticValueLimits},
+        grammar::BWErr,
+    };
+    let length = 64 * 1024;
+    for diagnostic in [
+        Diagnostic::new(BWErr::NativeError("x".repeat(length))),
+        Diagnostic::new(BWErr::VariableNotDefined("x".repeat(length))),
+    ] {
+        let limits = DiagnosticValueLimits {
+            values: ValueLimits {
+                string_bytes: 128,
+                ..ValueLimits::default()
+            },
+            ..DiagnosticValueLimits::default()
+        };
+        let (result, large) = observe(length, || diagnostic.to_value_with_limits(&limits));
+        assert!(result.is_err());
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
+fn wide_diagnostic_metadata_rejects_before_allocating_array_or_traversal_storage() {
+    use botwork::core::{
+        diagnostic::{Diagnostic, DiagnosticValueLimits},
+        grammar::BWErr,
+    };
+    let mut diagnostic = Diagnostic::new(BWErr::NativeError("reason".into()));
+    diagnostic.causes = (0..4096)
+        .map(|_| Diagnostic::new(BWErr::NativeError("reason".into())))
+        .collect();
+    let limits = DiagnosticValueLimits {
+        values: ValueLimits {
+            entries: 8,
+            ..ValueLimits::default()
+        },
+        ..DiagnosticValueLimits::default()
+    };
+    let (result, large) = observe(4096, || diagnostic.to_value_with_limits(&limits));
+    assert!(result.is_err());
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn catch_temporary_admission_precedes_diagnostic_payload_copies() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        grammar::BWErr,
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    let reason = Mutex::new(Some("x".repeat(length)));
+    let mut context = Context::with_limits(RunLimits {
+        temporaries: TemporaryLimits {
+            payload_bytes: 0,
+            ..TemporaryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .register_native("Fail", move |_| {
+            Err(BWErr::NativeError(reason.lock().unwrap().take().unwrap()))
+        })
+        .unwrap();
+    let program = Program::parse("catch", "Try { Fail } Catch |error| {}").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    let error = result.unwrap_err();
+    assert!(matches!(
+        error.error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "temporary value payload bytes",
+            ..
+        }
+    ));
+    assert_eq!(error.causes.len(), 1);
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn temporary_variable_copy_is_admitted_before_payload_allocation() {
     use botwork::core::{
         ast::Program,

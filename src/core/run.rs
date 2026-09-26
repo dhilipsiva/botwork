@@ -16,7 +16,7 @@ use std::{
 use super::{
     ast::Program,
     ast_limits::AstLimits,
-    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticResult},
+    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticResult, DiagnosticValueLimits},
     eval::{evaluate_program_detailed, Context},
     grammar::{BWErr, Literal, LiteralResult},
     operation::OperationControl,
@@ -74,6 +74,7 @@ pub struct RunLimits {
     pub snapshots: SnapshotLimits,
     pub results: ResultLimits,
     pub temporaries: TemporaryLimits,
+    pub diagnostic_values: DiagnosticValueLimits,
 }
 
 impl Default for RunLimits {
@@ -95,6 +96,7 @@ impl Default for RunLimits {
             snapshots: SnapshotLimits::default(),
             results: ResultLimits::default(),
             temporaries: TemporaryLimits::default(),
+            diagnostic_values: DiagnosticValueLimits::default(),
         }
     }
 }
@@ -103,6 +105,7 @@ impl RunLimits {
     pub(crate) fn validate(&self) -> DiagnosticResult<()> {
         self.ast.validate()?;
         self.values.validate()?;
+        self.diagnostic_values.values.validate()?;
         if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
                 "Module dependency depth cannot exceed {MAX_MODULE_CHAIN_DEPTH}"

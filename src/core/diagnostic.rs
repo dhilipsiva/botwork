@@ -7,6 +7,9 @@ use super::{
     grammar::{BWErr, Literal},
 };
 
+mod value;
+pub use value::DiagnosticValueLimits;
+
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
 /// Stable machine-readable categories. Existing string identifiers are never reused.
@@ -110,33 +113,41 @@ impl BWErr {
     }
 
     pub fn help(&self) -> String {
-        match self {
-            Self::VariableNotDefined(name) => format!("Define `{name}` before reading it in this lexical scope; check spelling and case."),
-            Self::ParsingError(_) => "Check the indicated token and close every pipe, bracket, brace, quote, and block comment.".into(),
-            Self::ControlFlowError(_) => "Return needs a custom body; Break/Continue need a loop and Rethrow needs a Catch in the same invocation.".into(),
-            Self::DuplicateParameter { .. } => "Give each parameter a distinct, case-sensitive name.".into(),
-            Self::SignatureError(_) => "Use declared parameter names and document each error code once with a nonempty description.".into(),
-            Self::StatementNotDefined(_) => "Define the statement before calling it; check sentence punctuation and parameter positions/count.".into(),
-            Self::DuplicateStatement { .. } => "Rename this declaration or remove the duplicate in this scope; the original remains registered.".into(),
-            Self::ParameterMissingError(_) => "Supply one argument for each parameter in the registered signature.".into(),
-            Self::ParsingIntegerError(_) => "Use an i32 integer (-2147483648..2147483647) or a finite f32 decimal; numbers use ASCII digits.".into(),
-            Self::ArithmeticError(_) => "Check zero divisors, intermediate i32 overflow, and whether floating-point operands/results are finite.".into(),
-            Self::OperationIncompatibleError(_) => "Use the documented operand kinds; conditions require booleans and For requires an array.".into(),
-            Self::CollectionAccessError { .. } => "Check each key/index and container kind; maps use exact string keys and arrays use in-bounds nonnegative indexes.".into(),
-            Self::OutputError(_) => "Check the output destination and account for bytes already written before retrying.".into(),
-            Self::NativeError(_) => "Check the registered operation's requirements and reason; account for completed effects before retrying.".into(),
-            Self::NativePanic(_) => "Fix the native callback; return an error for expected failures and inspect captured host state before reuse.".into(),
-            Self::Cancelled(_) => "Inspect completed effects and use a fresh operation control for an intentional retry.".into(),
-            Self::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.".into(),
-            Self::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.".into(),
-            Self::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.".into(),
-            Self::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/AST/value/evaluation/import limits within documented ceilings.".into(),
-            Self::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.".into(),
-            Self::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.".into(),
-            Self::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.".into(),
-            Self::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.".into(),
-            Self::DuplicateNamespace { .. } => "Choose a distinct namespace or remove conflicting declarations in this scope; the original remains registered.".into(),
-        }
+        Help(self).to_string()
+    }
+}
+
+struct Help<'a>(&'a BWErr);
+impl fmt::Display for Help<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let guidance = match self.0 {
+            BWErr::VariableNotDefined(name) => return write!(formatter, "Define `{name}` before reading it in this lexical scope; check spelling and case."),
+            BWErr::ParsingError(_) => "Check the indicated token and close every pipe, bracket, brace, quote, and block comment.",
+            BWErr::ControlFlowError(_) => "Return needs a custom body; Break/Continue need a loop and Rethrow needs a Catch in the same invocation.",
+            BWErr::DuplicateParameter { .. } => "Give each parameter a distinct, case-sensitive name.",
+            BWErr::SignatureError(_) => "Use declared parameter names and document each error code once with a nonempty description.",
+            BWErr::StatementNotDefined(_) => "Define the statement before calling it; check sentence punctuation and parameter positions/count.",
+            BWErr::DuplicateStatement { .. } => "Rename this declaration or remove the duplicate in this scope; the original remains registered.",
+            BWErr::ParameterMissingError(_) => "Supply one argument for each parameter in the registered signature.",
+            BWErr::ParsingIntegerError(_) => "Use an i32 integer (-2147483648..2147483647) or a finite f32 decimal; numbers use ASCII digits.",
+            BWErr::ArithmeticError(_) => "Check zero divisors, intermediate i32 overflow, and whether floating-point operands/results are finite.",
+            BWErr::OperationIncompatibleError(_) => "Use the documented operand kinds; conditions require booleans and For requires an array.",
+            BWErr::CollectionAccessError { .. } => "Check each key/index and container kind; maps use exact string keys and arrays use in-bounds nonnegative indexes.",
+            BWErr::OutputError(_) => "Check the output destination and account for bytes already written before retrying.",
+            BWErr::NativeError(_) => "Check the registered operation's requirements and reason; account for completed effects before retrying.",
+            BWErr::NativePanic(_) => "Fix the native callback; return an error for expected failures and inspect captured host state before reuse.",
+            BWErr::Cancelled(_) => "Inspect completed effects and use a fresh operation control for an intentional retry.",
+            BWErr::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.",
+            BWErr::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.",
+            BWErr::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.",
+            BWErr::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/AST/value/evaluation/import limits within documented ceilings.",
+            BWErr::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.",
+            BWErr::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.",
+            BWErr::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.",
+            BWErr::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.",
+            BWErr::DuplicateNamespace { .. } => "Choose a distinct namespace or remove conflicting declarations in this scope; the original remains registered.",
+        };
+        formatter.write_str(guidance)
     }
 }
 
@@ -231,145 +242,28 @@ impl Diagnostic {
         Arc::try_unwrap(self.error).unwrap_or_else(|error| (*error).clone())
     }
 
-    /// Owned DSL metadata. Coordinates are decimal strings to avoid i32 truncation.
+    /// Full owned metadata for host-managed use, without resource admission.
+    /// Prefer `to_value_with_limits` for bounded conversion. Coordinates are decimal strings.
     pub fn to_value(&self) -> Literal {
-        let details = match self.error.as_ref() {
-            BWErr::VariableNotDefined(name) => value_map([("name", text(name))]),
-            BWErr::StatementNotDefined(call) => value_map([("call", text(call))]),
-            BWErr::DuplicateStatement {
-                signature,
-                original,
-                duplicate,
-            } => value_map([
-                ("signature", text(signature)),
-                ("original", text(original)),
-                ("duplicate", text(duplicate)),
-            ]),
-            BWErr::DuplicateParameter {
-                name,
-                original,
-                duplicate,
-            } => value_map([
-                ("name", text(name)),
-                ("original", text(original)),
-                ("duplicate", text(duplicate)),
-            ]),
-            BWErr::CollectionAccessError {
-                path,
-                segment,
-                reason,
-            } => value_map([
-                ("path", text(path)),
-                ("segment", text(segment)),
-                ("reason", text(reason)),
-            ]),
-            BWErr::DuplicateNamespace {
-                namespace,
-                original,
-                duplicate,
-            } => value_map([
-                ("namespace", text(namespace)),
-                ("original", text(original)),
-                ("duplicate", text(duplicate)),
-            ]),
-            BWErr::ParameterMissingError(reason)
-            | BWErr::ParsingError(reason)
-            | BWErr::SignatureError(reason)
-            | BWErr::ParsingIntegerError(reason)
-            | BWErr::OperationIncompatibleError(reason)
-            | BWErr::ControlFlowError(reason)
-            | BWErr::ArithmeticError(reason)
-            | BWErr::OutputError(reason)
-            | BWErr::NativeError(reason)
-            | BWErr::Cancelled(reason)
-            | BWErr::Timeout(reason)
-            | BWErr::AsyncRuntime(reason)
-            | BWErr::ImportRead(reason)
-            | BWErr::ImportCycle(reason)
-            | BWErr::NativePanic(reason)
-            | BWErr::InputError(reason)
-            | BWErr::RunConfiguration(reason)
-            | BWErr::SourceRead(reason) => value_map([("reason", text(reason))]),
-            BWErr::ResourceLimit { resource, limit } => value_map([
-                ("resource", text(resource)),
-                ("limit", text(&limit.to_string())),
-            ]),
-        };
-        value_map([
-            ("code", text(self.code().as_str())),
-            ("message", text(&self.error.to_string())),
-            ("help", text(&self.help())),
-            ("details", details),
-            ("source", span_value(self.span.as_ref())),
-            (
-                "call_stack",
-                Literal::Array(
-                    self.call_stack
-                        .iter()
-                        .map(|frame| {
-                            value_map([
-                                ("signature", text(&frame.signature)),
-                                ("call_site", span_value(Some(&frame.call_site))),
-                                (
-                                    "definition_site",
-                                    span_value(frame.definition_site.as_ref()),
-                                ),
-                            ])
-                        })
-                        .collect(),
-                ),
-            ),
-            (
-                "related",
-                Literal::Array(
-                    self.related
-                        .iter()
-                        .map(|location| {
-                            value_map([
-                                ("message", text(&location.message)),
-                                ("source", span_value(Some(&location.span))),
-                            ])
-                        })
-                        .collect(),
-                ),
-            ),
-            (
-                "causes",
-                Literal::Array(self.causes.iter().map(Self::to_value).collect()),
-            ),
-        ])
+        value::build(self)
     }
-}
 
-fn text(value: &str) -> Literal {
-    Literal::String(value.to_owned())
-}
+    /// Measure metadata before copying text or constructing owned collections.
+    pub fn value_size_with_limits(
+        &self,
+        limits: &DiagnosticValueLimits,
+    ) -> DiagnosticResult<super::value_limits::ValueSize> {
+        value::measure(self, limits).map_err(Diagnostic::new)
+    }
 
-fn value_map(entries: impl IntoIterator<Item = (&'static str, Literal)>) -> Literal {
-    Literal::Map(
-        entries
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
-}
-
-fn span_value(span: Option<&Span>) -> Literal {
-    let Some(span) = span else {
-        return Literal::None;
-    };
-    let (line, column) = span.line_column();
-    let (end_line, end_column) = span.end_line_column();
-    value_map([
-        ("file", text(span.source().name())),
-        ("text", text(span.text())),
-        ("start_byte", text(&span.start().to_string())),
-        ("end_byte", text(&span.end().to_string())),
-        ("line", text(&line.to_string())),
-        ("column", text(&column.to_string())),
-        ("end_line", text(&end_line.to_string())),
-        ("end_column", text(&end_column.to_string())),
-    ])
+    /// Convert only after all value and source-position work limits pass.
+    pub fn to_value_with_limits(
+        &self,
+        limits: &DiagnosticValueLimits,
+    ) -> DiagnosticResult<Literal> {
+        self.value_size_with_limits(limits)?;
+        Ok(self.to_value())
+    }
 }
 
 impl From<BWErr> for Diagnostic {

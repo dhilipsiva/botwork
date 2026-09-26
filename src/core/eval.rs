@@ -1290,10 +1290,21 @@ fn evaluate_handler(
 ) -> CompletionResult {
     let owner = context.current;
     let previous = if let Some(name) = binding {
-        let value = Owned::new(original.to_value());
-        let value = context
-            .temporary(value.into_inner())
+        context
+            .checkpoint()
             .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
+        let limits = context.limits();
+        let limits = limits.diagnostic_values.intersect(&limits.values);
+        let size = original.value_size_with_limits(&limits).map_err(|error| {
+            context
+                .retain_limit(error)
+                .at(&name.span)
+                .while_handling(original.clone())
+        })?;
+        let reservation = context
+            .temporary_reservation(size)
+            .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
+        let value = TemporaryValue::new(original.to_value(), reservation);
         let (value, _reservation) = value.into_parts();
         context
             .set_variable(&name.text, value)

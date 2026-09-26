@@ -414,6 +414,34 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::DiagnosticValueBoundary | Input::DiagnosticValueLimit => {
+                use botwork::core::{
+                    diagnostic::{Diagnostic, DiagnosticValueLimits},
+                    value_limits::ValueLimits,
+                };
+                let original = Diagnostic::new(BWErr::NativeError("reason".into()));
+                let result = original.to_value_with_limits(&DiagnosticValueLimits {
+                    values: ValueLimits {
+                        nodes: if case.error.is_some() { 9 } else { 10 },
+                        depth: 3,
+                        ..ValueLimits::default()
+                    },
+                    position_bytes: 0,
+                });
+                if let Some(expected) = case.error {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                } else {
+                    let Literal::Map(map) = result.unwrap() else {
+                        panic!("map")
+                    };
+                    assert_eq!(map["code"].to_string(), "BW4002");
+                    assert_eq!(map.len(), 8);
+                }
+                assert_eq!(original.code().as_str(), "BW4002");
+                continue;
+            }
             Input::TemporaryBoundary | Input::TemporaryLimit => {
                 use botwork::core::run::{
                     Engine, RunLimits, RunOptions, RunOutcome, TemporaryLimits,

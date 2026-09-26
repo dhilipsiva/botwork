@@ -39,6 +39,8 @@ pub enum Input {
     ResultLimit,
     TemporaryBoundary,
     TemporaryLimit,
+    DiagnosticValueBoundary,
+    DiagnosticValueLimit,
 }
 
 #[derive(Clone)]
@@ -219,5 +221,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::TemporaryBoundary, stdout: "", code: None, error: None },
         Case { id: "temporary-limit", positive: &[], invalid: &["R15"], boundary: &[],
             input: Input::TemporaryLimit, stdout: "", code: Some("BW8001"), error: Some("temporary value payload bytes") },
+        Case { id: "diagnostic-value-boundary", positive: &["R16"], invalid: &[], boundary: &["R16"],
+            input: Input::DiagnosticValueBoundary, stdout: "", code: None, error: None },
+        Case { id: "diagnostic-value-limit", positive: &[], invalid: &["R16"], boundary: &[],
+            input: Input::DiagnosticValueLimit, stdout: "", code: Some("BW8001"), error: Some("value nodes") },
     ]
 }
