@@ -179,6 +179,13 @@ impl Measurement<'_> {
             });
         }
         self.text(diagnostic.label)?;
+        if let Some(source) = diagnostic
+            .omissions
+            .as_ref()
+            .and_then(|omissions| omissions.source.as_ref())
+        {
+            self.text(&source.file)?;
+        }
         for text in error_text(&diagnostic.error) {
             self.text(text)?;
         }
@@ -238,6 +245,7 @@ fn shallow_clone(value: &Diagnostic) -> Diagnostic {
         call_stack: value.call_stack.clone(),
         related: value.related.clone(),
         causes: Vec::with_capacity(value.causes.len()),
+        omissions: value.omissions.clone(),
     }
 }
 
@@ -268,6 +276,10 @@ pub(super) fn discard_causes(causes: Vec<Diagnostic>) {
     while let Some(children) = pending.last_mut() {
         if let Some(mut child) = children.next() {
             let causes = std::mem::take(&mut child.causes);
+            // A finished parent needs no pending slot while descending its last child.
+            if children.len() == 0 {
+                pending.pop();
+            }
             if !causes.is_empty() {
                 pending.push(causes.into_iter());
             }

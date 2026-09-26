@@ -7,6 +7,10 @@ use super::{
     grammar::{BWErr, Literal},
 };
 
+mod rejection;
+pub use rejection::{
+    DiagnosticOmissions, OmittedSource, SUMMARY_DETAIL_BYTES, SUMMARY_SOURCE_NAME_BYTES,
+};
 mod ownership;
 pub(crate) use ownership::OwnedDiagnostic;
 pub use ownership::{DiagnosticLimits, DiagnosticSize, MAX_DIAGNOSTIC_DEPTH};
@@ -180,6 +184,8 @@ pub struct Diagnostic {
     pub related: Vec<RelatedLocation>,
     /// Errors being handled when this error occurred, with their original spans/stacks.
     pub causes: Vec<Diagnostic>,
+    /// Explicit loss of metadata in an emergency bounded summary. None for full diagnostics.
+    pub omissions: Option<Box<DiagnosticOmissions>>,
 }
 
 impl Diagnostic {
@@ -199,6 +205,7 @@ impl Diagnostic {
             call_stack: vec![],
             related: vec![],
             causes: vec![],
+            omissions: None,
         }
     }
 
@@ -321,6 +328,16 @@ impl fmt::Display for Diagnostic {
             )?;
             if let Some(definition) = &frame.definition_site {
                 write!(formatter, " (defined at {})", definition.location())?;
+            }
+        }
+        if let Some(omissions) = &self.omissions {
+            write!(formatter, "\n  diagnostic metadata omitted: {} shortened detail fields, {} call frames, {} related locations, {} direct causes; label omitted: {}; prior summary omitted: {}", omissions.detail_fields, omissions.call_frames, omissions.related_locations, omissions.direct_causes, omissions.label, omissions.prior_summary)?;
+            if let Some(source) = &omissions.source {
+                write!(
+                    formatter,
+                    "; source {} bytes {}..{} (filename shortened: {})",
+                    source.file, source.start_byte, source.end_byte, source.file_truncated
+                )?;
             }
         }
         write!(formatter, "\n  help: {}", self.help())?;

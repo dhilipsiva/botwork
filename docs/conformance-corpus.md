@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 79 cases against the 47 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 81 cases against the 47 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -54,7 +54,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R14 | result-boundary | result-limit | result-boundary |
 | R15 | temporary-boundary | temporary-limit | temporary-boundary |
 | R16 | diagnostic-value-boundary | diagnostic-value-limit | diagnostic-value-boundary |
-| R17 | diagnostic-ownership-boundary | diagnostic-ownership-limit | diagnostic-ownership-boundary |
+| R17 | diagnostic-ownership-boundary, diagnostic-admission-boundary | diagnostic-ownership-limit, diagnostic-admission-limit | diagnostic-ownership-boundary, diagnostic-admission-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -99,3 +99,5 @@ Two temporary host cases admit exact concatenation operand/output headroom or re
 Two diagnostic conversion host cases admit exactly ten metadata nodes or reject a nine-node budget while preserving the borrowed original category.
 
 Two diagnostic ownership host cases admit exact label/error text bytes or reject checked copying while preserving the original error identity and category.
+
+Two owned diagnostic admission cases preserve an accepted original or return a bounded original-category summary with explicit omissions after rejecting its text quota.

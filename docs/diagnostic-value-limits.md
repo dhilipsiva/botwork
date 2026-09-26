@@ -4,7 +4,7 @@
 
 ## Admission and Accounting
 
-Traverse borrowed diagnostic fields iteratively before allocating owned metadata strings, maps, or arrays. Count every metadata Literal node, every UTF-8 string and map key, and the complete formatted message/help. Formatting measurement writes into a checked byte counter. Arrays are traversed one item at a time; pending scratch grows with admitted depth, independently of array width. Small schema maps contain at most eight borrowed fields.
+Traverse borrowed diagnostic fields iteratively before allocating owned metadata strings, maps, or arrays. Count every metadata Literal node, every UTF-8 string and map key, and the complete formatted message/help. Formatting measurement writes into a checked byte counter. Arrays are traversed one item at a time; pending scratch grows with admitted depth, independently of array width. Small schema maps contain at most nine borrowed fields, including optional explicit omission metadata on bounded rejection summaries.
 
 The source-position budget charges `6 * (start_byte + end_byte)` for every source-map occurrence, with checked cumulative arithmetic. This conservatively covers scanning each source prefix up to three times in both measurement and construction. Charge before scanning; repeated call, definition, related, and cause locations count separately even when their SourceFile is shared. Absent sources and empty input-origin spans cost zero scan bytes. Measurement alone reserves the same two-pass allowance. Coordinates retain the existing one-based Unicode scalar columns and exclusive endpoints as decimal strings.
 

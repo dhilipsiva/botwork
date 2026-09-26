@@ -94,3 +94,7 @@ Catch bindings use [diagnostic conversion limits](diagnostic-value-limits.md) be
 ## Host Ownership Helpers
 
 [Diagnostic ownership](diagnostic-ownership.md) provides borrowed size admission and `try_clone_with_limits` before copying mutable metadata. Full Clone is iterative and shares immutable error/source identity. Use `discard` or `into_error` to release unadmitted deep cause trees without recursive destruction. Runtime-owned blocking-worker errors use an iterative cleanup guard when abandoned; limits on runtime error construction and retained context remain pending.
+
+## Explicit Omission Metadata
+
+Owned [diagnostic admission](diagnostic-ownership.md#owned-admission-and-emergency-evidence) can return a fixed emergency summary after rejecting and freeing an oversized tree. The quota failure remains primary; its bounded cause preserves the original category and includes `omissions` with shortened detail counts, omitted context counts, prior-summary/custom-label flags, and optional filename/byte-offset evidence. Full diagnostics retain the original eight-key schema; only summaries add this ninth key. Rendering marks every summary explicitly. Runtime retention integration and general output limits remain pending.

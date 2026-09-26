@@ -414,6 +414,28 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::DiagnosticAdmissionBoundary | Input::DiagnosticAdmissionLimit => {
+                use botwork::core::diagnostic::{Diagnostic, DiagnosticLimits};
+                let original = Diagnostic::new(BWErr::NativeError("reason".into()));
+                let result = DiagnosticLimits {
+                    text_bytes: if case.error.is_some() { 11 } else { 12 },
+                    source_bytes: 0,
+                    ..DiagnosticLimits::default()
+                }
+                .admit(original);
+                if let Some(expected) = case.error {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW4002");
+                    assert!(error.causes[0].omissions.is_some());
+                } else {
+                    let original = result.unwrap();
+                    assert_eq!(original.code().as_str(), "BW4002");
+                    assert!(original.omissions.is_none());
+                }
+                continue;
+            }
             Input::DiagnosticOwnershipBoundary | Input::DiagnosticOwnershipLimit => {
                 use botwork::core::diagnostic::{Diagnostic, DiagnosticLimits};
                 let original = Diagnostic::new(BWErr::NativeError("reason".into()));

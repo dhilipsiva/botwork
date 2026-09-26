@@ -58,6 +58,29 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn owned_diagnostic_rejection_does_not_copy_large_details_or_filenames() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{Diagnostic, DiagnosticLimits},
+        grammar::BWErr,
+    };
+    let length = 64 * 1024;
+    let program = Program::parse(&"f".repeat(length), "|x| = |1|").unwrap();
+    let error =
+        Diagnostic::new(BWErr::NativeError("x".repeat(length))).at(&program.statements[0].span);
+    let (result, large) = observe(length, || {
+        DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        }
+        .admit(error)
+    });
+    let rejected = result.unwrap_err();
+    assert!(rejected.causes[0].omissions.is_some());
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn checked_diagnostic_clone_rejects_large_context_and_width_before_copying() {
     use botwork::core::{
         ast::Program,

@@ -1,6 +1,6 @@
 //! Borrowed metadata traversal, admission, and iterative owned construction.
 
-use super::{CallFrame, Diagnostic, Help, RelatedLocation};
+use super::{CallFrame, Diagnostic, DiagnosticOmissions, Help, OmittedSource, RelatedLocation};
 use crate::core::{
     ast::Span,
     grammar::{BWErr, Literal},
@@ -70,6 +70,9 @@ enum Node<'a> {
     Related(&'a RelatedLocation),
     Array(Items<'a>),
     Text(Text<'a>),
+    Bool(bool),
+    Omissions(&'a DiagnosticOmissions),
+    OmittedSource(&'a OmittedSource),
 }
 
 #[derive(Clone, Copy)]
@@ -100,7 +103,8 @@ impl<'a> Items<'a> {
 enum Shape<'a> {
     None,
     Text(Text<'a>),
-    // Schema maps have at most eight entries, regardless of input width.
+    Bool(bool),
+    // Schema maps have at most nine entries, regardless of input width.
     Map(Vec<(&'static str, Node<'a>)>),
     Array(Items<'a>),
 }
@@ -116,6 +120,28 @@ impl<'a> Node<'a> {
     fn shape(self) -> Shape<'a> {
         match self {
             Self::Text(value) => Shape::Text(value),
+            Self::Bool(value) => Shape::Bool(value),
+            Self::Omissions(value) => Shape::Map(vec![
+                ("detail_fields", offset(value.detail_fields)),
+                ("call_frames", offset(value.call_frames)),
+                ("related_locations", offset(value.related_locations)),
+                ("direct_causes", offset(value.direct_causes)),
+                ("label", Self::Bool(value.label)),
+                ("prior_summary", Self::Bool(value.prior_summary)),
+                (
+                    "source",
+                    value
+                        .source
+                        .as_ref()
+                        .map_or(Self::Source(None), Self::OmittedSource),
+                ),
+            ]),
+            Self::OmittedSource(value) => Shape::Map(vec![
+                ("file", text(&value.file)),
+                ("file_truncated", Self::Bool(value.file_truncated)),
+                ("start_byte", offset(value.start_byte)),
+                ("end_byte", offset(value.end_byte)),
+            ]),
             Self::Array(values) => Shape::Array(values),
             Self::Source(None) => Shape::None,
             Self::Source(Some(span)) => {
@@ -132,16 +158,22 @@ impl<'a> Node<'a> {
                     ("end_column", offset(end_column)),
                 ])
             }
-            Self::Diagnostic(value) => Shape::Map(vec![
-                ("code", text(value.code().as_str())),
-                ("message", Self::Text(Text::Error(&value.error))),
-                ("help", Self::Text(Text::Help(&value.error))),
-                ("details", Self::Details(&value.error)),
-                ("source", Self::Source(value.span.as_ref())),
-                ("call_stack", Self::Array(Items::Calls(&value.call_stack))),
-                ("related", Self::Array(Items::Related(&value.related))),
-                ("causes", Self::Array(Items::Causes(&value.causes))),
-            ]),
+            Self::Diagnostic(value) => {
+                let mut fields = vec![
+                    ("code", text(value.code().as_str())),
+                    ("message", Self::Text(Text::Error(&value.error))),
+                    ("help", Self::Text(Text::Help(&value.error))),
+                    ("details", Self::Details(&value.error)),
+                    ("source", Self::Source(value.span.as_ref())),
+                    ("call_stack", Self::Array(Items::Calls(&value.call_stack))),
+                    ("related", Self::Array(Items::Related(&value.related))),
+                    ("causes", Self::Array(Items::Causes(&value.causes))),
+                ];
+                if let Some(omissions) = &value.omissions {
+                    fields.push(("omissions", Self::Omissions(omissions)));
+                }
+                Shape::Map(fields)
+            }
             Self::Call(value) => Shape::Map(vec![
                 ("signature", text(&value.signature)),
                 ("call_site", Self::Source(Some(&value.call_site))),
@@ -301,6 +333,7 @@ pub(super) fn measure(
                 }
                 match node.shape() {
                     Shape::None => (),
+                    Shape::Bool(_) => values.add_bytes(&mut size, 1)?,
                     Shape::Text(value) => {
                         let mut counter = Counter {
                             bytes: 0,
@@ -337,6 +370,7 @@ pub(super) fn build(diagnostic: &Diagnostic) -> Literal {
         match work {
             Work::Visit(node) => match node.shape() {
                 Shape::None => ready.push(Literal::None),
+                Shape::Bool(value) => ready.push(Literal::Bool(value)),
                 Shape::Text(value) => ready.push(Literal::String(value.to_string())),
                 Shape::Map(items) => {
                     pending.push(Work::Map(items.iter().map(|(key, _)| *key).collect()));

@@ -1,0 +1,3 @@
+# Diagnostic is a public 128-byte value on 64-bit hosts, including its optional
+# omission pointer. Keep its existing field types and by-value API; flag growth.
+large-error-threshold = 129

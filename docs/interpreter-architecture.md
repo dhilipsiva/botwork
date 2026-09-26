@@ -520,3 +520,20 @@ original.discard();
 assert_eq!(copy.into_error().code().as_str(), "BW4002");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Owned Diagnostic Rejection
+
+Owned admission retains a complete diagnostic only when it fits. Rejection frees the original tree and returns bounded emergency evidence, including its category and explicit omission metadata. The emergency representation has its own fixed caps and remains available with zero input quotas.
+
+```rust
+use botwork::core::{diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLimits}, grammar::BWErr};
+let original = Diagnostic::new(BWErr::NativeError("x".repeat(4096)));
+let limits = DiagnosticLimits { text_bytes: 32, ..DiagnosticLimits::default() };
+let failure = limits.admit(original).unwrap_err();
+assert_eq!(failure.code(), DiagnosticCode::ResourceLimit);
+let summary = &failure.causes[0];
+assert_eq!(summary.code(), DiagnosticCode::Native);
+assert_eq!(summary.omissions.as_ref().unwrap().detail_fields, 1);
+assert!(summary.span.is_none());
+assert!(summary.causes.is_empty());
+```

@@ -146,7 +146,7 @@ The library's program evaluator returns the final top-level statement's normal r
 
 ## Host Diagnostic Ownership
 
-**R17 — Diagnostic lifecycle helpers.** Measure borrowed diagnostic trees without copying, recursively calling, or formatting text. Bound diagnostic count/depth, call/related counts, raw text, and distinct source-owner bytes before checked cloning. Preserve error/source identities and independently copy mutable metadata. Provide iterative full Clone, explicit disposal, and category extraction for deep host trees; guard runtime-owned abandoned worker errors. [Ownership rules](diagnostic-ownership.md) define exact metrics, compatibility ownership, and pending runtime retention enforcement.
+**R17 — Diagnostic lifecycle helpers.** Measure borrowed diagnostic trees without copying, recursively calling, or formatting text. Bound diagnostic count/depth, call/related counts, raw text, and distinct source-owner bytes before checked cloning. Preserve error/source identities and independently copy mutable metadata. Provide iterative full Clone, explicit disposal, and category extraction for deep host trees; guard runtime-owned abandoned worker errors. Owned admission preserves accepted originals; on rejection, dispose the tree and return a fixed emergency original-category summary with explicit omissions and source-byte evidence. [Ownership rules](diagnostic-ownership.md) define exact metrics, compatibility ownership, and pending runtime retention enforcement.
 
 ## Evidence and Implementation Gaps
 
@@ -228,3 +228,5 @@ R15 evidence in `tests/temporary_limits.rs`, temporary reservation unit tests, a
 R16 evidence in diagnostic conversion unit/contract tests, the 25-code catalog, and allocation observations covers exact/zero/raised budgets, overflow, deep/wide causes, Unicode coordinates, native failures, temporary admission, original identity, handler restoration, and clone stop isolation. Two host corpus cases and a Rust example pin checked conversion and original preservation.
 
 R17 evidence in diagnostic ownership unit/contract tests, all-category checks, and allocation observations covers exact/zero/raised bounds, overflow, distinct/shared sources, metadata isolation, deep cloning/rejection/disposal, async and blocking delivery, abandoned worker cleanup, and cancellation causes. Two host corpus cases and a Rust example pin checked ownership and identity preservation.
+
+R17 owned-rejection evidence adds six unit tests, three public contract tests, all-category preservation, allocation checks, two host corpus cases, and a Rust example for UTF-8 summary caps, optional omission metadata, source-owner release, identity-preserving success, repeated summaries, zero/configuration failures, and deep cleanup.

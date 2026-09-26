@@ -144,6 +144,26 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "document {code}"
         );
         let diagnostic = Diagnostic::new(error);
+        let rejection = DiagnosticLimits {
+            diagnostics: 0,
+            ..DiagnosticLimits::default()
+        }
+        .admit(diagnostic.clone())
+        .unwrap_err();
+        assert_eq!(rejection.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(rejection.causes[0].code(), category);
+        assert_eq!(
+            rejection.causes[0].error.to_string(),
+            diagnostic.error.to_string()
+        );
+        assert_eq!(
+            rejection.causes[0]
+                .omissions
+                .as_ref()
+                .unwrap()
+                .detail_fields,
+            0
+        );
         let ownership = DiagnosticLimits::default();
         assert_eq!(ownership.check(&diagnostic).unwrap().diagnostics, 1);
         let copy = diagnostic.try_clone_with_limits(&ownership).unwrap();
