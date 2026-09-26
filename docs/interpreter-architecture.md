@@ -61,13 +61,14 @@ If, While, and Try/Catch bodies share their enclosing frame. For evaluates its i
 ## Execution API
 
 ```rust
-use botwork::core::{ast::Program, eval::{evaluate_program, Context}};
+use botwork::core::{ast::Program, eval::{evaluate_program, Context}, grammar::Literal};
 
 let program = Program::parse("example.botwork", "|answer| = |2 ^ 3 ^ 2|")
     .expect("valid program");
 let mut context = Context::default();
 context.init_statements(); // Register native Log.
 let result = evaluate_program(&program, &mut context).expect("successful execution");
+assert!(matches!(result, Literal::Int(512)));
 ```
 
 `evaluate_program` validates its entire statement list before executing any statement. This also checks programs assembled by Rust callers from extracted syntax nodes. `execute_statement` validates its subtree at script scope. Neither entry point invokes the parser; internal loops and invocations do not repeat validation. The CLI finishes parsing/validation before any statement trace or output. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.

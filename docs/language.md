@@ -40,11 +40,13 @@ Assignment tokens, required control-header tokens, and opening braces may be on 
 
 Outside open expressions, a newline ends a custom sentence. `First Second` is one call name; `First` and `Second` on separate lines are two calls. Continue a call or definition header explicitly with `\`, followed only by optional spaces/tabs and LF/CRLF, then the next sentence part or parameter:
 
+<!-- botwork-test: multiline-call -->
 ```botwork
 Pair |first| with \
     |second| { Return |[first, second]| }
 |answer| = Pair |1| with \
     |2|
+Log |answer|
 ```
 
 Continuation markers do not enter the statement signature. A trailing marker without another part, a comment after the marker, or an intervening blank/comment-only line is invalid. Backslash outside strings is reserved for this continuation syntax. Bare `Return` ends at its line boundary; open its parameter pipe before breaking the line, or use explicit `Return \` followed by `|value|`. It never silently consumes the next line's assignment.
@@ -81,6 +83,7 @@ Source files are UTF-8. Variable names, parameter labels, unquoted map keys, and
 
 Custom sentence names accept broader Unicode text and punctuation, subject to the reserved delimiters and line rules above. For example:
 
+<!-- botwork-test: multilingual-call -->
 ```botwork
 கூட்டு |முதல்| உடன் |இரண்டாம்| { Return |முதல் + இரண்டாம்| }
 |விடை| = கூட்டு |2| உடன் |3|
@@ -252,6 +255,7 @@ Invalid placement produces `ControlFlowError` with the offending source file and
 
 `Try` requires exactly one `Catch` block. `Catch` can start on the same line as the try block's closing brace or after blank/comment lines. Both blocks may be empty; keywords are case-insensitive, and complete `Try/Catch` statements may nest.
 
+<!-- botwork-test: catch-recovery -->
 ```botwork
 Try {
     |value| = |missing|

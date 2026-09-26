@@ -37,6 +37,7 @@ Or you can create a file from below sample and pass the path to cargo run
 
 Here is what a botwork script might looke like right now
 
+<!-- botwork-test: readme-sample -->
 ```botwork
 # Declaration
 What is square-root of |number| divided by |divisor| equals, eh?!... {
