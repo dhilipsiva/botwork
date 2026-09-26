@@ -61,6 +61,8 @@ pub enum Input {
     AccessDiagnosticLimit,
     OperatorDiagnosticBoundary,
     OperatorDiagnosticLimit,
+    HostInputDiagnosticBoundary,
+    HostInputDiagnosticLimit,
 }
 
 #[derive(Clone)]
@@ -285,5 +287,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::OperatorDiagnosticBoundary, stdout: "", code: None, error: None },
         Case { id: "operator-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::OperatorDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
+        Case { id: "input-diagnostic-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::HostInputDiagnosticBoundary, stdout: "", code: None, error: None },
+        Case { id: "input-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::HostInputDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
     ]
 }

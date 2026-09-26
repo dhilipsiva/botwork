@@ -417,12 +417,19 @@ impl Context {
             if let Some(budget) = &self.budget {
                 budget.check_name_length(name.len())?;
             }
-            super::input::validate_name("host variables", name)?;
+            super::input::validate_name_with("host variables", name, |message| {
+                self.formatted_error(BWErr::InputError, message, None, false)
+            })?;
             self.check_value(value)?;
             validate_value(value).map_err(|_| {
-                Diagnostic::new(BWErr::InputError(format!(
-                    "host variables: {name:?}: values must contain only finite floats"
-                )))
+                self.formatted_error(
+                    BWErr::InputError,
+                    format_args!(
+                        "host variables: {name:?}: values must contain only finite floats"
+                    ),
+                    None,
+                    false,
+                )
             })?;
         }
         self.checkpoint()?;

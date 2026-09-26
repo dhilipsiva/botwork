@@ -655,3 +655,22 @@ assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
 assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
 assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
 ```
+
+## Host Input Diagnostic Construction
+
+Input names are checked without parser allocations. Invalid-name and host non-finite-value messages use local diagnostic quotas before formatting owned details; the complete batch is validated before installing any binding.
+
+```rust
+use std::collections::BTreeMap;
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, eval::Context, grammar::Literal, run::RunLimits};
+let mut context = Context::with_limits(RunLimits {
+    diagnostics: DiagnosticLimits { text_bytes: 0, ..DiagnosticLimits::default() },
+    ..RunLimits::default()
+})?;
+let error = context.set_input_variables(BTreeMap::from([("invalid name".into(), Literal::None)])).unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::Input);
+assert!(error.causes[0].span.is_none());
+assert!(context.checkpoint().is_err());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

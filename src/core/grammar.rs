@@ -12,6 +12,19 @@ pub use super::parser::Rule;
 /// Public Pest-compatible parser with default source/syntax preflight bounds.
 pub struct BWParser;
 
+/// Exact identifier recognition shared with input admission. Keep parity tests
+/// against grammar.pest's ident/reserved rules when changing either definition.
+pub(crate) fn is_identifier(name: &str) -> bool {
+    if matches!(name, "true" | "false" | "and" | "or") {
+        return false;
+    }
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first == '_' || pest::unicode::XID_START(first))
+        && characters.all(pest::unicode::XID_CONTINUE)
+}
+
 impl pest::Parser<Rule> for BWParser {
     fn parse(
         rule: Rule,

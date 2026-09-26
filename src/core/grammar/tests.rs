@@ -2,6 +2,71 @@ use super::{BWErr, BWParser, Literal, Operate, Rule};
 use pest::Parser;
 
 #[test]
+fn identifier_recognition_matches_pest_for_reserved_names_ascii_and_unicode_boundaries() {
+    let check = |name: &str| {
+        let parsed = BWParser::parse(Rule::ident, name)
+            .ok()
+            .and_then(|mut pairs| pairs.next())
+            .is_some_and(|pair| pair.as_span().start() == 0 && pair.as_span().end() == name.len());
+        assert_eq!(super::is_identifier(name), parsed, "identifier {name:?}");
+    };
+    for name in [
+        "",
+        "_",
+        "true",
+        "false",
+        "and",
+        "or",
+        "True",
+        "FALSE",
+        "And",
+        "OR",
+        "Return",
+        "Import",
+        "true_value",
+        "false1",
+        "and_then",
+        "orElse",
+        "a.b",
+        "a b",
+        " a",
+        "a\n",
+        "é",
+        "e\u{301}",
+        "தமிழ்",
+        "变量",
+    ] {
+        check(name);
+    }
+    let characters = (0..=127)
+        .map(char::from)
+        .chain([
+            'é',
+            'λ',
+            '中',
+            'த',
+            '\u{301}',
+            '\u{b7}',
+            '\u{200c}',
+            '\u{200d}',
+            '\u{feff}',
+            '🦀',
+            '\u{10400}',
+            '\u{ff11}',
+        ])
+        .collect::<Vec<_>>();
+    for first in &characters {
+        check(&first.to_string());
+        for reserved in ["true", "false", "and", "or"] {
+            check(&format!("{reserved}{first}"));
+        }
+        for second in &characters {
+            check(&format!("{first}{second}"));
+        }
+    }
+}
+
+#[test]
 fn operator_error_formatting_occurs_only_after_value_checks_and_incompatibility() {
     use crate::core::{
         diagnostic::{Diagnostic, DiagnosticCode},

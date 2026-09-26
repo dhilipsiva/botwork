@@ -2,16 +2,17 @@
 
 use std::{collections::BTreeMap, fs, io::Read, path::PathBuf};
 
-use pest::Parser;
 use serde_json::value::RawValue;
 
 use super::{
-    diagnostic::{Diagnostic, DiagnosticResult},
-    grammar::{BWErr, BWParser, Literal, Rule},
+    diagnostic::{Diagnostic, DiagnosticLimits, DiagnosticResult},
+    grammar::{BWErr, Literal},
 };
 
 mod limits;
 mod raw;
+#[cfg(test)]
+mod tests;
 use super::value_limits::ValueSize;
 pub use limits::InputLimits;
 use limits::{resource, Budget};
@@ -24,18 +25,32 @@ fn invalid(origin: &str, path: &str, reason: impl std::fmt::Display) -> Diagnost
 }
 
 pub(crate) fn validate_name(origin: &str, name: &str) -> DiagnosticResult<()> {
-    let valid = BWParser::parse(Rule::ident, name)
-        .ok()
-        .and_then(|mut pairs| pairs.next())
-        .is_some_and(|pair| pair.as_span().start() == 0 && pair.as_span().end() == name.len());
-    if valid {
+    validate_name_with(origin, name, |message| {
+        DiagnosticLimits::default().formatted_detail(
+            BWErr::InputError,
+            message,
+            None,
+            false,
+            std::iter::empty(),
+        )
+    })
+}
+
+pub(crate) fn validate_name_with(
+    origin: &str,
+    name: &str,
+    error: impl FnOnce(std::fmt::Arguments<'_>) -> Diagnostic,
+) -> DiagnosticResult<()> {
+    // Preserve the former parser facade's fixed name ceiling without building
+    // a Pest error. Configured name quotas can reject earlier.
+    if name.len() <= super::syntax_limits::DEFAULT_SOURCE_BYTES
+        && super::grammar::is_identifier(name)
+    {
         Ok(())
     } else {
-        Err(invalid(
-            origin,
-            &format!("variable {name:?}"),
-            "expected an exact DSL identifier",
-        ))
+        Err(error(format_args!(
+            "{origin}: variable {name:?}: expected an exact DSL identifier"
+        )))
     }
 }
 

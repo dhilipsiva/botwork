@@ -553,6 +553,49 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::HostInputDiagnosticBoundary | Input::HostInputDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let message = "host variables: variable \"true\": expected an exact DSL identifier";
+                let run = Engine::default().run_source(
+                    case.id,
+                    "|effect| = |1|",
+                    RunOptions {
+                        variables: BTreeMap::from([
+                            ("a".into(), Literal::Int(1)),
+                            ("true".into(), Literal::None),
+                        ]),
+                        limits: RunLimits {
+                            diagnostics: DiagnosticLimits {
+                                text_bytes: "source".len() + message.len()
+                                    - usize::from(case.error.is_some()),
+                                ..DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                assert!(run.variables.is_empty());
+                assert_eq!(run.steps, 0);
+                let error = run.result.unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW7001");
+                    assert!(error.causes[0].omissions.is_some());
+                } else {
+                    assert_eq!(error.code().as_str(), "BW7001");
+                    let BWErr::InputError(detail) = error.error.as_ref() else {
+                        panic!("category")
+                    };
+                    assert_eq!(detail, message);
+                    assert!(error.span.is_none() && error.omissions.is_none());
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

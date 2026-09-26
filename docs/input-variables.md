@@ -17,6 +17,8 @@ Float underflow rounds to zero; negative floating zero retains its sign. Large i
 
 Top-level names must exactly match DSL identifiers, including Unicode XID characters and `_`. Names are case-sensitive; lowercase `true`, `false`, `and`, and `or` are reserved. Leading/trailing whitespace, dots, brackets, and assignment syntax are rejected. Flags split at the first `=`; strings still need JSON quotes.
 
+Name validation checks borrowed characters directly without allocating parser results/errors or normalizing Unicode. It retains the former parser facade's fixed 1 MiB name ceiling, even when configured name budgets are raised above it. Escaped invalid-name messages are measured before allocation: standalone helpers use default diagnostic limits; Context installation uses the run's limits. An oversized message returns BW8001 with bounded BW7001 evidence. See [construction rules](diagnostic-construction.md#input-identifier-and-host-value-failures).
+
 ## Precedence and Scope
 
 1. Read variable files in their flag order; later files replace earlier bindings.
@@ -34,6 +36,8 @@ Input failure cannot be caught by the script because execution has not begun. Re
 ## Rust Hosts
 
 `core::input::{parse_variables, parse_variable, load_variables}` return owned values with detailed errors. `Context::set_input_variables` validates all names and nested finite values before atomically replacing root bindings; omitted bindings remain. Context clones copy binding maps and share immutable storage, so later replacements are independent. See the executed [Rust input example](interpreter-architecture.md#input-variables).
+
+Host non-finite-value messages also pass local diagnostic construction admission. Ordinary input errors allow retry without changing bindings; diagnostic quota failures stop the requesting Context. Name/value limits retain their earlier priority, and prior cancellation wins before validation. Engine runs start with fresh budgets.
 
 ## Input Resource Budgets
 

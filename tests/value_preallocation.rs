@@ -58,6 +58,65 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn standalone_invalid_input_names_reject_large_origins_before_detail_allocation() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        input::{parse_variable, parse_variables},
+    };
+    let origin = "é".repeat(DiagnosticLimits::default().text_bytes / 2);
+    for from_json in [false, true] {
+        let (result, large) = observe(64 * 1024, || {
+            if from_json {
+                parse_variables(&origin, r#"{"!":null}"#).map(|_| ())
+            } else {
+                parse_variable(&origin, "!=null").map(|_| ())
+            }
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::Input);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
+fn invalid_host_names_and_nonfinite_value_messages_reject_without_large_parser_or_detail_copies() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::Context,
+    };
+    let length = 64 * 1024;
+    for invalid_name in [false, true] {
+        let name = if invalid_name {
+            format!("!{}", "x".repeat(length - 1))
+        } else {
+            "x".repeat(length)
+        };
+        let value = if invalid_name {
+            Literal::None
+        } else {
+            Literal::Float(f32::INFINITY)
+        };
+        let variables = BTreeMap::from([(name, value)]);
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 32,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let (result, large) = observe(length, || context.set_input_variables(variables));
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::Input);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
 fn incompatible_operator_messages_reject_large_debug_details_before_allocation() {
     use botwork::core::{
         ast::Program,
