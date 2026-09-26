@@ -83,6 +83,14 @@ fn power_example_checks_grouping_and_catchable_intermediate_overflow() {
 }
 
 #[test]
+fn keyword_example_preserves_identifier_and_statement_names() {
+    assert_example(
+        "06-keywords.botwork",
+        &["8", "punctuation name", r#"{"order": 7, "trueValue": 8}"#],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

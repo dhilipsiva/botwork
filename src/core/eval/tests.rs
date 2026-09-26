@@ -15,6 +15,75 @@ fn variable(context: &Context, name: &str) -> Literal {
 }
 
 #[test]
+fn keyword_prefix_identifiers_preserve_their_complete_names() {
+    for name in [
+        "order",
+        "android",
+        "trueValue",
+        "falsehood",
+        "trueandfalse",
+        "or2",
+        "and_",
+        "trueé",
+        "false漢",
+        "or٣",
+        "True",
+        "False",
+        "And",
+        "Or",
+    ] {
+        let source = format!("|{name}| = |7|\n|answer| = |{name} + 1|");
+        let result = evaluate(&source, &mut Context::default());
+        assert!(
+            matches!(result, Ok(Literal::Int(8))),
+            "{source}: {result:?}"
+        );
+    }
+    let result = evaluate(
+        "|answer| = |{order: 7, trueValue: 8, android: 9}|",
+        &mut Context::default(),
+    )
+    .unwrap();
+    let Literal::Map(values) = result else {
+        panic!("expected map")
+    };
+    assert!(matches!(values.get("order"), Some(Literal::Int(7))));
+    assert!(matches!(values.get("trueValue"), Some(Literal::Int(8))));
+    assert!(matches!(values.get("android"), Some(Literal::Int(9))));
+    assert!(
+        matches!(evaluate("|answer| = |order.trueValue|", &mut Context::default()), Err(BWErr::UnsupportedAccessError(path)) if path == "order.trueValue")
+    );
+}
+
+#[test]
+fn custom_statements_starting_with_keyword_text_execute_normally() {
+    for name in [
+        "Format report",
+        "Ifonly",
+        "Elsewhere",
+        "Breakdown",
+        "Return2",
+        "Continue_job",
+        "Whileé",
+        "If\u{301}",
+        "Try漢",
+        "Catch٣",
+        "Break!",
+        "Return-value",
+        "I f",
+        "In order",
+    ] {
+        let source = format!("{name} {{\n |answer| = |7|\n}}\n{name}");
+        let mut context = Context::default();
+        evaluate(&source, &mut context).unwrap();
+        assert!(
+            matches!(variable(&context, "answer"), Literal::Int(7)),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn assignments_use_existing_variables_and_arithmetic_precedence() {
     let mut context = Context::default();
     evaluate("|a| = |2|\n|answer| = |a + 3 * 4|", &mut context).unwrap();

@@ -1,0 +1,17 @@
+|order| = |7|
+|trueValue| = |order + 1|
+|falsehood| = |false|
+
+Format report |entry| {
+    Log |entry|
+}
+FORMAT REPORT |trueValue|
+
+Break! {
+    Log |"punctuation name"|
+}
+Break!
+
+iF |trueValue == 8 and !falsehood| {
+    Log |{order: order, trueValue: trueValue}|
+}

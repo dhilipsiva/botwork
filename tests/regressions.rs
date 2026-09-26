@@ -114,13 +114,11 @@ fn string_escapes_are_decoded() {
 }
 
 #[test]
-#[ignore = "known defect: reserved-word prefixes reject otherwise valid identifiers"]
 fn identifiers_can_begin_with_reserved_word_text() {
     assert_int("|order| = |7|\n|answer| = |order|", 7);
 }
 
 #[test]
-#[ignore = "known defect: control-keyword prefixes reject natural statement names"]
 fn statement_names_can_begin_with_control_keyword_text() {
     assert_int(
         "Format report {\n Return |7|\n |unused| = |0|\n}\n\

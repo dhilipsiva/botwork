@@ -1,0 +1,3 @@
+Log |"before"|
+Return-value
+Log |"after"|

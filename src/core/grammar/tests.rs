@@ -104,6 +104,129 @@ fn incomplete_power_and_unary_expressions_are_syntax_errors() {
 }
 
 #[test]
+fn expression_keywords_require_complete_identifier_tokens() {
+    for name in ["true", "false", "and", "or"] {
+        let source = format!("|{name}| = |7|");
+        assert!(BWParser::parse(Rule::botwork, &source).is_err(), "{source}");
+    }
+    for expression in [
+        "true andfalse",
+        "false ortrue",
+        "true and_false",
+        "false or2",
+        "true orδ",
+        "true a### gap ###nd false",
+    ] {
+        let source = format!("|answer| = |{expression}|");
+        assert!(BWParser::parse(Rule::botwork, &source).is_err(), "{source}");
+    }
+    for expression in [
+        "true and false",
+        "false or true",
+        "(true)and(false)",
+        "false or(true)",
+        "true### gap ###and false",
+    ] {
+        let source = format!("|answer| = |{expression}|");
+        assert!(BWParser::parse(Rule::botwork, &source).is_ok(), "{source}");
+    }
+}
+
+#[test]
+fn control_keyword_prefixes_are_single_custom_statements() {
+    for name in [
+        "Ifonly",
+        "Elsewhere",
+        "Format report",
+        "Breakdown",
+        "Return2",
+        "Continue_job",
+        "Whileé",
+        "If\u{301}",
+        "Try漢",
+        "Catch٣",
+        "Break!",
+        "Return-value",
+        "I f",
+        "F or report",
+    ] {
+        let call: Vec<_> = BWParser::parse(Rule::botwork, name).unwrap().collect();
+        assert_eq!(call.len(), 2, "{name}");
+        assert_eq!(call[0].as_rule(), Rule::stmt_invoke, "{name}");
+        assert_eq!(call[0].as_str(), name, "{name}");
+        let source = format!("{name} {{}}");
+        let definition: Vec<_> = BWParser::parse(Rule::botwork, &source).unwrap().collect();
+        assert_eq!(definition.len(), 2, "{source}");
+        assert_eq!(definition[0].as_rule(), Rule::stmt_define, "{source}");
+    }
+}
+
+#[test]
+fn complete_control_keywords_preserve_their_statement_layout() {
+    for (source, rule, children) in [
+        (
+            "iF|true|{}",
+            Rule::stmt_if,
+            vec![Rule::param_invoke, Rule::stmt_block],
+        ),
+        (
+            "fOr|i|iN|[]|{}",
+            Rule::stmt_for,
+            vec![Rule::ident, Rule::param_invoke, Rule::stmt_block],
+        ),
+        (
+            "wHiLe\t|false|{}",
+            Rule::stmt_while,
+            vec![Rule::param_invoke, Rule::stmt_block],
+        ),
+        ("bReAk", Rule::stmt_break, vec![]),
+        ("Break# comment\n", Rule::stmt_break, vec![]),
+        ("cOnTiNuE # comment\r\n", Rule::stmt_continue, vec![]),
+        ("rEtUrN|1|", Rule::stmt_return, vec![Rule::param_invoke]),
+        (
+            "iF|false|{}eLsE iF|true|{}",
+            Rule::stmt_if,
+            vec![Rule::param_invoke, Rule::stmt_block, Rule::stmt_else],
+        ),
+        (
+            "TrY### gap ###{}CaTcH{}",
+            Rule::stmt_try,
+            vec![Rule::stmt_block, Rule::stmt_catch],
+        ),
+    ] {
+        let mut program = BWParser::parse(Rule::botwork, source).unwrap();
+        let statement = program.next().unwrap();
+        assert_eq!(statement.as_rule(), rule, "{source}");
+        assert_eq!(
+            statement
+                .into_inner()
+                .map(|pair| pair.as_rule())
+                .collect::<Vec<_>>(),
+            children,
+            "{source}"
+        );
+        assert_eq!(program.next().unwrap().as_rule(), Rule::EOI, "{source}");
+        assert!(program.next().is_none(), "{source}");
+    }
+    for source in [
+        "For |i| Inside |[]| {}",
+        "For |i| in_ |[]| {}",
+        "For |i| in! |[]| {}",
+        "For |i| i n |[]| {}",
+        "Try {} Catchall {}",
+    ] {
+        assert!(BWParser::parse(Rule::botwork, source).is_err(), "{source}");
+    }
+    let mut program = BWParser::parse(Rule::botwork, "Example {Return}").unwrap();
+    let block = program.next().unwrap().into_inner().nth(1).unwrap();
+    assert_eq!(block.as_rule(), Rule::stmt_block);
+    assert_eq!(
+        block.into_inner().next().unwrap().as_rule(),
+        Rule::stmt_return
+    );
+}
+
+#[test]
 fn integer_operators_produce_expected_values() {
     for (operator, lhs, rhs, expected) in [
         (Rule::plus, 5, 3, 8),

@@ -1,18 +1,26 @@
 WHITESPACE = _{ (" " | "\t")+ }
 botwork    = _{ SOI ~ statements* ~ EOI }
-reserved   =  { "true" | "false" | "and" | "or" }
+ident_continue = _{ LETTER | NUMBER | "_" }
+reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
 
 // Special statements. Can cause changes to program behaviour.
-IF       = _{ ("i" | "I") ~ ("f" | "F") }
-IN       = _{ ("i" | "I") ~ ("n" | "N") }
-ELSE     = _{ ("e" | "E") ~ ("l" | "L") ~ ("s" | "S") ~ ("e" | "E") }
-FOR      = _{ ("f" | "F") ~ ("o" | "O") ~ ("r" | "R") }
-BREAK    = _{ ("b" | "B") ~ ("r" | "R") ~ ("e" | "E") ~ ("a" | "A") ~ ("k" | "K") }
-RETURN   = _{ ("r" | "R") ~ ("e" | "E") ~ ("t" | "T") ~ ("u" | "U") ~ ("r" | "R") ~ ("n" | "N") }
-CONTINUE = _{ ("c" | "C") ~ ("o" | "O") ~ ("n" | "N") ~ ("t" | "T") ~ ("i" | "I") ~ ("n" | "N") ~ ("u" | "U") ~ ("e" | "E") }
-WHILE    = _{ ("w" | "W") ~ ("h" | "H") ~ ("i" | "I") ~ ("l" | "L") ~ ("e" | "E") }
-TRY      = _{ ("t" | "T") ~ ("r" | "R") ~ ("y" | "Y") }
-CATCH    = _{ ("c" | "C") ~ ("a" | "A") ~ ("t" | "T") ~ ("c" | "C") ~ ("h" | "H") }
+// Atomic lookahead checks the adjacent delimiter without emitting keyword pairs.
+// The literal prechecks below retain contextual diagnostics for absent keywords.
+control_keyword = @{
+    (^"if" | ^"in" | ^"else" | ^"for" | ^"break" | ^"return"
+        | ^"continue" | ^"while" | ^"try" | ^"catch")
+    ~ &(" " | "\t" | "\r" | "\n" | "|" | "{" | "}" | "#" | EOI)
+}
+IF       = _{ &^"if" ~ &control_keyword ~ ^"if" }
+IN       = _{ &^"in" ~ &control_keyword ~ ^"in" }
+ELSE     = _{ &^"else" ~ &control_keyword ~ ^"else" }
+FOR      = _{ &^"for" ~ &control_keyword ~ ^"for" }
+BREAK    = _{ &^"break" ~ &control_keyword ~ ^"break" }
+RETURN   = _{ &^"return" ~ &control_keyword ~ ^"return" }
+CONTINUE = _{ &^"continue" ~ &control_keyword ~ ^"continue" }
+WHILE    = _{ &^"while" ~ &control_keyword ~ ^"while" }
+TRY      = _{ &^"try" ~ &control_keyword ~ ^"try" }
+CATCH    = _{ &^"catch" ~ &control_keyword ~ ^"catch" }
 
 reserved_parts = _{ IF | ELSE | FOR | BREAK | RETURN | CONTINUE | WHILE | TRY | CATCH }
 
@@ -49,7 +57,7 @@ primary           = _{ literal | dot_path | ident | braced_expression }
 dot_path          =  { ident ~ ("." ~ (ident | integer))+ }
 literal           = _{ map | array | string | float | integer | boolean }
 array             =  { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
-ident             = @{ !reserved ~ LETTER ~ (LETTER | NUMBER | "_")* }
+ident             = @{ !reserved ~ LETTER ~ ident_continue* }
 
 map       =  { "{" ~ (map_pair ~ ("," ~ map_pair)*)? ~ "}" }
 map_pair  =  { keyword ~ seperator ~ expression }
@@ -76,8 +84,8 @@ greater_than          = { ">" }
 greater_than_or_equal = { ">=" }
 not_equal             = { "!=" }
 equal                 = { "==" }
-logical_and           = { "and" }
-logical_or            = { "or" }
+logical_and           = @{ "and" ~ !ident_continue }
+logical_or            = @{ "or" ~ !ident_continue }
 logical_not           = { "!" }
 
 binary_operator = _{
@@ -98,5 +106,5 @@ binary_operator = _{
 unary_operator  = _{ minus | logical_not }
 
 boolean       = _{ boolean_true | boolean_false }
-boolean_true  =  { "true" }
-boolean_false =  { "false" }
+boolean_true  = @{ "true" ~ !ident_continue }
+boolean_false = @{ "false" ~ !ident_continue }

@@ -137,6 +137,18 @@ fn uncaught_arithmetic_errors_fail_without_panicking() {
 }
 
 #[test]
+fn unknown_keyword_prefix_is_reported_as_a_complete_statement_name() {
+    let path = fixture("keyword-prefix-error.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("keyword-prefix-error.botwork"));
+    assert!(diagnostic.contains("Statement not defined: Return-value"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn runtime_error_reports_file_and_variable_and_stops_execution() {
     let path = fixture("runtime-error.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);
