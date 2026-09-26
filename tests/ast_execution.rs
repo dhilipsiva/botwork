@@ -76,6 +76,18 @@ fn pair_compatibility_uses_original_offsets_and_retains_definitions() {
 }
 
 #[test]
+fn pair_compatibility_supports_the_full_signed_integer_range() {
+    let pair = BWParser::parse(Rule::expression, "-2147483648")
+        .unwrap()
+        .next()
+        .unwrap();
+    assert!(matches!(
+        botwork(pair, &mut Context::default()),
+        Ok(Literal::Int(i32::MIN))
+    ));
+}
+
+#[test]
 fn pair_compatibility_supports_expressions_and_rejects_non_executable_rules() {
     let expression = BWParser::parse(Rule::expression, "2 + 3 * 4")
         .unwrap()

@@ -8,6 +8,8 @@ The tree represents assignments, calls, definitions, branches, loops, error hand
 
 Strings are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. Dot access retains its source path and continues to report the temporary unsupported-access error.
 
+Unary syntax retains its operator and operand spans. At runtime, a minus directly wrapping an integer atom converts the signed text together so the minimum `i32` literal is representable. Negation of compound expressions still evaluates the operand first and uses checked arithmetic; power grouping remains unchanged.
+
 ## Source Ownership and Locations
 
 Each program shares one `Arc<SourceFile>` containing its name and original UTF-8 text. Statement, expression, block, definition, identifier, and operator spans retain this source. Byte ranges use an exclusive end; `text()` returns the original range, including any whitespace consumed by that grammar node. Parenthesized operands retain their delimiters.

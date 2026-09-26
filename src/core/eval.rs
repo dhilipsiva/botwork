@@ -8,7 +8,7 @@ use std::{
 use super::{
     ast::{
         self, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr, ExprKind, Node,
-        Program, Statement, StatementKind,
+        Program, Statement, StatementKind, UnaryOp,
     },
     grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
 };
@@ -198,9 +198,23 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
         }
         ExprKind::Unary {
             operator, operand, ..
-        } => operator
-            .to_rule()
-            .operate_unary(evaluate_expression(operand, context)?),
+        } => match (operator, &operand.kind) {
+            (UnaryOp::Negate, ExprKind::Integer(text)) => {
+                // Convert the signed atom together: MIN's positive magnitude is not i32.
+                // Compound operands still evaluate normally before checked negation.
+                #[cfg(test)]
+                context
+                    .expression_visits
+                    .push(operand.span.text().to_owned());
+                format!("-{text}")
+                    .parse::<i32>()
+                    .map(Literal::Int)
+                    .map_err(|error| BWErr::ParsingIntegerError(error.to_string()))
+            }
+            _ => operator
+                .to_rule()
+                .operate_unary(evaluate_expression(operand, context)?),
+        },
         ExprKind::Binary {
             operator,
             left,

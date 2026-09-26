@@ -18,6 +18,8 @@ The powers example checks right association, unary grouping, negative exponents,
 
 The scopes example checks argument binding, caller preservation, lexical lookup, native Log inside a call, recursion, loop-variable restoration after failure, and nested definition lifetime. Unit cases also inspect frame cleanup, cloned-context isolation, and iterator restoration before an invocation is discarded.
 
+The signed-integer example checks both range boundaries, leading zeroes, power grouping, and caught literal/negation errors. The CLI overflow fixture verifies that the valid minimum prints before a later overflow fails the process and skips subsequent output.
+
 ## Coverage Measurement
 
 Use Python 3.9 or newer and the active Rust toolchain's LLVM tools:
@@ -61,11 +63,11 @@ These are baseline measurements, not release-gate results: 13 known regressions 
 
 [The AST capture](coverage-after-ast.json) records the expanded source scope: `ast.rs`, `eval.rs`, and `grammar.rs`, plus `main.rs` in the full suite. Library unit coverage is **686/774 lines (88.63%)** from 82 tests; the full suite covers **723/799 lines (90.49%)** from 132 active tests, with 16 pending tests ignored. All recorded input hashes matched the measured worktree. Source scope and implementation changed, so these percentages are not a like-for-like comparison with the initial baseline. Branch and grammar-rule coverage, pending behavior, and final release gates remain unmeasured or unfinished.
 
-## Known Defects
+## Regression Status
 
-`tests/regressions.rs` captures intended behavior for the confirmed DSL defects. Each unfixed case is explicitly ignored with a reason so the ordinary suite reports pending work. Run `cargo test --test regressions -- --ignored` to reproduce those failures, or pass a test name to isolate one. Enable each case in the commit that fixes it; an ignored test is never evidence of a passing requirement.
+`tests/regressions.rs` captures the originally confirmed DSL defects. All current cases are active and pass; run `cargo test --test regressions` or pass a test name to isolate one. Preserve these minimal reproductions. If a future unfixed case is temporarily ignored, document its reason and enable it with its fix; an ignored test is never evidence of a passing requirement.
 
-All current `tests/language_contract.rs` expectations are active, including lexical lookup, invocation-local bindings and definitions, loop-variable restoration, return values, and control propagation. The remaining ignored regression concerns the minimum signed integer literal. Run both suites with `--release` as well. The specification and roadmap still require broader conformance coverage; passing these cases alone does not satisfy every release gate.
+All current `tests/language_contract.rs` expectations are active, including lexical lookup, invocation-local bindings and definitions, loop-variable restoration, return values, and control propagation. Run both suites with `--release` as well. The specification and roadmap still require broader conformance coverage; passing these cases alone does not satisfy every release gate.
 
 The active collection-access regression temporarily permits the typed `UnsupportedAccessError` until access is implemented; arbitrary errors do not satisfy it. Evaluator and CLI tests verify [catchable unsupported access](language.md#collection-access-status), preserved assignments, and failure status without a panic. A `Try` without `Catch` is rejected during parsing; the active regression, parser cases, and CLI fixture verify this [error-handling contract](language.md#trycatch). Whole-program control validation has AST, library, compatibility, and CLI checks; runtime guard tests deliberately bypass validation internally to exercise the defensive paths. Other regression expectations follow the accepted roadmap.
 

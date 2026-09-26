@@ -69,7 +69,15 @@ Powers require an integer exponent. A nonnegative exponent with an integer base 
 
 Float literal evaluation and supported numeric operations reject non-finite values/results. Operand-type errors take priority over checks on host-supplied non-finite values. Finite underflow to zero is allowed. Ordinary mixed arithmetic converts integer operands to `f32`; rounding can lose integer precision (`16777217 + 0.0` becomes `16777216`) or retain a finite maximum after a small addition. Floating powers instead convert their base exactly to `f64` for intermediate calculations. These checks do not redesign numeric precision, comparison, or host-value serialization contracts, which remain roadmap work.
 
-Arithmetic errors can be handled by `Try/Catch`. An uncaught error stops execution and returns CLI status `1`; direct failed numeric assignments preserve their previous value. See [the arithmetic example](../examples/04-arithmetic-errors.botwork). The current positive-integer literal conversion cannot represent the magnitude in `-2147483648` directly; use `(-2147483647 - 1)` pending the full literal/value contract.
+Arithmetic errors can be handled by `Try/Catch`. An uncaught error stops execution and returns CLI status `1`; direct failed numeric assignments preserve their previous value. See [the arithmetic example](../examples/04-arithmetic-errors.botwork).
+
+## Signed Integer Literals
+
+Integer literals support the full range `-2147483648` through `2147483647`. When unary minus directly wraps an integer atom, the sign and digits convert together at runtime. Whitespace, leading zeroes, and parentheses around that atom are allowed: `- 2147483648`, `-0002147483648`, and `-(2147483648)` all produce the minimum integer. Positive `2147483648` and negative `-2147483649` produce catchable `ParsingIntegerError` values.
+
+Compound operands still evaluate before negation with the usual precedence and intermediate bounds. `--2147483648` overflows when the outer minus negates the minimum value. `-(2147483648 + 0)` fails while converting its positive operand. `-2147483648 ^ 0` likewise attempts the power first and fails on its positive base; `(-2147483648) ^ 0` is `1`. See [the signed-integer example](../examples/10-signed-integers.botwork).
+
+Parsing keeps numeric text unevaluated. Unused definitions, unselected branches, and skipped boolean operands do not trigger literal-conversion errors.
 
 ## Strings
 

@@ -1,0 +1,14 @@
+Log |-2147483648|
+Log |2147483647|
+Log |-0002147483648|
+Log |(-2147483648) ^ 0|
+Log |-2147483648 % -1|
+
+# Signed atoms convert at runtime; values outside i32 remain catchable errors.
+Try { Log |-2147483649| } Catch { Log |"caught literal range error"| }
+
+# A second minus is an operation on MIN and overflows.
+Try { Log |--2147483648| } Catch { Log |"caught negation overflow"| }
+
+# Power binds first: the positive base cannot be converted before negation.
+Try { Log |-2147483648 ^ 0| } Catch { Log |"caught positive base range error"| }

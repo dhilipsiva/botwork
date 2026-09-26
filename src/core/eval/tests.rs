@@ -288,6 +288,102 @@ fn ordinary_blocks_share_their_invocation_frame_without_changing_the_caller() {
 }
 
 #[test]
+fn signed_integer_literals_include_both_boundaries_and_leading_zeroes() {
+    for (expression, expected) in [
+        ("2147483647", i32::MAX),
+        ("-2147483648", i32::MIN),
+        ("- 2147483648", i32::MIN),
+        ("-(2147483648)", i32::MIN),
+        ("-((2147483648))", i32::MIN),
+        ("-0002147483648", i32::MIN),
+        ("-0", 0),
+        ("-000000", 0),
+        ("-2147483647", -2147483647),
+        ("0 + -2147483648", i32::MIN),
+        ("-2147483648 + 1", i32::MIN + 1),
+        ("-2147483648 % -1", 0),
+        ("(-2147483648) ^ 0", 1),
+        ("(-2147483648) ^ 1", i32::MIN),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn signed_literal_conversion_keeps_intermediate_range_checks_and_precedence() {
+    for expression in [
+        "2147483648",
+        "-2147483649",
+        "-99999999999999999999999999999999999",
+        "0 - 2147483648",
+        "-(2147483648 + 0)",
+        "-2147483648 ^ 0",
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Err(BWErr::ParsingIntegerError(_))),
+            "{expression}: {result:?}"
+        );
+    }
+    for expression in [
+        "--2147483648",
+        "-(-2147483648)",
+        "-2147483648 - 1",
+        "0 - -2147483648",
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Err(BWErr::ArithmeticError(_))),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn signed_literal_conversion_is_deferred_and_errors_remain_catchable() {
+    let result = evaluate(
+        "Unused { Return |-2147483649| }\nIf |false| { |value| = |-2147483649| }\n\
+         |answer| = |-2147483648|\nTry { |answer| = |-2147483649| } Catch {}\n\
+         |skipped| = |false and -2147483649|\n|result| = |answer|",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::Int(i32::MIN))), "{result:?}");
+    let mut context = Context::default();
+    let result = evaluate("|answer| = |-2147483648|", &mut context);
+    assert!(matches!(result, Ok(Literal::Int(i32::MIN))));
+    assert_eq!(context.expression_visits, ["-2147483648", "2147483648"]);
+}
+
+#[test]
+fn minimum_integer_composes_in_collections_calls_and_float_operations() {
+    let result = evaluate(
+        "Identity |value| { Return |value| }\n\
+         |answer| = Identity |[-2147483648, {min: -2147483648}]|",
+        &mut Context::default(),
+    )
+    .unwrap();
+    assert!(
+        matches!(&result, Literal::Array(values) if matches!(values[0], Literal::Int(i32::MIN)))
+    );
+    assert_eq!(result.to_string(), "[-2147483648, {\"min\": -2147483648}]");
+    let result = evaluate("|answer| = |-2147483648 / -1|", &mut Context::default());
+    assert!(matches!(result, Ok(Literal::Float(value)) if value == 2147483648.0));
+}
+
+#[test]
 fn normally_completed_controls_do_not_collect_body_results() {
     for source in [
         "If |true| { |value| = |7| }",

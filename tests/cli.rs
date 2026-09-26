@@ -74,6 +74,18 @@ fn invalid_control_diagnostics_preserve_unicode_crlf_and_tab_locations() {
 }
 
 #[test]
+fn signed_integer_overflow_fails_after_printing_the_valid_minimum() {
+    let path = fixture("signed-integer-overflow.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"-2147483648\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("signed-integer-overflow.botwork"));
+    assert!(diagnostic.contains("Arithmetic error:"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn help_describes_file_argument_on_stdout() {
     let output = run(&["--help"]);
     assert!(output.status.success());

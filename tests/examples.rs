@@ -125,6 +125,23 @@ fn scope_example_preserves_callers_and_restores_loop_bindings() {
 }
 
 #[test]
+fn signed_integer_example_handles_boundaries_and_catchable_failures() {
+    assert_example(
+        "10-signed-integers.botwork",
+        &[
+            "-2147483648",
+            "2147483647",
+            "-2147483648",
+            "1",
+            "0",
+            "caught literal range error",
+            "caught negation overflow",
+            "caught positive base range error",
+        ],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

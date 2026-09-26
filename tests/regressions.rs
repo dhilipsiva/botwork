@@ -1,5 +1,5 @@
 //! Expected language behavior for independently reproduced defects.
-//! Remove each ignore when its corresponding TODO is implemented.
+//! Keep these minimal reproductions active as their corresponding fixes evolve.
 
 use botwork::core::{
     ast::Program,
@@ -138,7 +138,6 @@ fn arithmetic_failure_can_be_caught() {
 }
 
 #[test]
-#[ignore = "known defect: positive-magnitude conversion rejects the minimum signed integer literal"]
 fn minimum_signed_integer_literal_is_representable() {
     assert_int("|answer| = |-2147483648|", i32::MIN);
 }
