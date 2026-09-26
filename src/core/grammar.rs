@@ -1,6 +1,7 @@
 use pest::pratt_parser::PrattParser;
 use pest_derive::Parser;
 use std::collections::HashMap;
+use std::fmt;
 use thiserror::Error;
 
 #[cfg(test)]
@@ -45,6 +46,8 @@ pub enum BWErr {
     ParsingIntegerError(String),
     #[error("Operation performed on incompatible types: {0}")]
     OperationIncompatibleError(String),
+    #[error("Writing output failed: {0}")]
+    OutputError(String),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -57,6 +60,51 @@ pub enum Literal {
     String(String),
     Array(Vec<Literal>),
     Map(HashMap<String, Literal>),
+}
+
+struct CollectionValue<'a>(&'a Literal);
+
+impl fmt::Display for CollectionValue<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Literal::String(value) => write!(formatter, "{value:?}"),
+            value => write!(formatter, "{value}"),
+        }
+    }
+}
+
+impl fmt::Display for Literal {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => formatter.write_str("none"),
+            Self::Int(value) => write!(formatter, "{value}"),
+            Self::Float(value) => write!(formatter, "{value}"),
+            Self::Bool(value) => write!(formatter, "{value}"),
+            Self::String(value) => formatter.write_str(value),
+            Self::Array(values) => {
+                formatter.write_str("[")?;
+                for (index, value) in values.iter().enumerate() {
+                    if index != 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "{}", CollectionValue(value))?;
+                }
+                formatter.write_str("]")
+            }
+            Self::Map(values) => {
+                let mut entries: Vec<_> = values.iter().collect();
+                entries.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+                formatter.write_str("{")?;
+                for (index, (key, value)) in entries.into_iter().enumerate() {
+                    if index != 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "{key:?}: {}", CollectionValue(value))?;
+                }
+                formatter.write_str("}")
+            }
+        }
+    }
 }
 
 type ORResult<O, E = BWErr> = Result<O, E>;

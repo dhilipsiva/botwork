@@ -25,6 +25,11 @@ I wanted:
 1. Clone the repo
 2. run `cargo run -- --file examples/02-syntaxes.botwork`
 
+`Log` writes readable values to stdout. Diagnostics go to stderr, and uncaught
+script errors return a nonzero exit status. Add `--debug` after `cargo run --`
+to trace top-level statement locations on stderr. See [language behavior](docs/language.md)
+and [testing instructions](docs/testing.md) for the implemented contracts.
+
 Or you can create a file from below sample and pass the path to cargo run
 
 

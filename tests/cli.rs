@@ -118,3 +118,37 @@ fn syntax_failure_prevents_execution_of_the_whole_program() {
     assert!(diagnostic.contains("syntax-after-output.botwork"));
     assert!(!diagnostic.contains("must not execute"));
 }
+
+#[test]
+fn log_writes_readable_values_to_stdout() {
+    let path = fixture("log-values.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "hello\n7\n1.5\ntrue\n[1, \"x\", false]\n{\"a\": 1, \"z\": 2}\nfirst\nsecond\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn debug_traces_locations_without_changing_stdout() {
+    let path = fixture("log-values.botwork");
+    let normal = run(&["--file", path.to_str().unwrap()]);
+    let debug = run(&["--debug", "--file", path.to_str().unwrap()]);
+    assert!(debug.status.success());
+    assert_eq!(debug.stdout, normal.stdout);
+    let trace = String::from_utf8(debug.stderr).unwrap();
+    let lines: Vec<_> = trace.lines().collect();
+    assert_eq!(lines.len(), 7);
+    for (index, line) in lines.iter().enumerate() {
+        assert_eq!(
+            *line,
+            format!("debug: {}:{}:1: call", path.display(), index + 1)
+        );
+    }
+    assert!(
+        !trace.contains("hello"),
+        "trace should not copy literal values"
+    );
+}

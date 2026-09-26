@@ -1,6 +1,11 @@
 use pest::iterators::Pair;
 use pest::Parser;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    io::{self, Write},
+    rc::Rc,
+};
 
 use super::grammar::{BWErr, BWParser, Literal, LiteralResult, Operate, Rule, PRATT_PARSER};
 
@@ -164,8 +169,12 @@ fn log_param(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
             "`Log {param}` requires atleast 1 parameter".into(),
         ))?;
     let ok = botwork(param_pair, globals)?;
-    // TODO Implement Display for token
-    Ok(dbg!(ok))
+    write_log(&ok, &mut io::stdout().lock())?;
+    Ok(ok)
+}
+
+fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
+    writeln!(output, "{value}").map_err(|error| BWErr::OutputError(error.to_string()))
 }
 
 fn no_op(_pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {

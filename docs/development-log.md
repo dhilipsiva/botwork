@@ -36,3 +36,10 @@ One TODO is selected, designed, implemented, verified, and committed before the 
 - **Design:** Decode supported escapes once from parser string contents, preserve Unicode and literal whitespace, and keep identifier map keys on a separate conversion path.
 - **Implementation:** Added decoding for newline, quote, and backslash escapes; made the string grammar compound atomic so whitespace/comments inside quotes are preserved; enabled both string regressions and documented the behavior.
 - **Verification:** The original concatenation/escape cases failed before the fix. A new leading-space case exposed implicit parser skipping and failed before the grammar correction. All 40 active tests now pass in debug and release, including empty strings, tabs, comment markers, Unicode, escaped backslashes, literal newlines, and nested map values. Fourteen unrelated regressions remain ignored.
+
+## Replace Debug Logging with Normal Output
+
+- **Plan:** Give scripts usable stdout, keep diagnostics on stderr, and make tracing opt-in.
+- **Design:** Display decoded strings and scalar values directly; quote nested strings and sort map keys. Return typed output errors for failed writes. Trace only top-level source locations and statement kinds with `--debug`.
+- **Implementation:** Added value formatting, a fallible logging writer, CLI tracing, output documentation, and stdout/stderr/formatting tests. Removed all `dbg!` calls from application source.
+- **Verification:** The new CLI output test failed before implementation because stdout was empty. All 46 active tests now pass in debug and release; 14 other regressions remain ignored. Tests cover nested formatting, exact CLI output, trace locations, unchanged stdout under tracing, and a broken writer. Formatting and whitespace checks passed.

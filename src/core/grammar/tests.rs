@@ -144,3 +144,39 @@ fn unsupported_string_escapes_are_rejected() {
         assert!(BWParser::parse(Rule::botwork, source).is_err(), "{source}");
     }
 }
+
+#[test]
+fn display_values_without_rust_type_wrappers() {
+    for (value, expected) in [
+        (Literal::None, "none"),
+        (Literal::Int(-3), "-3"),
+        (Literal::Float(1.5), "1.5"),
+        (Literal::Bool(false), "false"),
+        (Literal::String("a\nb".into()), "a\nb"),
+        (Literal::Array(vec![]), "[]"),
+        (Literal::Map(Default::default()), "{}"),
+    ] {
+        assert_eq!(value.to_string(), expected);
+    }
+}
+
+#[test]
+fn display_nested_collections_with_escaped_strings_and_sorted_keys() {
+    let value = Literal::Map(
+        [
+            ("z".into(), Literal::None),
+            (
+                "a".into(),
+                Literal::Array(vec![
+                    Literal::String("line\n\"quoted\"\\".into()),
+                    Literal::Map([("key".into(), Literal::Int(7))].into()),
+                ]),
+            ),
+        ]
+        .into(),
+    );
+    assert_eq!(
+        value.to_string(),
+        r#"{"a": ["line\n\"quoted\"\\", {"key": 7}], "z": none}"#
+    );
+}

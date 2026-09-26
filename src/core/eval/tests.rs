@@ -201,3 +201,31 @@ fn map_keys_remain_identifiers_while_string_values_are_decoded() {
     };
     assert!(matches!(nested.get("value"), Some(Literal::String(value)) if value == "a\nb"));
 }
+
+#[test]
+fn log_output_is_a_value_followed_by_a_newline() {
+    let mut output = Vec::new();
+    super::write_log(&Literal::String("hello".into()), &mut output).unwrap();
+    assert_eq!(output, b"hello\n");
+}
+
+#[test]
+fn log_output_failure_returns_a_typed_error() {
+    struct BrokenWriter;
+    impl std::io::Write for BrokenWriter {
+        fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "closed",
+            ))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    assert!(matches!(
+        super::write_log(&Literal::Int(7), &mut BrokenWriter),
+        Err(BWErr::OutputError(message)) if message.contains("closed")
+    ));
+}
