@@ -70,7 +70,7 @@ The following defects were reproduced during the DSL review. Relevant implementa
 
 ### Confirmed Control-Flow and Scope Defects
 
-- [ ] **Fix `While` stopping after one ordinary iteration.** A counter starting at `0` and incrementing while below `3` must finish at `3`, not `1`. Reevaluate the condition after every normal iteration; cover `Continue` and `Break` separately.
+- [x] **Fix `While` stopping after one ordinary iteration.** A counter starting at `0` and incrementing while below `3` finishes at `3`. The active regression and unit tests cover repeated conditions, zero iterations, `Continue`, `Break`, and nonboolean conditions. See [loop semantics](docs/language.md#while-loops).
 - [ ] **Fix position-dependent `Return`.** A custom statement ending with `Return |7|` must return `7`, not `[7]`. Adding unreachable statements must not change the result, and no pending return may leak into another invocation.
 - [ ] **Fix nested return propagation.** A return inside an `If`, loop, or `Try/Catch` must exit the containing custom statement. Outer statements after that return must not execute.
 - [ ] **Fix parameter binding corrupting arguments and caller state.** With caller `x = 10`, calling `Pair |1| with |x|` against parameters `x` and `y` must pass `1, 10`. Evaluate all arguments in caller scope before binding parameters; preserve the caller's `x`.

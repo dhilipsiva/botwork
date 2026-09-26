@@ -466,7 +466,6 @@ fn stmt_while(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
                     return Ok(Literal::Array(results));
                 }
             }
-            return Ok(Literal::Array(results));
         } else {
             return Err(BWErr::OperationIncompatibleError(
                 "While loop requires expressions to return boolean".into(),

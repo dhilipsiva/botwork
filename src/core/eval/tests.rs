@@ -229,3 +229,58 @@ fn log_output_failure_returns_a_typed_error() {
         Err(BWErr::OutputError(message)) if message.contains("closed")
     ));
 }
+
+#[test]
+fn while_rechecks_the_condition_after_every_iteration() {
+    let mut context = Context::default();
+    evaluate(
+        "|i| = |0|\nWhile |i < 4| {\n |i| = |i + 1|\n}\n",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "i"), Literal::Int(4)));
+}
+
+#[test]
+fn false_while_does_not_execute_its_body() {
+    let mut context = Context::default();
+    evaluate("While |false| {\n |x| = |missing|\n}", &mut context).unwrap();
+}
+
+#[test]
+fn while_continue_skips_the_remaining_body_and_rechecks_condition() {
+    let mut context = Context::default();
+    evaluate(
+        "|i| = |0|\n|sum| = |0|\nWhile |i < 5| {\n |i| = |i + 1|\n\
+         If |i == 2| { Continue }\n |sum| = |sum + i|\n}",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "sum"), Literal::Int(13)));
+    assert!(matches!(variable(&context, "i"), Literal::Int(5)));
+}
+
+#[test]
+fn while_break_stops_the_loop_before_the_rest_of_its_body() {
+    let mut context = Context::default();
+    evaluate(
+        "|i| = |0|\n|sum| = |0|\nWhile |i < 10| {\n |i| = |i + 1|\n\
+         If |i == 4| { Break }\n |sum| = |sum + i|\n}",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "sum"), Literal::Int(6)));
+    assert!(matches!(variable(&context, "i"), Literal::Int(4)));
+}
+
+#[test]
+fn while_reports_a_condition_that_becomes_non_boolean() {
+    let mut context = Context::default();
+    assert!(matches!(
+        evaluate(
+            "|condition| = |true|\nWhile |condition| {\n |condition| = |1|\n}",
+            &mut context
+        ),
+        Err(BWErr::OperationIncompatibleError(_))
+    ));
+}

@@ -30,7 +30,6 @@ fn assert_int(source: &str, expected: i32) {
 }
 
 #[test]
-#[ignore = "known defect: While returns after its first ordinary iteration"]
 fn while_repeats_until_the_condition_is_false() {
     assert_int(
         "|i| = |0|\nWhile |i < 3| {\n |i| = |i + 1|\n}\n|answer| = |i|",
