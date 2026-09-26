@@ -17,6 +17,7 @@ use super::{
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Operate, Rule},
+    run::{RunBudget, RunEnvironment, SourceFailure},
     signature::{StatementOrigin, StatementSignature},
 };
 
@@ -91,7 +92,9 @@ pub struct Context {
     handlers: Vec<HandledError>,
     modules: ModuleCache,
     loading: Vec<PathBuf>,
-    working_directory: Result<PathBuf, String>,
+    pub(crate) working_directory: Result<PathBuf, String>,
+    pub(crate) environment: Option<Arc<RunEnvironment>>,
+    pub(crate) budget: Option<RunBudget>,
     #[cfg(test)]
     expression_visits: std::cell::RefCell<Vec<String>>,
 }
@@ -106,6 +109,8 @@ impl Default for Context {
             modules: ModuleCache::default(),
             loading: vec![],
             working_directory: std::env::current_dir().map_err(|error| error.to_string()),
+            environment: None,
+            budget: None,
             #[cfg(test)]
             expression_visits: Default::default(),
         }
@@ -113,6 +118,90 @@ impl Default for Context {
 }
 
 impl Context {
+    pub(crate) fn root_variables(&self) -> BTreeMap<String, Literal> {
+        self.frames[0]
+            .variables
+            .iter()
+            .map(|(name, value)| (name.clone(), value.as_ref().clone()))
+            .collect()
+    }
+
+    pub(crate) fn checkpoint(&self) -> DiagnosticResult<()> {
+        self.budget.as_ref().map_or(Ok(()), RunBudget::checkpoint)
+    }
+
+    fn tick(&self) -> DiagnosticResult<()> {
+        self.budget.as_ref().map_or(Ok(()), RunBudget::tick)
+    }
+
+    fn check_call_depth(&self) -> DiagnosticResult<()> {
+        self.checkpoint()?;
+        if let Some(budget) = &self.budget {
+            if self.calls.len() >= budget.limits().call_depth {
+                return Err(budget.limit("call depth", budget.limits().call_depth as u64));
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_source_size(&self, bytes: usize) -> DiagnosticResult<()> {
+        self.checkpoint()?;
+        if let Some(budget) = &self.budget {
+            if bytes > budget.limits().source_bytes {
+                return Err(budget.limit("source bytes", budget.limits().source_bytes as u64));
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn read_source(&self, path: &std::path::Path) -> Result<String, SourceFailure> {
+        self.checkpoint().map_err(SourceFailure::Diagnostic)?;
+        let bytes = super::run::read_source(
+            path,
+            self.budget
+                .as_ref()
+                .map(|budget| budget.limits().source_bytes),
+        )?;
+        self.check_source_size(bytes.len())
+            .map_err(SourceFailure::Diagnostic)?;
+        String::from_utf8(bytes).map_err(|error| {
+            SourceFailure::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+        })
+    }
+
+    pub(crate) fn after_operation<T>(&self, result: DiagnosticResult<T>) -> DiagnosticResult<T> {
+        match self.checkpoint() {
+            Ok(()) => result,
+            Err(stopped) => match result {
+                Err(original) if original.code() == stopped.code() => Err(original),
+                Err(original) => Err(stopped.while_handling(original)),
+                Ok(_) => Err(stopped),
+            },
+        }
+    }
+
+    pub(crate) fn register_run_native(
+        &mut self,
+        signature: StatementSignature,
+        callback: impl Fn(&[Literal], &RunEnvironment) -> LiteralResult + Send + Sync + 'static,
+    ) -> DiagnosticResult<()> {
+        if signature.origin() != StatementOrigin::Native {
+            return Err(Diagnostic::new(BWErr::SignatureError(
+                "Native registration requires a native signature".into(),
+            ))
+            .at(signature.header()));
+        }
+        self.insert_native(
+            signature,
+            Arc::new(move |values, context| {
+                let environment = context.environment.as_ref().ok_or_else(|| {
+                    BWErr::RunConfiguration("Native operation needs a configured run".into())
+                })?;
+                callback(values, environment)
+            }),
+        )
+    }
+
     /// Validate and install owned values in the entry script's root scope.
     /// Replaces matching root bindings only after every input is valid.
     /// Imported modules keep independent globals; local bindings can shadow inputs.
@@ -365,6 +454,8 @@ impl Context {
         frame: CallFrame,
         body: impl FnOnce(&mut Self) -> RuntimeResult,
     ) -> RuntimeResult {
+        self.check_call_depth()
+            .map_err(|error| error.at(&frame.call_site).capture_stack(&self.calls))?;
         self.calls.push(frame);
         let result = body(self).map_err(|error| error.capture_stack(&self.calls));
         self.calls.pop();
@@ -400,6 +491,7 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
         )
         .into());
     }
+    context.check_call_depth()?;
     let arguments = call
         .arguments
         .iter()
@@ -439,7 +531,14 @@ fn invoke_resolved(
             },
             |context| {
                 let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
-                    .map_err(|_| BWErr::NativePanic(call.signature.clone()))??;
+                    .map_err(|_| BWErr::NativePanic(call.signature.clone()))
+                    .and_then(|result| result)
+                    .map_err(|error| {
+                        Diagnostic::new(error)
+                            .at(&call.span)
+                            .capture_stack(&context.calls)
+                    });
+                let result = context.after_operation(result)?;
                 validate_value(&result)?;
                 metadata.validate_return(&result)?;
                 Ok(result)
@@ -492,6 +591,7 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> RuntimeResul
 }
 
 fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> RuntimeResult {
+    context.tick()?;
     #[cfg(test)]
     context
         .expression_visits
@@ -530,6 +630,7 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Runtim
             operator, operand, ..
         } => match (operator, &operand.kind) {
             (UnaryOp::Negate, ExprKind::Integer(text)) => {
+                context.tick()?;
                 // Convert the signed atom together: MIN's positive magnitude is not i32.
                 // Compound operands still evaluate normally before checked negation.
                 #[cfg(test)]
@@ -703,6 +804,7 @@ fn evaluate_for(
     let previous = context.frames[context.current].variables.remove(binding);
     let result = (|| {
         for value in values {
+            context.tick()?;
             context.set_variable(binding.to_owned(), value);
             match evaluate_block(body, context)? {
                 Completion::Normal(_) | Completion::Continue => (),
@@ -774,6 +876,7 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
 }
 
 fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> CompletionResult {
+    context.tick()?;
     match &statement.kind {
         StatementKind::Assign { name, value } => {
             let value = match value {
@@ -836,7 +939,16 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             handler,
         } => match evaluate_block(body, context) {
             Ok(value) => Ok(value),
-            Err(original) => evaluate_handler(binding.as_ref(), handler, original, context),
+            Err(original) => {
+                let original = context
+                    .after_operation::<Literal>(Err(original))
+                    .unwrap_err();
+                if context.checkpoint().is_err() {
+                    Err(original)
+                } else {
+                    evaluate_handler(binding.as_ref(), handler, original, context)
+                }
+            }
         },
         StatementKind::Return(expression) => {
             let value = match expression {
@@ -894,6 +1006,7 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
 
 /// Execute one script-level statement with source locations and entered-call frames.
 pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) -> RuntimeResult {
+    context.checkpoint()?;
     ast::validate_script_detailed(std::slice::from_ref(statement))?;
     finish_script(evaluate_statement(statement, context)?)
 }
@@ -905,6 +1018,7 @@ pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResu
 
 /// Validate and execute a program while preserving structured diagnostic causes.
 pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> RuntimeResult {
+    context.checkpoint()?;
     program.validate_detailed()?;
     let mut result = Literal::None;
     for statement in &program.statements {

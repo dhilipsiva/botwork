@@ -33,6 +33,8 @@ and [testing instructions](docs/testing.md) for the implemented contracts.
 Use `cargo run -- --list-statements` to list built-ins, or
 `cargo run -- --statement-help 'Log |value|'` for parameter/return kinds and errors.
 Rust hosts can [register statements with checked signatures](docs/interpreter-architecture.md#shared-signature-metadata).
+Use the [embedded Engine](docs/embedded-runs.md) for fresh runs with local variables,
+directory/environment configuration, cooperative cancellation, budgets, and structured results.
 Use [call expressions](docs/language.md#calls-inside-expressions), such as `@{Double |3|}`,
 to compose statement results inside other expressions.
 [Local modules](docs/language.md#local-modules) use `Import |"helpers.botwork"| As |helpers|`

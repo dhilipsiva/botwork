@@ -107,7 +107,7 @@ Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones 
 
 ## Remaining Interpreter Work
 
-Resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine runs have initial source/step/call-depth budgets; legacy Context/CLI execution remains unbounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
 
@@ -254,3 +254,33 @@ assert_eq!(result.to_string(), "[\"Ada\", 4]");
 ```
 
 `set_input_variables` validates the entire batch before updating root bindings. Its input map is ordered, making name-validation error priority deterministic. Host-created values receive recursive finite checks; imported module roots remain independent. Input errors use BW7001 without echoing whole payloads or inventing DSL spans. The [input contract](input-variables.md) defines file/flag precedence, number ranges, duplicate keys, and scope.
+
+## Embedded Runs
+
+`core::run::Engine` owns native registrations; each call creates independent run state. Its configuration does not change the host environment or working directory. Native closures receive immutable run environment data and a cooperative control handle; captured host state keeps its explicitly shared lifetime.
+
+```rust
+use std::collections::BTreeMap;
+use botwork::core::{
+    grammar::Literal,
+    run::{Engine, RunOptions, RunOutcome},
+};
+
+let mut engine = Engine::default();
+engine.register_native("Greeting |name|", |values, environment| {
+    let prefix = environment.get("GREETING").unwrap().to_string_lossy();
+    Ok(Literal::String(format!("{prefix}, {}", values[0])))
+})?;
+let report = engine.run_source("greeting.botwork", "Greeting |name|", RunOptions {
+    variables: BTreeMap::from([("name".into(), Literal::String("Ada".into()))]),
+    inherit_environment: false,
+    environment: BTreeMap::from([("GREETING".into(), Some("Hello".into()))]),
+    ..RunOptions::default()
+});
+assert_eq!(report.outcome(), RunOutcome::Succeeded);
+assert_eq!(report.result?.to_string(), "Hello, Ada");
+assert_eq!(report.steps, 2);
+# Ok::<(), botwork::core::diagnostic::Diagnostic>(())
+```
+
+`run_program` accepts reusable owned syntax, and `run_file` performs a bounded source read relative to the run directory. Run snapshots include completed root variables, a detailed terminal result, steps, and elapsed duration. Module contexts share the run's budget/control/environment while retaining isolated globals. Public Context clones copy counters; module isolation explicitly shares them. Stop errors latch, bypass Catch, and preserve frame/iterator cleanup. See [embedded-run contracts](embedded-runs.md) for exact defaults, count boundaries, clocks, compatibility, and cooperative execution limits.

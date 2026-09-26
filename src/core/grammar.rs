@@ -82,6 +82,12 @@ pub enum BWErr {
     AsyncRuntime(String),
     #[error("Invalid input variables: {0}")]
     InputError(String),
+    #[error("Invalid run configuration: {0}")]
+    RunConfiguration(String),
+    #[error("Reading source failed: {0}")]
+    SourceRead(String),
+    #[error("Resource limit exceeded: {resource} (limit {limit})")]
+    ResourceLimit { resource: &'static str, limit: u64 },
     #[error("Loading module failed: {0}")]
     ImportRead(String),
     #[error("Import cycle: {0}")]

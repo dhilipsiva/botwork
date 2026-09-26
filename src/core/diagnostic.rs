@@ -35,6 +35,9 @@ pub enum DiagnosticCode {
     ImportCycle,
     DuplicateNamespace,
     Input,
+    RunConfiguration,
+    SourceRead,
+    ResourceLimit,
 }
 
 impl DiagnosticCode {
@@ -62,6 +65,9 @@ impl DiagnosticCode {
             Self::ImportCycle => "BW6002",
             Self::DuplicateNamespace => "BW6003",
             Self::Input => "BW7001",
+            Self::RunConfiguration => "BW7002",
+            Self::SourceRead => "BW7003",
+            Self::ResourceLimit => "BW8001",
         }
     }
 }
@@ -97,6 +103,9 @@ impl BWErr {
             Self::ImportCycle(_) => DiagnosticCode::ImportCycle,
             Self::DuplicateNamespace { .. } => DiagnosticCode::DuplicateNamespace,
             Self::InputError(_) => DiagnosticCode::Input,
+            Self::RunConfiguration(_) => DiagnosticCode::RunConfiguration,
+            Self::SourceRead(_) => DiagnosticCode::SourceRead,
+            Self::ResourceLimit { .. } => DiagnosticCode::ResourceLimit,
         }
     }
 
@@ -121,6 +130,9 @@ impl BWErr {
             Self::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.".into(),
             Self::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.".into(),
             Self::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.".into(),
+            Self::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, and a representable run timeout.".into(),
+            Self::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.".into(),
+            Self::ResourceLimit { .. } => "Reduce the workload or explicitly increase the named run budget; completed effects are not rolled back.".into(),
             Self::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.".into(),
             Self::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.".into(),
             Self::DuplicateNamespace { .. } => "Choose a distinct namespace or remove conflicting declarations in this scope; the original remains registered.".into(),
@@ -275,7 +287,13 @@ impl Diagnostic {
             | BWErr::ImportRead(reason)
             | BWErr::ImportCycle(reason)
             | BWErr::NativePanic(reason)
-            | BWErr::InputError(reason) => value_map([("reason", text(reason))]),
+            | BWErr::InputError(reason)
+            | BWErr::RunConfiguration(reason)
+            | BWErr::SourceRead(reason) => value_map([("reason", text(reason))]),
+            BWErr::ResourceLimit { resource, limit } => value_map([
+                ("resource", text(resource)),
+                ("limit", text(&limit.to_string())),
+            ]),
         };
         value_map([
             ("code", text(self.code().as_str())),

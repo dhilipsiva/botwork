@@ -12,6 +12,8 @@ pub enum Input {
     ImportCycle,
     VariablesSuccess,
     VariablesInvalid,
+    EmbeddedSuccess,
+    EmbeddedLimit,
 }
 
 #[derive(Clone)]
@@ -135,5 +137,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::VariablesSuccess, stdout: "[2, -2147483648, 2147483647, none, true]\n", code: None, error: None },
         Case { id: "variables-invalid", positive: &[], invalid: &["I1"], boundary: &[],
             input: Input::VariablesInvalid, stdout: "", code: Some("BW7001"), error: Some("integer is outside") },
+        Case { id: "embedded-success", positive: &["R1"], invalid: &[], boundary: &["R1"],
+            input: Input::EmbeddedSuccess, stdout: "", code: None, error: None },
+        Case { id: "embedded-limit", positive: &[], invalid: &["R1"], boundary: &[],
+            input: Input::EmbeddedLimit, stdout: "", code: Some("BW8001"), error: Some("evaluation steps") },
     ]
 }

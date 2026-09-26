@@ -339,6 +339,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_async_case(&case);
                 continue;
             }
+            Input::EmbeddedSuccess | Input::EmbeddedLimit => {
+                check_embedded_case(&case);
+                continue;
+            }
             Input::ImportSuccess => {
                 fs::create_dir_all(harness.workspace.join("modules")).unwrap();
                 fs::write(
@@ -413,6 +417,42 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 assert_eq!(output.status.code(), Some(0), "{label}");
                 assert!(diagnostic.is_empty(), "{label}");
             }
+        }
+    }
+}
+
+fn check_embedded_case(case: &Case) {
+    use botwork::core::run::{Engine, RunLimits, RunOptions, RunOutcome};
+    let engine = Engine::default();
+    let run = engine.run_source(
+        "embedded.botwork",
+        "|result| = |input|",
+        RunOptions {
+            variables: BTreeMap::from([("input".into(), Literal::Int(7))]),
+            limits: RunLimits {
+                steps: if case.error.is_some() { 1 } else { 2 },
+                ..RunLimits::default()
+            },
+            ..RunOptions::default()
+        },
+    );
+    match case.error {
+        Some(expected) => {
+            assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+            assert!(!run.variables.contains_key("result"));
+            let error = run.result.unwrap_err();
+            assert_eq!(error.code().as_str(), case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+        }
+        None => {
+            assert_eq!(run.outcome(), RunOutcome::Succeeded);
+            assert_eq!(run.result.unwrap().to_string(), "7");
+            assert_eq!(run.variables["result"].to_string(), "7");
+            assert_eq!(run.steps, 2);
+            assert!(engine
+                .run_source("fresh", "", RunOptions::default())
+                .variables
+                .is_empty());
         }
     }
 }

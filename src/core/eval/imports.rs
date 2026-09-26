@@ -125,8 +125,12 @@ fn load_module(
     if let Some(module) = context.modules.loaded.get(&canonical) {
         return Ok(Arc::clone(module));
     }
-    let source = fs::read_to_string(&canonical)
-        .map_err(|error| failure(format!("{}: {error}", canonical.display())))?;
+    let source = context
+        .read_source(&canonical)
+        .map_err(|error| match error {
+            SourceFailure::Io(error) => failure(format!("{}: {error}", canonical.display())),
+            SourceFailure::Diagnostic(error) => error.at(span),
+        })?;
     let source_name = canonical
         .to_str()
         .ok_or_else(|| failure("Module paths must be valid UTF-8".into()))?;
@@ -166,6 +170,8 @@ fn isolated(frame: Frame, context: &Context) -> Context {
         modules: context.modules.clone(),
         loading: context.loading.clone(),
         working_directory: context.working_directory.clone(),
+        environment: context.environment.clone(),
+        budget: context.budget.as_ref().map(RunBudget::shared),
         #[cfg(test)]
         expression_visits: Default::default(),
     }

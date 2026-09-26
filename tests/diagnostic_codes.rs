@@ -89,6 +89,20 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "BW7001",
         ),
         (
+            BWErr::RunConfiguration("directory".into()),
+            RunConfiguration,
+            "BW7002",
+        ),
+        (BWErr::SourceRead("missing".into()), SourceRead, "BW7003"),
+        (
+            BWErr::ResourceLimit {
+                resource: "steps",
+                limit: 10,
+            },
+            ResourceLimit,
+            "BW8001",
+        ),
+        (
             BWErr::ImportRead("missing file".into()),
             ImportRead,
             "BW6001",
@@ -150,6 +164,7 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "BW2003" => &["duplicate", "original", "signature"],
             "BW3004" => &["path", "reason", "segment"],
             "BW6003" => &["duplicate", "namespace", "original"],
+            "BW8001" => &["limit", "resource"],
             _ => &["reason"],
         };
         assert_eq!(

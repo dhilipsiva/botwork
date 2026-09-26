@@ -24,7 +24,7 @@ EXCLUSIONS = (r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
 LIBRARY_FILES = {
     "src/core/ast.rs", "src/core/diagnostic.rs", "src/core/eval.rs",
     "src/core/eval/imports.rs", "src/core/grammar.rs", "src/core/input.rs",
-    "src/core/operation.rs", "src/core/signature.rs",
+    "src/core/operation.rs", "src/core/run.rs", "src/core/signature.rs",
 }
 EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs"}}
 
