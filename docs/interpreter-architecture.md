@@ -22,7 +22,7 @@ Maps use exact string keys; arrays require ASCII digits for dot segments or nonn
 
 ## Value Comparison
 
-`numeric_pair` widens integers and stored binary32 floats exactly to binary64 for all numeric comparisons. Arithmetic retains its separate binary32 conversion policy. `values_equal` first validates both complete value trees for non-finite host floats, then compares structural values using an explicit work list. Arrays compare positions; maps compare key sets and associated values independently of iteration order. Distinct nonnumeric kinds are unequal. Neither pass adds recursive comparison frames; source/value nesting and resource limits still require their own work.
+`numeric_pair` widens integers and stored binary32 floats exactly to binary64 for all numeric comparisons. Arithmetic retains its separate binary32 conversion policy. `values_equal` first validates both complete value trees for non-finite host floats, then compares structural values using an explicit work list. Arrays compare positions; maps compare key sets and associated values independently of iteration order. Distinct nonnumeric kinds are unequal. Neither pass adds recursive comparison frames; source syntax has preflight bounds; runtime value nesting and broader limits remain separate work.
 
 Equality runs before constructing generic incompatible-operator diagnostics, avoiding unnecessary formatting of entire collections on successful comparisons. Both operands have already evaluated before the value operator runs, so structural mismatches do not suppress expression errors or effects.
 
@@ -107,7 +107,7 @@ Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones 
 
 ## Remaining Interpreter Work
 
-Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine runs have initial source/step/call-depth budgets; legacy Context/CLI execution remains unbounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine runs have initial source/step/call-depth budgets; legacy Context/CLI source parsing has fixed syntax guards, while their runtime execution remains unbounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
 
@@ -284,3 +284,7 @@ assert_eq!(report.steps, 2);
 ```
 
 `run_program` accepts reusable owned syntax, and `run_file` performs a bounded source read relative to the run directory. Run snapshots include completed root variables, a detailed terminal result, steps, and elapsed duration. Module contexts share the run's budget/control/environment while retaining isolated globals. Public Context clones copy counters; module isolation explicitly shares them. Stop errors latch, bypass Catch, and preserve frame/iterator cleanup. See [embedded-run contracts](embedded-runs.md) for exact defaults, count boundaries, clocks, compatibility, and cooperative execution limits.
+
+## Source Preflight
+
+`syntax_limits` scans source before entering the generated Pest parser. The public Pest-compatible wrapper lives in grammar.rs, keeping maintained guard code in coverage scope while excluding generated code. Program parsing uses the private generated parser only after a successful preflight. Guard failures retain a bounded source prefix and typed resource diagnostics. Engine options tighten syntax limits locally; CLI and legacy module reads use the default byte cap. [Source-limit rules](syntax-limits.md) specify counting, lexical contexts, fixed ceilings, and compatibility.

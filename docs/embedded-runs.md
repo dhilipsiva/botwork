@@ -2,7 +2,7 @@
 
 `core::run::Engine` keeps reusable native registrations. `run_source(name, text, options)`, `run_program(&program, options)`, and `run_file(path, options)` synchronously execute in fresh contexts. Each run owns variables, custom definitions, namespace/module caches, handler state, and counters. Programs are immutable and reusable. Engine clones share native callback captures; hosts remain responsible for intentional shared state and callback synchronization.
 
-The executed [Rust example](interpreter-architecture.md#embedded-runs) demonstrates inputs, environment overlays, native registration, and structured results. The CLI still uses its existing Context path; Engine defaults do not yet impose budgets on CLI/legacy execution. Async-operation dispatch remains separate roadmap work.
+The executed [Rust example](interpreter-architecture.md#embedded-runs) demonstrates inputs, environment overlays, native registration, and structured results. The CLI still uses its existing Context path; CLI/legacy parsing has shared source/syntax guards; runtime step/call budgets still belong to Engine execution. Async-operation dispatch remains separate roadmap work.
 
 ## Configuration and Environment
 
@@ -21,10 +21,11 @@ Neither directory nor environment configuration mutates process-global state. Na
 | `source_bytes` | 1 MiB | Per entry/module source, UTF-8 bytes; reject before parsing |
 | `steps` | 1,000,000 | One per visited statement, expression node, and For iteration |
 | `call_depth` | 32 | Entered native/custom calls; imported wrappers do not add another level |
+| `syntax` | Nesting 32, operator units 64; combined ceiling 66 | Local [parser guards](syntax-limits.md), tighten-only fixed syntax ceilings |
 
 Zero is permitted: an empty run needs no steps/calls, and nonempty source exceeds a zero byte budget. Signed integer negation counts its operand even though conversion handles sign/magnitude together. Short-circuited operands consume no steps. Loops revisit their condition/body expressions; empty For bodies still charge iterations. Initializations and calls across modules share the run's counter. Call depth is checked after signature/arity resolution and before argument effects.
 
-File reads retain at most `source_bytes + 1` bytes before reporting BW8001, including when the cut splits UTF-8. `run_program` checks its retained source size before validation; previously assembled ASTs are host-owned input. Step/recursion/source failures latch for the run and cannot be caught to resume work. Higher budgets are an explicit host policy choice. Parser/AST depth, import depth/count, aggregate source/value/collection memory, and stricter preallocation bounds remain the next resource task. Current budgets do not make untrusted source safe to execute.
+File reads retain at most `source_bytes + 1` bytes before reporting BW8001, including when the cut splits UTF-8. `run_program` checks its retained source size before validation; previously assembled ASTs are host-owned input. Step/recursion/source failures latch for the run and cannot be caught to resume work. Higher budgets are an explicit host policy choice. Combined evaluator/host-AST depth, import depth/count, aggregate source/value/collection memory, and stricter preallocation bounds remain the next resource task. Current budgets do not make untrusted source safe to execute.
 
 ## Stop and Completion Rules
 

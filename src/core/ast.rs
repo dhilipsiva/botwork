@@ -6,6 +6,7 @@ use pest::{iterators::Pair, Parser};
 
 use super::diagnostic::{Diagnostic, DiagnosticResult};
 use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
+use super::syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES};
 
 #[cfg(test)]
 mod tests;
@@ -102,11 +103,22 @@ impl Program {
 
     /// Parse and validate with retained source locations and structured details.
     pub fn parse_detailed(name: &str, source: &str) -> DiagnosticResult<Self> {
+        Self::parse_bounded(name, source, DEFAULT_SOURCE_BYTES, &SyntaxLimits::default())
+    }
+
+    /// Parse with a local source-byte budget and tightened syntax guard.
+    pub fn parse_bounded(
+        name: &str,
+        source: &str,
+        source_bytes: usize,
+        limits: &SyntaxLimits,
+    ) -> DiagnosticResult<Self> {
+        check_source(name, source, source_bytes, limits)?;
         let source = Arc::new(SourceFile {
             name: name.to_owned(),
             text: source.to_owned(),
         });
-        let statements = BWParser::parse(Rule::botwork, &source.text)
+        let statements = super::parser::BWParser::parse(Rule::botwork, &source.text)
             .map_err(|error| parse_error(error, &source))?
             .filter(|pair| pair.as_rule() != Rule::EOI)
             .map(|pair| {
@@ -128,6 +140,32 @@ impl Program {
     pub fn validate_detailed(&self) -> DiagnosticResult<()> {
         validate_script_detailed(&self.statements)
     }
+}
+
+pub(crate) fn check_source(
+    name: &str,
+    source: &str,
+    source_bytes: usize,
+    limits: &SyntaxLimits,
+) -> DiagnosticResult<()> {
+    super::syntax_limits::check(source, source_bytes, limits, false).map_err(|violation| {
+        let end = violation.offset
+            + source[violation.offset..]
+                .chars()
+                .next()
+                .map_or(0, char::len_utf8);
+        // Keep only the checked prefix on rejection; diagnostics must not clone an
+        // unbounded rejected source merely to report the first excessive token.
+        let owner = Arc::new(SourceFile {
+            name: name.to_owned(),
+            text: source[..end].to_owned(),
+        });
+        Diagnostic::new(violation.error).at(&Span {
+            source: owner,
+            start: violation.offset,
+            end,
+        })
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -723,6 +761,7 @@ pub(crate) struct NativeSignature {
 }
 
 pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<NativeSignature> {
+    check_source(name, text, DEFAULT_SOURCE_BYTES, &SyntaxLimits::default())?;
     let source = Arc::new(SourceFile {
         name: name.into(),
         text: text.into(),

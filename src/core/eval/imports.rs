@@ -134,7 +134,7 @@ fn load_module(
     let source_name = canonical
         .to_str()
         .ok_or_else(|| failure("Module paths must be valid UTF-8".into()))?;
-    let program = Program::parse_detailed(source_name, &source)?;
+    let program = context.parse_source(source_name, &source)?;
     let mut module_context = isolated(Frame::default(), context);
     // Modules inherit visible host operations, never caller variables/custom definitions.
     for metadata in context.statement_signatures() {

@@ -20,23 +20,26 @@ use super::{
     grammar::{BWErr, Literal, LiteralResult},
     operation::OperationControl,
     signature::StatementSignature,
+    syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
 };
 
-/// Initial run budgets. Parser nesting, value size, and hard native termination
+/// Initial run budgets. Combined evaluation depth, value size, and hard native termination
 /// have separate contracts; these limits do not make execution a sandbox.
 #[derive(Clone, Debug)]
 pub struct RunLimits {
     pub source_bytes: usize,
     pub steps: u64,
     pub call_depth: usize,
+    pub syntax: SyntaxLimits,
 }
 
 impl Default for RunLimits {
     fn default() -> Self {
         Self {
-            source_bytes: 1024 * 1024,
+            source_bytes: DEFAULT_SOURCE_BYTES,
             steps: 1_000_000,
             call_depth: 32,
+            syntax: SyntaxLimits::default(),
         }
     }
 }
@@ -220,7 +223,7 @@ impl Engine {
     pub fn run_source(&self, name: &str, source: &str, options: RunOptions) -> RunResult {
         self.run(options, |context| {
             context.check_source_size(source.len())?;
-            let program = Program::parse_detailed(name, source)?;
+            let program = context.parse_source(name, source)?;
             evaluate_program_detailed(&program, context)
         })
     }
@@ -228,6 +231,7 @@ impl Engine {
     pub fn run_program(&self, program: &Program, options: RunOptions) -> RunResult {
         self.run(options, |context| {
             context.check_source_size(program.source.text().len())?;
+            context.check_syntax(program.source.name(), program.source.text())?;
             evaluate_program_detailed(program, context)
         })
     }
@@ -249,7 +253,7 @@ impl Engine {
                 }
                 SourceFailure::Diagnostic(error) => error,
             })?;
-            let program = Program::parse_detailed(name, &source)?;
+            let program = context.parse_source(name, &source)?;
             evaluate_program_detailed(&program, context)
         })
     }

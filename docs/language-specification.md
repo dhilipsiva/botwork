@@ -84,6 +84,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R1 — Embedded runs.** Engine execution starts with fresh DSL/module state and validated per-run variables, a resolved directory, and an immutable environment overlay without changing host globals. Reuse registered natives and owned programs; explicitly share callback captures only. Return an owned result/diagnostic, completed root bindings, consumed steps, and elapsed time. Check cancellation/deadlines and configured source-byte/step/call-depth budgets at documented boundaries; share counters across imports. Latched run stops bypass handlers while preserving interpreter cleanup and completed effects. [Embedded-run rules](embedded-runs.md) define defaults, counting, stop priority, clocks, file reads, concurrency, legacy compatibility, and remaining resource/termination limitations.
 
+## Source Bounds
+
+**R2 — Source preflight.** Bound source bytes, open delimiters/active Else-If links, expression operators, and their combined complexity before recursive parsing/lowering. Ignore strings/comments according to their lexical context; sentence quotes never hide nested argument syntax. Apply local guards to public Pest parsing, Program, CLI source loading, native headers, and module sources. Report structured BW8001 from detailed APIs, retaining a bounded UTF-8 prefix, and reject configuration above fixed syntax ceilings. [Syntax limits](syntax-limits.md) define exact counts, defaults, compatibility, and remaining host-AST/runtime limits.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -132,3 +136,5 @@ M1 evidence in `tests/local_imports.rs` covers nested source-relative loading, m
 I1 evidence in `tests/input_variables.rs` covers all JSON kinds, exact Unicode names, direct numeric rounding/ranges, arbitrary nested keys, duplicate-key precedence, malformed input, bounded depth, atomic host installation, lexical/cloned/module isolation, file/flag replacement, file/encoding failures, and rejection before output/debug traces. Example `20`, an executed Rust example, and two CLI corpus cases exercise public entry points.
 
 R1 evidence in `tests/embedded_runs.rs` covers reuse/fresh state, retained results/diagnostics, input/configuration failures before effects, native signatures/captures, directory/environment isolation, imported environments/cache lifetime, source/step/call-depth budgets, source read limits, cleanup, cancellation/deadline priority, callback causes/panics, clock consistency, and concurrent runs. Two host corpus cases and an executed Rust example exercise public results.
+
+R2 evidence in `tests/syntax_limits.rs` covers source/nesting/operator/Else-If boundaries, lexical quote/comment handling, public Pest entry points, configured/concurrent guards, bounded error sources, imported/reused programs, and adversarial CLI rejection before effects. Two corpus fixtures pin maximum accepted results and an expression-limit error.

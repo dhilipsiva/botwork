@@ -4,11 +4,12 @@ use botwork::core::{
     eval::{execute_statement_detailed, Context},
     grammar::BWErr,
     input::load_variables,
+    syntax_limits::DEFAULT_SOURCE_BYTES,
 };
 use clap::Parser as Clap;
 use std::{
-    fs::read_to_string,
-    io::{self, Write},
+    fs::File,
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
 };
@@ -47,14 +48,36 @@ enum CliError {
     Trace(io::Error),
     #[error("Writing statement help failed: {0}")]
     Help(io::Error),
+    #[error("{file}: {source}")]
+    SourceLimit {
+        file: PathBuf,
+        source: Box<Diagnostic>,
+    },
 }
 
 fn run(file: &Path, debug: bool, files: &[PathBuf], settings: &[String]) -> Result<(), CliError> {
     let variables = load_variables(files, settings)?;
-    let source = read_to_string(file).map_err(|source| CliError::Read {
+    let mut bytes = Vec::new();
+    let read_error = |source| CliError::Read {
         file: file.to_owned(),
         source,
-    })?;
+    };
+    File::open(file)
+        .map_err(read_error)?
+        .take(DEFAULT_SOURCE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(read_error)?;
+    if bytes.len() > DEFAULT_SOURCE_BYTES {
+        return Err(CliError::SourceLimit {
+            file: file.to_owned(),
+            source: Box::new(Diagnostic::new(BWErr::ResourceLimit {
+                resource: "source bytes",
+                limit: DEFAULT_SOURCE_BYTES as u64,
+            })),
+        });
+    }
+    let source = String::from_utf8(bytes)
+        .map_err(|error| read_error(io::Error::new(io::ErrorKind::InvalidData, error)))?;
     let program = Program::parse_detailed(&file.display().to_string(), &source)?;
     let mut context = Context::default();
     context.init_statements();

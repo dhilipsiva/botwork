@@ -29,6 +29,7 @@ I wanted:
 script errors return a nonzero exit status. Add `--debug` after `cargo run --`
 to trace top-level statement locations on stderr. See [language behavior](docs/language.md)
 and [testing instructions](docs/testing.md) for the implemented contracts.
+Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.
 
 Use `cargo run -- --list-statements` to list built-ins, or
 `cargo run -- --statement-help 'Log |value|'` for parameter/return kinds and errors.

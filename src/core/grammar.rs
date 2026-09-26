@@ -6,7 +6,77 @@ use thiserror::Error;
 #[cfg(test)]
 mod tests;
 
-pub use super::parser::{BWParser, Rule};
+pub use super::parser::Rule;
+
+/// Public Pest-compatible parser with default source/syntax preflight bounds.
+pub struct BWParser;
+
+impl pest::Parser<Rule> for BWParser {
+    fn parse(
+        rule: Rule,
+        input: &str,
+    ) -> Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>> {
+        use super::syntax_limits::{check, check_size, SyntaxLimits, DEFAULT_SOURCE_BYTES};
+        let expression_root = matches!(
+            rule,
+            Rule::expression
+                | Rule::expression_inner
+                | Rule::primary
+                | Rule::literal
+                | Rule::array
+                | Rule::map
+                | Rule::map_pair
+                | Rule::unary
+                | Rule::power
+                | Rule::braced_expression
+                | Rule::call_expression
+                | Rule::computed_access
+        );
+        let structured = expression_root
+            || matches!(
+                rule,
+                Rule::botwork
+                    | Rule::statements
+                    | Rule::stmt_assign
+                    | Rule::stmt_if
+                    | Rule::stmt_else
+                    | Rule::stmt_for
+                    | Rule::stmt_while
+                    | Rule::stmt_try
+                    | Rule::stmt_catch
+                    | Rule::stmt_define
+                    | Rule::stmt_invoke
+                    | Rule::stmt_block
+                    | Rule::stmt_return
+                    | Rule::param_invoke
+            );
+        let checked = if structured {
+            check(
+                input,
+                DEFAULT_SOURCE_BYTES,
+                &SyntaxLimits::default(),
+                expression_root,
+            )
+        } else {
+            check_size(input, DEFAULT_SOURCE_BYTES)
+        };
+        if let Err(violation) = checked {
+            let end = violation.offset
+                + input[violation.offset..]
+                    .chars()
+                    .next()
+                    .map_or(0, char::len_utf8);
+            return Err(pest::error::Error::new_from_pos(
+                pest::error::ErrorVariant::CustomError {
+                    message: violation.error.to_string(),
+                },
+                pest::Position::new(&input[..end], violation.offset)
+                    .expect("preflight character boundary"),
+            ));
+        }
+        <super::parser::BWParser as pest::Parser<Rule>>::parse(rule, input)
+    }
+}
 
 lazy_static::lazy_static! {
     pub static ref PRATT_PARSER: PrattParser<Rule> = {

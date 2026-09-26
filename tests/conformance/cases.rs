@@ -141,5 +141,7 @@ pub fn cases() -> Vec<Case> {
             input: Input::EmbeddedSuccess, stdout: "", code: None, error: None },
         Case { id: "embedded-limit", positive: &[], invalid: &["R1"], boundary: &[],
             input: Input::EmbeddedLimit, stdout: "", code: Some("BW8001"), error: Some("evaluation steps") },
+        success("syntax-boundary", include_str!("syntax-boundary.botwork"), "65\n1\n", &["R2"], &["R2"]),
+        failure("syntax-limit", include_str!("syntax-limit.botwork"), "", "BW8001", "expression operators", &["R2"]),
     ]
 }

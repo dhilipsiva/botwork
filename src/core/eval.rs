@@ -150,17 +150,56 @@ impl Context {
             if bytes > budget.limits().source_bytes {
                 return Err(budget.limit("source bytes", budget.limits().source_bytes as u64));
             }
+        } else if bytes > super::syntax_limits::DEFAULT_SOURCE_BYTES {
+            return Err(BWErr::ResourceLimit {
+                resource: "source bytes",
+                limit: super::syntax_limits::DEFAULT_SOURCE_BYTES as u64,
+            }
+            .into());
         }
         Ok(())
+    }
+
+    fn retain_limit(&self, error: Diagnostic) -> Diagnostic {
+        if let (Some(budget), BWErr::ResourceLimit { resource, limit }) =
+            (&self.budget, error.error.as_ref())
+        {
+            budget.limit(resource, *limit);
+        }
+        error
+    }
+
+    pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
+        let limits = self
+            .budget
+            .as_ref()
+            .map(|budget| budget.limits().clone())
+            .unwrap_or_default();
+        ast::check_source(name, source, limits.source_bytes, &limits.syntax)
+            .map_err(|error| self.retain_limit(error))
+    }
+
+    pub(crate) fn parse_source(&self, name: &str, source: &str) -> DiagnosticResult<Program> {
+        let limits = self
+            .budget
+            .as_ref()
+            .map(|budget| budget.limits().clone())
+            .unwrap_or_default();
+        Program::parse_bounded(name, source, limits.source_bytes, &limits.syntax)
+            .map_err(|error| self.retain_limit(error))
     }
 
     pub(crate) fn read_source(&self, path: &std::path::Path) -> Result<String, SourceFailure> {
         self.checkpoint().map_err(SourceFailure::Diagnostic)?;
         let bytes = super::run::read_source(
             path,
-            self.budget
-                .as_ref()
-                .map(|budget| budget.limits().source_bytes),
+            Some(
+                self.budget
+                    .as_ref()
+                    .map_or(super::syntax_limits::DEFAULT_SOURCE_BYTES, |budget| {
+                        budget.limits().source_bytes
+                    }),
+            ),
         )?;
         self.check_source_size(bytes.len())
             .map_err(SourceFailure::Diagnostic)?;
