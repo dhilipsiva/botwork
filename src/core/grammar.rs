@@ -44,6 +44,8 @@ pub enum BWErr {
     ParsingIntegerError(String),
     #[error("Operation performed on incompatible types: {0}")]
     OperationIncompatibleError(String),
+    #[error("Arithmetic error: {0}")]
+    ArithmeticError(String),
     #[error("Collection access is unsupported: {0}")]
     UnsupportedAccessError(String),
     #[error("Writing output failed: {0}")]
@@ -110,6 +112,57 @@ impl fmt::Display for Literal {
 type ORResult<O, E = BWErr> = Result<O, E>;
 pub type LiteralResult = ORResult<Literal>;
 
+fn checked_integer(value: Option<i32>, operation: &str) -> LiteralResult {
+    value
+        .map(Literal::Int)
+        .ok_or_else(|| BWErr::ArithmeticError(format!("{operation} exceeds the i32 range")))
+}
+
+pub(super) fn finite_float(value: f32, operation: &str) -> LiteralResult {
+    if value.is_finite() {
+        Ok(Literal::Float(value))
+    } else {
+        Err(BWErr::ArithmeticError(format!(
+            "{operation} produced a non-finite result"
+        )))
+    }
+}
+
+fn validate_numeric_operand(value: &Literal) -> Result<(), BWErr> {
+    if matches!(value, Literal::Float(number) if !number.is_finite()) {
+        return Err(BWErr::ArithmeticError(
+            "Non-finite floating-point operand".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn float_power(base: f64, exponent: i32) -> LiteralResult {
+    if base == 0.0 && exponent < 0 {
+        return Err(BWErr::ArithmeticError(
+            "Zero cannot have a negative exponent".into(),
+        ));
+    }
+    // Keep exponent parity exact, and invert first to preserve tiny reciprocals.
+    // Wider intermediates are rounded to f32 once. At most 32 iterations run.
+    let mut factor = base;
+    if exponent < 0 {
+        factor = 1.0 / factor;
+    }
+    let mut remaining = exponent.unsigned_abs();
+    let mut result = 1.0;
+    while remaining != 0 {
+        if remaining & 1 != 0 {
+            result *= factor;
+        }
+        remaining >>= 1;
+        if remaining != 0 {
+            factor *= factor;
+        }
+    }
+    finite_float(result as f32, "Exponentiation")
+}
+
 pub trait Operate {
     fn operate_unary(&self, rhs: Literal) -> LiteralResult;
     fn operate_binary(&self, lhs: Literal, rhs: Literal) -> LiteralResult;
@@ -121,34 +174,66 @@ impl Operate for Rule {
         let err = Err(BWErr::OperationIncompatibleError(err));
         use Literal::*;
         use Rule::*;
+        let numeric_operands = match self {
+            exponent => matches!((&lhs, &rhs), (Int(_) | Float(_), Int(_))),
+            plus
+            | minus
+            | multiply
+            | divide
+            | modulus
+            | less_than
+            | less_than_or_equal
+            | greater_than
+            | greater_than_or_equal
+            | equal
+            | not_equal => {
+                matches!((&lhs, &rhs), (Int(_) | Float(_), Int(_) | Float(_)))
+            }
+            _ => false,
+        };
+        if numeric_operands {
+            validate_numeric_operand(&lhs)?;
+            validate_numeric_operand(&rhs)?;
+        }
+        if matches!(self, divide | modulus)
+            && matches!(lhs, Int(_) | Float(_))
+            && match &rhs {
+                Int(value) => *value == 0,
+                Float(value) => *value == 0.0,
+                _ => false,
+            }
+        {
+            return Err(BWErr::ArithmeticError(format!("{self:?} by zero")));
+        }
         match self {
-            // Arithmatic Operations
+            // Arithmetic operations
             multiply => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Int(a * b)),
-                (Float(a), Int(b)) => Ok(Float(a * b as f32)),
-                (Int(a), Float(b)) => Ok(Float(a as f32 * b)),
-                (Float(a), Float(b)) => Ok(Float(a * b)),
+                (Int(a), Int(b)) => checked_integer(a.checked_mul(b), "Multiplication"),
+                (Float(a), Int(b)) => finite_float(a * b as f32, "Multiplication"),
+                (Int(a), Float(b)) => finite_float(a as f32 * b, "Multiplication"),
+                (Float(a), Float(b)) => finite_float(a * b, "Multiplication"),
                 _ => err,
             },
             divide => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Float(a as f32 / b as f32)),
-                (Float(a), Int(b)) => Ok(Float(a / b as f32)),
-                (Int(a), Float(b)) => Ok(Float(a as f32 / b)),
-                (Float(a), Float(b)) => Ok(Float(a / b)),
+                (Int(a), Int(b)) => finite_float(a as f32 / b as f32, "Division"),
+                (Float(a), Int(b)) => finite_float(a / b as f32, "Division"),
+                (Int(a), Float(b)) => finite_float(a as f32 / b, "Division"),
+                (Float(a), Float(b)) => finite_float(a / b, "Division"),
                 _ => err,
             },
             modulus => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Int(a % b)),
-                (Float(a), Int(b)) => Ok(Float(a % b as f32)),
-                (Int(a), Float(b)) => Ok(Float(a as f32 % b)),
-                (Float(a), Float(b)) => Ok(Float(a % b)),
+                (Int(i32::MIN), Int(-1)) => Ok(Int(0)),
+                (Int(a), Int(b)) => checked_integer(a.checked_rem(b), "Remainder"),
+                (Float(a), Int(b)) => finite_float(a % b as f32, "Remainder"),
+                (Int(a), Float(b)) => finite_float(a as f32 % b, "Remainder"),
+                (Float(a), Float(b)) => finite_float(a % b, "Remainder"),
                 _ => err,
             },
             plus => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Int(a + b)),
-                (Float(a), Int(b)) => Ok(Float(a + b as f32)),
-                (Int(a), Float(b)) => Ok(Float(a as f32 + b)),
-                (Float(a), Float(b)) => Ok(Float(a + b)),
+                (Int(a), Int(b)) => checked_integer(a.checked_add(b), "Addition"),
+                (Float(a), Int(b)) => finite_float(a + b as f32, "Addition"),
+                (Int(a), Float(b)) => finite_float(a as f32 + b, "Addition"),
+                (Float(a), Float(b)) => finite_float(a + b, "Addition"),
                 (String(a), String(b)) => Ok(String(format!("{}{}", a, b))),
                 (Array(a), Array(b)) => {
                     Ok(Array(a.iter().cloned().chain(b.iter().cloned()).collect()))
@@ -156,10 +241,10 @@ impl Operate for Rule {
                 _ => err,
             },
             minus => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Int(a - b)),
-                (Float(a), Int(b)) => Ok(Float(a - b as f32)),
-                (Int(a), Float(b)) => Ok(Float(a as f32 - b)),
-                (Float(a), Float(b)) => Ok(Float(a - b)),
+                (Int(a), Int(b)) => checked_integer(a.checked_sub(b), "Subtraction"),
+                (Float(a), Int(b)) => finite_float(a - b as f32, "Subtraction"),
+                (Int(a), Float(b)) => finite_float(a as f32 - b, "Subtraction"),
+                (Float(a), Float(b)) => finite_float(a - b, "Subtraction"),
                 _ => err,
             },
 
@@ -212,8 +297,11 @@ impl Operate for Rule {
             },
 
             exponent => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Int(a.pow(b as u32))),
-                (Float(a), Int(b)) => Ok(Float(a.powf(b as f32))),
+                (Int(a), Int(b)) if b >= 0 => {
+                    checked_integer(a.checked_pow(b as u32), "Exponentiation")
+                }
+                (Int(a), Int(b)) => float_power(f64::from(a), b),
+                (Float(a), Int(b)) => float_power(f64::from(a), b),
                 _ => err,
             },
             logical_and => match (lhs, rhs) {
@@ -229,12 +317,15 @@ impl Operate for Rule {
     }
 
     fn operate_unary(&self, rhs: Literal) -> LiteralResult {
+        if matches!(self, Rule::minus) && matches!(rhs, Literal::Int(_) | Literal::Float(_)) {
+            validate_numeric_operand(&rhs)?;
+        }
         let err = format!("{:?} {:?}", self, rhs);
         let err = Err(BWErr::OperationIncompatibleError(err));
         match self {
             Rule::minus => match rhs {
-                Literal::Int(a) => Ok(Literal::Int(-a)),
-                Literal::Float(a) => Ok(Literal::Float(-a)),
+                Literal::Int(a) => checked_integer(a.checked_neg(), "Negation"),
+                Literal::Float(a) => finite_float(-a, "Negation"),
                 _ => err,
             },
             Rule::logical_not => match rhs {

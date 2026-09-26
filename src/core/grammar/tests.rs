@@ -122,6 +122,184 @@ fn division_and_mixed_arithmetic_preserve_fractional_results() {
 }
 
 #[test]
+fn integer_overflow_returns_arithmetic_errors() {
+    for (operator, a, b) in [
+        (Rule::plus, i32::MAX, 1),
+        (Rule::minus, i32::MIN, 1),
+        (Rule::multiply, i32::MAX, 2),
+        (Rule::multiply, i32::MIN, -1),
+        (Rule::exponent, 2, 31),
+    ] {
+        assert!(
+            matches!(
+                operator.operate_binary(Literal::Int(a), Literal::Int(b)),
+                Err(BWErr::ArithmeticError(_))
+            ),
+            "{a} {operator:?} {b}"
+        );
+    }
+    assert!(matches!(
+        Rule::minus.operate_unary(Literal::Int(i32::MIN)),
+        Err(BWErr::ArithmeticError(_))
+    ));
+}
+
+#[test]
+fn division_and_remainder_reject_integer_and_signed_float_zero() {
+    for operator in [Rule::divide, Rule::modulus] {
+        for numerator in [Literal::Int(7), Literal::Float(7.0)] {
+            for divisor in [Literal::Int(0), Literal::Float(0.0), Literal::Float(-0.0)] {
+                assert!(
+                    matches!(
+                        operator.operate_binary(numerator.clone(), divisor),
+                        Err(BWErr::ArithmeticError(_))
+                    ),
+                    "{operator:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn representable_integer_boundaries_and_large_exponents_succeed() {
+    for (operator, a, b, expected) in [
+        (Rule::plus, i32::MAX, 0, i32::MAX),
+        (Rule::minus, i32::MIN, 0, i32::MIN),
+        (Rule::multiply, i32::MIN, 1, i32::MIN),
+        (Rule::modulus, i32::MIN, -1, 0),
+        (Rule::modulus, -7, 3, -1),
+        (Rule::modulus, 7, -3, 1),
+        (Rule::exponent, -2, 31, i32::MIN),
+        (Rule::exponent, 0, 0, 1),
+        (Rule::exponent, 0, i32::MAX, 0),
+        (Rule::exponent, 1, i32::MAX, 1),
+        (Rule::exponent, -1, i32::MAX, -1),
+    ] {
+        let result = operator.operate_binary(Literal::Int(a), Literal::Int(b));
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{a} {operator:?} {b}: {result:?}"
+        );
+    }
+    assert!(matches!(
+        Rule::divide.operate_binary(Literal::Int(i32::MIN), Literal::Int(-1)),
+        Ok(Literal::Float(2147483648.0))
+    ));
+}
+
+#[test]
+fn nonfinite_float_operands_and_results_are_arithmetic_errors() {
+    for value in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+        assert!(matches!(
+            Rule::plus.operate_binary(Literal::Float(value), Literal::Int(1)),
+            Err(BWErr::ArithmeticError(_))
+        ));
+        assert!(matches!(
+            Rule::multiply.operate_binary(Literal::Int(1), Literal::Float(value)),
+            Err(BWErr::ArithmeticError(_))
+        ));
+        assert!(matches!(
+            Rule::minus.operate_unary(Literal::Float(value)),
+            Err(BWErr::ArithmeticError(_))
+        ));
+    }
+    for (operator, a, b) in [
+        (Rule::plus, f32::MAX, f32::MAX),
+        (Rule::minus, -f32::MAX, f32::MAX),
+        (Rule::multiply, f32::MAX, 2.0),
+        (Rule::divide, f32::MAX, 0.5),
+    ] {
+        assert!(
+            matches!(
+                operator.operate_binary(Literal::Float(a), Literal::Float(b)),
+                Err(BWErr::ArithmeticError(_))
+            ),
+            "{operator:?}"
+        );
+    }
+    assert!(matches!(
+        Rule::exponent.operate_binary(Literal::Float(f32::MAX), Literal::Int(2)),
+        Err(BWErr::ArithmeticError(_))
+    ));
+}
+
+#[test]
+fn incompatible_types_take_priority_over_nonfinite_host_values() {
+    assert!(matches!(
+        Rule::logical_not.operate_unary(Literal::Float(f32::NAN)),
+        Err(BWErr::OperationIncompatibleError(_))
+    ));
+    for (operator, lhs, rhs) in [
+        (
+            Rule::plus,
+            Literal::Bool(true),
+            Literal::Float(f32::INFINITY),
+        ),
+        (Rule::exponent, Literal::Int(4), Literal::Float(f32::NAN)),
+        (
+            Rule::equal,
+            Literal::String("x".into()),
+            Literal::Float(f32::NAN),
+        ),
+    ] {
+        assert!(matches!(
+            operator.operate_binary(lhs, rhs),
+            Err(BWErr::OperationIncompatibleError(_))
+        ));
+    }
+    assert!(matches!(
+        Rule::less_than.operate_binary(Literal::Float(f32::NAN), Literal::Int(1)),
+        Err(BWErr::ArithmeticError(_))
+    ));
+}
+
+#[test]
+fn integer_exponents_preserve_parity_reciprocals_and_subnormal_results() {
+    for (base, exponent, expected) in [
+        (Literal::Int(2), -3, 0.125),
+        (Literal::Float(-1.0), 16777217, -1.0),
+        (Literal::Float(1.0), i32::MIN, 1.0),
+        (Literal::Int(-1), i32::MIN, 1.0),
+        (Literal::Int(2), -149, f32::from_bits(1)),
+        (Literal::Int(2), -150, 0.0),
+        (Literal::Float(0.0), 0, 1.0),
+    ] {
+        let result = Rule::exponent.operate_binary(base.clone(), Literal::Int(exponent));
+        assert!(
+            matches!(result, Ok(Literal::Float(value)) if value == expected),
+            "{base:?} ^ {exponent}: {result:?}"
+        );
+    }
+    for base in [Literal::Int(0), Literal::Float(-0.0)] {
+        assert!(matches!(
+            Rule::exponent.operate_binary(base, Literal::Int(-1)),
+            Err(BWErr::ArithmeticError(_))
+        ));
+    }
+    assert!(matches!(
+        Rule::exponent.operate_binary(Literal::Int(4), Literal::Float(0.5)),
+        Err(BWErr::OperationIncompatibleError(_))
+    ));
+}
+
+#[test]
+fn finite_float_rounding_and_underflow_remain_valid() {
+    assert!(matches!(
+        Rule::divide.operate_binary(Literal::Float(f32::from_bits(1)), Literal::Int(2)),
+        Ok(Literal::Float(0.0))
+    ));
+    assert!(matches!(
+        Rule::plus.operate_binary(Literal::Int(16777217), Literal::Float(0.0)),
+        Ok(Literal::Float(16777216.0))
+    ));
+    assert!(
+        matches!(Rule::plus.operate_binary(Literal::Float(f32::MAX), Literal::Int(1)),
+        Ok(Literal::Float(value)) if value == f32::MAX)
+    );
+}
+
+#[test]
 fn comparisons_and_boolean_operators_produce_booleans() {
     for (operator, expected) in [
         (Rule::less_than, true),

@@ -22,6 +22,18 @@ Addition/subtraction and multiplication/division/remainder associate left within
 
 Run `cargo run -- --file examples/03-precedence.botwork` for an executable example. Exponent-chain associativity, the complete unary/power precedence contract, comparison-chain semantics, and boolean short-circuiting remain separate roadmap work. In particular, `and` and `or` still evaluate both operands at this stage.
 
+## Arithmetic Boundaries and Errors
+
+Integers currently use signed 32-bit values; floats use 32-bit binary floating point. Integer `+`, `-`, `*`, unary negation, and nonnegative integer powers return `ArithmeticError` when the result exceeds the integer range. Results are checked in debug and release builds. Invalid operand types retain `OperationIncompatibleError`.
+
+Division always returns a float. Division and remainder reject a zero divisor, including either sign of floating zero. Integer remainder follows the dividend's sign; `(-2147483647 - 1) % -1` returns integer `0`, while division of the same operands returns floating `2147483648.0`.
+
+Powers require an integer exponent. A nonnegative exponent with an integer base returns an integer; a negative exponent or floating base returns a float. `0 ^ 0` is `1`, while zero to a negative power is an arithmetic error. Floating powers preserve integer exponent parity and use at most 32 repeated-squaring steps, wider intermediates, and one final rounding to `f32`. For example, `2 ^ -3` is `0.125`, and `2 ^ -149` remains a positive subnormal value. Grammar grouping of chained powers and unary operators is still pending the next expression TODO.
+
+Float literal evaluation and supported numeric operations reject non-finite values/results. Operand-type errors take priority over checks on host-supplied non-finite values. Finite underflow to zero is allowed. Ordinary mixed arithmetic converts integer operands to `f32`; rounding can lose integer precision (`16777217 + 0.0` becomes `16777216`) or retain a finite maximum after a small addition. Floating powers instead convert their base exactly to `f64` for intermediate calculations. These checks do not redesign numeric precision, comparison, or host-value serialization contracts, which remain roadmap work.
+
+Arithmetic errors can be handled by `Try/Catch`. An uncaught error stops execution and returns CLI status `1`; direct failed numeric assignments preserve their previous value. See [the arithmetic example](../examples/04-arithmetic-errors.botwork). The current positive-integer literal conversion cannot represent the magnitude in `-2147483648` directly; use `(-2147483647 - 1)` pending the full literal/value contract.
+
 ## Strings
 
 Double quotes delimit a string; they are not part of its value. `"a" + "b"` produces the same value as `"ab"`. Strings preserve Unicode text without normalization and may contain literal newlines, pipes, comment markers, and braces.
@@ -66,7 +78,7 @@ The try body runs once. If it succeeds, the handler is skipped. On an evaluation
 
 A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the entire file before execution, so this prevents even earlier `Log` statements from running. Syntax errors cannot be caught by a script. Write ordinary statements directly when no handler is intended.
 
-This contract covers returned evaluation errors. Converting arithmetic panics into catchable errors, preserving structured error causes, and correcting nested `Return` remain separate roadmap items.
+This contract covers returned evaluation errors, including the arithmetic failures described above. Preserving structured error causes and correcting nested `Return` remain separate roadmap items.
 
 ## Collection Access Status
 

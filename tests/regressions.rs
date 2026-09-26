@@ -142,13 +142,18 @@ fn collection_access_returns_a_value_or_an_explicit_unsupported_error() {
 }
 
 #[test]
-#[ignore = "known defect: integer remainder by zero panics instead of returning an error"]
 fn arithmetic_failure_can_be_caught() {
     assert_int(
         "|answer| = |0|\nTry {\n |answer| = |1 % 0|\n} Catch {\n\
          |answer| = |42|\n}\n|result| = |answer|",
         42,
     );
+}
+
+#[test]
+#[ignore = "known defect: positive-magnitude conversion rejects the minimum signed integer literal"]
+fn minimum_signed_integer_literal_is_representable() {
+    assert_int("|answer| = |-2147483648|", i32::MIN);
 }
 
 #[test]

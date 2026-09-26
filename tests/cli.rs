@@ -125,6 +125,18 @@ fn caught_unsupported_access_resumes_the_script_successfully() {
 }
 
 #[test]
+fn uncaught_arithmetic_errors_fail_without_panicking() {
+    let path = fixture("arithmetic-failure.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("arithmetic-failure.botwork"));
+    assert!(diagnostic.contains("Arithmetic error: divide by zero"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn runtime_error_reports_file_and_variable_and_stops_execution() {
     let path = fixture("runtime-error.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);

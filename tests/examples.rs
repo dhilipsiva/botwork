@@ -52,6 +52,19 @@ fn precedence_example_produces_expected_values() {
 }
 
 #[test]
+fn arithmetic_example_handles_errors_and_preserves_valid_boundaries() {
+    assert_example(
+        "04-arithmetic-errors.botwork",
+        &[
+            "caught remainder error",
+            "caught overflow",
+            "0.125",
+            "-2147483648",
+        ],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

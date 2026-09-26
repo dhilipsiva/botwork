@@ -154,6 +154,95 @@ fn mixed_precedence_does_not_coerce_invalid_operand_types() {
 }
 
 #[test]
+fn arithmetic_failures_are_typed_and_catchable_without_assignment_changes() {
+    for expression in [
+        "1 % 0",
+        "1 / 0",
+        "1.0 % -0.0",
+        "2147483647 + 1",
+        "(-2147483647 - 1) - 1",
+        "50000 * 50000",
+        "-(-2147483647 - 1)",
+        "2 ^ 31",
+        "0 ^ -1",
+        "2.0 ^ 128",
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Err(BWErr::ArithmeticError(_))),
+            "{expression}: {result:?}"
+        );
+        let mut context = Context::default();
+        evaluate(
+            &format!(
+                "|answer| = |7|\nTry {{\n |answer| = |{expression}|\n}} Catch {{\n\
+             |caught| = |true|\n}}\n|after| = |answer|"
+            ),
+            &mut context,
+        )
+        .unwrap();
+        assert!(matches!(variable(&context, "answer"), Literal::Int(7)));
+        assert!(matches!(variable(&context, "caught"), Literal::Bool(true)));
+        assert!(matches!(variable(&context, "after"), Literal::Int(7)));
+    }
+}
+
+#[test]
+fn float_literals_reject_nonfinite_overflow_and_allow_finite_underflow() {
+    let source = format!("|number| = |{}.0|", "9".repeat(80));
+    assert!(matches!(
+        evaluate(&source, &mut Context::default()),
+        Err(BWErr::ArithmeticError(_))
+    ));
+    let mut context = Context::default();
+    evaluate(
+        &format!("Try {{\n {source}\n}} Catch {{\n |caught| = |true|\n}}"),
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "caught"), Literal::Bool(true)));
+    let source = format!("|number| = |0.{}1|", "0".repeat(60));
+    assert!(matches!(
+        evaluate(&source, &mut Context::default()),
+        Ok(Literal::Float(0.0))
+    ));
+}
+
+#[test]
+fn arithmetic_boundaries_and_reciprocal_powers_work_in_source() {
+    for (expression, expected) in [("(-2) ^ 31", i32::MIN), ("(-2147483647 - 1) % -1", 0)] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+    for (expression, expected) in [
+        ("(-2147483647 - 1) / -1", 2147483648.0),
+        ("1 ^ (-2147483647 - 1)", 1.0),
+        ("(-1.0) ^ 16777217", -1.0),
+        ("2 ^ -149", f32::from_bits(1)),
+        ("-7.5 % 3", -1.5),
+        ("7 % -3.0", 1.0),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Float(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
 fn undefined_variables_and_statements_return_typed_errors() {
     let mut context = Context::default();
     assert!(matches!(

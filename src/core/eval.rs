@@ -7,7 +7,9 @@ use std::{
     rc::Rc,
 };
 
-use super::grammar::{BWErr, BWParser, Literal, LiteralResult, Operate, Rule, PRATT_PARSER};
+use super::grammar::{
+    finite_float, BWErr, BWParser, Literal, LiteralResult, Operate, Rule, PRATT_PARSER,
+};
 
 #[cfg(test)]
 mod tests;
@@ -257,7 +259,7 @@ fn integer(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
 
 fn float(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
     match pair.as_str().parse() {
-        Ok(float) => Ok(Literal::Float(float)),
+        Ok(float) => finite_float(float, "Float literal"),
         Err(err) => Err(BWErr::ParsingIntegerError(err.to_string())),
     }
 }
