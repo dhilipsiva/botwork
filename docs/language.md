@@ -20,7 +20,17 @@ Thus `1 + 2 == 3` means `(1 + 2) == 3`, and `1 < 2 == 3 < 4` compares two boolea
 
 Addition/subtraction and multiplication/division/remainder associate left within their respective levels: `20 - 5 - 2` gives `13`, and `12 / 3 / 2` gives `2.0`. Unary minus and logical negation remain supported, including `3 - -2` and `!(1 > 2)`. Invalid operand combinations produce type errors rather than implicit boolean/numeric coercion.
 
-Run `cargo run -- --file examples/03-precedence.botwork` for an executable example. Exponent-chain associativity, the complete unary/power precedence contract, comparison-chain semantics, and boolean short-circuiting remain separate roadmap work. In particular, `and` and `or` still evaluate both operands at this stage.
+Run `cargo run -- --file examples/03-precedence.botwork` for an executable example. Comparison-chain semantics and boolean short-circuiting remain separate roadmap work. In particular, `and` and `or` still evaluate both operands at this stage.
+
+## Powers and Unary Operators
+
+Powers associate right: `2 ^ 3 ^ 2` means `2 ^ (3 ^ 2)` and produces `512`. Parentheses override grouping: `(2 ^ 3) ^ 2` produces `64`.
+
+Unary minus and logical negation (`!`) bind more tightly than multiplication but less tightly than a power to their right. Thus `-2 ^ 2` is `-(2 ^ 2)`, producing `-4`, while `(-2) ^ 2` produces `4`. Prefixes may repeat and apply from right to left: `--2` is `2`, `!!true` is `true`, and `- - -2` is `-2`. Unary minus requires a number; `!` requires a boolean. Unary plus is unsupported.
+
+The exponent may start with a unary operator. `2 ^ -2` produces `0.25`; `2 ^ -2 ^ 2` means `2 ^ (-(2 ^ 2))`, producing `0.0625`. Multiplication stays outside that exponent: `2 ^ -2 * 4` produces `1.0`.
+
+Every intermediate operation must satisfy the arithmetic contract below. `-2 ^ 31` fails because the positive intermediate `2 ^ 31` exceeds the integer range; `(-2) ^ 31` produces `-2147483648`. Likewise, `2 ^ 2 ^ -1` fails the integer-exponent requirement after its inner power produces `0.5`. Missing operands and unmatched parentheses are syntax errors; evaluation errors in operands propagate and remain catchable. See [the powers example](../examples/05-powers.botwork).
 
 ## Arithmetic Boundaries and Errors
 
@@ -28,7 +38,7 @@ Integers currently use signed 32-bit values; floats use 32-bit binary floating p
 
 Division always returns a float. Division and remainder reject a zero divisor, including either sign of floating zero. Integer remainder follows the dividend's sign; `(-2147483647 - 1) % -1` returns integer `0`, while division of the same operands returns floating `2147483648.0`.
 
-Powers require an integer exponent. A nonnegative exponent with an integer base returns an integer; a negative exponent or floating base returns a float. `0 ^ 0` is `1`, while zero to a negative power is an arithmetic error. Floating powers preserve integer exponent parity and use at most 32 repeated-squaring steps, wider intermediates, and one final rounding to `f32`. For example, `2 ^ -3` is `0.125`, and `2 ^ -149` remains a positive subnormal value. Grammar grouping of chained powers and unary operators is still pending the next expression TODO.
+Powers require an integer exponent. A nonnegative exponent with an integer base returns an integer; a negative exponent or floating base returns a float. `0 ^ 0` is `1`, while zero to a negative power is an arithmetic error. Floating powers preserve integer exponent parity and use at most 32 repeated-squaring steps, wider intermediates, and one final rounding to `f32`. For example, `2 ^ -3` is `0.125`, and `2 ^ -149` remains a positive subnormal value.
 
 Float literal evaluation and supported numeric operations reject non-finite values/results. Operand-type errors take priority over checks on host-supplied non-finite values. Finite underflow to zero is allowed. Ordinary mixed arithmetic converts integer operands to `f32`; rounding can lose integer precision (`16777217 + 0.0` becomes `16777216`) or retain a finite maximum after a small addition. Floating powers instead convert their base exactly to `f64` for intermediate calculations. These checks do not redesign numeric precision, comparison, or host-value serialization contracts, which remain roadmap work.
 

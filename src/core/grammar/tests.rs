@@ -94,6 +94,16 @@ fn malformed_collection_paths_remain_syntax_errors() {
 }
 
 #[test]
+fn incomplete_power_and_unary_expressions_are_syntax_errors() {
+    for expression in [
+        "2 ^", "^ 2", "2 ^^ 3", "2 ^ -", "2 ^ +3", "2 ^ (3", "-", "!", "--", "!!", "2 ^ ()",
+    ] {
+        let source = format!("|answer| = |{expression}|");
+        assert!(BWParser::parse(Rule::botwork, &source).is_err(), "{source}");
+    }
+}
+
+#[test]
 fn integer_operators_produce_expected_values() {
     for (operator, lhs, rhs, expected) in [
         (Rule::plus, 5, 3, 8),

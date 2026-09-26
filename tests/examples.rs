@@ -65,6 +65,24 @@ fn arithmetic_example_handles_errors_and_preserves_valid_boundaries() {
 }
 
 #[test]
+fn power_example_checks_grouping_and_catchable_intermediate_overflow() {
+    assert_example(
+        "05-powers.botwork",
+        &[
+            "512",
+            "64",
+            "-4",
+            "4",
+            "0.0625",
+            "2",
+            "true",
+            "caught intermediate overflow",
+            "-2147483648",
+        ],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

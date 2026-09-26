@@ -1,0 +1,16 @@
+# Powers associate right; parentheses choose a different grouping.
+Log |2 ^ 3 ^ 2|
+Log |(2 ^ 3) ^ 2|
+Log |-2 ^ 2|
+Log |(-2) ^ 2|
+Log |2 ^ -2 ^ 2|
+Log |--2|
+Log |!!true|
+# The positive intermediate 2 ^ 31 exceeds the integer range.
+Try {
+    Log |-2 ^ 31|
+    Log |"must not execute"|
+} Catch {
+    Log |"caught intermediate overflow"|
+}
+Log |(-2) ^ 31|

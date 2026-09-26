@@ -552,6 +552,7 @@ pub fn botwork(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
         Rule::stmt_assign => stmt_assign,
         Rule::param_invoke => pratt_parse,
         Rule::expression => pratt_parse,
+        Rule::power => pratt_parse,
         Rule::unary => unary,
         Rule::array => array,
         Rule::ident => ident,

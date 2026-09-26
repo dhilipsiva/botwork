@@ -25,7 +25,7 @@ lazy_static::lazy_static! {
             )
             .op(Op::infix(plus, Left) | Op::infix(minus, Left))
             .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulus, Left))
-            .op(Op::infix(exponent, Left))
+            .op(Op::infix(exponent, Right))
     };
 }
 

@@ -80,7 +80,6 @@ fn arithmetic_binds_before_comparison() {
 }
 
 #[test]
-#[ignore = "known defect: exponentiation is left associative"]
 fn exponentiation_is_right_associative() {
     assert_int("|answer| = |2 ^ 3 ^ 2|", 512);
 }

@@ -41,9 +41,10 @@ param_define  = _{ "|" ~ ident ~ "|" }
 
 expression        =  { infix | expression_inner }
 infix             = _{ expression_inner ~ (binary_operator ~ expression_inner)+ }
-expression_inner  = _{ unary | primary }
+expression_inner  = _{ unary | power }
 braced_expression = _{ "(" ~ expression ~ ")" }
-unary             =  { unary_operator ~ primary }
+unary             =  { unary_operator ~ expression_inner }
+power             =  { primary ~ (exponent ~ expression_inner)? }
 primary           = _{ literal | dot_path | ident | braced_expression }
 dot_path          =  { ident ~ ("." ~ (ident | integer))+ }
 literal           = _{ map | array | string | float | integer | boolean }
@@ -80,8 +81,7 @@ logical_or            = { "or" }
 logical_not           = { "!" }
 
 binary_operator = _{
-    exponent
-  | multiply
+    multiply
   | divide
   | modulus
   | plus

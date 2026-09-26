@@ -243,6 +243,132 @@ fn arithmetic_boundaries_and_reciprocal_powers_work_in_source() {
 }
 
 #[test]
+fn powers_associate_right_and_parentheses_override_them() {
+    for (expression, expected) in [
+        ("2 ^ 3 ^ 2", 512),
+        ("(2 ^ 3) ^ 2", 64),
+        ("2 ^ (3 ^ 2)", 512),
+        ("2 ^ 2 ^ 3", 256),
+        ("2 ^ 3 ^ 0", 2),
+        ("4 * 2 ^ 3", 32),
+        ("2 ^ 3 * 4", 32),
+        ("2 ^ --3", 8),
+        ("(-2) ^ 31", i32::MIN),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn unary_minus_binds_after_power_and_before_multiplication() {
+    for (expression, expected) in [
+        ("-2 ^ 2", -4),
+        ("(-2) ^ 2", 4),
+        ("-2 ^ 2 * 3", -12),
+        ("--2 ^ 2", 4),
+        ("- - -2", -2),
+        ("3 - --2", 1),
+        ("-2 ^ 0", -1),
+        ("(-2) ^ 0", 1),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn powers_accept_negative_exponents_with_the_same_grouping_rules() {
+    for (expression, expected) in [
+        ("2 ^ -2", 0.25),
+        ("2 ^ -2 ^ 2", 0.0625),
+        ("-2 ^ -2", -0.25),
+        ("(-2) ^ -2", 0.25),
+        ("(-2) ^ -3", -0.125),
+        ("2 ^ -(1 + 2)", 0.125),
+        ("2 ^ -2 * 4", 1.0),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Float(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn nested_unary_expressions_keep_type_errors_and_controlled_failures() {
+    for expression in ["!!true", "!!!false", "!!(1 < 2)", "!false == true"] {
+        assert!(
+            matches!(
+                evaluate(
+                    &format!("|answer| = |{expression}|"),
+                    &mut Context::default()
+                ),
+                Ok(Literal::Bool(true))
+            ),
+            "{expression}"
+        );
+    }
+    for expression in [
+        "!-2",
+        "-!true",
+        "!!1",
+        "--true",
+        "2 ^ true",
+        "2 ^ 0.5",
+        "2 ^ 2.0",
+        "2 ^ 2 ^ -1",
+    ] {
+        assert!(
+            matches!(
+                evaluate(
+                    &format!("|answer| = |{expression}|"),
+                    &mut Context::default()
+                ),
+                Err(BWErr::OperationIncompatibleError(_))
+            ),
+            "{expression}"
+        );
+    }
+    assert!(
+        matches!(evaluate("|answer| = |2 ^ -missing|", &mut Context::default()),
+        Err(BWErr::VariableNotDefined(name)) if name == "missing")
+    );
+    assert!(
+        matches!(evaluate("|answer| = |2 ^ m.a|", &mut Context::default()),
+        Err(BWErr::UnsupportedAccessError(path)) if path == "m.a")
+    );
+    for expression in ["2 ^ 2 ^ 5", "-2 ^ 31", "2 ^ (1 / 0)", "(2 ^ 31) ^ 0"] {
+        assert!(
+            matches!(
+                evaluate(
+                    &format!("|answer| = |{expression}|"),
+                    &mut Context::default()
+                ),
+                Err(BWErr::ArithmeticError(_))
+            ),
+            "{expression}"
+        );
+    }
+}
+
+#[test]
 fn undefined_variables_and_statements_return_typed_errors() {
     let mut context = Context::default();
     assert!(matches!(
