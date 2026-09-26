@@ -13,6 +13,45 @@ Run `cargo test --test examples` to check the expression and syntax demonstratio
 
 The initial suite does not establish complete language conformance or the roadmap's final coverage targets. Track unfinished regression and validation work in [TODO.md](../TODO.md).
 
+## Coverage Measurement
+
+Use Python 3.9 or newer and the active Rust toolchain's LLVM tools:
+
+```sh
+rustup component add llvm-tools-preview
+cargo install cargo-llvm-cov --version 0.9.1 --locked
+python3 tests/coverage_tools.py
+python3 scripts/coverage.py --offline
+```
+
+Omit `--offline` when Cargo dependencies need downloading. If installing the tool with `--root`, add that directory's `bin` to `PATH`. The helper requires the recorded tool version; review upgrades explicitly. Use the default Cargo compiler/profile configuration and unset custom compiler and LLVM-reporting overrides before capture. The initial configuration uses the compiler's matching LLVM tools.
+
+The command collects **library unit tests** and **all active Rust tests** separately. Use `--scope unit` or `--scope all` for a single capture. Each scope uses its own target directory and cleans previous profiles. CLI subprocesses inherit profiling settings with process/module identifiers, so their execution contributes to full-suite coverage. Do not run concurrent captures of the same scope.
+
+Reports and test logs are written under ignored `target/coverage/`: `unit.json`, `all.json`, their `.log` files, and `both-summary.json` (or the selected scope's summary). Summaries record commands, versions, platform, source/test hashes, test counts, and per-file covered/total lines. The Git revision is the base revision; when the worktree is dirty, input hashes identify the measured files. Stop editing source/tests during collection.
+
+Coverage includes executable lines in maintained Rust source files. It excludes test files and the isolated Pest-generated parser in `src/core/parser.rs`; handwritten operators in `grammar.rs` remain included. Other derives, such as clap and thiserror, can contribute mapped lines. Library-only coverage excludes `main.rs`; full-suite coverage includes it. Module-only files have no executable lines. Review the expected source-file lists in `scripts/coverage.py` whenever adding code; mismatches fail collection.
+
+Line coverage does **not** measure grammar-rule coverage, branch coverage, ignored regressions, doctests, assertions' quality, or correctness of every exercised path. README's 50% unit-coverage goal is an intermediate target, and TODO milestone 10 retains the stronger release gates. The helper's eight tests run in CI; instrumented coverage collection is currently a local command.
+
+Tool references: [cargo-llvm-cov usage](https://github.com/taiki-e/cargo-llvm-cov) and [Rust coverage instrumentation](https://doc.rust-lang.org/rustc/instrument-coverage.html).
+
+### Initial Baseline — 2026-09-26
+
+[Recorded JSON](coverage-baseline.json) preserves the first capture's inputs and results. The debug capture used Rust/Cargo 1.97.1, cargo-llvm-cov 0.9.1, and matching LLVM 22.1.6 tools on x86_64 Linux under WSL2. It measured the parser-module extraction and coverage helper on top of revision `e04fbbd`; the recorded input hashes identify the measured worktree precisely.
+
+| Maintained source | Library unit tests | Full active suite |
+| --- | ---: | ---: |
+| `src/core/eval.rs` | 334 / 415 | 378 / 415 |
+| `src/core/grammar.rs` | 79 / 133 | 79 / 133 |
+| `src/main.rs` | Outside library scope | 25 / 36 |
+| **Total covered / executable lines** | **413 / 548 (75.36%)** | **482 / 584 (82.53%)** |
+| Rust tests | 35 passed | 54 passed; 13 ignored |
+
+The library unit result exceeds the intermediate 50% numerical target within its stated scope. CLI coverage comes from integration tests. A second clean unit capture after the full suite returned identical counts, confirming profile isolation for this run. Full-suite execution covered CLI source lines, confirming that subprocess profiles contributed. Separate uninstrumented debug and release suites also passed.
+
+These are baseline measurements, not release-gate results: 13 known regressions remain unresolved, grammar-rule and branch coverage are unmeasured, and the measured operator code still has substantial gaps. Keep this initial record; later measurements should be recorded separately with their own source hashes and tool versions.
+
 ## Known Defects
 
 `tests/regressions.rs` captures intended behavior for the confirmed DSL defects. Each unfixed case is explicitly ignored with a reason so the ordinary suite reports pending work. Run `cargo test --test regressions -- --ignored` to reproduce those failures, or pass a test name to isolate one. Enable each case in the commit that fixes it; an ignored test is never evidence of a passing requirement.

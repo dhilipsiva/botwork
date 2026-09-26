@@ -1,5 +1,4 @@
 use pest::pratt_parser::PrattParser;
-use pest_derive::Parser;
 use std::collections::HashMap;
 use std::fmt;
 use thiserror::Error;
@@ -7,9 +6,7 @@ use thiserror::Error;
 #[cfg(test)]
 mod tests;
 
-#[derive(Parser)]
-#[grammar = "src/core/grammar.pest"]
-pub struct BWParser;
+pub use super::parser::{BWParser, Rule};
 
 lazy_static::lazy_static! {
     pub static ref PRATT_PARSER: PrattParser<Rule> = {

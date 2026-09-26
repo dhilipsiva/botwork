@@ -1,0 +1,133 @@
+{
+  "base_revision": "e04fbbd0210e046be80e768ce07f2d5cf8603e2e",
+  "captured_at": "2026-09-26T11:14:21.860677+00:00",
+  "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+  "cargo_llvm_cov": "cargo-llvm-cov 0.9.1",
+  "excluded": [
+    "tests/**",
+    "src/**/tests.rs",
+    "src/core/parser.rs (generated Pest parser)"
+  ],
+  "input_sha256": {
+    "Cargo.lock": "e21b1f746f8991dd3b0543947eec8808333dec4364878b21ef5faceda270331e",
+    "Cargo.toml": "c5c7c934f4856a13d5aa9ab6b78d59a3ec7903a4ff3537e9309c979aaae5e2e7",
+    "examples/01-expressions.botwork": "3f6f8bd724b055d75b4b421629856010c26ac6961e1ba15856db84d26613e5c2",
+    "examples/02-syntaxes.botwork": "7cab851198c5bbe035903165cfb9206d358f9d444f559b0b18ee46ae62d51ef0",
+    "scripts/coverage.py": "397d911dfb89fe99c42ae220f610aa0b448fcd4a8954a717c2249395e3c0de99",
+    "src/core/eval.rs": "147fbbd0a13eddec5803bcdf312acdbeb8f96c4f96d692406672b4b45b8a8709",
+    "src/core/eval/tests.rs": "0918755bb9b248ab0bdb4a81860f9c17362e51dfe865bb31159bfe309bcfc4ee",
+    "src/core/grammar.pest": "7e9b02413cb16e3b7c4dcdd3f9a9faa10b57de89974e8672ed4e5de966bd94bf",
+    "src/core/grammar.rs": "da568f7e5214062f04e7cb0f9328cb4e11ee55865792ba3fd2b6151ad29a2240",
+    "src/core/grammar/tests.rs": "eae2782b3ea5064c560d81146bc54ebc39522e86373210b8950b91446d2c5fa1",
+    "src/core/mod.rs": "8d0db22840f5afde279d4e4bc306fe8c4951f72822a2ebc210fa0431d8c4fe4c",
+    "src/core/parser.rs": "a3cedaef0d733a66f59213c81b85a17f03f2ed63f74340987685ac1decc0dec1",
+    "src/lib.rs": "0ef0a2bc9fabad23421ee18ce3bd3fe710c9d25d8efe333b11a47c901c49a409",
+    "src/main.rs": "7a28149694803f98e6fb66338c089fbe3bd4f70a4b98f1efa8ba0cdb7efa16e7",
+    "tests/cli.rs": "a38890b5b85963758611446bced62d55826ef2e49f252e1a2143e0919314199c",
+    "tests/coverage_tools.py": "5f777b02632eba743003d1c2d95a13cd8be89c1da53069a53f88a5d47b49d350",
+    "tests/examples.rs": "ccc3f09a915ceefd6b7019e91e877df517f4537a4351c44126bfa8669b985a89",
+    "tests/fixtures/assignment.botwork": "0f82f7a5d559a643353bc5d4c808e8d009a0548e7e88364be6587ee46d79b1b9",
+    "tests/fixtures/caught-error.botwork": "57e4eb4ee974920d605a526ac3597ea059d54af4014d67835e7594e507c6092b",
+    "tests/fixtures/log-values.botwork": "9506609187b59bccbfff7d7bfb0e7a0b5710f098e939a61171d9e3822fc9446c",
+    "tests/fixtures/runtime-after-output.botwork": "0c2f0ef91e2559d1fca0487a6d5f60e3d563b46e084ccd876042c9e5587ba7af",
+    "tests/fixtures/runtime-error.botwork": "72895c2d67ba7f42ee7f0ad4a1fa77ece573990f09aa3066e8fd2f8ac27c7b7b",
+    "tests/fixtures/syntax-after-output.botwork": "0f80a3e0fa3efc354ee6d6318dfc7c3377a695d100c97889cc2ad69f082f4f9a",
+    "tests/fixtures/syntax-error.botwork": "9e02d96150cb830fa32b0f1b9057233e053764d9e9216381c402e80add37bf39",
+    "tests/regressions.rs": "53c19e19712b321ee842a9fe2fb82016979d197b2944f02287d4ce1f3c93fff6"
+  },
+  "llvm_cov": "LLVM (http://llvm.org/):\n  LLVM version 22.1.6-rust-1.97.1-stable\n  Optimized build.",
+  "llvm_profdata": "LLVM (http://llvm.org/):\n  LLVM version 22.1.6-rust-1.97.1-stable\n  Optimized build.",
+  "metric": "executable line coverage of maintained Rust source files",
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "profile": "debug",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6",
+  "schema": 1,
+  "scopes": {
+    "all": {
+      "command": [
+        "cargo",
+        "llvm-cov",
+        "--locked",
+        "--json",
+        "--summary-only",
+        "--ignore-filename-regex",
+        "(^|[/\\\\])tests([/\\\\]|\\.rs$)|[/\\\\]src[/\\\\]core[/\\\\]parser\\.rs$",
+        "--output-path",
+        "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/all.json",
+        "--offline"
+      ],
+      "covered": 482,
+      "environment": {
+        "CARGO_LLVM_COV_BUILD_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/all-target",
+        "CARGO_LLVM_COV_TARGET_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/all-target",
+        "LLVM_PROFILE_FILE_NAME": "botwork-%p-%m.profraw"
+      },
+      "files": {
+        "src/core/eval.rs": {
+          "covered": 378,
+          "total": 415
+        },
+        "src/core/grammar.rs": {
+          "covered": 79,
+          "total": 133
+        },
+        "src/main.rs": {
+          "covered": 25,
+          "total": 36
+        }
+      },
+      "percent": 82.53,
+      "tests": {
+        "failed": 0,
+        "ignored": 13,
+        "passed": 54
+      },
+      "total": 584
+    },
+    "unit": {
+      "command": [
+        "cargo",
+        "llvm-cov",
+        "--locked",
+        "--json",
+        "--summary-only",
+        "--ignore-filename-regex",
+        "(^|[/\\\\])tests([/\\\\]|\\.rs$)|[/\\\\]src[/\\\\]core[/\\\\]parser\\.rs$",
+        "--output-path",
+        "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/unit.json",
+        "--lib",
+        "--offline"
+      ],
+      "covered": 413,
+      "environment": {
+        "CARGO_LLVM_COV_BUILD_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/unit-target",
+        "CARGO_LLVM_COV_TARGET_DIR": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/coverage/unit-target",
+        "LLVM_PROFILE_FILE_NAME": "botwork-%p-%m.profraw"
+      },
+      "files": {
+        "src/core/eval.rs": {
+          "covered": 334,
+          "total": 415
+        },
+        "src/core/grammar.rs": {
+          "covered": 79,
+          "total": 133
+        }
+      },
+      "percent": 75.36,
+      "tests": {
+        "failed": 0,
+        "ignored": 0,
+        "passed": 35
+      },
+      "total": 548
+    }
+  },
+  "unmeasured": [
+    "branch coverage",
+    "grammar-rule coverage",
+    "ignored regressions",
+    "doctests"
+  ],
+  "worktree_status": "M .github/workflows/ci.yml\n M docs/testing.md\n M src/core/grammar.rs\n M src/core/mod.rs\n?? scripts/\n?? src/core/parser.rs\n?? tests/coverage_tools.py"
+}

@@ -43,6 +43,9 @@ jobs:
       - name: Check Clippy warnings
         if: matrix.profile == 'debug'
         run: cargo +stable clippy --locked --all-targets -- -D warnings
+      - name: Check coverage reporting helper
+        if: matrix.profile == 'debug'
+        run: python3 tests/coverage_tools.py
       - name: Build all targets
         run: cargo +stable build --locked --all-targets ${{ matrix.flags }}
       - name: Run tests and examples
