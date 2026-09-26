@@ -11,6 +11,7 @@ use super::{
         self, AccessSegment, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr,
         ExprKind, Node, Program, Statement, StatementKind, UnaryOp,
     },
+    diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
 };
 
@@ -28,7 +29,8 @@ enum Completion {
     Continue,
 }
 
-type CompletionResult = Result<Completion, BWErr>;
+type CompletionResult = DiagnosticResult<Completion>;
+type RuntimeResult = DiagnosticResult<Literal>;
 
 #[derive(Clone)]
 enum StmtType {
@@ -51,6 +53,7 @@ struct Frame {
 pub struct Context {
     frames: Vec<Frame>,
     current: usize,
+    calls: Vec<CallFrame>,
     #[cfg(test)]
     expression_visits: std::cell::RefCell<Vec<String>>,
 }
@@ -60,6 +63,7 @@ impl Default for Context {
         Self {
             frames: vec![Frame::default()],
             current: 0,
+            calls: vec![],
             #[cfg(test)]
             expression_visits: Default::default(),
         }
@@ -123,11 +127,22 @@ impl Context {
                 name: "Log",
             });
     }
+
+    fn with_call(
+        &mut self,
+        frame: CallFrame,
+        body: impl FnOnce(&mut Self) -> RuntimeResult,
+    ) -> RuntimeResult {
+        self.calls.push(frame);
+        let result = body(self).map_err(|error| error.capture_stack(&self.calls));
+        self.calls.pop();
+        result
+    }
 }
 
-type Callback = fn(&Call, &mut Context) -> LiteralResult;
+type Callback = fn(&Call, &mut Context) -> RuntimeResult;
 
-fn log_param(call: &Call, context: &mut Context) -> LiteralResult {
+fn log_param(call: &Call, context: &mut Context) -> RuntimeResult {
     let expression = call.arguments.last().ok_or_else(|| {
         BWErr::ParameterMissingError("`Log {param}` requires at least 1 parameter".into())
     })?;
@@ -140,17 +155,29 @@ fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
     writeln!(output, "{value}").map_err(|error| BWErr::OutputError(error.to_string()))
 }
 
-fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
+fn invoke(call: &Call, context: &mut Context) -> RuntimeResult {
+    invoke_inner(call, context).map_err(|error| error.at(&call.span).capture_stack(&context.calls))
+}
+
+fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
     let (definition, owner) = context
         .get_statement(&call.signature)
         .ok_or_else(|| BWErr::StatementNotDefined(call.span.text().to_owned()))?;
     match definition {
-        StmtType::Native { callback, .. } => callback(call, context),
+        StmtType::Native { callback, .. } => context.with_call(
+            CallFrame {
+                signature: call.signature.clone(),
+                call_site: call.span.clone(),
+                definition_site: None,
+            },
+            |context| callback(call, context),
+        ),
         StmtType::UserDefined(definition) => {
             if definition.parameters.len() != call.arguments.len() {
                 return Err(BWErr::ParameterMissingError(
                     "The call does not match the definition's parameter count".into(),
-                ));
+                )
+                .into());
             }
             let arguments = call
                 .arguments
@@ -167,18 +194,35 @@ fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
                 parent: Some(owner),
                 ..Frame::default()
             };
-            match context
-                .with_invocation(frame, |context| evaluate_block(&definition.body, context))?
-            {
-                Completion::Return(value) => Ok(value),
-                // Reject unconsumed loop controls here so they cannot reach a caller's loop.
-                completion => finish_script(completion),
-            }
+            context.with_call(
+                CallFrame {
+                    signature: call.signature.clone(),
+                    call_site: call.span.clone(),
+                    definition_site: Some(definition.span.clone()),
+                },
+                |context| {
+                    context
+                        .with_invocation(frame, |context| evaluate_block(&definition.body, context))
+                        .and_then(|completion| match completion {
+                            Completion::Return(value) => Ok(value),
+                            // Reject unconsumed loop controls at their invocation boundary.
+                            completion => finish_script(completion),
+                        })
+                },
+            )
         }
     }
 }
 
-fn evaluate_expression(expression: &Expr, context: &Context) -> LiteralResult {
+fn evaluate_expression(expression: &Expr, context: &Context) -> RuntimeResult {
+    evaluate_expression_inner(expression, context).map_err(|error| {
+        error
+            .at_expression(&expression.span)
+            .capture_stack(&context.calls)
+    })
+}
+
+fn evaluate_expression_inner(expression: &Expr, context: &Context) -> RuntimeResult {
     #[cfg(test)]
     context
         .expression_visits
@@ -189,16 +233,16 @@ fn evaluate_expression(expression: &Expr, context: &Context) -> LiteralResult {
         ExprKind::Integer(text) => text
             .parse::<i32>()
             .map(Literal::Int)
-            .map_err(|error| BWErr::ParsingIntegerError(error.to_string())),
+            .map_err(|error| BWErr::ParsingIntegerError(error.to_string()).into()),
         ExprKind::Float(text) => {
             let value = text
                 .parse::<f32>()
                 .map_err(|error| BWErr::ParsingIntegerError(error.to_string()))?;
-            finite_float(value, "Float literal")
+            finite_float(value, "Float literal").map_err(Into::into)
         }
         ExprKind::Bool(value) => Ok(Literal::Bool(*value)),
         ExprKind::String(value) => Ok(Literal::String(value.clone())),
-        ExprKind::Variable(name) => context.get_variable(name),
+        ExprKind::Variable(name) => context.get_variable(name).map_err(Into::into),
         ExprKind::Access { base, segments } => evaluate_access(base, segments, context),
         ExprKind::Array(elements) => elements
             .iter()
@@ -226,11 +270,12 @@ fn evaluate_expression(expression: &Expr, context: &Context) -> LiteralResult {
                 format!("-{text}")
                     .parse::<i32>()
                     .map(Literal::Int)
-                    .map_err(|error| BWErr::ParsingIntegerError(error.to_string()))
+                    .map_err(|error| BWErr::ParsingIntegerError(error.to_string()).into())
             }
             _ => operator
                 .to_rule()
-                .operate_unary(evaluate_expression(operand, context)?),
+                .operate_unary(evaluate_expression(operand, context)?)
+                .map_err(Into::into),
         },
         ExprKind::Binary {
             operator,
@@ -248,19 +293,23 @@ fn evaluate_expression(expression: &Expr, context: &Context) -> LiteralResult {
                     };
                     return Err(BWErr::OperationIncompatibleError(format!(
                         "The left operand of `{name}` must be a boolean"
-                    )));
+                    ))
+                    .into());
                 };
                 if (*operator == BinaryOp::And && !value) || (*operator == BinaryOp::Or && *value) {
                     return Ok(Literal::Bool(*value));
                 }
             }
             let right = evaluate_expression(right, context)?;
-            operator.to_rule().operate_binary(left, right)
+            operator
+                .to_rule()
+                .operate_binary(left, right)
+                .map_err(Into::into)
         }
     }
 }
 
-fn evaluate_access(base: &Expr, segments: &[AccessSegment], context: &Context) -> LiteralResult {
+fn evaluate_access(base: &Expr, segments: &[AccessSegment], context: &Context) -> RuntimeResult {
     // Expressions cannot change bindings. Borrow a variable's containers throughout
     // index evaluation, or own a temporary base, then copy only the selected result.
     let container = if let ExprKind::Variable(name) = &base.kind {
@@ -269,7 +318,11 @@ fn evaluate_access(base: &Expr, segments: &[AccessSegment], context: &Context) -
             .expression_visits
             .borrow_mut()
             .push(base.span.text().to_owned());
-        Cow::Borrowed(context.get_variable_ref(name)?)
+        Cow::Borrowed(
+            context
+                .get_variable_ref(name)
+                .map_err(|error| Diagnostic::new(error).at_expression(&base.span))?,
+        )
     } else {
         Cow::Owned(evaluate_expression(base, context)?)
     };
@@ -284,14 +337,19 @@ fn evaluate_access(base: &Expr, segments: &[AccessSegment], context: &Context) -
                 AccessSegment::Computed { span, .. } => path.push_str(span.text().trim()),
             }
         }
-        BWErr::CollectionAccessError {
+        let span = match segment {
+            AccessSegment::Literal(name) => &name.span,
+            AccessSegment::Computed { span, .. } => span,
+        };
+        Diagnostic::new(BWErr::CollectionAccessError {
             path,
             segment: match segment {
                 AccessSegment::Literal(name) => name.text.clone(),
                 AccessSegment::Computed { span, .. } => span.text().trim().to_owned(),
             },
             reason,
-        }
+        })
+        .at_expression(span)
     };
     let mut value = container.as_ref();
     for segment in segments {
@@ -363,9 +421,10 @@ fn evaluate_for(
     context: &mut Context,
 ) -> CompletionResult {
     let Literal::Array(values) = evaluate_expression(iterable, context)? else {
-        return Err(BWErr::OperationIncompatibleError(
+        return Err(Diagnostic::new(BWErr::OperationIncompatibleError(
             "For requires an array to iterate over".into(),
-        ));
+        ))
+        .at_expression(&iterable.span));
     };
     let previous = context.frames[context.current].variables.remove(binding);
     let result = (|| {
@@ -390,9 +449,10 @@ fn evaluate_for(
 fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> CompletionResult {
     loop {
         let Literal::Bool(should_loop) = evaluate_expression(condition, context)? else {
-            return Err(BWErr::OperationIncompatibleError(
+            return Err(Diagnostic::new(BWErr::OperationIncompatibleError(
                 "While requires a boolean condition".into(),
-            ));
+            ))
+            .at_expression(&condition.span));
         };
         if !should_loop {
             break;
@@ -407,6 +467,11 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Comp
 }
 
 fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
+    evaluate_statement_inner(statement, context)
+        .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))
+}
+
+fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> CompletionResult {
     match &statement.kind {
         StatementKind::Assign { name, value } => {
             let value = match value {
@@ -421,15 +486,24 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
         StatementKind::Define(definition) => {
             let statements = &mut context.frames[context.current].statements;
             if let Some(original) = statements.get(&definition.signature) {
+                let origin_span = match original {
+                    StmtType::UserDefined(definition) => Some(&definition.span),
+                    StmtType::Native { .. } => None,
+                };
                 let original = match original {
                     StmtType::Native { name, .. } => format!("<builtin {name}>"),
                     StmtType::UserDefined(original) => original.span.location(),
                 };
-                return Err(BWErr::DuplicateStatement {
+                let mut diagnostic = Diagnostic::new(BWErr::DuplicateStatement {
                     signature: definition.signature.clone(),
                     original,
                     duplicate: definition.span.location(),
-                });
+                })
+                .at(&definition.span);
+                if let Some(span) = origin_span {
+                    diagnostic = diagnostic.with_related("first definition", span);
+                }
+                return Err(diagnostic);
             }
             statements.insert(
                 definition.signature.clone(),
@@ -444,9 +518,10 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
             else_branch,
         } => {
             let Literal::Bool(condition) = evaluate_expression(condition, context)? else {
-                return Err(BWErr::OperationIncompatibleError(
+                return Err(Diagnostic::new(BWErr::OperationIncompatibleError(
                     "If requires a boolean condition".into(),
-                ));
+                ))
+                .at_expression(&condition.span));
             };
             if condition {
                 evaluate_block(then_branch, context)
@@ -466,7 +541,9 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
         StatementKind::While { condition, body } => evaluate_while(condition, body, context),
         StatementKind::Try { body, handler } => match evaluate_block(body, context) {
             Ok(value) => Ok(value),
-            Err(_) => evaluate_block(handler, context),
+            Err(original) => {
+                evaluate_block(handler, context).map_err(|error| error.while_handling(original))
+            }
         },
         StatementKind::Return(expression) => {
             let value = match expression {
@@ -481,18 +558,20 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
 }
 
 // Retain runtime boundary guards even though public entry points validate placement.
-fn finish_script(completion: Completion) -> LiteralResult {
+fn finish_script(completion: Completion) -> RuntimeResult {
     match completion {
         Completion::Normal(value) => Ok(value),
-        Completion::Return(_) => Err(BWErr::ControlFlowError(
-            "Return requires a custom-statement body".into(),
-        )),
+        Completion::Return(_) => {
+            Err(BWErr::ControlFlowError("Return requires a custom-statement body".into()).into())
+        }
         Completion::Break => Err(BWErr::ControlFlowError(
             "Break requires an enclosing loop in the same invocation".into(),
-        )),
+        )
+        .into()),
         Completion::Continue => Err(BWErr::ControlFlowError(
             "Continue requires an enclosing loop in the same invocation".into(),
-        )),
+        )
+        .into()),
     }
 }
 
@@ -501,13 +580,23 @@ fn finish_script(completion: Completion) -> LiteralResult {
 /// Definitions retain their syntax tree and source spans after the program is dropped.
 /// The entire statement is validated before execution; custom calls consume their returns.
 pub fn execute_statement(statement: &Statement, context: &mut Context) -> LiteralResult {
-    ast::validate_script(std::slice::from_ref(statement))?;
+    execute_statement_detailed(statement, context).map_err(Diagnostic::into_error)
+}
+
+/// Execute one script-level statement with source locations and entered-call frames.
+pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) -> RuntimeResult {
+    ast::validate_script_detailed(std::slice::from_ref(statement))?;
     finish_script(evaluate_statement(statement, context)?)
 }
 
 /// Validate the complete program, then execute without parsing or rebuilding it.
 pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResult {
-    program.validate()?;
+    evaluate_program_detailed(program, context).map_err(Diagnostic::into_error)
+}
+
+/// Validate and execute a program while preserving structured diagnostic causes.
+pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> RuntimeResult {
+    program.validate_detailed()?;
     let mut result = Literal::None;
     for statement in &program.statements {
         result = finish_script(evaluate_statement(statement, context)?)?;
@@ -520,11 +609,16 @@ pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResu
 /// This lowers the pair once. Prefer `Program::parse` and `evaluate_program` to
 /// share one owned source allocation across an entire script.
 pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
+    botwork_detailed(pair, context).map_err(Diagnostic::into_error)
+}
+
+/// Parser-pair compatibility with detailed execution errors.
+pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
     match ast::from_pair(pair)? {
-        Node::Statement(statement) => execute_statement(&statement, context),
+        Node::Statement(statement) => execute_statement_detailed(&statement, context),
         Node::Expression(expression) => evaluate_expression(&expression, context),
         Node::Block(block) => {
-            ast::validate_script(&block.statements)?;
+            ast::validate_script_detailed(&block.statements)?;
             finish_script(evaluate_block(&block, context)?)
         }
         Node::None => Ok(Literal::None),

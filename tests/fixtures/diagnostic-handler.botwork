@@ -1,0 +1,5 @@
+Try {
+    |value| = |missing_original|
+} Catch {
+    |value| = |missing_handler|
+}

@@ -7,7 +7,7 @@ fn run(source: &str, context: &mut Context) -> LiteralResult {
     evaluate_program(&program, context)
 }
 
-fn record(call: &Call, context: &mut Context) -> LiteralResult {
+fn record(call: &Call, context: &mut Context) -> RuntimeResult {
     let value = evaluate_expression(&call.arguments[0], context)?;
     let depth = context.frames.len() as i32;
     for (key, entry) in [
@@ -242,7 +242,8 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                     panic!("holder")
                 };
                 // Inspect restored bindings before an invocation frame could mask a leak.
-                let result = evaluate_block(&definition.body, &mut context);
+                let result =
+                    evaluate_block(&definition.body, &mut context).map_err(Diagnostic::into_error);
                 assert!(
                     match action {
                         "return" => matches!(result, Ok(Completion::Return(Literal::Int(42)))),

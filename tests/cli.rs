@@ -73,6 +73,47 @@ fn native_argument_failure_preserves_prior_output_and_skips_the_entire_call_tail
 }
 
 #[test]
+fn structured_runtime_diagnostics_report_the_expression_and_entered_call_stack() {
+    let path = fixture("diagnostic-stack.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostic.contains("diagnostic-stack.botwork:2:17"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("expression: missing"), "{diagnostic}");
+    assert!(
+        diagnostic.contains("diagnostic-stack.botwork:5:16"),
+        "{diagnostic}"
+    );
+    assert!(
+        diagnostic.contains("diagnostic-stack.botwork:8:1"),
+        "{diagnostic}"
+    );
+}
+
+#[test]
+fn a_failed_handler_reports_both_failures_at_their_original_locations() {
+    let path = fixture("diagnostic-handler.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("missing_handler"), "{diagnostic}");
+    assert!(diagnostic.contains("missing_original"), "{diagnostic}");
+    assert!(
+        diagnostic.contains("diagnostic-handler.botwork:4:16"),
+        "{diagnostic}"
+    );
+    assert!(
+        diagnostic.contains("diagnostic-handler.botwork:2:16"),
+        "{diagnostic}"
+    );
+}
+
+#[test]
 fn invalid_control_placement_prevents_all_cli_execution() {
     assert_control_placement_failure("invalid-control.botwork", 2, 13, "Return");
 }

@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 27 cases against the 22 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 29 cases against the 23 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -30,12 +30,13 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | C2 | values | return-operand-order | empty, values |
 | F1 | control | required-catch | recovery |
 | F2 | recovery | return-operand-order | recovery |
+| F3 | recovery | diagnostic-stack | diagnostic-handler |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
 ## Execution and Maintenance
 
-Run `cargo test --locked --test conformance --test cli_harness`, then repeat with `--release`. CI's normal test matrix executes both profiles. The 26 script cases run through Cargo's built CLI in isolated temporary working directories. Each checks exact stdout, status `0`/`1`, empty success stderr, or the expected failure message and source filename. A five-second timeout terminates and reaps a stuck process. Runner tests check timeout recovery, stream separation, and workspace cleanup.
+Run `cargo test --locked --test conformance --test cli_harness`, then repeat with `--release`. CI's normal test matrix executes both profiles. The 28 script cases run through Cargo's built CLI in isolated temporary working directories. Each checks exact stdout, status `0`/`1`, empty success stderr, or the expected failure message and source filename. A five-second timeout terminates and reaps a stuck process. Runner tests check timeout recovery, stream separation, and workspace cleanup.
 
 The host-only case exercises the public Rust equality API with NaN and both infinities, directly and nested in arrays/maps, on both operand sides. All 36 combinations across equality/inequality require an arithmetic error, even when the other value has a different kind. Valid DSL source cannot construct these non-finite host values.
 

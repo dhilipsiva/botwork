@@ -268,7 +268,7 @@ The try body runs once. If it succeeds, the handler is skipped. On an evaluation
 
 A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the entire file before execution, so this prevents even earlier `Log` statements from running. Syntax errors cannot be caught by a script. Write ordinary statements directly when no handler is intended.
 
-This contract covers evaluation errors, including the arithmetic failures described above. Valid `Return`, `Break`, and `Continue` pass through Try/Catch without running its handler. An error evaluating a return expression remains catchable, and a handler can return a fallback value or raise another error. Preserving structured error causes remains a separate roadmap item.
+This contract covers evaluation errors, including the arithmetic failures described above. Valid `Return`, `Break`, and `Continue` pass through Try/Catch without running its handler. An error evaluating a return expression remains catchable, and a handler can return a fallback value or raise another error. [Structured diagnostics](diagnostics.md) retain original source locations and entered-call stacks. If a handler fails, its error is primary and the handled error remains as a cause; a successful handler consumes its error. DSL inspection/rethrow remains a separate roadmap item.
 
 ## Collection Access
 

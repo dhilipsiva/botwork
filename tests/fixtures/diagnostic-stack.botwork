@@ -1,0 +1,8 @@
+Fail |x| {
+    Return |x + missing|
+}
+Outer {
+    |result| = Fail |7|
+    Return |result|
+}
+Outer

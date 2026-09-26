@@ -60,6 +60,8 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **F2 — Effects and reporting.** Error handling does not undo completed assignments or output. A failed direct assignment preserves its destination; a failed output operation may already have written bytes. Syntax/validation errors cannot be caught by the script. Successfully handled errors exit with CLI status `0`; uncaught failures exit with `1` and diagnostics on stderr. Normal `Log` output uses stdout. Numeric conversion errors remain runtime errors despite the prototype's `ParsingIntegerError` name.
 
+**F3 — Diagnostic context.** Detailed parsing/execution APIs and the CLI retain the innermost relevant source span, original error category, related declaration locations, and an innermost-first snapshot of entered calls. Capture stacks before unwinding so caught errors retain their original callers. Unresolved/custom argument failures add no unentered callee frame. A failed handler preserves its own error as primary and the handled error as a structured cause; successful handling consumes the error. Syntax/validation diagnostics still precede effects. Legacy Rust entry points retain category-only errors. [Diagnostic fields and compatibility](diagnostics.md) define source ownership, position units, and rendering.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -87,6 +89,8 @@ The [conformance corpus](conformance-corpus.md) maps all current rule IDs to pos
 
 The [combined execution matrix](execution-conformance.md) adds source-order visit traces for E2–E4, 56 nested-loop completion/restoration combinations for S3/C1/F1, and recursive event/frame traces for S1/S2/C2. CLI fixtures assert exact observable output, first-error priority, failure status, and skipped call tails. Arguments are currently pure expressions; effectful call composition and future native adapters must extend this evidence.
 
+F3 evidence in `tests/diagnostics.rs` covers specific expression/segment spans, syntax/EOF/Unicode locations, pre-effect validation, related declarations, retained source lifetimes, native and recursive call stacks, failed argument boundaries, original causes through nested handlers, context cleanup, and legacy/Pair APIs. CLI fixtures and the conformance corpus check rendered locations and causes; detailed API examples are doctests.
+
 ## Deliberately Separate Contracts
 
-Imports, resource limits, structured diagnostics, public native registration, and async execution remain separate tasks. The core value contract does not implement the planned collection library, serialization, or cross-language value conversions; those additions must extend the specification and conformance evidence explicitly.
+Imports, resource limits, stable diagnostic codes, Catch inspection/rethrow, public native registration, and async execution remain separate tasks. The core value contract does not implement the planned collection library, serialization, or cross-language value conversions; those additions must extend the specification and conformance evidence explicitly.

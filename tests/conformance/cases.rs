@@ -74,7 +74,7 @@ pub fn cases() -> Vec<Case> {
         success("crlf-comments", "\t# line\r\n### block\r\ncomment ###\r\n\r\nLog |\"# | { }\"|\r\n", "# | { }\n", &[], &["L1", "L2"]),
         success("recovery", include_str!("recovery.botwork"),
             "before\ncompleted effect\n7\nouter handler\nnot hoisted\nregistered later\n[false, true]\n",
-            &["F2"], &["E1", "E2", "E4", "F1", "F2"]),
+            &["F2", "F3"], &["E1", "E2", "E4", "F1", "F2"]),
         failure("incomplete-continuation", include_str!("../fixtures/invalid-continuation.botwork"), "", "Parsing error:", &["E1", "L1"]),
         failure("unclosed-comment", include_str!("../fixtures/unclosed-block-comment.botwork"), "", "Parsing error:", &["L2"]),
         failure("resolve-before-arguments", "Unknown |missing_argument|", "", "Statement not defined: Unknown", &["E3", "S1"]),
@@ -91,6 +91,8 @@ pub fn cases() -> Vec<Case> {
         failure("non-array-iteration", "For |item| In |{}| { Log |\"unreachable\"| }", "", "For requires an array", &["S3"]),
         failure("invalid-control", include_str!("../fixtures/invalid-control-unused-break.botwork"), "", "Break requires", &["C1"]),
         failure("required-catch", include_str!("../fixtures/missing-catch.botwork"), "", "Parsing error:", &["F1"]),
+        failure("diagnostic-stack", include_str!("../fixtures/diagnostic-stack.botwork"), "", "diagnostic-stack.botwork:2:17", &["F3"]),
+        Case { boundary: &["F3"], ..failure("diagnostic-handler", include_str!("../fixtures/diagnostic-handler.botwork"), "", "while handling:", &["F3"]) },
         Case { id: "structural-host-invalid", positive: &[], invalid: &["V6"], boundary: &[],
             input: Input::NonFiniteHost, stdout: "", error: Some("Non-finite floating-point operand") },
     ]

@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use pest::{iterators::Pair, Parser};
 
+use super::diagnostic::{Diagnostic, DiagnosticResult};
 use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
 
 #[cfg(test)]
@@ -87,17 +88,41 @@ pub struct Program {
 
 impl Program {
     pub fn parse(name: &str, source: &str) -> Result<Self, BWErr> {
+        Self::parse_detailed(name, source).map_err(Diagnostic::into_error)
+    }
+
+    /// Parse and validate with retained source locations and structured details.
+    pub fn parse_detailed(name: &str, source: &str) -> DiagnosticResult<Self> {
         let source = Arc::new(SourceFile {
             name: name.to_owned(),
             text: source.to_owned(),
         });
         let statements = BWParser::parse(Rule::botwork, &source.text)
-            .map_err(|error| BWErr::ParsingError(error.to_string()))?
+            .map_err(|error| {
+                let (start, end) = match error.location {
+                    pest::error::InputLocation::Pos(start) => {
+                        let length = source.text[start..]
+                            .chars()
+                            .next()
+                            .map_or(0, char::len_utf8);
+                        (start, start + length)
+                    }
+                    pest::error::InputLocation::Span((start, end)) => (start, end),
+                };
+                Diagnostic::new(BWErr::ParsingError(error.to_string())).at(&Span {
+                    source: Arc::clone(&source),
+                    start,
+                    end,
+                })
+            })?
             .filter(|pair| pair.as_rule() != Rule::EOI)
-            .map(|pair| statement(pair, &source))
+            .map(|pair| {
+                let span = Span::of(&pair, &source);
+                statement(pair, &source).map_err(|error| Diagnostic::new(error).at(&span))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let program = Self { source, statements };
-        program.validate()?;
+        program.validate_detailed()?;
         Ok(program)
     }
 
@@ -105,6 +130,10 @@ impl Program {
     /// This does not evaluate expressions or resolve names.
     pub fn validate(&self) -> Result<(), BWErr> {
         validate_script(&self.statements)
+    }
+
+    pub fn validate_detailed(&self) -> DiagnosticResult<()> {
+        validate_script_detailed(&self.statements)
     }
 }
 
@@ -173,17 +202,21 @@ struct ControlScope {
 }
 
 pub(crate) fn validate_script(statements: &[Statement]) -> Result<(), BWErr> {
+    validate_script_detailed(statements).map_err(Diagnostic::into_error)
+}
+
+pub(crate) fn validate_script_detailed(statements: &[Statement]) -> DiagnosticResult<()> {
     validate_statements(statements, ControlScope::default())
 }
 
-fn validate_statements(statements: &[Statement], scope: ControlScope) -> Result<(), BWErr> {
+fn validate_statements(statements: &[Statement], scope: ControlScope) -> DiagnosticResult<()> {
     for statement in statements {
         validate_statement(statement, scope)?;
     }
     Ok(())
 }
 
-fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), BWErr> {
+fn validate_statement(statement: &Statement, scope: ControlScope) -> DiagnosticResult<()> {
     match &statement.kind {
         StatementKind::Return(_) if !scope.in_definition => Err(control_placement_error(
             statement,
@@ -201,11 +234,13 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), 
             let mut parameters = HashMap::new();
             for parameter in &definition.parameters {
                 if let Some(original) = parameters.insert(&parameter.text, &parameter.span) {
-                    return Err(BWErr::DuplicateParameter {
+                    return Err(Diagnostic::new(BWErr::DuplicateParameter {
                         name: parameter.text.clone(),
                         original: original.location(),
                         duplicate: parameter.span.location(),
-                    });
+                    })
+                    .at(&parameter.span)
+                    .with_related("first parameter", original));
                 }
             }
             validate_statements(
@@ -247,12 +282,13 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), 
     }
 }
 
-fn control_placement_error(statement: &Statement, message: &str) -> BWErr {
+fn control_placement_error(statement: &Statement, message: &str) -> Diagnostic {
     let (line, column) = statement.span.line_column();
-    BWErr::ControlFlowError(format!(
+    Diagnostic::new(BWErr::ControlFlowError(format!(
         "{}:{line}:{column}: {message}",
         statement.span.source().name()
-    ))
+    )))
+    .at(&statement.span)
 }
 
 #[derive(Clone, Debug)]
@@ -424,11 +460,12 @@ pub(crate) enum Node {
 
 /// Compatibility entry point for callers still holding a single Pest pair.
 /// The resulting node owns the entire original input, including nested offsets.
-pub(crate) fn from_pair(pair: Pair<Rule>) -> Result<Node, BWErr> {
+pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
     let source = Arc::new(SourceFile {
         name: "<input>".to_owned(),
         text: pair.as_span().get_input().to_owned(),
     });
+    let span = Span::of(&pair, &source);
     match pair.as_rule() {
         Rule::EOI | Rule::logical_not | Rule::seperator => Ok(Node::None),
         Rule::stmt_block | Rule::stmt_catch | Rule::stmt_else => {
@@ -446,6 +483,7 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> Result<Node, BWErr> {
         | Rule::stmt_continue => statement(pair, &source).map(Node::Statement),
         _ => expression(pair, &source).map(Node::Expression),
     }
+    .map_err(|error| Diagnostic::new(error).at(&span))
 }
 
 fn invalid(part: &str) -> BWErr {

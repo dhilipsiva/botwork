@@ -1,10 +1,10 @@
 use botwork::core::{
     ast::Program,
-    eval::{execute_statement, Context},
+    diagnostic::Diagnostic,
+    eval::{execute_statement_detailed, Context},
 };
 use clap::Parser as Clap;
 use std::{
-    error::Error,
     fs::read_to_string,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -23,9 +23,22 @@ struct Args {
     debug: bool,
 }
 
-fn run(file: &Path, debug: bool) -> Result<(), Box<dyn Error>> {
-    let source = read_to_string(file)?;
-    let program = Program::parse(&file.display().to_string(), &source)?;
+#[derive(Debug, thiserror::Error)]
+enum CliError {
+    #[error("{file}: {source}")]
+    Read { file: PathBuf, source: io::Error },
+    #[error(transparent)]
+    Script(#[from] Diagnostic),
+    #[error("Writing debug trace failed: {0}")]
+    Trace(io::Error),
+}
+
+fn run(file: &Path, debug: bool) -> Result<(), CliError> {
+    let source = read_to_string(file).map_err(|source| CliError::Read {
+        file: file.to_owned(),
+        source,
+    })?;
+    let program = Program::parse_detailed(&file.display().to_string(), &source)?;
     let mut context = Context::default();
     context.init_statements();
     for statement in &program.statements {
@@ -36,9 +49,10 @@ fn run(file: &Path, debug: bool) -> Result<(), Box<dyn Error>> {
                 io::stderr().lock(),
                 "debug: {}:{line}:{column}: {kind}",
                 file.display()
-            )?;
+            )
+            .map_err(CliError::Trace)?;
         }
-        execute_statement(statement, &mut context)?;
+        execute_statement_detailed(statement, &mut context)?;
     }
     Ok(())
 }
@@ -48,7 +62,7 @@ fn main() -> ExitCode {
     match run(&args.file, args.debug) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = writeln!(io::stderr().lock(), "{}: {error}", args.file.display());
+            let _ = writeln!(io::stderr().lock(), "{error}");
             ExitCode::FAILURE
         }
     }

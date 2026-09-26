@@ -32,7 +32,7 @@ Each program shares one `Arc<SourceFile>` containing its name and original UTF-8
 
 `line_column()` reports one-based lines and Unicode scalar columns. A tab occupies one column; CRLF counts as one line ending. Columns are not display widths or grapheme counts. Span ranges and source contents are private so callers cannot invalidate slicing boundaries.
 
-`Statement::kind()` exposes an immutable view of typed syntax for inspection. `kind_name()` supplies the existing CLI trace labels. Control-placement errors use the offending statement's original file, line, and column. Runtime errors do not yet include these spans or statement call stacks; structured diagnostics remain a separate TODO.
+`Statement::kind()` exposes an immutable view of typed syntax for inspection. `kind_name()` supplies the existing CLI trace labels. Detailed syntax, validation, and runtime diagnostics retain the innermost relevant span. Runtime errors snapshot active calls before unwinding; related declaration locations and handler causes retain their own source owners. See [structured diagnostics](diagnostics.md).
 
 ## Validate Controls and Parameter Names
 
@@ -71,13 +71,27 @@ let result = evaluate_program(&program, &mut context).expect("successful executi
 assert!(matches!(result, Literal::Int(512)));
 ```
 
+Use the detailed entry points to inspect the original failure location:
+
+```rust
+use botwork::core::{ast::Program, eval::{evaluate_program_detailed, Context}};
+
+let program = Program::parse_detailed("failure.botwork", "|answer| = |1 + missing|")?;
+let error = evaluate_program_detailed(&program, &mut Context::default()).unwrap_err();
+assert_eq!(error.span.as_ref().unwrap().text(), "missing");
+assert_eq!(error.span.as_ref().unwrap().line_column(), (1, 17));
+# Ok::<(), botwork::core::diagnostic::Diagnostic>(())
+```
+
+The original entry points convert detailed failures back into `BWErr` at their public boundary. Detailed methods retain spans, entered calls, related declarations, and handler causes. Parser-pair lowering retains locations for both construction and execution failures.
+
 `evaluate_program` validates its entire statement list before executing any statement. This also checks programs assembled by Rust callers from extracted syntax nodes. `execute_statement` validates its subtree at script scope. Neither entry point invokes the parser; internal loops and invocations do not repeat validation. The CLI finishes parsing/validation before any statement trace or output. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.
 
 The existing `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once, validates the resulting statement/block at script scope, and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Validation covers only the supplied subtree, so use the program API to reject a later invalid statement before earlier effects in a whole file. Separate compatibility calls allocate separate source owners.
 
 ## Completion Outcomes
 
-Internal statement execution returns `Result<Completion, BWErr>`. `Completion` distinguishes a normal value from `Return(value)`, `Break`, and `Continue`. Blocks discard ordinary statement values and stop immediately on control transfer or error. Normally completed blocks, loops, branches, and handlers yield `None`; they retain no implicit result arrays.
+Internal statement execution returns `Result<Completion, Diagnostic>`. `Completion` distinguishes a normal value from `Return(value)`, `Break`, and `Continue`. Blocks discard ordinary statement values and stop immediately on control transfer or error. Normally completed blocks, loops, branches, and handlers yield `None`; they retain no implicit result arrays.
 
 Branches and Try/Catch pass control outcomes upward. A handler runs only for an evaluation error; a failed return expression is still an error until its value exists. For/While consume their own Break/Continue and propagate Return. A custom invocation consumes Return, preserving its exact value; fallthrough produces None. No control flags are stored in the context.
 
@@ -85,6 +99,6 @@ Runtime boundaries retain defensive checks for escaping controls, including a ca
 
 ## Remaining Interpreter Work
 
-Resource limits, imports, structured runtime diagnostics, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Resource limits, imports, stable diagnostic codes, Catch inspection/rethrow, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
