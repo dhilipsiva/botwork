@@ -75,6 +75,7 @@ struct Frame {
     variables: HashMap<String, Arc<Literal>>,
     statements: HashMap<String, StmtType>,
     namespaces: HashMap<String, Span>,
+    dependency_depth: usize,
     // Definitions are not first-class values, so lexical owners remain on the stack.
     parent: Option<usize>,
 }

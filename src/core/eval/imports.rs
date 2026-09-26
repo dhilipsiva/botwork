@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::run::ImportResource;
 use std::{fs, path::Path};
 
 #[derive(Clone, Default)]
@@ -52,13 +53,15 @@ pub(super) fn evaluate_import(
     }
     let module = load_module(path, path_span, context)
         .map_err(|error| error.with_related("imported here", import_site))?;
+    admit_namespace(&module, namespace, &normalized, context)
+        .map_err(|error| error.at(import_site))?;
     let frame = &mut context.frames[context.current];
     // Publish the complete namespace only after initialization succeeds.
     for (exported, statement) in &module.frame.statements {
         if matches!(statement, StmtType::Native { .. }) {
             continue;
         }
-        let metadata = Arc::new(statement.metadata().qualified(&namespace.text));
+        let metadata = Arc::new(statement.metadata().qualified(&namespace.text, &normalized));
         frame.statements.insert(
             metadata.normalized().into(),
             StmtType::Imported {
@@ -69,8 +72,84 @@ pub(super) fn evaluate_import(
             },
         );
     }
+    frame.dependency_depth = frame
+        .dependency_depth
+        .max(module.frame.dependency_depth + 1);
     frame.namespaces.insert(normalized, import_site.clone());
     Ok(Literal::None)
+}
+
+fn check_dependency_depth(context: &Context, dependency: usize) -> DiagnosticResult<()> {
+    if let Some(budget) = &context.budget {
+        let maximum = budget.limits().imports.dependency_depth;
+        if context
+            .loading
+            .len()
+            .checked_add(dependency)
+            .and_then(|depth| depth.checked_add(1))
+            .is_none_or(|depth| depth > maximum)
+        {
+            return Err(budget.limit("module dependency depth", maximum as u64));
+        }
+    }
+    Ok(())
+}
+
+fn admit_namespace(
+    module: &LoadedModule,
+    namespace: &Name,
+    normalized: &str,
+    context: &Context,
+) -> DiagnosticResult<()> {
+    check_dependency_depth(context, module.frame.dependency_depth)?;
+    if let Some(budget) = &context.budget {
+        let mut bindings = 1usize;
+        let mut bytes = normalized.len();
+        for statement in module
+            .frame
+            .statements
+            .values()
+            .filter(|statement| !matches!(statement, StmtType::Native { .. }))
+        {
+            bindings = bindings
+                .checked_add(1)
+                .ok_or_else(|| budget.import_limit(ImportResource::Bindings))?;
+            bytes = statement
+                .metadata()
+                .qualified_bytes(&namespace.text, normalized)
+                .and_then(|size| bytes.checked_add(size))
+                .ok_or_else(|| budget.import_limit(ImportResource::MetadataBytes))?;
+        }
+        budget.charge_imports(&[
+            (ImportResource::Bindings, bindings),
+            (ImportResource::MetadataBytes, bytes),
+        ])?;
+    }
+    Ok(())
+}
+
+fn read_module_source(path: &Path, context: &Context) -> Result<String, SourceFailure> {
+    let Some(budget) = &context.budget else {
+        return context.read_source(path);
+    };
+    budget
+        .charge_imports(&[
+            (ImportResource::Loads, 1),
+            (ImportResource::MetadataBytes, path.as_os_str().len()),
+        ])
+        .map_err(SourceFailure::Diagnostic)?;
+    let remaining = budget.import_remaining(ImportResource::SourceBytes);
+    let bytes =
+        crate::core::run::read_source(path, Some(remaining.min(budget.limits().source_bytes)))?;
+    context
+        .check_source_size(bytes.len())
+        .map_err(SourceFailure::Diagnostic)?;
+    budget
+        .charge_imports(&[(ImportResource::SourceBytes, bytes.len())])
+        .map_err(SourceFailure::Diagnostic)?;
+    String::from_utf8(bytes).map_err(|error| {
+        SourceFailure::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+    })
 }
 
 fn load_module(
@@ -118,22 +197,36 @@ fn load_module(
             .join(" -> ");
         return Err(Diagnostic::new(BWErr::ImportCycle(chain)).at(span));
     }
-    context
-        .modules
-        .resolved
-        .insert(requested, canonical.clone());
+    if !context.modules.resolved.contains_key(&requested) {
+        if let Some(budget) = &context.budget {
+            let bytes = requested
+                .as_os_str()
+                .len()
+                .checked_add(canonical.as_os_str().len())
+                .ok_or_else(|| budget.import_limit(ImportResource::MetadataBytes).at(span))?;
+            budget
+                .charge_imports(&[
+                    (ImportResource::Paths, 1),
+                    (ImportResource::MetadataBytes, bytes),
+                ])
+                .map_err(|error| error.at(span))?;
+        }
+        context
+            .modules
+            .resolved
+            .insert(requested, canonical.clone());
+    }
     if let Some(module) = context.modules.loaded.get(&canonical) {
         return Ok(Arc::clone(module));
     }
     context
         .check_import_depth()
         .map_err(|error| error.at(span))?;
-    let source = context
-        .read_source(&canonical)
-        .map_err(|error| match error {
-            SourceFailure::Io(error) => failure(format!("{}: {error}", canonical.display())),
-            SourceFailure::Diagnostic(error) => error.at(span),
-        })?;
+    check_dependency_depth(context, 0).map_err(|error| error.at(span))?;
+    let source = read_module_source(&canonical, context).map_err(|error| match error {
+        SourceFailure::Io(error) => failure(format!("{}: {error}", canonical.display())),
+        SourceFailure::Diagnostic(error) => error.at(span),
+    })?;
     let source_name = canonical
         .to_str()
         .ok_or_else(|| failure("Module paths must be valid UTF-8".into()))?;

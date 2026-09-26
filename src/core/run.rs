@@ -24,12 +24,16 @@ use super::{
     syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
 };
 
+mod import_limits;
+pub(crate) use import_limits::ImportResource;
+pub use import_limits::{ImportLimits, MAX_MODULE_CHAIN_DEPTH};
+
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
 pub const MAX_IMPORT_DEPTH: usize = 16;
 pub const MAX_PARSER_CALLER_DEPTH: usize = 16;
 
-/// Initial run budgets. Aggregate imports, value size, and hard native termination
+/// Run budgets. Aggregate retained values and hard native termination
 /// have separate contracts; these limits do not make execution a sandbox.
 #[derive(Clone, Debug)]
 pub struct RunLimits {
@@ -40,6 +44,7 @@ pub struct RunLimits {
     pub import_depth: usize,
     pub syntax: SyntaxLimits,
     pub ast: AstLimits,
+    pub imports: ImportLimits,
 }
 
 impl Default for RunLimits {
@@ -52,6 +57,7 @@ impl Default for RunLimits {
             import_depth: MAX_IMPORT_DEPTH,
             syntax: SyntaxLimits::default(),
             ast: AstLimits::default(),
+            imports: ImportLimits::default(),
         }
     }
 }
@@ -59,6 +65,12 @@ impl Default for RunLimits {
 impl RunLimits {
     pub(crate) fn validate(&self) -> DiagnosticResult<()> {
         self.ast.validate()?;
+        if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
+            return Err(BWErr::RunConfiguration(format!(
+                "Module dependency depth cannot exceed {MAX_MODULE_CHAIN_DEPTH}"
+            ))
+            .into());
+        }
         if self.import_depth > MAX_IMPORT_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
                 "Import initialization depth cannot exceed {MAX_IMPORT_DEPTH}"
@@ -324,6 +336,7 @@ struct BudgetState {
     control: OperationControl,
     used: AtomicU64,
     active: AtomicUsize,
+    imports: Mutex<[usize; 5]>,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -337,6 +350,7 @@ impl Clone for RunBudget {
             control: self.0.control.clone(),
             used: AtomicU64::new(self.used()),
             active: AtomicUsize::new(0),
+            imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -355,6 +369,7 @@ impl RunBudget {
             control,
             used: AtomicU64::new(0),
             active: AtomicUsize::new(0),
+            imports: Mutex::new([0; 5]),
             stopped: Mutex::new(None),
         }))
     }

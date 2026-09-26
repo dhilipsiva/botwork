@@ -24,6 +24,6 @@ Engine and Context use their configured tree budgets for program, statement, par
 
 ## Scope
 
-These checks bound admission work and accepted tree structure. They do not prevent allocations already made by a Rust host or during parser lowering, and do not take ownership of rejected host trees. A host constructing arbitrarily deep rejected trees must also arrange their safe destruction. Aggregate retained definitions/sources across successive evaluations, module caches, values, and temporary allocations remain separate resource tasks.
+These checks bound admission work and accepted tree structure. They do not prevent allocations already made by a Rust host or during parser lowering, and do not take ownership of rejected host trees. A host constructing arbitrarily deep rejected trees must also arrange their safe destruction. [Import budgets](import-limits.md) separately bound module-cache/export admission. Aggregate retained definitions/sources across successive evaluations, values, cache snapshots, and temporary allocations remain resource tasks.
 
 Tests cover exact counts, zero/invalid configurations, shared and hidden source owners, 10,000 nested host expressions, 1,000 nested host control blocks, wide repeated statements, explicit larger budgets, persistent stop behavior, imported failures, and CLI rejection before effects. R4 host corpus cases pin exact admission and pre-execution failure.

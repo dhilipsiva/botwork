@@ -414,6 +414,28 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::ImportBudgetBoundary | Input::ImportBudgetLimit => {
+                use botwork::core::run::{Engine, ImportLimits, RunLimits, RunOptions};
+                let module = "Read { Return |7| }";
+                fs::write(harness.workspace.join("bounded.botwork"), module).unwrap();
+                let run = Engine::default().run_source("root", "Import |\"bounded.botwork\"| As |a|\nImport |\"bounded.botwork\"| As |b|\n|value| = b::Read", RunOptions {
+                    working_directory: Some(harness.workspace.clone()),
+                    limits: RunLimits { imports: ImportLimits {
+                        loads:1, source_bytes:module.len(), paths:1,
+                        bindings: if case.error.is_some() {3} else {4}, ..ImportLimits::default()
+                    }, ..RunLimits::default() }, ..RunOptions::default()
+                });
+                if let Some(expected) = case.error {
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(!run.variables.contains_key("value"));
+                } else {
+                    assert_eq!(run.result.unwrap().to_string(), "7");
+                    assert_eq!(run.variables["value"].to_string(), "7");
+                }
+                continue;
+            }
             Input::ImportCycle => {
                 fs::write(
                     harness.workspace.join("cycle.botwork"),

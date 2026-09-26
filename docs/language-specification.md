@@ -96,6 +96,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R4 — Tree admission.** Check all reachable owned syntax before recursive control validation or effects. Bound node count/depth and individual/aggregate source owners, including host-reassembled programs and unreachable bodies. Count shared source allocations once and repeated syntax occurrences individually. Use an iterative walk with width-independent pending work. Apply configured budgets to Engine/Context/module/Pair entry points and defaults to Program/CLI entry points; report BW8001 or unsupported-configuration BW7002. [AST rules](ast-limits.md) define exact counts, public configuration, source identity, diagnostic locations, and remaining allocation/aggregate-state limits.
 
+## Import Bounds
+
+**R5 — Import admission.** Share cumulative load/source/path/binding/metadata budgets across module initialization and calls. Bound reads before decoding/parsing, retain charges for failed work, and reuse cached sources without another load. Check cached dependency depth as well as pending ancestors; atomically admit namespace/export publication before copying metadata. Preserve completed initialization effects and dependencies on late failure while publishing no partial namespace. Latch BW8001 across handlers and reject unsupported graph ceilings with BW7002. [Import limits](import-limits.md) define counts, defaults, ordering, aliases, zero/clone behavior, and remaining memory/host limitations.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -150,3 +154,5 @@ R2 evidence in `tests/syntax_limits.rs` covers source/nesting/operator/Else-If b
 R3 evidence in `tests/runtime_limits.rs` covers combined stack stress, recursive imports, cached re-exports, zero/exact ceilings, persistent/cloned contexts, parser-pair controls, cleanup/call sites, default CLI loop limits, explicit flags, and configuration errors. The host boundary and CLI recursion corpus cases pin success and BW8001.
 
 R4 evidence in `src/core/ast_limits/tests.rs` and `tests/ast_limits.rs` covers exact counts, adversarial depth/width, hidden/shared source owners, configuration, raised budgets, public entry points, import stop propagation, and CLI pre-effect rejection. Two host corpus cases and an executed Rust example pin admission before execution.
+
+R5 evidence in `tests/import_limits.rs` covers exact/zero/configuration budgets, retries, cache aliases/removal, nested calls, context clones, cold/cached/empty dependency chains, exponential fanout, metadata, and CLI load limits. Reservation/qualification unit tests cover arithmetic, atomicity, and Unicode; two host corpus cases pin cached source reuse and binding failures.

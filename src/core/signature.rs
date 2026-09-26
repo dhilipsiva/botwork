@@ -244,18 +244,45 @@ impl StatementSignature {
         }
     }
 
-    pub(crate) fn qualified(&self, namespace: &str) -> Self {
-        let mut signature = self.clone();
-        signature.normalized = format!(
-            "{}::{}",
-            ast::normalize_sentence(namespace),
-            self.normalized
-        );
-        signature.namespace = Some(match &self.namespace {
-            Some(nested) => format!("{namespace}::{nested}"),
-            None => namespace.into(),
-        });
-        signature
+    /// Owned string payload copied into qualified metadata and its namespace map entry.
+    pub(crate) fn qualified_bytes(&self, namespace: &str, normalized: &str) -> Option<usize> {
+        let qualified = normalized
+            .len()
+            .checked_add(2)?
+            .checked_add(self.normalized.len())?;
+        let display = namespace.len().checked_add(
+            self.namespace
+                .as_ref()
+                .map_or(0, |name| name.len().saturating_add(2)),
+        )?;
+        let mut bytes = qualified
+            .checked_mul(2)?
+            .checked_add(display)?
+            .checked_add(self.normalized.len())?
+            .checked_add(self.description.len())?;
+        for parameter in &self.parameters {
+            bytes = bytes.checked_add(parameter.name.len())?;
+        }
+        for error in &self.errors {
+            bytes = bytes.checked_add(error.description.len())?;
+        }
+        Some(bytes)
+    }
+
+    pub(crate) fn qualified(&self, namespace: &str, normalized: &str) -> Self {
+        Self {
+            normalized: format!("{normalized}::{}", self.normalized),
+            namespace: Some(match &self.namespace {
+                Some(nested) => format!("{namespace}::{nested}"),
+                None => namespace.into(),
+            }),
+            header: self.header.clone(),
+            origin: self.origin,
+            parameters: self.parameters.clone(),
+            returns: self.returns,
+            description: self.description.clone(),
+            errors: self.errors.clone(),
+        }
     }
     pub fn origin(&self) -> StatementOrigin {
         self.origin

@@ -17,6 +17,8 @@ pub enum Input {
     RuntimeBoundary,
     AstBoundary,
     AstLimit,
+    ImportBudgetBoundary,
+    ImportBudgetLimit,
 }
 
 #[derive(Clone)]
@@ -153,5 +155,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::AstBoundary, stdout: "", code: None, error: None },
         Case { id: "ast-limit", positive: &[], invalid: &["R4"], boundary: &[],
             input: Input::AstLimit, stdout: "", code: Some("BW8001"), error: Some("AST nodes") },
+        Case { id: "import-budget-boundary", positive: &["R5"], invalid: &[], boundary: &["R5"],
+            input: Input::ImportBudgetBoundary, stdout: "", code: None, error: None },
+        Case { id: "import-budget-limit", positive: &[], invalid: &["R5"], boundary: &[],
+            input: Input::ImportBudgetLimit, stdout: "", code: Some("BW8001"), error: Some("imported bindings") },
     ]
 }
