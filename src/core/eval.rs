@@ -19,8 +19,8 @@ use super::{
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Rule},
     operation::OperationControl,
     run::{
-        EvaluationGuard, RunBudget, RunEnvironment, RunLimits, SourceFailure, StoredValue,
-        ValueReservation,
+        DefinitionReservation, EvaluationGuard, RunBudget, RunEnvironment, RunLimits,
+        SourceFailure, StoredValue, ValueReservation,
     },
     signature::{StatementOrigin, StatementSignature},
     value_limits::Owned,
@@ -55,6 +55,7 @@ enum StmtType {
     UserDefined {
         definition: Arc<Definition>,
         metadata: Arc<StatementSignature>,
+        _reservation: Option<Arc<DefinitionReservation>>,
     },
     Imported {
         module: Arc<LoadedModule>,
@@ -537,12 +538,20 @@ impl Context {
         span: &Span,
         statement: StmtType,
     ) -> DiagnosticResult<()> {
+        self.check_statement_collision(signature, span)?;
+        self.frames[self.current]
+            .statements
+            .insert(signature.into(), statement);
+        Ok(())
+    }
+
+    fn check_statement_collision(&self, signature: &str, span: &Span) -> DiagnosticResult<()> {
         if let Some((namespace, _)) = signature.split_once("::") {
             if let Some(original) = self.frames[self.current].namespaces.get(namespace) {
                 return Err(imports::namespace_collision(namespace, original, span));
             }
         }
-        let statements = &mut self.frames[self.current].statements;
+        let statements = &self.frames[self.current].statements;
         if let Some(original) = statements.get(signature) {
             let (origin, origin_span) = match original {
                 StmtType::Native { metadata, .. } => (
@@ -564,7 +573,6 @@ impl Context {
             .at(span)
             .with_related("first definition", origin_span));
         }
-        statements.insert(signature.into(), statement);
         Ok(())
     }
 
@@ -689,6 +697,7 @@ fn invoke_resolved(
         StmtType::UserDefined {
             definition,
             metadata,
+            ..
         } => {
             let frame = Frame {
                 variables: definition
@@ -1124,12 +1133,20 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {
+            context.check_statement_collision(&definition.signature, &definition.span)?;
+            let reservation = context
+                .budget
+                .as_ref()
+                .map(|budget| budget.reserve_definition(definition))
+                .transpose()
+                .map_err(|error| context.retain_limit(error))?;
             context.insert_statement(
                 &definition.signature,
                 &definition.span,
                 StmtType::UserDefined {
                     definition: Arc::clone(definition),
                     metadata: Arc::new(definition.signature_metadata()),
+                    _reservation: reservation,
                 },
             )?;
             Ok(Completion::Normal(Literal::None))

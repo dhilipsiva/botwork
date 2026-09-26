@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 63 cases against the 39 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 65 cases against the 40 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -47,6 +47,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R7 | construction-boundary | construction-limit | construction-boundary |
 | R8 | input-budget-boundary | input-budget-limit | input-budget-boundary |
 | R9 | retention-boundary | retention-limit | retention-boundary |
+| R10 | definition-boundary | definition-limit | definition-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -75,3 +76,5 @@ Two construction host cases trace duplicate-key callback effects at exact retain
 Two input-budget host cases parse one object at exact source/token/name/value limits or reject a deficient raw-token allowance without retaining the JSON payload in diagnostics.
 
 Two retained-value host cases admit exact replacement overlap or reject it before publishing the new value, preserving the original destination and structured resource error.
+
+Two retained-definition host cases share one source's exact text/name budget across declarations or reject the next definition while preserving the earlier registration.

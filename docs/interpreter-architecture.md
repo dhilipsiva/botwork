@@ -365,3 +365,22 @@ let run = Engine::default().run_source("retention", "|x| = |1|\n|x| = |2|", RunO
 assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
 assert_eq!(run.variables["x"].to_string(), "1");
 ```
+
+## Configure Retained Definitions
+
+Multiple declarations in one source share its retained text/name allowance.
+
+```rust
+use botwork::core::run::{Engine, RetainedDefinitionLimits, RunLimits, RunOptions, RunOutcome};
+let source = "First {}\nSecond {}";
+let run = Engine::default().run_source("source", source, RunOptions {
+    limits: RunLimits {
+        retained_definitions: RetainedDefinitionLimits {
+            definitions: 2, nodes: 6, source_bytes: source.len() + "source".len()
+        },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::Succeeded);
+```

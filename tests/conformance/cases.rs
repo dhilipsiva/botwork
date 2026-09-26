@@ -27,6 +27,8 @@ pub enum Input {
     JsonBudgetLimit,
     RetentionBoundary,
     RetentionLimit,
+    DefinitionBoundary,
+    DefinitionLimit,
 }
 
 #[derive(Clone)]
@@ -183,5 +185,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::RetentionBoundary, stdout: "", code: None, error: None },
         Case { id: "retention-limit", positive: &[], invalid: &["R9"], boundary: &[],
             input: Input::RetentionLimit, stdout: "", code: Some("BW8001"), error: Some("retained values") },
+        Case { id: "definition-boundary", positive: &["R10"], invalid: &[], boundary: &["R10"],
+            input: Input::DefinitionBoundary, stdout: "", code: None, error: None },
+        Case { id: "definition-limit", positive: &[], invalid: &["R10"], boundary: &[],
+            input: Input::DefinitionLimit, stdout: "", code: Some("BW8001"), error: Some("retained definitions") },
     ]
 }

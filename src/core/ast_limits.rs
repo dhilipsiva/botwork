@@ -75,6 +75,7 @@ struct Walk<'a> {
     limits: &'a AstLimits,
     per_source_bytes: usize,
     sources: HashSet<*const SourceFile>,
+    retained_sources: Option<Vec<Arc<SourceFile>>>,
     source_bytes: usize,
     nodes: usize,
     stack: Vec<(Item<'a>, usize)>,
@@ -87,6 +88,7 @@ impl<'a> Walk<'a> {
             limits,
             per_source_bytes,
             sources: HashSet::new(),
+            retained_sources: None,
             source_bytes: 0,
             nodes: 0,
             stack: vec![],
@@ -106,6 +108,9 @@ impl<'a> Walk<'a> {
             .filter(|bytes| *bytes <= self.limits.source_bytes)
             .ok_or_else(|| limit("AST source bytes", self.limits.source_bytes, span))?;
         self.sources.insert(Arc::as_ptr(source));
+        if let Some(sources) = &mut self.retained_sources {
+            sources.push(Arc::clone(source));
+        }
         Ok(())
     }
 
@@ -124,7 +129,7 @@ impl<'a> Walk<'a> {
         self.stack.push((item, depth));
     }
 
-    fn run(mut self) -> DiagnosticResult<()> {
+    fn run(mut self) -> DiagnosticResult<Self> {
         while let Some((item, depth)) = self.stack.pop() {
             // Slice cursors admit one child at a time: wide rejected inputs never
             // allocate a work queue proportional to their host-owned width.
@@ -296,7 +301,7 @@ impl<'a> Walk<'a> {
                 }
             }
         }
-        Ok(())
+        Ok(self)
     }
 }
 
@@ -308,7 +313,7 @@ pub(crate) fn check_program(
     let mut walk = Walk::new(limits, per_source_bytes)?;
     walk.source(&program.source, None)?;
     walk.push(Item::Statements(&program.statements), 1);
-    walk.run()
+    walk.run().map(|_| ())
 }
 
 pub(crate) fn check_statements(
@@ -318,7 +323,7 @@ pub(crate) fn check_statements(
 ) -> DiagnosticResult<()> {
     let mut walk = Walk::new(limits, per_source_bytes)?;
     walk.push(Item::Statements(statements), 1);
-    walk.run()
+    walk.run().map(|_| ())
 }
 
 pub(crate) fn check_node(
@@ -333,5 +338,25 @@ pub(crate) fn check_node(
         Node::Block(block) => walk.push(Item::Block(block), 1),
         Node::None => {}
     }
-    walk.run()
+    walk.run().map(|_| ())
+}
+
+pub(crate) struct DefinitionSize {
+    pub(crate) nodes: usize,
+    pub(crate) sources: Vec<Arc<SourceFile>>,
+}
+
+pub(crate) fn measure_definition(
+    definition: &Definition,
+    limits: &AstLimits,
+    per_source_bytes: usize,
+) -> DiagnosticResult<DefinitionSize> {
+    let mut walk = Walk::new(limits, per_source_bytes)?;
+    walk.retained_sources = Some(Vec::new());
+    walk.push(Item::Definition(definition), 1);
+    let walk = walk.run()?;
+    Ok(DefinitionSize {
+        nodes: walk.nodes,
+        sources: walk.retained_sources.expect("enabled source inventory"),
+    })
 }

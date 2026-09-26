@@ -1241,8 +1241,8 @@ fn custom_calls_reuse_the_same_definition_and_original_source_spans() {
         assert!(Arc::ptr_eq(&weak_definition.upgrade().unwrap(), stored));
         assert_eq!(
             Arc::strong_count(stored),
-            1,
-            "calls must not retain cloned bodies"
+            2,
+            "only the binding and its reservation retain the shared body"
         );
         assert_eq!(stored.span.source().name(), "original.botwork");
         assert_eq!(stored.span.line_column(), (2, 1));

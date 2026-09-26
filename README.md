@@ -53,6 +53,8 @@ cargo run -- --file examples/20-input-variables.botwork \
 
 [Retained-value budgets](docs/retained-values.md) bound variable storage across calls,
 modules, and cloned contexts, releasing capacity when stored values are dropped.
+[Definition budgets](docs/retained-definitions.md) also account for installed DSL
+definitions and shared source text across repeated evaluations.
 
 Or you can create a file from below sample and pass the path to cargo run
 

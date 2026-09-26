@@ -414,6 +414,38 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::DefinitionBoundary | Input::DefinitionLimit => {
+                use botwork::core::{
+                    ast::Program,
+                    eval::{evaluate_program_detailed, Context},
+                    run::{RetainedDefinitionLimits, RunLimits},
+                };
+                let source = "First {}\nSecond {}";
+                let mut context = Context::with_limits(RunLimits {
+                    retained_definitions: RetainedDefinitionLimits {
+                        definitions: if case.error.is_some() { 1 } else { 2 },
+                        nodes: 6,
+                        source_bytes: source.len() + case.id.len(),
+                    },
+                    ..RunLimits::default()
+                })
+                .unwrap();
+                let result = evaluate_program_detailed(
+                    &Program::parse(case.id, source).unwrap(),
+                    &mut context,
+                );
+                assert!(context.statement_signature("First").unwrap().is_some());
+                if let Some(expected) = case.error {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(context.statement_signature("Second").unwrap().is_none());
+                } else {
+                    result.unwrap();
+                    assert!(context.statement_signature("Second").unwrap().is_some());
+                }
+                continue;
+            }
             Input::RetentionBoundary | Input::RetentionLimit => {
                 use botwork::core::run::{Engine, RetainedValueLimits, RunLimits, RunOptions};
                 let run = Engine::default().run_source(

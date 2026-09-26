@@ -31,6 +31,9 @@ pub use import_limits::{ImportLimits, MAX_MODULE_CHAIN_DEPTH};
 mod retained_values;
 pub use retained_values::RetainedValueLimits;
 pub(crate) use retained_values::{StoredValue, ValueReservation};
+mod retained_definitions;
+pub(crate) use retained_definitions::DefinitionReservation;
+pub use retained_definitions::RetainedDefinitionLimits;
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
@@ -51,6 +54,7 @@ pub struct RunLimits {
     pub imports: ImportLimits,
     pub values: ValueLimits,
     pub retained_values: RetainedValueLimits,
+    pub retained_definitions: RetainedDefinitionLimits,
 }
 
 impl Default for RunLimits {
@@ -66,6 +70,7 @@ impl Default for RunLimits {
             imports: ImportLimits::default(),
             values: ValueLimits::default(),
             retained_values: RetainedValueLimits::default(),
+            retained_definitions: RetainedDefinitionLimits::default(),
         }
     }
 }
@@ -348,6 +353,7 @@ struct BudgetState {
     active: AtomicUsize,
     imports: Mutex<[usize; 5]>,
     retained_values: Arc<retained_values::RetainedValues>,
+    retained_definitions: Arc<retained_definitions::RetainedDefinitions>,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -364,6 +370,7 @@ impl Clone for RunBudget {
             active: AtomicUsize::new(0),
             imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
             retained_values: Arc::clone(&self.0.retained_values),
+            retained_definitions: Arc::clone(&self.0.retained_definitions),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -378,6 +385,9 @@ impl Clone for RunBudget {
 impl RunBudget {
     pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
+            retained_definitions: Arc::new(retained_definitions::RetainedDefinitions::new(
+                limits.retained_definitions.clone(),
+            )),
             retained_values: Arc::new(retained_values::RetainedValues::new(
                 limits.retained_values.clone(),
             )),

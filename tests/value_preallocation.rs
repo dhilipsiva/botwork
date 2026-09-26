@@ -84,6 +84,33 @@ fn retained_value_failure_precedes_the_assignment_copy() {
 }
 
 #[test]
+fn definition_retention_failure_precedes_signature_parameter_copies() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::RetainedDefinitionLimits,
+    };
+    let length = 64 * 1024;
+    let source = format!("Read |{}| {{}}", "x".repeat(length));
+    let program = Program::parse("parameter", &source).unwrap();
+    let mut context = Context::with_limits(RunLimits {
+        retained_definitions: RetainedDefinitionLimits {
+            definitions: 0,
+            ..RetainedDefinitionLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("retained definitions"));
+    assert_eq!(large, 0);
+    assert!(context.statement_signature("Read |x|").unwrap().is_none());
+}
+
+#[test]
 fn rejected_concatenation_does_not_allocate_result_or_format_operand_payloads() {
     let length = 64 * 1024;
     let left = Literal::String("a".repeat(length));

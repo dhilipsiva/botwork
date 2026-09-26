@@ -1,4 +1,22 @@
 use super::*;
+
+#[test]
+fn definition_measurement_includes_hidden_sources_and_deduplicates_owners() {
+    let program = Program::parse("definition", "Read |x| { Return |x+1| }").unwrap();
+    let StatementKind::Define(definition) = program.statements[0].kind() else {
+        panic!("definition")
+    };
+    let mut definition = definition.as_ref().clone();
+    let header = Program::parse("header", "Other {}").unwrap();
+    let parameter = Program::parse("parameter", "Other {}").unwrap();
+    definition.header = header.statements[0].span.clone();
+    definition.parameters[0].span = parameter.statements[0].span.clone();
+    let size = measure_definition(&definition, &AstLimits::default(), usize::MAX).unwrap();
+    assert_eq!(size.nodes, 9);
+    let mut sources: Vec<_> = size.sources.iter().map(|source| source.name()).collect();
+    sources.sort();
+    assert_eq!(sources, ["definition", "header", "parameter"]);
+}
 use crate::core::{diagnostic::DiagnosticCode, syntax_limits::DEFAULT_SOURCE_BYTES};
 
 fn span() -> Span {

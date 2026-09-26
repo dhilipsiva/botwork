@@ -116,6 +116,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R9 — Stored-value admission.** Reserve aggregate live value/node/payload allowance before publishing variable storage and before assignment copies. Count shared storage once across root/call/module frames, cached globals, saved bindings, access snapshots, and public Context clones. Release after the final owner drops; replacements and atomic input batches require peak headroom. Latch requesting-context failures with BW8001, preserve prior bindings, and unwind frames/iterators/handlers reliably. Engine runs start independent trackers. [Retained-value rules](retained-values.md) specify defaults, exact counts, stop/clone behavior, concurrency, and remaining metadata/temporary/snapshot scope.
 
+## Retained Definition Bounds
+
+**R10 — Definition ownership admission.** Bound distinct installed DSL definitions, their AST subtree costs, and unique reachable source text/name bytes across repeated evaluations. Preserve collision priority and earlier registrations/effects; reserve atomically before metadata copies and publication, and latch BW8001 on rejection. Share accounting across modules and Context clones, release on final runtime ownership, and start fresh Engine trackers. [Definition rules](retained-definitions.md) specify identity deduplication, conservative nested-subtree counts, exact defaults, source discovery, concurrency, and remaining metadata/snapshot scope.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -180,3 +184,5 @@ R7 evidence in `tests/value_preallocation.rs` and value/evaluator unit tests use
 R8 evidence in `tests/input_limits.rs`, input-limit unit tests, the original input suite, and allocator observations covers counts, Unicode escapes, raw/decode depth, duplicates/overrides, bounded reads, error origin/path handling, local settings, and pre-effect CLI rejection. Two host corpus cases and a Rust example pin exact source/token/value budgets.
 
 R9 evidence in `tests/retained_values.rs`, reservation/evaluator unit tests, and allocation observations covers exact/zero/default counters, atomic root batches, overflow, pre-copy rejection, call/module/loop/handler cleanup, shared snapshots/clones, concurrent reservations, and independent failures/runs. Two host corpus cases and a Rust example pin peak replacement and destination preservation.
+
+R10 evidence in `tests/retained_definitions.rs` and reservation/AST unit tests covers exact/default/zero/raised limits, source names/hidden owners, atomicity/overflow, repeated evaluation, collisions, local/recursive/module cleanup, cached aliases, cloned/concurrent ownership, and source release. Two host corpus cases and a Rust example pin shared-source budgets and admission failures.
