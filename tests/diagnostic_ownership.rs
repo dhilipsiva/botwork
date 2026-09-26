@@ -60,7 +60,7 @@ fn rejected_clone_leaves_original_available_for_explicit_disposal() {
 }
 
 #[tokio::test]
-async fn async_and_blocking_results_preserve_full_host_diagnostics_until_explicit_disposal() {
+async fn async_and_blocking_results_dispose_deep_host_diagnostics_before_publication() {
     for blocking in [false, true] {
         let (diagnostic, leaf) = deep();
         let value = Mutex::new(Some(diagnostic));
@@ -81,9 +81,11 @@ async fn async_and_blocking_results_preserve_full_host_diagnostics_until_explici
             .invoke(vec![], OperationControl::default())
             .await
             .unwrap_err();
-        assert_eq!(error.code(), DiagnosticCode::Native);
-        assert_eq!(error.span.as_ref().unwrap().source().name(), "<native>");
-        assert!(DiagnosticLimits::default().check(&error).is_err());
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+        assert!(error.causes[0].omissions.is_some());
+        assert!(error.span.is_none());
+        assert!(DiagnosticLimits::default().check(&error).is_ok());
         error.discard();
         assert!(leaf.upgrade().is_none());
     }
@@ -139,7 +141,7 @@ async fn abandoned_blocking_worker_error_is_destroyed_iteratively_and_releases_c
 }
 
 #[tokio::test]
-async fn cancellation_cleanup_preserves_deep_worker_cause_for_host_disposal() {
+async fn cancellation_cleanup_keeps_bounded_evidence_after_deep_worker_disposal() {
     let (diagnostic, leaf) = deep();
     let value = Mutex::new(Some(diagnostic));
     let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -177,7 +179,10 @@ async fn cancellation_cleanup_preserves_deep_worker_cause_for_host_disposal() {
     release_tx.send(()).unwrap();
     let error = invocation.await.unwrap_err();
     assert_eq!(error.code(), DiagnosticCode::Cancelled);
-    assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].causes[0].code(), DiagnosticCode::Native);
+    assert!(error.causes[0].causes[0].omissions.is_some());
+    assert!(leaf.upgrade().is_none());
     error.discard();
     assert!(leaf.upgrade().is_none());
 }

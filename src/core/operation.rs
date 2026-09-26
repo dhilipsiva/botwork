@@ -1,5 +1,8 @@
 //! Async adapter boundary. Hosts supply a Tokio runtime with time enabled.
 
+#[cfg(test)]
+mod tests;
+
 use std::{
     future::Future,
     num::NonZeroUsize,
@@ -12,7 +15,7 @@ use tokio::{sync::Semaphore, time::Instant};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    diagnostic::{Diagnostic, DiagnosticResult, OwnedDiagnostic},
+    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLimits, DiagnosticResult, OwnedDiagnostic},
     grammar::{validate_value, BWErr, Literal},
     signature::{StatementOrigin, StatementSignature},
     value_limits::{Owned, ValueLimits},
@@ -111,6 +114,7 @@ pub struct NativeOperation {
     signature: Arc<StatementSignature>,
     implementation: Implementation,
     value_limits: ValueLimits,
+    diagnostic_limits: DiagnosticLimits,
 }
 
 impl NativeOperation {
@@ -168,6 +172,7 @@ impl NativeOperation {
             signature: Arc::new(signature),
             implementation,
             value_limits: ValueLimits::default(),
+            diagnostic_limits: DiagnosticLimits::default(),
         })
     }
 
@@ -178,6 +183,13 @@ impl NativeOperation {
     pub fn with_value_limits(mut self, limits: ValueLimits) -> DiagnosticResult<Self> {
         limits.validate()?;
         self.value_limits = limits;
+        Ok(self)
+    }
+
+    /// Configure individual callback/cleanup errors before worker handoff and publication.
+    pub fn with_diagnostic_limits(mut self, limits: DiagnosticLimits) -> DiagnosticResult<Self> {
+        limits.validate()?;
+        self.diagnostic_limits = limits;
         Ok(self)
     }
 
@@ -193,9 +205,35 @@ impl NativeOperation {
         // must also release rejected deep host input without recursive destruction.
         let values = Owned::new(values);
         async move {
-            self.invoke_inner(values, control)
-                .await
-                .map_err(|error| error.at(self.signature.header()))
+            let child = control.child(None);
+            // Covers all exits; the final checkpoint precedes this guard's cancellation.
+            let _cancel_on_drop = child.cancellation.clone().drop_guard();
+            let mut cleanup_stop = None;
+            let result = self
+                .invoke_inner(values, child.clone(), &mut cleanup_stop)
+                .await;
+            let stopped = cleanup_stop.or_else(|| child.checkpoint().err());
+            let preserve_stop = stopped.as_ref().is_some_and(|error| {
+                matches!(
+                    error.code(),
+                    DiagnosticCode::Cancelled | DiagnosticCode::Timeout
+                )
+            });
+            let result = match (result, stopped) {
+                (Ok(value), None) => return Ok(value.into_inner()),
+                (Ok(_), Some(error)) => error,
+                (Err(error), Some(stopped)) if error.code() != stopped.code() => {
+                    stopped.while_handling(error)
+                }
+                (Err(error), _) => error,
+            };
+            Err(admit_error(
+                &self.diagnostic_limits,
+                &self.signature,
+                result,
+                preserve_stop,
+                true,
+            ))
         }
     }
 
@@ -203,7 +241,8 @@ impl NativeOperation {
         &self,
         values: Owned<Vec<Literal>>,
         control: OperationControl,
-    ) -> DiagnosticResult<Literal> {
+        cleanup_stop: &mut Option<Diagnostic>,
+    ) -> DiagnosticResult<Owned<Literal>> {
         control.checkpoint()?;
         if values.len() != self.signature.parameters().len() {
             return Err(BWErr::ParameterMissingError(
@@ -218,9 +257,7 @@ impl NativeOperation {
         }
         tokio::runtime::Handle::try_current()
             .map_err(|_| BWErr::AsyncRuntime("Invoke operations inside a Tokio runtime".into()))?;
-        let child = control.child(None);
-        // Covers normal completion, errors, and the host dropping this invocation.
-        let _cancel_on_drop = child.cancellation.clone().drop_guard();
+        let child = control;
         let value = match &self.implementation {
             Implementation::Async(callback) => {
                 let future = catch_unwind(AssertUnwindSafe(|| {
@@ -230,6 +267,7 @@ impl NativeOperation {
                 let future = GuardedFuture {
                     future,
                     signature: Arc::clone(&self.signature),
+                    limits: self.diagnostic_limits.clone(),
                 };
                 tokio::select! {
                     biased;
@@ -247,21 +285,32 @@ impl NativeOperation {
                 let callback = Arc::clone(callback);
                 let worker_control = child.clone();
                 let signature = Arc::clone(&self.signature);
+                let limits = self.diagnostic_limits.clone();
                 let mut worker = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
-                    worker_control.checkpoint().map_err(OwnedDiagnostic::new)?;
-                    catch_unwind(AssertUnwindSafe(|| {
-                        callback(values.into_inner(), worker_control)
-                    }))
-                    .unwrap_or_else(|_| {
-                        Err(BWErr::NativePanic(signature.normalized().into()).into())
-                    })
-                    .map(Owned::new)
-                    .map_err(OwnedDiagnostic::new)
+                    worker_control
+                        .checkpoint()
+                        .and_then(|_| {
+                            catch_unwind(AssertUnwindSafe(|| {
+                                callback(values.into_inner(), worker_control)
+                            }))
+                            .unwrap_or_else(|_| {
+                                Err(BWErr::NativePanic(signature.normalized().into()).into())
+                            })
+                        })
+                        .map(Owned::new)
+                        .map_err(|error| {
+                            OwnedDiagnostic::new(admit_error(
+                                &limits, &signature, error, false, false,
+                            ))
+                        })
                 });
                 tokio::select! {
                     biased;
                     mut error = child.stopped() => {
+                        // Preserve the observed deadline/runtime failure before cancellation
+                        // is requested solely to drain the worker.
+                        *cleanup_stop = Some(error.clone());
                         child.cancel();
                         worker.abort(); // Cancels queued work; started callbacks must cooperate.
                         match worker.await {
@@ -281,7 +330,7 @@ impl NativeOperation {
         self.value_limits.check(&value)?;
         validate_value(&value)?;
         self.signature.validate_return(&value)?;
-        Ok(value.into_inner())
+        Ok(value)
     }
 
     fn panic_error(&self) -> Diagnostic {
@@ -292,6 +341,7 @@ impl NativeOperation {
 struct GuardedFuture {
     future: OperationFuture,
     signature: Arc<StatementSignature>,
+    limits: DiagnosticLimits,
 }
 
 impl Future for GuardedFuture {
@@ -303,6 +353,39 @@ impl Future for GuardedFuture {
                     BWErr::NativePanic(self.signature.normalized().into()).into()
                 ))
             })
-            .map(|result| result.map(Owned::new).map_err(OwnedDiagnostic::new))
+            .map(|result| {
+                result.map(Owned::new).map_err(|error| {
+                    OwnedDiagnostic::new(admit_error(
+                        &self.limits,
+                        &self.signature,
+                        error,
+                        false,
+                        false,
+                    ))
+                })
+            })
+    }
+}
+
+// Only internal, previously admitted emergency records can skip another admission.
+// Host callback records always pass measurement, even if their public fields imitate one.
+fn admit_error(
+    limits: &DiagnosticLimits,
+    signature: &StatementSignature,
+    error: Diagnostic,
+    preserve_stop: bool,
+    admitted: bool,
+) -> Diagnostic {
+    if admitted && error.is_emergency() {
+        return error;
+    }
+    match limits.admit(error.at(signature.header())) {
+        Ok(error) => error,
+        Err(mut error) if preserve_stop => {
+            let mut original = error.causes.pop().expect("bounded original");
+            original.causes.push(error);
+            original
+        }
+        Err(error) => error,
     }
 }

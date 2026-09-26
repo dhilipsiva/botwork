@@ -58,6 +58,47 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn operation_rejects_large_host_error_details_without_copying_them() {
+    use botwork::core::{
+        diagnostic::{Diagnostic, DiagnosticLimits},
+        grammar::BWErr,
+        operation::{NativeOperation, OperationControl},
+        signature::StatementSignature,
+    };
+    let length = 64 * 1024;
+    let error = Mutex::new(Some(Diagnostic::new(BWErr::NativeError(
+        "x".repeat(length),
+    ))));
+    let operation =
+        NativeOperation::asynchronous(StatementSignature::native("Fail").unwrap(), move |_, _| {
+            let error = error.lock().unwrap().take().unwrap();
+            async move { Err(error) }
+        })
+        .unwrap()
+        .with_diagnostic_limits(DiagnosticLimits {
+            text_bytes: 64,
+            ..DiagnosticLimits::default()
+        })
+        .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    let (result, large) = observe(length, || {
+        runtime.block_on(operation.invoke(vec![], OperationControl::default()))
+    });
+    assert_eq!(
+        result.unwrap_err().causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .detail_fields,
+        1
+    );
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn active_call_retention_rejects_before_copying_a_large_signature() {
     use botwork::core::{
         ast::Program,

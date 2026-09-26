@@ -571,3 +571,20 @@ let failure = run.result.unwrap_err();
 assert_eq!(failure.causes[0].code(), DiagnosticCode::UndefinedStatement);
 assert!(failure.causes[0].omissions.is_some());
 ```
+
+## Operation Diagnostic Admission
+
+Operations admit callback errors before worker handoff and final publication. Configure individual quotas independently of value limits; rejected errors preserve bounded original-category evidence after iterative disposal. See [operation diagnostic rules](operation-diagnostics.md).
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, grammar::BWErr, operation::{NativeOperation, OperationControl}, signature::StatementSignature};
+let operation = NativeOperation::asynchronous(StatementSignature::native("Fail")?, |_, _| async {
+    Err(BWErr::NativeError("reason".into()).into())
+})?.with_diagnostic_limits(DiagnosticLimits { text_bytes: 11, ..DiagnosticLimits::default() })?;
+let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build()?;
+let error = runtime.block_on(operation.invoke(vec![], OperationControl::default())).unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+assert!(error.causes[0].omissions.is_some());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

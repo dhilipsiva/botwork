@@ -339,6 +339,41 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_async_case(&case);
                 continue;
             }
+            Input::OperationDiagnosticBoundary | Input::OperationDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    operation::{NativeOperation, OperationControl},
+                    signature::StatementSignature,
+                };
+                let operation = NativeOperation::asynchronous(
+                    StatementSignature::native("Fail").unwrap(),
+                    |_, _| async { Err(BWErr::NativeError("reason".into()).into()) },
+                )
+                .unwrap()
+                .with_diagnostic_limits(DiagnosticLimits {
+                    text_bytes: if case.error.is_some() { 11 } else { 12 },
+                    ..DiagnosticLimits::default()
+                })
+                .unwrap();
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .unwrap();
+                let error = runtime
+                    .block_on(operation.invoke(vec![], OperationControl::default()))
+                    .unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW4002");
+                    assert!(error.causes[0].omissions.is_some());
+                } else {
+                    assert_eq!(error.code().as_str(), "BW4002");
+                    assert!(error.omissions.is_none());
+                    assert_eq!(error.span.as_ref().unwrap().source().name(), "<native>");
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;
