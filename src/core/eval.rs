@@ -4,6 +4,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::grammar::{BWErr, BWParser, Literal, LiteralResult, Operate, Rule, PRATT_PARSER};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone, Debug, Default, PartialEq)]
 enum InteruptKind {
     #[default]

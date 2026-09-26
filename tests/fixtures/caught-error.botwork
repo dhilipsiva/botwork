@@ -1,0 +1,5 @@
+Try {
+    |answer| = |missing|
+} Catch {
+    |answer| = |42|
+}

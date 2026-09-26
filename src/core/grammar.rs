@@ -3,6 +3,9 @@ use pest_derive::Parser;
 use std::collections::HashMap;
 use thiserror::Error;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Parser)]
 #[grammar = "src/core/grammar.pest"]
 pub struct BWParser;
