@@ -44,6 +44,8 @@ pub enum BWErr {
     ParsingIntegerError(String),
     #[error("Operation performed on incompatible types: {0}")]
     OperationIncompatibleError(String),
+    #[error("Invalid control flow: {0}")]
+    ControlFlowError(String),
     #[error("Arithmetic error: {0}")]
     ArithmeticError(String),
     #[error("Collection access is unsupported: {0}")]

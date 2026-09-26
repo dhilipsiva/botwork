@@ -1,0 +1,44 @@
+# Return crosses the Try, If, and For blocks and exits only this invocation.
+Find seven in |items| {
+    For |item| In |items| {
+        Try {
+            If |item < 0| { Continue }
+            If |item == 7| { Return |item| }
+        } Catch {
+            Log |"unexpected handler"|
+        }
+    }
+    Return
+}
+
+|found| = Find seven in |[-1, 2, 7, 9]|
+Log |found|
+|absent| = Find seven in |[1, 2]|
+Log |absent|
+|again| = Find seven in |[7]|
+Log |again|
+
+# Evaluating a return expression can fail before a return value exists.
+Recover value {
+    Try { Return |missing| } Catch { Return |42| }
+    Log |"unreachable"|
+}
+|recovered| = Recover value
+Log |recovered|
+
+# Finishing a custom statement without Return produces none.
+Do work { |local| = |7| }
+|no_result| = Do work
+Log |no_result|
+
+# Loop controls pass through Try without running its handler.
+For |number| In |[1, 2, 3, 4, 5]| {
+    Try {
+        If |number == 2| { Continue }
+        If |number == 4| { Break }
+    } Catch {
+        Log |"unexpected handler"|
+    }
+    Log |number|
+}
+Log |"after loop"|

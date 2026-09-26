@@ -34,13 +34,11 @@ fn while_repeats_until_the_condition_is_false() {
 }
 
 #[test]
-#[ignore = "known defect: a final Return yields an array and leaves a pending interrupt"]
 fn final_return_produces_a_scalar() {
     assert_int("Get value {\n Return |7|\n}\n|answer| = Get value", 7);
 }
 
 #[test]
-#[ignore = "known defect: nested blocks consume Return before the invocation boundary"]
 fn nested_return_skips_remaining_outer_statements() {
     assert_int(
         "Get value {\n If |true| {\n Return |7|\n |unused| = |0|\n }\n\

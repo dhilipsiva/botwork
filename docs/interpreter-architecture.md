@@ -38,8 +38,16 @@ let result = evaluate_program(&program, &mut context).expect("successful executi
 
 The existing `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Prefer the program API when executing a whole file; separate compatibility calls otherwise allocate separate source owners.
 
+## Completion Outcomes
+
+Internal statement execution returns `Result<Completion, BWErr>`. `Completion` distinguishes a normal value from `Return(value)`, `Break`, and `Continue`. Blocks discard ordinary statement values and stop immediately on control transfer or error. Normally completed blocks, loops, branches, and handlers yield `None`; they retain no implicit result arrays.
+
+Branches and Try/Catch pass control outcomes upward. A handler runs only for an evaluation error; a failed return expression is still an error until its value exists. For/While consume their own Break/Continue and propagate Return. A custom invocation consumes Return, preserving its exact value; fallthrough produces None. No control flags are stored in the context.
+
+Script-level execution and standalone parser-pair blocks reject escaping controls with `ControlFlowError`. Invocation boundaries also reject escaping loop controls, preventing a callee from controlling its caller's loop. These runtime guards do not validate unused branches or definitions. Whole-file placement validation remains a separate TODO; until then, an invalid callee control can produce a runtime error caught by its caller.
+
 ## Remaining Interpreter Work
 
-Explicit completion outcomes, invocation scopes, control-placement validation, and resource limits retain their own roadmap items. Parser-only `Else`/`Catch` wrappers are flattened in the tree; implicit block-result arrays remain transitional behavior, not the specified custom-return contract. The AST refactor does not establish complete language conformance.
+Invocation scopes, control-placement validation, and resource limits retain their own roadmap items. Parameter binding still uses shared context variables, and For bindings are not yet restored. The completion refactor does not establish those scope guarantees or complete language conformance.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

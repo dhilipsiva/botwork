@@ -97,7 +97,15 @@ Output failures become evaluation errors. Errors are reported on stderr with a n
 
 `While |condition| { ... }` evaluates its boolean condition before each iteration, including the first. A false condition skips the body. Normal completion and `Continue` reevaluate the condition; `Continue` skips the rest of the current body. `Break` exits the loop immediately. A condition that is not boolean raises an evaluation error, including when its type changes during execution.
 
-Nested `Return` propagation remains a tracked defect; the completed loop-iteration fix does not establish correct function-return behavior.
+`Return` inside a loop exits its containing custom statement. Loops consume only their own `Break` and `Continue`; a custom call cannot transfer those controls to its caller's loop. For-variable restoration remains part of the pending scope work.
+
+## Returns and Control Flow
+
+`Return |value|` evaluates its expression once and returns that exact value from the containing custom statement. It crosses nested `If`, `For`, `While`, `Try`, and `Catch` blocks, skipping every remaining statement in the invocation. A return at the end of a body behaves identically to one followed by unreachable statements. The caller resumes after its call.
+
+Bare `Return` and custom statements that finish without returning a value produce `None` (displayed as `none`). Normally completed definitions and control constructs also produce `None`. Blocks and loops do not collect their statements' results into arrays; an explicit array or map return preserves that value. Assignment and native `Log` retain their value results. See [the control-flow example](../examples/08-control-flow.botwork).
+
+At runtime, a `Return` escaping script-level execution or a `Break`/`Continue` escaping its invocation or script yields `ControlFlowError`. No pending control state survives an invocation. Whole-file rejection of invalid placements, including unused definitions, is still planned; current guards operate only on executed paths. Invocation-local variables and definitions remain separate scope TODOs.
 
 ## Try/Catch
 
@@ -115,7 +123,7 @@ The try body runs once. If it succeeds, the handler is skipped. On an evaluation
 
 A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the entire file before execution, so this prevents even earlier `Log` statements from running. Syntax errors cannot be caught by a script. Write ordinary statements directly when no handler is intended.
 
-This contract covers returned evaluation errors, including the arithmetic failures described above. Preserving structured error causes and correcting nested `Return` remain separate roadmap items.
+This contract covers evaluation errors, including the arithmetic failures described above. Valid `Return`, `Break`, and `Continue` pass through Try/Catch without running its handler. An error evaluating a return expression remains catchable, and a handler can return a fallback value or raise another error. Preserving structured error causes remains a separate roadmap item.
 
 ## Collection Access Status
 

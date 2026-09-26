@@ -94,3 +94,29 @@ fn pair_compatibility_supports_expressions_and_rejects_non_executable_rules() {
         Err(BWErr::ParsingError(_))
     ));
 }
+
+#[test]
+fn pair_blocks_discard_normal_values_and_reject_escaping_control() {
+    for source in [
+        "{}",
+        "{ |value| = |7| }",
+        "{ For |item| In |[1]| { Break } }",
+    ] {
+        let pair = BWParser::parse(Rule::stmt_block, source)
+            .unwrap()
+            .next()
+            .unwrap();
+        let result = botwork(pair, &mut Context::default());
+        assert!(matches!(result, Ok(Literal::None)), "{source}: {result:?}");
+    }
+    for source in ["{ Return |7| }", "{ Break }", "{ Continue }"] {
+        let pair = BWParser::parse(Rule::stmt_block, source)
+            .unwrap()
+            .next()
+            .unwrap();
+        assert!(matches!(
+            botwork(pair, &mut Context::default()),
+            Err(BWErr::ControlFlowError(_))
+        ));
+    }
+}

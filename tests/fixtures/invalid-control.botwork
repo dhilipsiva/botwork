@@ -1,0 +1,3 @@
+Log |"before"|
+If |true| { Return |7| }
+Log |"unreachable"|

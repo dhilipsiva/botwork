@@ -10,6 +10,146 @@ fn variable(context: &Context, name: &str) -> Literal {
 }
 
 #[test]
+fn normally_completed_controls_do_not_collect_body_results() {
+    for source in [
+        "If |true| { |value| = |7| }",
+        "If |false| { |failure| = |missing| }",
+        "If |false| {} Else { |value| = |7| }",
+        "If |false| {} Else If |true| { |value| = |7| }",
+        "For |item| In |[1, 2, 3]| { |value| = |item| }",
+        "For |item| In |[]| { |failure| = |missing| }",
+        "|i| = |0|\nWhile |i < 1000| { |i| = |i + 1| }",
+        "While |false| { |failure| = |missing| }",
+        "Try { |value| = |7| } Catch { |failure| = |missing| }",
+        "Try { |value| = |missing| } Catch { |value| = |7| }",
+    ] {
+        let result = evaluate(source, &mut Context::default());
+        assert!(matches!(result, Ok(Literal::None)), "{source}: {result:?}");
+    }
+}
+
+#[test]
+fn return_and_break_stop_before_another_while_condition() {
+    for control in ["Return |7|", "Break"] {
+        let mut context = Context::default();
+        let source = format!(
+            "Finish {{\n While |true| {{\n {control}\n |failure| = |missing|\n }}\n\
+             }}\n|answer| = Finish"
+        );
+        let result = evaluate(&source, &mut context).unwrap();
+        if control.starts_with("Return") {
+            assert!(matches!(result, Literal::Int(7)));
+            assert_eq!(context.expression_visits, ["true", "7"]);
+        } else {
+            assert!(matches!(result, Literal::None));
+            assert_eq!(context.expression_visits, ["true"]);
+        }
+    }
+}
+
+#[test]
+fn return_expression_is_evaluated_once_before_control_transfer() {
+    let mut context = Context::default();
+    let result = evaluate(
+        "Answer {\n If |true| { Return |3 + 4| }\n |failure| = |missing|\n}\n\
+         |answer| = Answer",
+        &mut context,
+    );
+    assert!(matches!(result, Ok(Literal::Int(7))), "{result:?}");
+    assert_eq!(context.expression_visits, ["true", "3 + 4", "3 ", "4"]);
+}
+
+#[test]
+fn escaped_control_is_an_error_and_does_not_poison_the_context() {
+    // Runtime boundary guards; whole-program placement validation is still pending.
+    for control in ["Return |7|", "Return", "Break", "Continue"] {
+        for source in [control.to_owned(), format!("If |true| {{ {control} }}")] {
+            let mut context = Context::default();
+            assert!(
+                matches!(
+                    evaluate(&source, &mut context),
+                    Err(BWErr::ControlFlowError(_))
+                ),
+                "{source}"
+            );
+            let result = evaluate("Fresh {\n Return |9|\n}\n|answer| = Fresh", &mut context);
+            assert!(
+                matches!(result, Ok(Literal::Int(9))),
+                "{source}: {result:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn callee_loop_control_cannot_escape_to_a_callers_loop() {
+    // These are runtime guards until invalid placement is rejected before execution.
+    for control in ["Break", "Continue"] {
+        let mut context = Context::default();
+        let source = format!("Escape {{ {control} }}\nEscape");
+        let error = evaluate(&source, &mut context).unwrap_err();
+        assert!(matches!(error, BWErr::ControlFlowError(message) if message.contains(control)));
+        let source = "Fresh { Return |9| }\n|caught| = |0|\n|count| = |0|\n\
+                      For |item| In |[1, 2, 3]| {\n\
+                      Try { Escape } Catch { |caught| = |caught + 1| }\n\
+                      |value| = Fresh\n|count| = |count + 1|\n}\n";
+        evaluate(source, &mut context).unwrap();
+        assert!(matches!(variable(&context, "caught"), Literal::Int(3)));
+        assert!(matches!(variable(&context, "count"), Literal::Int(3)));
+        assert!(matches!(variable(&context, "value"), Literal::Int(9)));
+    }
+}
+
+#[test]
+fn return_discards_unreachable_control_statements_in_the_same_loop() {
+    for trailing in ["Break", "Continue", "Return |missing|"] {
+        let source = format!(
+            "Finish {{\n For |item| In |[1, 2]| {{\n Return |7|\n {trailing}\n}}\n\
+             |failure| = |missing|\n}}\n|answer| = Finish"
+        );
+        let result = evaluate(&source, &mut Context::default());
+        assert!(
+            matches!(result, Ok(Literal::Int(7))),
+            "{source}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn returning_none_from_a_nested_call_still_stops_the_caller() {
+    let result = evaluate(
+        "Empty {}\nFinish {\n |value| = Empty\n Return |value|\n\
+         |failure| = |missing|\n}\n|answer| = Finish",
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::None)), "{result:?}");
+}
+
+#[test]
+fn nested_for_and_while_loops_consume_only_their_own_controls() {
+    for outer in [
+        "For |outer| In |[1, 2, 3]| {",
+        "While |outer < 3| {\n |outer| = |outer + 1|",
+    ] {
+        for inner in [
+            "For |inner| In |[1, 2, 3, 4]| {",
+            "While |inner < 4| {\n |inner| = |inner + 1|",
+        ] {
+            let source = format!(
+                "|sum| = |0|\n|outer| = |0|\n{outer}\n |inner| = |0|\n{inner}\n\
+                 If |inner == 2| {{ Continue }}\nIf |inner == 3| {{ Break }}\n\
+                 |sum| = |sum + 1|\n}}\n|sum| = |sum + 10|\n}}\n|answer| = |sum|"
+            );
+            let result = evaluate(&source, &mut Context::default());
+            assert!(
+                matches!(result, Ok(Literal::Int(33))),
+                "{source}: {result:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn boolean_operators_skip_irrelevant_values_and_failures() {
     let huge_integer = "9".repeat(50);
     let huge_float = format!("{huge_integer}.0");
@@ -224,9 +364,8 @@ fn short_circuiting_composes_in_collections_and_custom_arguments() {
     };
     assert!(matches!(map.get("value"), Some(Literal::Bool(true))));
 
-    // Keep argument selection independent of the pending final-Return correction.
     let result = evaluate(
-        "Identity |value| {\n Return |value|\n |unreachable| = |missing|\n}\n\
+        "Identity |value| {\n Return |value|\n}\n\
          |answer| = Identity |true or missing|",
         &mut Context::default(),
     );
@@ -352,9 +491,7 @@ fn custom_statements_starting_with_keyword_text_execute_normally() {
         "I f",
         "In order",
     ] {
-        // The trailing statement isolates name matching from the final-Return defect.
-        let source =
-            format!("{name} {{\n Return |7|\n |unreachable| = |missing|\n}}\n|answer| = {name}");
+        let source = format!("{name} {{\n Return |7|\n}}\n|answer| = {name}");
         let result = evaluate(&source, &mut Context::default());
         assert!(
             matches!(result, Ok(Literal::Int(7))),

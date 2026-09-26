@@ -15,6 +15,19 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 #[test]
+fn escaped_control_fails_the_cli_without_panicking_or_running_the_tail() {
+    // Runtime guard until the separate whole-program placement validator is added.
+    let path = fixture("invalid-control.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("invalid-control.botwork"));
+    assert!(diagnostic.contains("Invalid control flow: Return requires a custom-statement body"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn help_describes_file_argument_on_stdout() {
     let output = run(&["--help"]);
     assert!(output.status.success());

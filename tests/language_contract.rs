@@ -32,9 +32,8 @@ fn definitions_become_available_when_executed() {
 
 #[test]
 fn a_definition_reads_updated_run_bindings() {
-    // Keep lookup independent of the pending final-Return correction.
     let result = evaluate(
-        "|x| = |10|\nRead value {\n Return |x|\n |unreachable| = |missing|\n}\n\
+        "|x| = |10|\nRead value {\n Return |x|\n}\n\
          |x| = |11|\n|answer| = Read value",
     );
     assert!(matches!(result, Ok(Literal::Int(11))), "{result:?}");
@@ -102,7 +101,6 @@ fn catch_preserves_completed_work_and_a_failed_assignment_destination() {
 }
 
 #[test]
-#[ignore = "specified behavior: custom fallthrough must yield None instead of block-result arrays"]
 fn custom_fallthrough_returns_none() {
     for body in ["", "|local| = |7|", "If |true| { |local| = |7| }"] {
         let source = format!("Do work {{\n {body}\n}}\n|answer| = Do work");
@@ -112,7 +110,6 @@ fn custom_fallthrough_returns_none() {
 }
 
 #[test]
-#[ignore = "specified behavior: bare Return must yield None at the invocation boundary"]
 fn bare_return_returns_none() {
     let result = evaluate("Do work {\n Return\n}\n|answer| = Do work");
     assert!(matches!(result, Ok(Literal::None)), "{result:?}");
@@ -121,10 +118,9 @@ fn bare_return_returns_none() {
 #[test]
 #[ignore = "specified behavior: free variables resolve through the defining environment"]
 fn a_helper_reads_its_lexical_environment_not_its_callers_parameters() {
-    // Trailing statements isolate lexical lookup from the recorded final-Return defect.
     let result = evaluate(
-        "|x| = |10|\nRead value {\n Return |x|\n |unused| = |0|\n}\n\
-         Call helper |x| {\n |value| = Read value\n Return |value|\n |unused| = |0|\n}\n\
+        "|x| = |10|\nRead value {\n Return |x|\n}\n\
+         Call helper |x| {\n |value| = Read value\n Return |value|\n}\n\
          |answer| = Call helper |1|",
     );
     assert!(matches!(result, Ok(Literal::Int(10))), "{result:?}");
@@ -190,7 +186,6 @@ fn nested_definitions_disappear_when_the_defining_invocation_finishes() {
 }
 
 #[test]
-#[ignore = "specified behavior: Return propagates through loops and Try without invoking Catch"]
 fn returns_cross_loops_and_try_blocks_without_running_handlers() {
     for nested in [
         "For |item| In |[1]| {\n Return |7|\n |failure| = |missing_inner|\n}",
@@ -207,4 +202,162 @@ fn returns_cross_loops_and_try_blocks_without_running_handlers() {
             "{source}: {result:?}"
         );
     }
+}
+
+#[test]
+fn return_position_and_unreachable_statements_do_not_change_the_value() {
+    for trailing in ["", "|unreachable| = |missing|"] {
+        let source = format!("Get value {{\n Return |7|\n {trailing}\n}}\n|answer| = Get value");
+        let result = evaluate(&source);
+        assert!(
+            matches!(result, Ok(Literal::Int(7))),
+            "{source}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn return_preserves_the_kind_of_each_value() {
+    for (expression, expected) in [
+        ("true", "bool"),
+        ("7", "int"),
+        ("7.5", "float"),
+        (r#""answer""#, "string"),
+        ("[1, 2]", "array"),
+        ("{answer: 7}", "map"),
+    ] {
+        let source = format!("Get value {{ Return |{expression}| }}\n|answer| = Get value");
+        let result = evaluate(&source).unwrap();
+        let matches_value = match (&result, expected) {
+            (Literal::Bool(value), "bool") => *value,
+            (Literal::Int(value), "int") => *value == 7,
+            (Literal::Float(value), "float") => *value == 7.5,
+            (Literal::String(value), "string") => value == "answer",
+            (Literal::Array(values), "array") => {
+                matches!(values.as_slice(), [Literal::Int(1), Literal::Int(2)])
+            }
+            (Literal::Map(values), "map") => {
+                values.len() == 1 && matches!(values.get("answer"), Some(Literal::Int(7)))
+            }
+            _ => false,
+        };
+        assert!(matches_value, "{source}: {result:?}");
+    }
+}
+
+#[test]
+fn repeated_calls_consume_return_outcomes_at_each_invocation_boundary() {
+    let result = evaluate(
+        "First { Return |1| }\nSecond { Return |2| }\nEmpty {}\n\
+         Wrapper {\n |inner| = First\n |inner| = |inner + 10|\n Return |inner|\n}\n\
+         |one| = First\nEmpty\n|two| = Second\n|eleven| = Wrapper\n\
+         |again| = First\n|answer| = |[one, two, eleven, again]|",
+    );
+    assert!(
+        matches!(&result, Ok(Literal::Array(values)) if matches!(values.as_slice(), [Literal::Int(1), Literal::Int(2), Literal::Int(11), Literal::Int(1)])),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn normal_control_constructs_return_none_without_collecting_body_values() {
+    for source in [
+        "Definition {}",
+        "If |true| { |value| = |7| }",
+        "If |false| { |value| = |missing| }",
+        "If |false| {} Else { |value| = |7| }",
+        "If |false| {} Else If |true| { |value| = |7| }",
+        "For |item| In |[1, 2]| { |value| = |item| }",
+        "For |item| In |[]| { |value| = |missing| }",
+        "|count| = |0|\nWhile |count < 2| { |count| = |count + 1| }",
+        "While |false| { |value| = |missing| }",
+        "Try { |value| = |7| } Catch { |value| = |missing| }",
+        "Try { |value| = |missing| } Catch { |value| = |7| }",
+    ] {
+        let result = evaluate(source);
+        assert!(matches!(result, Ok(Literal::None)), "{source}: {result:?}");
+    }
+}
+
+#[test]
+fn nested_if_and_catch_returns_exit_the_containing_custom_statement() {
+    for body in [
+        "If |true| { Return |7| }",
+        "If |false| {} Else { Return |7| }",
+        "If |false| {} Else If |true| { Return |7| }",
+        "Try { |failure| = |missing| } Catch { Return |7| }",
+        "Try {\n Try { |failure| = |missing| } Catch { Return |7| }\n\
+         } Catch { |failure| = |missing_outer_handler| }",
+        "For |item| In |[1]| {\n Try {\n If |true| { Return |7| }\n\
+         } Catch { |failure| = |missing_handler| }\n}",
+    ] {
+        let source = format!(
+            "Get value {{\n {body}\n |failure| = |missing_after_return|\n}}\n|answer| = Get value"
+        );
+        let result = evaluate(&source);
+        assert!(
+            matches!(result, Ok(Literal::Int(7))),
+            "{source}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn failed_return_expression_is_catchable_before_a_return_outcome_exists() {
+    let result = evaluate(
+        "Get value {\n Try {\n Return |missing|\n\
+         } Catch {\n |recovered| = |7|\n}\n Return |recovered|\n}\n|answer| = Get value",
+    );
+    assert!(matches!(result, Ok(Literal::Int(7))), "{result:?}");
+    let result = evaluate(
+        "Get value {\n Try { Return |missing_body| } Catch { Return |missing_handler| }\n}\nGet value",
+    );
+    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_handler"));
+}
+
+#[test]
+fn break_and_continue_cross_if_try_and_catch_without_running_unused_handlers() {
+    for controls in [
+        "Try {\n If |item == 2| { Continue }\n If |item == 4| { Break }\n\
+         } Catch { |failure| = |missing_handler| }",
+        "Try { |failure| = |missing_body| } Catch {\n\
+         If |item == 2| { Continue }\n If |item == 4| { Break }\n}",
+    ] {
+        for loop_source in [
+            format!("For |item| In |[1, 2, 3, 4, 5]| {{\n {controls}\n |sum| = |sum + item|\n}}"),
+            format!(
+                "While |item < 5| {{\n |item| = |item + 1|\n {controls}\n |sum| = |sum + item|\n}}"
+            ),
+        ] {
+            let source = format!("|item| = |0|\n|sum| = |0|\n{loop_source}\n|answer| = |sum|");
+            let result = evaluate(&source);
+            assert!(
+                matches!(result, Ok(Literal::Int(4))),
+                "{source}: {result:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn nested_loops_consume_only_their_own_break_and_continue() {
+    let result = evaluate(
+        "|sum| = |0|\nFor |outer| In |[1, 2, 3]| {\n\
+         For |inner| In |[1, 2, 3]| {\n If |inner == 2| { Continue }\n\
+         If |inner == 3| { Break }\n |sum| = |sum + 1|\n}\n\
+         |sum| = |sum + 10|\n}\n|answer| = |sum|",
+    );
+    assert!(matches!(result, Ok(Literal::Int(33))), "{result:?}");
+}
+
+#[test]
+fn a_callees_loops_and_return_do_not_interrupt_its_callers_loop() {
+    let result = evaluate(
+        "Get one {\n |count| = |0|\n For |inner| In |[1, 2, 3]| {\n\
+         If |inner == 2| { Continue }\n If |inner == 3| { Break }\n\
+         |count| = |count + 1|\n}\n Return |count|\n}\n\
+         |sum| = |0|\nFor |outer| In |[1, 2, 3]| {\n |value| = Get one\n\
+         |sum| = |sum + value + 10|\n}\n|answer| = |sum|",
+    );
+    assert!(matches!(result, Ok(Literal::Int(33))), "{result:?}");
 }

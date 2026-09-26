@@ -16,21 +16,15 @@ use super::{
 #[cfg(test)]
 mod tests;
 
-// Replaced by explicit completion outcomes in the following control-flow TODO.
-#[derive(Clone, Debug, Default, PartialEq)]
-enum InteruptKind {
-    #[default]
-    None,
-    Continue,
+#[derive(Debug)]
+enum Completion {
+    Normal(Literal),
+    Return(Literal),
     Break,
-    Return,
+    Continue,
 }
 
-#[derive(Clone, Debug, Default)]
-struct Interupt {
-    kind: InteruptKind,
-    literal: Literal,
-}
+type CompletionResult = Result<Completion, BWErr>;
 
 #[derive(Clone)]
 enum StmtType {
@@ -42,7 +36,6 @@ enum StmtType {
 pub struct Context {
     variables: HashMap<String, Literal>,
     statements: HashMap<String, StmtType>,
-    interupt: Interupt,
     #[cfg(test)]
     expression_visits: Vec<String>,
 }
@@ -62,50 +55,6 @@ impl Context {
     pub fn init_statements(&mut self) {
         self.statements
             .insert("log|param|".into(), StmtType::Native(log_param));
-    }
-
-    fn push_interupt(&mut self, interupt: Interupt) {
-        if InteruptKind::None == self.interupt.kind {
-            self.interupt = interupt;
-        } else {
-            unreachable!("Tried pushing an interrupt while another is in progress");
-        }
-    }
-
-    fn push_interupt_break(&mut self) {
-        self.push_interupt(Interupt {
-            kind: InteruptKind::Break,
-            literal: Literal::None,
-        });
-    }
-
-    fn push_interupt_continue(&mut self) {
-        self.push_interupt(Interupt {
-            kind: InteruptKind::Continue,
-            literal: Literal::None,
-        });
-    }
-
-    fn push_interupt_return(&mut self, literal: Literal) {
-        self.push_interupt(Interupt {
-            kind: InteruptKind::Return,
-            literal,
-        });
-    }
-
-    fn has_loop_interupt(&self) -> bool {
-        matches!(
-            self.interupt.kind,
-            InteruptKind::Continue | InteruptKind::Break
-        )
-    }
-
-    fn has_return_interupt(&self) -> bool {
-        self.interupt.kind == InteruptKind::Return
-    }
-
-    fn pop_interupt(&mut self) -> Interupt {
-        std::mem::take(&mut self.interupt)
     }
 }
 
@@ -143,7 +92,11 @@ fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
                 let value = evaluate_expression(argument, context)?;
                 context.set_variable(parameter.text.clone(), value);
             }
-            evaluate_block(&definition.body, context)
+            match evaluate_block(&definition.body, context)? {
+                Completion::Return(value) => Ok(value),
+                // Reject unconsumed loop controls here so they cannot reach a caller's loop.
+                completion => finish_script(completion),
+            }
         }
     }
 }
@@ -214,24 +167,14 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
     }
 }
 
-fn evaluate_block(block: &Block, context: &mut Context) -> LiteralResult {
-    let mut results = Vec::new();
+fn evaluate_block(block: &Block, context: &mut Context) -> CompletionResult {
     for statement in &block.statements {
-        if matches!(statement.kind, StatementKind::Break) {
-            context.push_interupt_break();
-            return Ok(Literal::Array(results));
-        } else if matches!(statement.kind, StatementKind::Continue) {
-            context.push_interupt_continue();
-            return Ok(Literal::Array(results));
-        } else if context.has_loop_interupt() {
-            return Ok(Literal::Array(results));
-        } else if context.has_return_interupt() {
-            return Ok(context.pop_interupt().literal);
-        } else {
-            results.push(execute_statement(statement, context)?);
+        match evaluate_statement(statement, context)? {
+            Completion::Normal(_) => (),
+            control => return Ok(control),
         }
     }
-    Ok(Literal::Array(results))
+    Ok(Completion::Normal(Literal::None))
 }
 
 fn evaluate_for(
@@ -239,32 +182,24 @@ fn evaluate_for(
     iterable: &Expr,
     body: &Block,
     context: &mut Context,
-) -> LiteralResult {
+) -> CompletionResult {
     let Literal::Array(values) = evaluate_expression(iterable, context)? else {
         return Err(BWErr::OperationIncompatibleError(
             "For requires an array to iterate over".into(),
         ));
     };
-    let mut results = Vec::new();
     for value in values {
         context.set_variable(binding.to_owned(), value);
-        results.push(evaluate_block(body, context)?);
-        let interupt = context.pop_interupt();
-        match interupt.kind {
-            InteruptKind::None => (),
-            InteruptKind::Continue => continue,
-            InteruptKind::Break => break,
-            InteruptKind::Return => {
-                context.push_interupt(interupt);
-                break;
-            }
+        match evaluate_block(body, context)? {
+            Completion::Normal(_) | Completion::Continue => (),
+            Completion::Break => break,
+            returned @ Completion::Return(_) => return Ok(returned),
         }
     }
-    Ok(Literal::Array(results))
+    Ok(Completion::Normal(Literal::None))
 }
 
-fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> LiteralResult {
-    let mut results = Vec::new();
+fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> CompletionResult {
     loop {
         let Literal::Bool(should_loop) = evaluate_expression(condition, context)? else {
             return Err(BWErr::OperationIncompatibleError(
@@ -274,26 +209,16 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Lite
         if !should_loop {
             break;
         }
-        results.push(evaluate_block(body, context)?);
-        let interupt = context.pop_interupt();
-        match interupt.kind {
-            InteruptKind::None => (),
-            InteruptKind::Continue => continue,
-            InteruptKind::Break => break,
-            InteruptKind::Return => {
-                context.push_interupt(interupt);
-                break;
-            }
+        match evaluate_block(body, context)? {
+            Completion::Normal(_) | Completion::Continue => (),
+            Completion::Break => break,
+            returned @ Completion::Return(_) => return Ok(returned),
         }
     }
-    Ok(Literal::Array(results))
+    Ok(Completion::Normal(Literal::None))
 }
 
-/// Evaluate an already parsed, owned statement in this context.
-///
-/// Definitions retain their syntax tree and source spans after the program is dropped.
-/// Control-flow and invocation-scope limitations are tracked in TODO.md.
-pub fn execute_statement(statement: &Statement, context: &mut Context) -> LiteralResult {
+fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
     match &statement.kind {
         StatementKind::Assign { name, value } => {
             let value = match value {
@@ -303,16 +228,16 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
                 AssignmentValue::Call(call) => invoke(call, context)?,
             };
             context.set_variable(name.text.clone(), value.clone());
-            Ok(value)
+            Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {
             context.statements.insert(
                 definition.signature.clone(),
                 StmtType::UserDefined(Arc::clone(definition)),
             );
-            Ok(Literal::None)
+            Ok(Completion::Normal(Literal::None))
         }
-        StatementKind::Invoke(call) => invoke(call, context),
+        StatementKind::Invoke(call) => invoke(call, context).map(Completion::Normal),
         StatementKind::If {
             condition,
             then_branch,
@@ -328,8 +253,8 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
             } else {
                 match else_branch {
                     Some(ElseBranch::Block(block)) => evaluate_block(block, context),
-                    Some(ElseBranch::If(statement)) => execute_statement(statement, context),
-                    None => Ok(Literal::None),
+                    Some(ElseBranch::If(statement)) => evaluate_statement(statement, context),
+                    None => Ok(Completion::Normal(Literal::None)),
                 }
             }
         }
@@ -348,14 +273,36 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
                 Some(expression) => evaluate_expression(expression, context)?,
                 None => Literal::None,
             };
-            context.push_interupt_return(value.clone());
-            Ok(value)
+            Ok(Completion::Return(value))
         }
-        // The full placement validator is a separate TODO; direct invalid dispatch is fallible.
-        StatementKind::Break | StatementKind::Continue => Err(BWErr::OperationIncompatibleError(
-            "Loop control requires an enclosing loop body".into(),
+        StatementKind::Break => Ok(Completion::Break),
+        StatementKind::Continue => Ok(Completion::Continue),
+    }
+}
+
+// Runtime guards for public entry points and invocation boundaries. Whole-program
+// placement validation, including unused definitions, has its own TODO.
+fn finish_script(completion: Completion) -> LiteralResult {
+    match completion {
+        Completion::Normal(value) => Ok(value),
+        Completion::Return(_) => Err(BWErr::ControlFlowError(
+            "Return requires a custom-statement body".into(),
+        )),
+        Completion::Break => Err(BWErr::ControlFlowError(
+            "Break requires an enclosing loop in the same invocation".into(),
+        )),
+        Completion::Continue => Err(BWErr::ControlFlowError(
+            "Continue requires an enclosing loop in the same invocation".into(),
         )),
     }
+}
+
+/// Evaluate an already parsed, owned statement at script level in this context.
+///
+/// Definitions retain their syntax tree and source spans after the program is dropped.
+/// Escaping control flow is an error; custom calls consume their own returns.
+pub fn execute_statement(statement: &Statement, context: &mut Context) -> LiteralResult {
+    finish_script(evaluate_statement(statement, context)?)
 }
 
 /// Evaluate a program without parsing or rebuilding its statements.
@@ -375,7 +322,7 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
     match ast::from_pair(pair)? {
         Node::Statement(statement) => execute_statement(&statement, context),
         Node::Expression(expression) => evaluate_expression(&expression, context),
-        Node::Block(block) => evaluate_block(&block, context),
+        Node::Block(block) => finish_script(evaluate_block(&block, context)?),
         Node::None => Ok(Literal::None),
     }
 }

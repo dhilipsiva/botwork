@@ -99,6 +99,14 @@ fn short_circuit_example_skips_errors_and_handles_required_operands() {
 }
 
 #[test]
+fn control_flow_example_returns_exact_values_and_resumes_at_the_correct_boundary() {
+    assert_example(
+        "08-control-flow.botwork",
+        &["7", "none", "7", "42", "none", "1", "3", "after loop"],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",
