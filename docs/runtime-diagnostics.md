@@ -8,7 +8,7 @@ Measure each complete error and any prospective call snapshot before cloning fra
 
 Apply checks at expression, statement, call, native-result, and public program/statement/Pair boundaries, including validation failures. Engine finalization also admits errors from parsing, source reads, inputs, and setup. Configured quotas apply after valid run/environment preparation installs the run budget; earlier control/configuration/environment failures use the fresh Context's default diagnostic quotas. Invalid diagnostic depth is rejected before script effects.
 
-Initial BWErr strings and active call frames already exist when admission runs. This contract prevents subsequent diagnostic snapshot copies and bounds the admitted tree; it does not yet preflight every original error-message allocation, active-call allocation, or small related/cause attachment. Those remain construction and aggregate retention tasks.
+Initial BWErr strings and active call frames already exist when this per-tree admission runs. [Retained call/handler limits](retained-diagnostics.md) separately reserve live records before call-signature copies and handler storage. Original error-message allocation and small related/cause attachments remain construction tasks.
 
 ## Failures, Cleanup, and Stops
 
@@ -20,6 +20,6 @@ Observe cancellation/deadline state before a new diagnostic quota can latch. Pre
 
 ## Remaining Boundaries and Evidence
 
-These are per-tree limits. Multiple active handlers, live call-context storage, Context snapshots, and host-retained run results still need aggregate ownership accounting. Original message construction, registration-only APIs, standalone NativeOperation diagnostics, arbitrary callback allocations, general rendering, and output/serialization have separate contracts. These limits do not establish a process-memory ceiling or hard termination deadline.
+These are per-tree limits. [Aggregate retained records](retained-diagnostics.md) account for active handlers, calls, shared Context snapshots, and their unique source owners. Host-retained run results, original message construction, registration-only APIs, standalone NativeOperation diagnostics, arbitrary callback allocations, general rendering, and output/serialization have separate contracts or pending work. These limits do not establish a process-memory ceiling or hard termination deadline.
 
 Tests cover exact/zero/invalid quotas, prospective versus existing stacks, source-byte evidence, prior effects, handler/rethrow/import cleanup, independent Context stops, native cancellation causes, controlled-clock timeouts, all synchronous entry points, pre-copy rejection, default CLI cause amplification, and recovery. Existing debug/release stack stress and completion matrices remain active. R18 corpus cases and a Rust doctest pin handler admission.

@@ -58,6 +58,72 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn active_call_retention_rejects_before_copying_a_large_signature() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticCode,
+        eval::{evaluate_program_detailed, Context},
+        run::RetainedDiagnosticLimits,
+    };
+    let length = 64 * 1024;
+    let header = "x".repeat(length);
+    for records in [0, 1] {
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records,
+                text_bytes: 0,
+                ..RetainedDiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        context
+            .register_native(&header, |_| panic!("rejected call entered"))
+            .unwrap();
+        let program = Program::parse("runtime", &header).unwrap();
+        let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+        assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
+fn handler_retention_rejects_before_copying_native_details_into_catch_metadata() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        grammar::BWErr,
+        run::RetainedDiagnosticLimits,
+    };
+    let length = 64 * 1024;
+    let reason = Mutex::new(Some("x".repeat(length)));
+    let mut context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            text_bytes: 4,
+            ..RetainedDiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .register_native("Fail", move |_| {
+            Err(BWErr::NativeError(reason.lock().unwrap().take().unwrap()))
+        })
+        .unwrap();
+    let program = Program::parse("runtime", "Try { Fail } Catch |error| {}").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert_eq!(
+        result.unwrap_err().causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .detail_fields,
+        1
+    );
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn runtime_diagnostic_limit_precedes_native_reason_copy_and_preserves_small_evidence() {
     use botwork::core::{
         ast::Program,

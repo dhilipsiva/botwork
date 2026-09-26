@@ -189,7 +189,7 @@ fn prospective_stack_matches_owned_metrics_and_preserves_an_existing_snapshot() 
     empty.call_stack.clear();
     let limits = DiagnosticLimits::default();
     assert_eq!(
-        limits.check_with_stack(&empty, &frames).unwrap(),
+        limits.check_with_stack(&empty, frames.iter()).unwrap(),
         limits.check(&original).unwrap()
     );
     let mut incoming = frames.clone();
@@ -198,12 +198,12 @@ fn prospective_stack_matches_owned_metrics_and_preserves_an_existing_snapshot() 
         call_frames: 1,
         ..limits
     };
-    let rejection = limits.admit_with_stack(empty, &incoming).unwrap_err();
+    let rejection = limits.admit_with_stack(empty, incoming.iter()).unwrap_err();
     assert_eq!(
         rejection.causes[0].omissions.as_ref().unwrap().call_frames,
         2
     );
-    let accepted = limits.admit_with_stack(original, &incoming).unwrap();
+    let accepted = limits.admit_with_stack(original, incoming.iter()).unwrap();
     assert_eq!(accepted.call_stack.len(), 1);
     assert_eq!(accepted.call_stack[0].signature, "read");
 }

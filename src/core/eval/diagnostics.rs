@@ -1,4 +1,7 @@
 use super::*;
+
+#[cfg(test)]
+mod tests;
 use crate::core::diagnostic::DiagnosticCode;
 
 impl Context {
@@ -41,6 +44,45 @@ impl Context {
         }
     }
 
+    pub(super) fn retain_handler(
+        &self,
+        original: Diagnostic,
+    ) -> DiagnosticResult<Arc<StoredDiagnostic>> {
+        let reservation = self
+            .budget
+            .as_ref()
+            .map(|budget| budget.reserve_diagnostic(&original))
+            .transpose();
+        match reservation {
+            Ok(reservation) => Ok(Arc::new(StoredDiagnostic {
+                value: original,
+                _reservation: reservation,
+            })),
+            Err(error) => Err(original.rejected(error.into_error())),
+        }
+    }
+
+    pub(super) fn retain_call(
+        &self,
+        signature: &str,
+        call_site: &Span,
+        definition_site: Option<&Span>,
+    ) -> DiagnosticResult<Arc<StoredCallFrame>> {
+        let reservation = self
+            .budget
+            .as_ref()
+            .map(|budget| budget.reserve_call_frame(signature, call_site, definition_site))
+            .transpose()?;
+        Ok(Arc::new(StoredCallFrame {
+            frame: CallFrame {
+                signature: signature.into(),
+                call_site: call_site.clone(),
+                definition_site: definition_site.cloned(),
+            },
+            _reservation: reservation,
+        }))
+    }
+
     fn admit_diagnostic(
         &self,
         error: Diagnostic,
@@ -56,7 +98,7 @@ impl Context {
         match self
             .limits()
             .diagnostics
-            .admit_with_stack(error, &self.calls)
+            .admit_with_stack(error, self.calls.iter().map(|record| &record.frame))
         {
             Ok(error) => error,
             Err(error) => {

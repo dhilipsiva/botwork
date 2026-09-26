@@ -25,8 +25,8 @@ use super::{
     operation::OperationControl,
     run::{
         DefinitionReservation, EvaluationGuard, RegistryPlan, RegistryReservation, RetainedName,
-        RunBudget, RunEnvironment, RunLimits, SourceFailure, StoredValue, TemporaryValue,
-        ValueReservation,
+        RunBudget, RunEnvironment, RunLimits, SourceFailure, StoredCallFrame, StoredDiagnostic,
+        StoredValue, TemporaryValue, ValueReservation,
     },
     signature::{StatementOrigin, StatementSignature},
     value_limits::Owned,
@@ -112,7 +112,7 @@ struct Frame {
 #[derive(Clone)]
 struct HandledError {
     invocation: usize,
-    diagnostic: Diagnostic,
+    diagnostic: Arc<StoredDiagnostic>,
 }
 
 /// Execution state. Infallible Clone is a host-owned copy outside snapshot work
@@ -122,7 +122,7 @@ struct HandledError {
 pub struct Context {
     frames: Vec<Frame>,
     current: usize,
-    calls: Vec<CallFrame>,
+    calls: Vec<Arc<StoredCallFrame>>,
     handlers: Vec<HandledError>,
     modules: ModuleCache,
     loading: Vec<PathBuf>,
@@ -732,11 +732,14 @@ impl Context {
 
     fn with_call(
         &mut self,
-        frame: CallFrame,
+        signature: &str,
+        call_site: &Span,
+        definition_site: Option<&Span>,
         body: impl FnOnce(&mut Self) -> TemporaryResult,
     ) -> TemporaryResult {
         self.check_call_depth()
-            .map_err(|error| self.diagnostic(error, Some(&frame.call_site), false))?;
+            .map_err(|error| self.diagnostic(error, Some(call_site), false))?;
+        let frame = self.retain_call(signature, call_site, definition_site)?;
         self.calls.push(frame);
         let result = body(self).map_err(|error| self.diagnostic(error, None, false));
         self.calls.pop();
@@ -820,40 +823,33 @@ fn invoke_resolved(
             metadata,
             builtin_log,
             ..
-        } => context.with_call(
-            CallFrame {
-                signature: call.signature.clone(),
-                call_site: call.span.clone(),
-                definition_site: None,
-            },
-            |context| {
-                let arguments = TemporaryArguments::new(arguments);
-                let known_result = if builtin_log {
-                    let size = context
-                        .limits()
-                        .values
-                        .check(&arguments[0])
-                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                    Some(context.temporary_reservation(size)?)
-                } else {
-                    None
-                };
-                let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
-                    .map_err(|_| BWErr::NativePanic(call.signature.clone()))
-                    .and_then(|result| result)
-                    .map_err(|error| {
-                        context.diagnostic(Diagnostic::new(error), Some(&call.span), false)
-                    });
-                let result = context.after_operation(result.map(Owned::new))?;
-                context.check_value(&result)?;
-                validate_value(&result)?;
-                metadata.validate_return(&result)?;
-                match known_result {
-                    Some(reservation) => Ok(TemporaryValue::new(result.into_inner(), reservation)),
-                    None => context.temporary(result.into_inner()),
-                }
-            },
-        ),
+        } => context.with_call(&call.signature, &call.span, None, |context| {
+            let arguments = TemporaryArguments::new(arguments);
+            let known_result = if builtin_log {
+                let size = context
+                    .limits()
+                    .values
+                    .check(&arguments[0])
+                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
+                Some(context.temporary_reservation(size)?)
+            } else {
+                None
+            };
+            let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
+                .map_err(|_| BWErr::NativePanic(call.signature.clone()))
+                .and_then(|result| result)
+                .map_err(|error| {
+                    context.diagnostic(Diagnostic::new(error), Some(&call.span), false)
+                });
+            let result = context.after_operation(result.map(Owned::new))?;
+            context.check_value(&result)?;
+            validate_value(&result)?;
+            metadata.validate_return(&result)?;
+            match known_result {
+                Some(reservation) => Ok(TemporaryValue::new(result.into_inner(), reservation)),
+                None => context.temporary(result.into_inner()),
+            }
+        }),
         StmtType::UserDefined {
             definition,
             metadata,
@@ -876,11 +872,9 @@ fn invoke_resolved(
                 ..Frame::default()
             };
             context.with_call(
-                CallFrame {
-                    signature: call.signature.clone(),
-                    call_site: call.span.clone(),
-                    definition_site: Some(definition.span.clone()),
-                },
+                &call.signature,
+                &call.span,
+                Some(&definition.span),
                 |context| {
                     context
                         .with_invocation(frame, |context| evaluate_block(&definition.body, context))
@@ -1282,26 +1276,29 @@ fn evaluate_handler(
     context: &mut Context,
 ) -> CompletionResult {
     let owner = context.current;
+    let original = context.retain_handler(original)?;
     let previous = if let Some(name) = binding {
-        context
-            .checkpoint()
-            .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
-        let limits = context.limits();
-        let limits = limits.diagnostic_values.intersect(&limits.values);
-        let size = original.value_size_with_limits(&limits).map_err(|error| {
-            context
-                .retain_limit(error)
-                .at(&name.span)
-                .while_handling(original.clone())
-        })?;
-        let reservation = context
-            .temporary_reservation(size)
-            .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
-        let value = TemporaryValue::new(original.to_value(), reservation);
-        let (value, _reservation) = value.into_parts();
-        context
-            .set_variable(&name.text, value)
-            .map_err(|error| error.at(&name.span).while_handling(original.clone()))?
+        let installed = (|| {
+            context.checkpoint()?;
+            let limits = context.limits();
+            let limits = limits.diagnostic_values.intersect(&limits.values);
+            let size = original
+                .value
+                .value_size_with_limits(&limits)
+                .map_err(|error| context.retain_limit(error))?;
+            let reservation = context.temporary_reservation(size)?;
+            let value = TemporaryValue::new(original.value.to_value(), reservation);
+            let (value, _reservation) = value.into_parts();
+            context.set_variable(&name.text, value)
+        })();
+        match installed {
+            Ok(previous) => previous,
+            Err(error) => {
+                return Err(error
+                    .at(&name.span)
+                    .while_handling(StoredDiagnostic::into_diagnostic(original)))
+            }
+        }
     } else {
         None
     };
@@ -1317,8 +1314,10 @@ fn evaluate_handler(
         invocation: owner,
         diagnostic: original.clone(),
     });
-    let result = evaluate_block(handler, context).map_err(|error| error.while_handling(original));
+    let result = evaluate_block(handler, context);
     context.handlers.pop();
+    let result =
+        result.map_err(|error| error.while_handling(StoredDiagnostic::into_diagnostic(original)));
     if let Some(name) = binding {
         // Reservation counters never participate in key equality or hashing.
         #[allow(clippy::mutable_key_type)]
@@ -1457,6 +1456,7 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             {
                 Some(handler) => Err(handler
                     .diagnostic
+                    .value
                     .clone()
                     .with_related("rethrow", &statement.span)),
                 None => Err(BWErr::ControlFlowError(

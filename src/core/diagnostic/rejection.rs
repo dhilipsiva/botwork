@@ -130,48 +130,58 @@ impl DiagnosticLimits {
     /// iteratively and return the violation with a bounded original-category summary.
     /// Emergency evidence has fixed independent caps and can exceed a zero input quota.
     pub fn admit(&self, diagnostic: Diagnostic) -> DiagnosticResult<Diagnostic> {
-        self.admit_with_stack(diagnostic, &[])
+        self.admit_with_stack(diagnostic, std::iter::empty())
     }
 
-    pub(crate) fn admit_with_stack(
+    pub(crate) fn admit_with_stack<'a>(
         &self,
         diagnostic: Diagnostic,
-        frames: &[CallFrame],
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> DiagnosticResult<Diagnostic> {
-        if let Err(violation) = self.check_with_stack(&diagnostic, frames) {
-            let mut shortened = 0;
-            let mut summary = Diagnostic::new(error_summary(&diagnostic.error, &mut shortened));
-            let source = diagnostic.span.as_ref().map(|span| {
-                let (file, file_truncated) =
-                    prefix(span.source().name(), SUMMARY_SOURCE_NAME_BYTES);
-                OmittedSource {
-                    file,
-                    file_truncated,
-                    start_byte: span.start(),
-                    end_byte: span.end(),
-                }
-            });
-            let label = !matches!(diagnostic.label, "source" | "expression");
-            if !label {
-                summary.label = diagnostic.label;
-            }
-            summary.omissions = Some(Box::new(DiagnosticOmissions {
-                detail_fields: shortened,
-                call_frames: if diagnostic.call_stack.is_empty() {
-                    frames.len()
-                } else {
-                    diagnostic.call_stack.len()
-                },
-                related_locations: diagnostic.related.len(),
-                direct_causes: diagnostic.causes.len(),
-                label,
-                prior_summary: diagnostic.omissions.is_some(),
-                source,
-            }));
-            diagnostic.discard();
-            Err(Diagnostic::new(violation).while_handling(summary))
+        if let Err(violation) = self.check_with_stack(&diagnostic, frames.clone()) {
+            Err(rejected(diagnostic, violation, frames.len()))
         } else {
             Ok(diagnostic.capture_stack(frames))
         }
     }
+}
+
+impl Diagnostic {
+    /// Fixed emergency evidence for a runtime budget/control failure retaining this error.
+    pub(crate) fn rejected(self, violation: BWErr) -> Self {
+        rejected(self, violation, 0)
+    }
+}
+
+fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> Diagnostic {
+    let mut shortened = 0;
+    let mut summary = Diagnostic::new(error_summary(&diagnostic.error, &mut shortened));
+    let source = diagnostic.span.as_ref().map(|span| {
+        let (file, file_truncated) = prefix(span.source().name(), SUMMARY_SOURCE_NAME_BYTES);
+        OmittedSource {
+            file,
+            file_truncated,
+            start_byte: span.start(),
+            end_byte: span.end(),
+        }
+    });
+    let label = !matches!(diagnostic.label, "source" | "expression");
+    if !label {
+        summary.label = diagnostic.label;
+    }
+    summary.omissions = Some(Box::new(DiagnosticOmissions {
+        detail_fields: shortened,
+        call_frames: if diagnostic.call_stack.is_empty() {
+            pending_frames
+        } else {
+            diagnostic.call_stack.len()
+        },
+        related_locations: diagnostic.related.len(),
+        direct_causes: diagnostic.causes.len(),
+        label,
+        prior_summary: diagnostic.omissions.is_some(),
+        source,
+    }));
+    diagnostic.discard();
+    Diagnostic::new(violation).while_handling(summary)
 }

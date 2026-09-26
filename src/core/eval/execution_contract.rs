@@ -515,7 +515,11 @@ fn defensive_rethrow_guard_does_not_consume_an_unrelated_callers_handler() {
     let mut context = context();
     context.handlers.push(HandledError {
         invocation: 0,
-        diagnostic: Diagnostic::new(BWErr::VariableNotDefined("original".into())),
+        diagnostic: context
+            .retain_handler(Diagnostic::new(BWErr::VariableNotDefined(
+                "original".into(),
+            )))
+            .unwrap(),
     });
     let program = Program::parse("guard.botwork", "Try {} Catch { Rethrow }").unwrap();
     let StatementKind::Try { handler, .. } = program.statements[0].kind() else {

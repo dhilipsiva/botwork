@@ -214,7 +214,7 @@ fn emergency_evidence_stays_bounded_when_unwinding_adds_context_and_causes() {
     let rejected = rejected
         .at(span)
         .at_expression(span)
-        .capture_stack(&[frame])
+        .capture_stack([frame].iter())
         .with_related(&"x".repeat(4096), span)
         .while_handling(BWErr::ArithmeticError("prior".into()).into());
     assert!(rejected.is_emergency());

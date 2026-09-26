@@ -47,6 +47,9 @@ pub use snapshot_limits::SnapshotLimits;
 pub(crate) use snapshot_limits::SnapshotSize;
 mod result_limits;
 pub use result_limits::ResultLimits;
+mod retained_diagnostics;
+pub use retained_diagnostics::RetainedDiagnosticLimits;
+pub(crate) use retained_diagnostics::{StoredCallFrame, StoredDiagnostic};
 mod temporary_values;
 pub use temporary_values::TemporaryLimits;
 pub(crate) use temporary_values::{TemporaryReservation, TemporaryValue};
@@ -78,6 +81,7 @@ pub struct RunLimits {
     pub temporaries: TemporaryLimits,
     pub diagnostic_values: DiagnosticValueLimits,
     pub diagnostics: DiagnosticLimits,
+    pub retained_diagnostics: RetainedDiagnosticLimits,
 }
 
 impl Default for RunLimits {
@@ -101,6 +105,7 @@ impl Default for RunLimits {
             temporaries: TemporaryLimits::default(),
             diagnostic_values: DiagnosticValueLimits::default(),
             diagnostics: DiagnosticLimits::default(),
+            retained_diagnostics: RetainedDiagnosticLimits::default(),
         }
     }
 }
@@ -412,6 +417,7 @@ struct BudgetState {
     retained_names: Arc<retained_names::RetainedNames>,
     retained_registry: Arc<retained_registry::RetainedRegistry>,
     temporary_values: Arc<temporary_values::TemporaryValues>,
+    retained_diagnostics: Arc<retained_diagnostics::RetainedDiagnostics>,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -433,6 +439,7 @@ impl Clone for RunBudget {
             retained_names: Arc::clone(&self.0.retained_names),
             retained_registry: Arc::clone(&self.0.retained_registry),
             temporary_values: Arc::clone(&self.0.temporary_values),
+            retained_diagnostics: Arc::clone(&self.0.retained_diagnostics),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -447,6 +454,9 @@ impl Clone for RunBudget {
 impl RunBudget {
     pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
+            retained_diagnostics: Arc::new(retained_diagnostics::RetainedDiagnostics::new(
+                limits.retained_diagnostics.clone(),
+            )),
             temporary_values: Arc::new(temporary_values::TemporaryValues::new(
                 limits.temporaries.clone(),
             )),

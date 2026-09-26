@@ -112,6 +112,7 @@ struct Measurement<'a> {
     limits: &'a DiagnosticLimits,
     size: DiagnosticSize,
     sources: HashSet<*const SourceFile>,
+    owners: Option<&'a mut Vec<Arc<SourceFile>>>,
 }
 
 impl Measurement<'_> {
@@ -141,6 +142,9 @@ impl Measurement<'_> {
                 "diagnostic source bytes",
             )?;
             self.sources.insert(pointer);
+            if let Some(owners) = &mut self.owners {
+                owners.push(Arc::clone(source));
+            }
         }
         Ok(())
     }
@@ -220,19 +224,38 @@ impl DiagnosticLimits {
     /// Inspect without recursion, formatting strings, scanning source positions, or copying payloads.
     /// Source allocations are deduplicated by identity; other metrics count occurrences.
     pub fn check(&self, diagnostic: &Diagnostic) -> Result<DiagnosticSize, BWErr> {
-        self.check_with_stack(diagnostic, &[])
+        self.check_with_stack(diagnostic, std::iter::empty())
     }
 
-    pub(crate) fn check_with_stack(
+    pub(crate) fn check_with_stack<'a>(
         &self,
         diagnostic: &Diagnostic,
-        frames: &[CallFrame],
+        frames: impl ExactSizeIterator<Item = &'a CallFrame>,
+    ) -> Result<DiagnosticSize, BWErr> {
+        self.inspect(diagnostic, frames, None)
+    }
+
+    pub(crate) fn retained_size(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
+        let mut sources = Vec::new();
+        let size = self.inspect(diagnostic, std::iter::empty(), Some(&mut sources))?;
+        Ok((size, sources))
+    }
+
+    fn inspect<'a>(
+        &self,
+        diagnostic: &Diagnostic,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame>,
+        owners: Option<&mut Vec<Arc<SourceFile>>>,
     ) -> Result<DiagnosticSize, BWErr> {
         self.validate()?;
         let mut measurement = Measurement {
             limits: self,
             size: DiagnosticSize::default(),
             sources: HashSet::new(),
+            owners,
         };
         let mut pending = vec![(std::slice::from_ref(diagnostic).iter(), 1)];
         while let Some((nodes, depth)) = pending.last_mut() {

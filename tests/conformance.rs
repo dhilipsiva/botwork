@@ -414,22 +414,35 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
-            Input::RuntimeDiagnosticBoundary | Input::RuntimeDiagnosticLimit => {
+            Input::RuntimeDiagnosticBoundary
+            | Input::RuntimeDiagnosticLimit
+            | Input::RetainedDiagnosticBoundary
+            | Input::RetainedDiagnosticLimit => {
                 use botwork::core::{
                     diagnostic::DiagnosticLimits,
-                    run::{Engine, RunLimits, RunOptions, RunOutcome},
+                    run::{Engine, RetainedDiagnosticLimits, RunLimits, RunOptions, RunOutcome},
                 };
+                let mut limits = RunLimits::default();
+                let capacity = usize::from(case.error.is_none());
+                if matches!(
+                    case.input,
+                    Input::RetainedDiagnosticBoundary | Input::RetainedDiagnosticLimit
+                ) {
+                    limits.retained_diagnostics = RetainedDiagnosticLimits {
+                        records: capacity,
+                        ..RetainedDiagnosticLimits::default()
+                    };
+                } else {
+                    limits.diagnostics = DiagnosticLimits {
+                        diagnostics: capacity,
+                        ..DiagnosticLimits::default()
+                    };
+                }
                 let run = Engine::default().run_source(
                     case.id,
                     "Try { Missing } Catch { |handled| = |true| }",
                     RunOptions {
-                        limits: RunLimits {
-                            diagnostics: DiagnosticLimits {
-                                diagnostics: if case.error.is_some() { 0 } else { 1 },
-                                ..DiagnosticLimits::default()
-                            },
-                            ..RunLimits::default()
-                        },
+                        limits,
                         ..RunOptions::default()
                     },
                 );

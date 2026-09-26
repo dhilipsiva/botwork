@@ -554,3 +554,20 @@ let failure = run.result.unwrap_err();
 assert_eq!(failure.causes[0].code(), DiagnosticCode::UndefinedStatement);
 assert!(failure.causes[0].omissions.is_some());
 ```
+
+## Retained Calls and Handler Errors
+
+Configure aggregate live records separately from individual diagnostic quotas. Context/module snapshots share immutable records; checked snapshots count copied handles. Rejection releases the original handler tree and preserves bounded category evidence.
+
+```rust
+use botwork::core::{diagnostic::DiagnosticCode, run::{Engine, RetainedDiagnosticLimits, RunLimits, RunOptions, RunOutcome}};
+let run = Engine::default().run_source("retention", "Try { Missing } Catch { |handled| = |true| }", RunOptions {
+    limits: RunLimits { retained_diagnostics: RetainedDiagnosticLimits { records: 0, ..RetainedDiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+assert!(!run.variables.contains_key("handled"));
+let failure = run.result.unwrap_err();
+assert_eq!(failure.causes[0].code(), DiagnosticCode::UndefinedStatement);
+assert!(failure.causes[0].omissions.is_some());
+```

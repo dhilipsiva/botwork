@@ -46,6 +46,7 @@ impl Context {
 
     pub(super) fn isolated_snapshot_size(&self) -> SnapshotSize {
         let mut size = SnapshotSize::default();
+        size.entries(self.calls.len());
         self.modules.snapshot_size(&mut size);
         for path in &self.loading {
             size.path(path);
@@ -60,9 +61,10 @@ impl Context {
     /// Admit table/path copying against this Context's cumulative snapshot budget.
     /// Successful copies inherit the updated work counters; a failed admission
     /// latches this Context. Immutable stored payloads and live trackers are shared.
-    /// Calls/handlers and owned result/diagnostic payloads have separate contracts.
+    /// Copied call/handler handles count as entries; immutable records stay shared.
     pub fn try_clone(&self) -> DiagnosticResult<Self> {
         let mut size = self.isolated_snapshot_size();
+        size.entries(self.handlers.len());
         for frame in &self.frames {
             frame.snapshot_size(&mut size);
         }

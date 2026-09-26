@@ -207,7 +207,10 @@ impl Diagnostic {
         }
         (matches!(
             self.code(),
-            DiagnosticCode::ResourceLimit | DiagnosticCode::RunConfiguration
+            DiagnosticCode::ResourceLimit
+                | DiagnosticCode::RunConfiguration
+                | DiagnosticCode::Cancelled
+                | DiagnosticCode::Timeout
         ) && self.omissions.is_none()
             && cause.omissions.is_some())
             || (matches!(
@@ -265,9 +268,12 @@ impl Diagnostic {
         self
     }
 
-    pub(crate) fn capture_stack(mut self, frames: &[CallFrame]) -> Self {
+    pub(crate) fn capture_stack<'a>(
+        mut self,
+        frames: impl DoubleEndedIterator<Item = &'a CallFrame>,
+    ) -> Self {
         if self.call_stack.is_empty() && !self.is_emergency() {
-            self.call_stack.extend(frames.iter().rev().cloned());
+            self.call_stack.extend(frames.rev().cloned());
         }
         self
     }

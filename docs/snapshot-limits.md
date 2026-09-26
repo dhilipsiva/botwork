@@ -4,7 +4,7 @@
 
 ## What Counts
 
-An entry is one copied variable, statement, namespace, loaded-module cache record, or requested-to-canonical path record. Count each occurrence on every copy, even when its immutable payload is shared. Include fixed built-in entries. Ordinary assignment, declaration, parameter installation, and first cache insertion use their existing retention/import budgets rather than snapshot counters.
+An entry is one copied variable, statement, namespace, loaded-module cache record, requested-to-canonical path record, active-call handle, or handler-error handle. Count each occurrence on every copy, even when its immutable payload is shared. Include fixed built-in entries. Ordinary assignment, declaration, parameter installation, and first cache insertion use their existing retention/import budgets rather than snapshot counters.
 
 Path bytes include copied loaded-module keys, requested/canonical resolution keys and values, active loading paths, and the isolated Context's working directory. Module initialization also counts the new loading-path copy. Use `OsStr::len()` for native path representation; no lossy display conversion. A retained working-directory error string counts its bytes instead.
 
@@ -13,7 +13,7 @@ Admission covers:
 - Engine native-template table copying, after configuration/environment validation and before native registry admission, inputs, or script effects.
 - Module initialization: the complete caller cache, loading/directory paths, and visible native registry entries. Caller variables and DSL definitions are not inherited. File resolution, reading, and parsing occur before this check.
 - Imported invocation: the module's root frame, the caller cache, and loading/directory paths, before entering the exported body. Required argument effects have already happened.
-- `Context::try_clone()`: all current frame tables, cache tables, and loading/directory paths before making a host copy.
+- `Context::try_clone()`: all current frame tables, cache tables, call/handler handles, and loading/directory paths before making a host copy. Module snapshots count inherited call handles; caller handlers are not inherited.
 
 Measure both counters without allocating copied tables or path strings, then atomically admit the entire charge with checked arithmetic. Rejection returns BW8001 and latches the requesting Context. Failed admission consumes neither counter; completed effects and existing state remain. Accepted work is cumulative and is not refunded on destruction or later failure. Repeated imports/calls can exhaust work budgets while their live state remains small.
 
@@ -29,7 +29,7 @@ The caller is suspended during isolated module execution. Transfer the child's c
 
 Use `Context::try_clone()` when a host copy must pass admission. It charges the source, then copies the updated work counters into the result. Failure stops the source. Subsequent source/result work counters are independent, while their stored payload reservations remain shared. Host-owned copies are not an aggregate process-memory ceiling.
 
-These logical counts exclude allocator overhead, call-stack/handler diagnostic copies, environment snapshots, and serialized output. [Expression temporaries](temporary-limits.md) have separate live accounting. [Owned run results](result-limits.md) have separate export admission and transfer rules; the other allocations retain their own contracts and roadmap tasks. Admission does not make allocation fallible at the OS level.
+These logical counts exclude allocator overhead, environment snapshots, and serialized output. [Immutable call/handler payloads](retained-diagnostics.md) stay shared under live reservations; copied handles count above. [Expression temporaries](temporary-limits.md) have separate live accounting. [Owned run results](result-limits.md) have separate export admission and transfer rules; the other allocations retain their own contracts and roadmap tasks. Admission does not make allocation fallible at the OS level.
 
 ## Evidence
 
