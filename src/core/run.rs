@@ -16,7 +16,9 @@ use std::{
 use super::{
     ast::Program,
     ast_limits::AstLimits,
-    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticResult, DiagnosticValueLimits},
+    diagnostic::{
+        Diagnostic, DiagnosticCode, DiagnosticLimits, DiagnosticResult, DiagnosticValueLimits,
+    },
     eval::{evaluate_program_detailed, Context},
     grammar::{BWErr, Literal, LiteralResult},
     operation::OperationControl,
@@ -75,6 +77,7 @@ pub struct RunLimits {
     pub results: ResultLimits,
     pub temporaries: TemporaryLimits,
     pub diagnostic_values: DiagnosticValueLimits,
+    pub diagnostics: DiagnosticLimits,
 }
 
 impl Default for RunLimits {
@@ -97,6 +100,7 @@ impl Default for RunLimits {
             results: ResultLimits::default(),
             temporaries: TemporaryLimits::default(),
             diagnostic_values: DiagnosticValueLimits::default(),
+            diagnostics: DiagnosticLimits::default(),
         }
     }
 }
@@ -106,6 +110,7 @@ impl RunLimits {
         self.ast.validate()?;
         self.values.validate()?;
         self.diagnostic_values.values.validate()?;
+        self.diagnostics.validate()?;
         if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
                 "Module dependency depth cannot exceed {MAX_MODULE_CHAIN_DEPTH}"
@@ -381,7 +386,8 @@ impl Engine {
             context.checkpoint()?;
             let result = execute(&mut context);
             context.after_operation(result)
-        })();
+        })()
+        .map_err(|error| context.diagnostic(error, None, false));
         let steps = context.budget.as_ref().map_or(0, |budget| budget.used());
         let (result, variables, snapshot_error) = context.finish_result(result, &result_limits);
         RunResult {

@@ -414,6 +414,39 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::RuntimeDiagnosticBoundary | Input::RuntimeDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions, RunOutcome},
+                };
+                let run = Engine::default().run_source(
+                    case.id,
+                    "Try { Missing } Catch { |handled| = |true| }",
+                    RunOptions {
+                        limits: RunLimits {
+                            diagnostics: DiagnosticLimits {
+                                diagnostics: if case.error.is_some() { 0 } else { 1 },
+                                ..DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW2002");
+                    assert!(error.causes[0].omissions.is_some());
+                    assert!(!run.variables.contains_key("handled"));
+                } else {
+                    assert_eq!(run.outcome(), RunOutcome::Succeeded);
+                    assert_eq!(run.variables["handled"].to_string(), "true");
+                }
+                continue;
+            }
             Input::DiagnosticAdmissionBoundary | Input::DiagnosticAdmissionLimit => {
                 use botwork::core::diagnostic::{Diagnostic, DiagnosticLimits};
                 let original = Diagnostic::new(BWErr::NativeError("reason".into()));

@@ -197,3 +197,51 @@ fn owned_deep_rejection_and_invalid_configuration_dispose_original_iteratively()
     assert_eq!(error.causes[0].code(), DiagnosticCode::Cancelled);
     assert!(leaf.upgrade().is_none());
 }
+
+#[test]
+fn emergency_evidence_stays_bounded_when_unwinding_adds_context_and_causes() {
+    let program = Program::parse("source", "|x| = |1|").unwrap();
+    let span = &program.statements[0].span;
+    let frame = CallFrame {
+        signature: "x".repeat(4096),
+        call_site: span.clone(),
+        definition_site: Some(span.clone()),
+    };
+    let rejected = zero()
+        .admit(BWErr::NativeError("reason".into()).into())
+        .unwrap_err();
+    let identity = rejected.error.clone();
+    let rejected = rejected
+        .at(span)
+        .at_expression(span)
+        .capture_stack(&[frame])
+        .with_related(&"x".repeat(4096), span)
+        .while_handling(BWErr::ArithmeticError("prior".into()).into());
+    assert!(rejected.is_emergency());
+    assert!(Arc::ptr_eq(&identity, &rejected.error));
+    assert!(
+        rejected.span.is_none() && rejected.call_stack.is_empty() && rejected.related.is_empty()
+    );
+    let omitted = rejected.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omitted.related_locations, 1);
+    assert_eq!(omitted.direct_causes, 1);
+    assert_eq!(omitted.call_frames, 0); // The original snapshot count is stable during unwind.
+}
+
+#[test]
+fn control_primary_emergency_evidence_uses_its_own_omission_record() {
+    let mut rejected = zero()
+        .admit(BWErr::Cancelled("stopped".into()).into())
+        .unwrap_err();
+    let mut original = rejected.causes.pop().unwrap();
+    original.causes.push(rejected);
+    assert!(original.is_emergency());
+    let program = Program::parse("source", "|x| = |1|").unwrap();
+    let original = original
+        .with_related("imported", &program.statements[0].span)
+        .while_handling(BWErr::NativeError("prior".into()).into());
+    assert!(original.is_emergency());
+    assert_eq!(original.code(), DiagnosticCode::Cancelled);
+    assert_eq!(original.omissions.as_ref().unwrap().related_locations, 1);
+    assert_eq!(original.omissions.as_ref().unwrap().direct_causes, 1);
+}

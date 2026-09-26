@@ -189,6 +189,46 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    pub(crate) fn is_emergency(&self) -> bool {
+        if self.span.is_some()
+            || !self.call_stack.is_empty()
+            || !self.related.is_empty()
+            || self.causes.len() != 1
+        {
+            return false;
+        }
+        let cause = &self.causes[0];
+        if cause.span.is_some()
+            || !cause.call_stack.is_empty()
+            || !cause.related.is_empty()
+            || !cause.causes.is_empty()
+        {
+            return false;
+        }
+        (matches!(
+            self.code(),
+            DiagnosticCode::ResourceLimit | DiagnosticCode::RunConfiguration
+        ) && self.omissions.is_none()
+            && cause.omissions.is_some())
+            || (matches!(
+                self.code(),
+                DiagnosticCode::Cancelled | DiagnosticCode::Timeout
+            ) && self.omissions.is_some()
+                && cause.code() == DiagnosticCode::ResourceLimit
+                && cause.omissions.is_none())
+    }
+
+    fn emergency_omissions_mut(&mut self) -> &mut DiagnosticOmissions {
+        if self.omissions.is_some() {
+            self.omissions.as_deref_mut().expect("emergency omissions")
+        } else {
+            self.causes[0]
+                .omissions
+                .as_deref_mut()
+                .expect("emergency omissions")
+        }
+    }
+
     pub fn code(&self) -> DiagnosticCode {
         self.error.code()
     }
@@ -211,14 +251,14 @@ impl Diagnostic {
 
     /// Keep the innermost location when an error crosses enclosing syntax nodes.
     pub fn at(mut self, span: &Span) -> Self {
-        if self.span.is_none() {
+        if self.span.is_none() && !self.is_emergency() {
             self.span = Some(span.clone());
         }
         self
     }
 
     pub(crate) fn at_expression(mut self, span: &Span) -> Self {
-        if self.span.is_none() {
+        if self.span.is_none() && !self.is_emergency() {
             self.span = Some(span.clone());
             self.label = "expression";
         }
@@ -226,7 +266,7 @@ impl Diagnostic {
     }
 
     pub(crate) fn capture_stack(mut self, frames: &[CallFrame]) -> Self {
-        if self.call_stack.is_empty() {
+        if self.call_stack.is_empty() && !self.is_emergency() {
             self.call_stack.extend(frames.iter().rev().cloned());
         }
         self
@@ -234,12 +274,23 @@ impl Diagnostic {
 
     pub(crate) fn while_handling(mut self, original: Diagnostic) -> Self {
         if !Arc::ptr_eq(&self.error, &original.error) {
-            self.causes.push(original);
+            if self.is_emergency() {
+                let omitted = self.emergency_omissions_mut();
+                omitted.direct_causes = omitted.direct_causes.saturating_add(1);
+                original.discard();
+            } else {
+                self.causes.push(original);
+            }
         }
         self
     }
 
     pub(crate) fn with_related(mut self, message: &str, span: &Span) -> Self {
+        if self.is_emergency() {
+            let omitted = self.emergency_omissions_mut();
+            omitted.related_locations = omitted.related_locations.saturating_add(1);
+            return self;
+        }
         self.related.push(RelatedLocation {
             message: message.into(),
             span: span.clone(),

@@ -58,6 +58,65 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn runtime_diagnostic_limit_precedes_native_reason_copy_and_preserves_small_evidence() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticLimits,
+        eval::{evaluate_program_detailed, Context},
+        grammar::BWErr,
+    };
+    let length = 64 * 1024;
+    let reason = Mutex::new(Some("x".repeat(length)));
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 32,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .register_native("Fail", move |_| {
+            Err(BWErr::NativeError(reason.lock().unwrap().take().unwrap()))
+        })
+        .unwrap();
+    let program = Program::parse("runtime", "Fail").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    let error = result.unwrap_err();
+    assert!(error.causes[0].omissions.is_some());
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn runtime_diagnostic_rejection_does_not_copy_large_entered_call_signatures() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticLimits,
+        eval::{evaluate_program_detailed, Context},
+        grammar::BWErr,
+    };
+    let length = 64 * 1024;
+    let header = "x".repeat(length);
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 32,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .register_native(&header, |_| Err(BWErr::NativeError("reason".into())))
+        .unwrap();
+    let program = Program::parse("runtime", &header).unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    let error = result.unwrap_err();
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().call_frames, 1);
+    // The active call frame owns its signature; no diagnostic snapshot repeats it.
+    assert_eq!(large, 1);
+}
+
+#[test]
 fn owned_diagnostic_rejection_does_not_copy_large_details_or_filenames() {
     use botwork::core::{
         ast::Program,

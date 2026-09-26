@@ -148,6 +148,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R17 — Diagnostic lifecycle helpers.** Measure borrowed diagnostic trees without copying, recursively calling, or formatting text. Bound diagnostic count/depth, call/related counts, raw text, and distinct source-owner bytes before checked cloning. Preserve error/source identities and independently copy mutable metadata. Provide iterative full Clone, explicit disposal, and category extraction for deep host trees; guard runtime-owned abandoned worker errors. Owned admission preserves accepted originals; on rejection, dispose the tree and return a fixed emergency original-category summary with explicit omissions and source-byte evidence. [Ownership rules](diagnostic-ownership.md) define exact metrics, compatibility ownership, and pending runtime retention enforcement.
 
+## Runtime Diagnostic Admission
+
+**R18 — Individual runtime errors.** Apply local diagnostic tree/context/text/source budgets through synchronous Engine, Context, statement, Pair, and module execution. Measure prospective call snapshots before copying; preserve existing entered-call context. Latch quota failures and bypass handlers while keeping fixed emergency evidence bounded during further unwinding. Observe cancellation/deadlines before diagnostic limits can replace their priority, preserving cause context when it fits and explicit omissions otherwise. [Runtime diagnostic rules](runtime-diagnostics.md) define defaults, entry/configuration boundaries, emergency behavior, clone semantics, and remaining aggregate/construction/async limits.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -230,3 +234,5 @@ R16 evidence in diagnostic conversion unit/contract tests, the 25-code catalog, 
 R17 evidence in diagnostic ownership unit/contract tests, all-category checks, and allocation observations covers exact/zero/raised bounds, overflow, distinct/shared sources, metadata isolation, deep cloning/rejection/disposal, async and blocking delivery, abandoned worker cleanup, and cancellation causes. Two host corpus cases and a Rust example pin checked ownership and identity preservation.
 
 R17 owned-rejection evidence adds six unit tests, three public contract tests, all-category preservation, allocation checks, two host corpus cases, and a Rust example for UTF-8 summary caps, optional omission metadata, source-owner release, identity-preserving success, repeated summaries, zero/configuration failures, and deep cleanup.
+
+R18 evidence in runtime diagnostic contract tests, prospective-stack/emergency unit tests, allocation observations, and existing cancellation/stack/cleanup contracts covers every quota, before-copy call snapshots, native/imported/handler/rethrow context, stop priority, all synchronous entry points, independent clone latches, default CLI cause amplification, and recovery. Two host corpus cases and a Rust example pin handler admission and limit evidence.

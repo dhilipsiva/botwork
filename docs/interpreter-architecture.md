@@ -537,3 +537,20 @@ assert_eq!(summary.omissions.as_ref().unwrap().detail_fields, 1);
 assert!(summary.span.is_none());
 assert!(summary.causes.is_empty());
 ```
+
+## Synchronous Runtime Diagnostic Limits
+
+Configure per-error tree/context/source quotas independently of Catch metadata conversion. Exceeding a diagnostic quota latches the run, skips handlers, and preserves bounded original-category evidence. Aggregate retained diagnostic accounting remains a separate contract.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, run::{Engine, RunLimits, RunOptions, RunOutcome}};
+let run = Engine::default().run_source("diagnostic", "Try { Missing } Catch { |handled| = |true| }", RunOptions {
+    limits: RunLimits { diagnostics: DiagnosticLimits { diagnostics: 0, ..DiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+assert!(!run.variables.contains_key("handled"));
+let failure = run.result.unwrap_err();
+assert_eq!(failure.causes[0].code(), DiagnosticCode::UndefinedStatement);
+assert!(failure.causes[0].omissions.is_some());
+```

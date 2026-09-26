@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+mod diagnostics;
 mod imports;
 mod results;
 mod snapshots;
@@ -735,9 +736,9 @@ impl Context {
         body: impl FnOnce(&mut Self) -> TemporaryResult,
     ) -> TemporaryResult {
         self.check_call_depth()
-            .map_err(|error| error.at(&frame.call_site).capture_stack(&self.calls))?;
+            .map_err(|error| self.diagnostic(error, Some(&frame.call_site), false))?;
         self.calls.push(frame);
-        let result = body(self).map_err(|error| error.capture_stack(&self.calls));
+        let result = body(self).map_err(|error| self.diagnostic(error, None, false));
         self.calls.pop();
         result
     }
@@ -756,7 +757,7 @@ fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
 }
 
 fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {
-    invoke_inner(call, context).map_err(|error| error.at(&call.span).capture_stack(&context.calls))
+    invoke_inner(call, context).map_err(|error| context.diagnostic(error, Some(&call.span), false))
 }
 
 fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
@@ -806,7 +807,7 @@ fn invoke_resolved(
 ) -> TemporaryResult {
     let _depth = context
         .enter_evaluation()
-        .map_err(|error| error.at(&call.span).capture_stack(&context.calls))?;
+        .map_err(|error| context.diagnostic(error, Some(&call.span), false))?;
     match definition {
         StmtType::Imported {
             module,
@@ -841,9 +842,7 @@ fn invoke_resolved(
                     .map_err(|_| BWErr::NativePanic(call.signature.clone()))
                     .and_then(|result| result)
                     .map_err(|error| {
-                        Diagnostic::new(error)
-                            .at(&call.span)
-                            .capture_stack(&context.calls)
+                        context.diagnostic(Diagnostic::new(error), Some(&call.span), false)
                     });
                 let result = context.after_operation(result.map(Owned::new))?;
                 context.check_value(&result)?;
@@ -901,21 +900,15 @@ fn invoke_resolved(
 }
 
 fn evaluate_expression(expression: &Expr, context: &mut Context) -> TemporaryResult {
-    let _depth = context.enter_evaluation().map_err(|error| {
-        error
-            .at_expression(&expression.span)
-            .capture_stack(&context.calls)
-    })?;
+    let _depth = context
+        .enter_evaluation()
+        .map_err(|error| context.diagnostic(error, Some(&expression.span), true))?;
     evaluate_expression_inner(expression, context)
         .and_then(|value| {
             context.check_value(&value)?;
             Ok(value)
         })
-        .map_err(|error| {
-            error
-                .at_expression(&expression.span)
-                .capture_stack(&context.calls)
-        })
+        .map_err(|error| context.diagnostic(error, Some(&expression.span), true))
 }
 
 fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> TemporaryResult {
@@ -1342,9 +1335,9 @@ fn evaluate_handler(
 fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
     let _depth = context
         .enter_evaluation()
-        .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))?;
+        .map_err(|error| context.diagnostic(error, Some(&statement.span), false))?;
     evaluate_statement_inner(statement, context)
-        .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))
+        .map_err(|error| context.diagnostic(error, Some(&statement.span), false))
 }
 
 // Declaration admission runs only for definitions; its scratch state must not
@@ -1503,13 +1496,16 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
 
 /// Execute one script-level statement with source locations and entered-call frames.
 pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) -> RuntimeResult {
-    context.checkpoint()?;
-    let statements = std::slice::from_ref(statement);
-    let limits = context.limits();
-    super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
-        .map_err(|error| context.retain_limit(error))?;
-    ast::validate_control_script_detailed(statements)?;
-    finish_script(evaluate_statement(statement, context)?).map(TemporaryValue::into_inner)
+    let result = (|| {
+        context.checkpoint()?;
+        let statements = std::slice::from_ref(statement);
+        let limits = context.limits();
+        super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
+            .map_err(|error| context.retain_limit(error))?;
+        ast::validate_control_script_detailed(statements)?;
+        finish_script(evaluate_statement(statement, context)?).map(TemporaryValue::into_inner)
+    })();
+    result.map_err(|error| context.diagnostic(error, None, false))
 }
 
 /// Validate the complete program, then execute without parsing or rebuilding it.
@@ -1519,20 +1515,23 @@ pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResu
 
 /// Validate and execute a program while preserving structured diagnostic causes.
 pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> RuntimeResult {
-    context.checkpoint()?;
-    let limits = context.limits();
-    program
-        .validate_with_limits(&limits.ast, limits.source_bytes)
-        .map_err(|error| context.retain_limit(error))?;
-    let mut result = None;
-    for statement in &program.statements {
-        // A replaced script result is unobservable once the next statement starts.
-        drop(result.take());
-        result = Some(finish_script(evaluate_statement(statement, context)?)?);
-    }
-    result
-        .map_or_else(|| context.temporary(Literal::None), Ok)
-        .map(TemporaryValue::into_inner)
+    let result = (|| {
+        context.checkpoint()?;
+        let limits = context.limits();
+        program
+            .validate_with_limits(&limits.ast, limits.source_bytes)
+            .map_err(|error| context.retain_limit(error))?;
+        let mut result = None;
+        for statement in &program.statements {
+            // A replaced script result is unobservable once the next statement starts.
+            drop(result.take());
+            result = Some(finish_script(evaluate_statement(statement, context)?)?);
+        }
+        result
+            .map_or_else(|| context.temporary(Literal::None), Ok)
+            .map(TemporaryValue::into_inner)
+    })();
+    result.map_err(|error| context.diagnostic(error, None, false))
 }
 
 /// Compatibility entry point for callers that already hold a Pest pair.
@@ -1545,22 +1544,25 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
 
 /// Parser-pair compatibility with detailed execution errors.
 pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
-    context.checkpoint()?;
-    let node = ast::from_pair(pair)?;
-    let limits = context.limits();
-    super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)
-        .map_err(|error| context.retain_limit(error))?;
-    match node {
-        Node::Statement(statement) => execute_statement_detailed(&statement, context),
-        Node::Expression(expression) => {
-            evaluate_expression(&expression, context).map(TemporaryValue::into_inner)
+    let result = (|| {
+        context.checkpoint()?;
+        let node = ast::from_pair(pair)?;
+        let limits = context.limits();
+        super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)
+            .map_err(|error| context.retain_limit(error))?;
+        match node {
+            Node::Statement(statement) => execute_statement_detailed(&statement, context),
+            Node::Expression(expression) => {
+                evaluate_expression(&expression, context).map(TemporaryValue::into_inner)
+            }
+            Node::Block(block) => {
+                ast::validate_control_script_detailed(&block.statements)?;
+                finish_script(evaluate_block(&block, context)?).map(TemporaryValue::into_inner)
+            }
+            Node::None => context
+                .temporary(Literal::None)
+                .map(TemporaryValue::into_inner),
         }
-        Node::Block(block) => {
-            ast::validate_control_script_detailed(&block.statements)?;
-            finish_script(evaluate_block(&block, context)?).map(TemporaryValue::into_inner)
-        }
-        Node::None => context
-            .temporary(Literal::None)
-            .map(TemporaryValue::into_inner),
-    }
+    })();
+    result.map_err(|error| context.diagnostic(error, None, false))
 }

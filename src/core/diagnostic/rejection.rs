@@ -1,6 +1,6 @@
 //! Fixed emergency evidence for rejected owned diagnostics.
 
-use super::{Diagnostic, DiagnosticLimits, DiagnosticResult};
+use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult};
 use crate::core::grammar::BWErr;
 
 #[cfg(test)]
@@ -130,7 +130,15 @@ impl DiagnosticLimits {
     /// iteratively and return the violation with a bounded original-category summary.
     /// Emergency evidence has fixed independent caps and can exceed a zero input quota.
     pub fn admit(&self, diagnostic: Diagnostic) -> DiagnosticResult<Diagnostic> {
-        if let Err(violation) = self.check(&diagnostic) {
+        self.admit_with_stack(diagnostic, &[])
+    }
+
+    pub(crate) fn admit_with_stack(
+        &self,
+        diagnostic: Diagnostic,
+        frames: &[CallFrame],
+    ) -> DiagnosticResult<Diagnostic> {
+        if let Err(violation) = self.check_with_stack(&diagnostic, frames) {
             let mut shortened = 0;
             let mut summary = Diagnostic::new(error_summary(&diagnostic.error, &mut shortened));
             let source = diagnostic.span.as_ref().map(|span| {
@@ -149,7 +157,11 @@ impl DiagnosticLimits {
             }
             summary.omissions = Some(Box::new(DiagnosticOmissions {
                 detail_fields: shortened,
-                call_frames: diagnostic.call_stack.len(),
+                call_frames: if diagnostic.call_stack.is_empty() {
+                    frames.len()
+                } else {
+                    diagnostic.call_stack.len()
+                },
                 related_locations: diagnostic.related.len(),
                 direct_causes: diagnostic.causes.len(),
                 label,
@@ -159,7 +171,7 @@ impl DiagnosticLimits {
             diagnostic.discard();
             Err(Diagnostic::new(violation).while_handling(summary))
         } else {
-            Ok(diagnostic)
+            Ok(diagnostic.capture_stack(frames))
         }
     }
 }

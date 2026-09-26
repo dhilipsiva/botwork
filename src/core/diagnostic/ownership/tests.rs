@@ -180,3 +180,30 @@ fn source_free_empty_and_wide_trees_have_explicit_boundaries() {
     assert_eq!(raised.check(&root).unwrap().diagnostics, 1025);
     root.discard();
 }
+
+#[test]
+fn prospective_stack_matches_owned_metrics_and_preserves_an_existing_snapshot() {
+    let original = tree();
+    let frames = original.call_stack.clone();
+    let mut empty = original.clone();
+    empty.call_stack.clear();
+    let limits = DiagnosticLimits::default();
+    assert_eq!(
+        limits.check_with_stack(&empty, &frames).unwrap(),
+        limits.check(&original).unwrap()
+    );
+    let mut incoming = frames.clone();
+    incoming.extend(frames.clone());
+    let limits = DiagnosticLimits {
+        call_frames: 1,
+        ..limits
+    };
+    let rejection = limits.admit_with_stack(empty, &incoming).unwrap_err();
+    assert_eq!(
+        rejection.causes[0].omissions.as_ref().unwrap().call_frames,
+        2
+    );
+    let accepted = limits.admit_with_stack(original, &incoming).unwrap();
+    assert_eq!(accepted.call_stack.len(), 1);
+    assert_eq!(accepted.call_stack[0].signature, "read");
+}

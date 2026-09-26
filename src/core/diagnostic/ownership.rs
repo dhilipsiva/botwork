@@ -1,6 +1,6 @@
 //! Checked diagnostic ownership and iterative host-tree lifecycle helpers.
 
-use super::Diagnostic;
+use super::{CallFrame, Diagnostic};
 use crate::core::{
     ast::{SourceFile, Span},
     grammar::BWErr,
@@ -208,14 +208,27 @@ impl Measurement<'_> {
 }
 
 impl DiagnosticLimits {
-    /// Inspect without recursion, formatting strings, scanning source positions, or copying payloads.
-    /// Source allocations are deduplicated by identity; other metrics count occurrences.
-    pub fn check(&self, diagnostic: &Diagnostic) -> Result<DiagnosticSize, BWErr> {
+    pub(crate) fn validate(&self) -> Result<(), BWErr> {
         if self.depth > MAX_DIAGNOSTIC_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
                 "Diagnostic depth cannot exceed {MAX_DIAGNOSTIC_DEPTH}"
             )));
         }
+        Ok(())
+    }
+
+    /// Inspect without recursion, formatting strings, scanning source positions, or copying payloads.
+    /// Source allocations are deduplicated by identity; other metrics count occurrences.
+    pub fn check(&self, diagnostic: &Diagnostic) -> Result<DiagnosticSize, BWErr> {
+        self.check_with_stack(diagnostic, &[])
+    }
+
+    pub(crate) fn check_with_stack(
+        &self,
+        diagnostic: &Diagnostic,
+        frames: &[CallFrame],
+    ) -> Result<DiagnosticSize, BWErr> {
+        self.validate()?;
         let mut measurement = Measurement {
             limits: self,
             size: DiagnosticSize::default(),
@@ -231,6 +244,21 @@ impl DiagnosticLimits {
                 }
             } else {
                 pending.pop();
+            }
+        }
+        if diagnostic.call_stack.is_empty() {
+            add(
+                &mut measurement.size.call_frames,
+                frames.len(),
+                self.call_frames,
+                "diagnostic call frames",
+            )?;
+            for frame in frames {
+                measurement.text(&frame.signature)?;
+                measurement.source(&frame.call_site)?;
+                if let Some(span) = &frame.definition_site {
+                    measurement.source(span)?;
+                }
             }
         }
         Ok(measurement.size)
