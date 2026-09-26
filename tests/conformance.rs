@@ -339,19 +339,31 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_async_case(&case);
                 continue;
             }
-            Input::OperationDiagnosticBoundary | Input::OperationDiagnosticLimit => {
+            Input::OperationDiagnosticBoundary
+            | Input::OperationDiagnosticLimit
+            | Input::OperationPanicBoundary
+            | Input::OperationPanicLimit => {
                 use botwork::core::{
                     diagnostic::DiagnosticLimits,
                     operation::{NativeOperation, OperationControl},
                     signature::StatementSignature,
                 };
+                let panics = matches!(
+                    case.input,
+                    Input::OperationPanicBoundary | Input::OperationPanicLimit
+                );
+                let expected_code = if panics { "BW4003" } else { "BW4002" };
+                let bytes = if panics { 10 } else { 12 };
                 let operation = NativeOperation::asynchronous(
                     StatementSignature::native("Fail").unwrap(),
-                    |_, _| async { Err(BWErr::NativeError("reason".into()).into()) },
+                    move |_, _| async move {
+                        assert!(!panics, "corpus panic");
+                        Err(BWErr::NativeError("reason".into()).into())
+                    },
                 )
                 .unwrap()
                 .with_diagnostic_limits(DiagnosticLimits {
-                    text_bytes: if case.error.is_some() { 11 } else { 12 },
+                    text_bytes: bytes - usize::from(case.error.is_some()),
                     ..DiagnosticLimits::default()
                 })
                 .unwrap();
@@ -365,10 +377,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 if let Some(expected) = case.error {
                     assert_eq!(error.code().as_str(), case.code.unwrap());
                     assert!(error.to_string().contains(expected));
-                    assert_eq!(error.causes[0].code().as_str(), "BW4002");
+                    assert_eq!(error.causes[0].code().as_str(), expected_code);
                     assert!(error.causes[0].omissions.is_some());
                 } else {
-                    assert_eq!(error.code().as_str(), "BW4002");
+                    assert_eq!(error.code().as_str(), expected_code);
                     assert!(error.omissions.is_none());
                     assert_eq!(error.span.as_ref().unwrap().source().name(), "<native>");
                 }

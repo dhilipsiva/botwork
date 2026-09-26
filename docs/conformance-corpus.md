@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 89 cases against the 51 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 91 cases against the 51 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -58,7 +58,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R18 | runtime-diagnostic-boundary | runtime-diagnostic-limit | runtime-diagnostic-boundary |
 | R19 | retained-diagnostic-boundary | retained-diagnostic-limit | retained-diagnostic-boundary |
 | R20 | operation-diagnostic-boundary | operation-diagnostic-limit | operation-diagnostic-boundary |
-| R21 | borrowed-diagnostic-boundary | borrowed-diagnostic-limit | borrowed-diagnostic-boundary |
+| R21 | borrowed-diagnostic-boundary, operation-panic-boundary | borrowed-diagnostic-limit, operation-panic-limit | borrowed-diagnostic-boundary, operation-panic-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 

@@ -75,3 +75,27 @@ fn accepted_operation_errors_retain_full_metadata_and_share_original_identity() 
     assert_eq!(accepted.span.as_ref().unwrap().text(), "Fail");
     assert!(accepted.omissions.is_none());
 }
+
+#[test]
+fn panic_construction_keeps_full_admitted_details_or_bounded_original_evidence() {
+    let signature = StatementSignature::native("Fail").unwrap();
+    for text_bytes in [9, 10] {
+        let limits = DiagnosticLimits {
+            text_bytes,
+            ..DiagnosticLimits::default()
+        };
+        let error = panic_error(&limits, &signature);
+        if text_bytes == 10 {
+            assert_eq!(error.code(), DiagnosticCode::NativePanic);
+            assert_eq!(error.span.as_ref().unwrap().text(), "Fail");
+            assert!(error.omissions.is_none());
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::NativePanic);
+            assert!(error.is_emergency());
+            let error = admit_error(&limits, &signature, error, false, true);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::NativePanic);
+            assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
+        }
+    }
+}

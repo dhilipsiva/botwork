@@ -53,6 +53,117 @@ fn detailed() -> Diagnostic {
     error
 }
 
+fn panicking_operation(stage: usize, header: &str, cancel: bool) -> NativeOperation {
+    let signature = StatementSignature::native(header).unwrap();
+    if stage == 2 {
+        NativeOperation::blocking(
+            signature,
+            NonZeroUsize::new(1).unwrap(),
+            move |_, control| {
+                if cancel {
+                    control.cancel();
+                }
+                panic!("blocking panic")
+            },
+        )
+        .unwrap()
+    } else {
+        NativeOperation::asynchronous(signature, move |_, control| {
+            if stage == 0 {
+                if cancel {
+                    control.cancel();
+                }
+                panic!("factory panic");
+            }
+            async move {
+                if cancel {
+                    control.cancel();
+                }
+                panic!("poll panic")
+            }
+        })
+        .unwrap()
+    }
+}
+
+#[tokio::test]
+async fn all_panic_stages_keep_one_bounded_signature_summary_and_remain_reusable() {
+    let header = "x".repeat(65_536);
+    for stage in 0..3 {
+        let operation = panicking_operation(stage, &header, false)
+            .with_diagnostic_limits(DiagnosticLimits {
+                text_bytes: 32,
+                ..DiagnosticLimits::default()
+            })
+            .unwrap();
+        let parent = OperationControl::default();
+        for _ in 0..2 {
+            let error = operation.invoke(vec![], parent.clone()).await.unwrap_err();
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes.len(), 1);
+            let summary = &error.causes[0];
+            assert_eq!(summary.code(), DiagnosticCode::NativePanic);
+            let omitted = summary.omissions.as_ref().unwrap();
+            assert_eq!(omitted.detail_fields, 1);
+            assert!(!omitted.prior_summary);
+            assert_eq!(omitted.source.as_ref().unwrap().end_byte, header.len());
+            assert!(summary.causes.is_empty() && summary.span.is_none());
+            assert!(!parent.is_cancelled());
+        }
+    }
+}
+
+#[tokio::test]
+async fn every_panic_stage_admits_exact_signature_text_and_header_source_quotas() {
+    for stage in 0..3 {
+        for fits in [false, true] {
+            let limits = DiagnosticLimits {
+                text_bytes: 10,
+                source_bytes: if fits { 12 } else { 11 },
+                ..DiagnosticLimits::default()
+            };
+            let error = panicking_operation(stage, "Fail", false)
+                .with_diagnostic_limits(limits)
+                .unwrap()
+                .invoke(vec![], OperationControl::default())
+                .await
+                .unwrap_err();
+            if fits {
+                assert_eq!(error.code(), DiagnosticCode::NativePanic);
+                let BWErr::NativePanic(detail) = error.error.as_ref() else {
+                    panic!("category")
+                };
+                assert_eq!(detail, "fail");
+                assert_eq!(error.span.as_ref().unwrap().text(), "Fail");
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::NativePanic);
+                assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 0);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn cancellation_then_panic_keeps_stop_priority_at_every_operation_stage() {
+    for stage in 0..3 {
+        let parent = OperationControl::default();
+        let error = panicking_operation(stage, "Stop", true)
+            .with_diagnostic_limits(DiagnosticLimits {
+                diagnostics: 0,
+                ..DiagnosticLimits::default()
+            })
+            .unwrap()
+            .invoke(vec![], parent.clone())
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::Cancelled);
+        assert!(error.omissions.is_some());
+        assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+        assert!(!parent.is_cancelled());
+    }
+}
+
 #[tokio::test]
 async fn exact_diagnostic_dimensions_preserve_identity_and_lower_limits_reject_both_adapters() {
     for blocking in [false, true] {

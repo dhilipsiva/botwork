@@ -58,6 +58,41 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn operation_factory_and_poll_panics_do_not_copy_rejected_large_signatures() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        operation::{NativeOperation, OperationControl},
+        signature::StatementSignature,
+    };
+    let length = 64 * 1024;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    for factory in [false, true] {
+        let signature = StatementSignature::native(&"x".repeat(length)).unwrap();
+        let operation = NativeOperation::asynchronous(signature, move |_, _| {
+            assert!(!factory, "factory panic");
+            async { panic!("poll panic") }
+        })
+        .unwrap()
+        .with_diagnostic_limits(DiagnosticLimits {
+            text_bytes: 32,
+            ..DiagnosticLimits::default()
+        })
+        .unwrap();
+        let (result, large) = observe(length, || {
+            runtime.block_on(operation.invoke(vec![], OperationControl::default()))
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.causes[0].code(), DiagnosticCode::NativePanic);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
 fn runtime_name_and_panic_construction_rejects_before_copying_borrowed_details() {
     use botwork::core::{
         ast::Program,

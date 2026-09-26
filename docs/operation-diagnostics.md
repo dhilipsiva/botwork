@@ -10,6 +10,8 @@ Rejected trees are disposed iteratively, including arbitrarily deep host causes.
 
 Apply admission again to complete invocation failures, including argument/value contract errors, callback construction/poll/worker panics, missing runtime support, and blocking cleanup causes. Preexisting per-value limits still validate arguments before callback entry and results before publication. Builder/registration failures have their own construction contract and precede invocation settings.
 
+Factory, poll, and worker panic details also use [borrowed construction admission](diagnostic-construction.md#operation-panics) before copying the normalized signature. Generated bounded panic evidence passes through internal handoff without losing its original category to a second emergency summary. Raw callback errors remain fully measured.
+
 ## Stops and Ownership
 
 Observe child cancellation/deadlines after callback completion, including failures returned during the same completion. Keep the observed stop primary and retain admitted callback evidence when the combined tree fits. If the stop tree exceeds diagnostic quotas, return its bounded original-category summary with the quota failure as its cause; record omitted causes explicitly. A callback-reported cancellation category alone does not signal an observed stop.

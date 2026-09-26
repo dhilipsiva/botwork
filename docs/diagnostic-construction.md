@@ -1,6 +1,6 @@
 # Diagnostic Detail Construction
 
-Synchronous undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. The existing `RunLimits::diagnostics` quotas apply; there is no additional setting. Variable access includes direct expressions and missing bases of collection access.
+Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
 
 ## Admission Before Copying
 
@@ -12,8 +12,14 @@ Rejected construction returns BW8001, latches the requesting Context, and bypass
 
 Observe an existing stop before a construction quota can latch. Native callbacks that request cancellation and then panic keep cancellation primary; if combined stop evidence exceeds quotas, use the existing bounded stop/limit representation. Context clones retain independent stop state and share their existing live accounting.
 
+## Operation Panics
+
+NativeOperation applies the same pre-copy check to factory panics, future-poll panics, and blocking-worker panics. Measure normalized signature detail bytes and the native header source before allocating the panic string. A panic has already occurred when this admission runs; completed callback effects are preserved.
+
+Keep generated, already admitted panic diagnostics separate from raw callback errors. Worker/poll handoff preserves bounded panic evidence without admitting its emergency wrapper as a new original error. Raw host-returned diagnostics always pass their own full measurement. Repeated invocations and blocking capacity remain usable after rejection; observed cancellation/timeout keeps the [operation priority rules](operation-diagnostics.md). Zero operation quotas do not latch the parent control or sibling operations.
+
 ## Scope and Evidence
 
-This contract covers the three named borrowed-detail paths. Formatted or multi-field errors, operation panic strings, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active native call signatures have already passed their own retained-record admission and still own one copy.
+This contract covers the named borrowed-detail paths. Formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
 
-Unit checks compare constructed and ordinary diagnostics at exact quotas and exercise prospective dimensions, invalid/zero limits, Unicode caps, source release, and omitted-frame counts. Integration checks cover normal catchability, exact contexts, handler restoration, prior effects, Pair entry, independent clone latches, and cancellation with panic. Allocation observations verify zero large copies for rejected missing names and no extra panic-detail copy beyond the admitted active-call signature. R21 host corpus cases and an executed Rust example pin the byte boundary.
+Unit checks compare constructed and ordinary diagnostics at exact quotas and exercise prospective dimensions, invalid/zero limits, Unicode caps, source release, and omitted-frame counts. Integration checks cover normal catchability, exact contexts, handler restoration, prior effects, Pair entry, independent clone latches, all operation panic stages, repeated worker use, and cancellation with panic. Allocation observations verify zero large copies for rejected missing names and operation factory/poll signatures, plus no extra synchronous panic-detail copy beyond the admitted active-call signature. R21 host corpus cases and an executed Rust example pin byte boundaries.

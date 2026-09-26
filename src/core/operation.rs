@@ -263,7 +263,7 @@ impl NativeOperation {
                 let future = catch_unwind(AssertUnwindSafe(|| {
                     callback(values.into_inner(), child.clone())
                 }))
-                .map_err(|_| self.panic_error())?;
+                .map_err(|_| panic_error(&self.diagnostic_limits, &self.signature))?;
                 let future = GuardedFuture {
                     future,
                     signature: Arc::clone(&self.signature),
@@ -288,22 +288,15 @@ impl NativeOperation {
                 let limits = self.diagnostic_limits.clone();
                 let mut worker = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
-                    worker_control
-                        .checkpoint()
-                        .and_then(|_| {
-                            catch_unwind(AssertUnwindSafe(|| {
-                                callback(values.into_inner(), worker_control)
-                            }))
-                            .unwrap_or_else(|_| {
-                                Err(BWErr::NativePanic(signature.normalized().into()).into())
-                            })
-                        })
-                        .map(Owned::new)
-                        .map_err(|error| {
-                            OwnedDiagnostic::new(admit_error(
-                                &limits, &signature, error, false, false,
-                            ))
-                        })
+                    worker_control.checkpoint().map_err(|error| {
+                        OwnedDiagnostic::new(admit_error(&limits, &signature, error, false, false))
+                    })?;
+                    match catch_unwind(AssertUnwindSafe(|| {
+                        callback(values.into_inner(), worker_control)
+                    })) {
+                        Ok(result) => admit_callback_result(result, &limits, &signature),
+                        Err(_) => Err(OwnedDiagnostic::new(panic_error(&limits, &signature))),
+                    }
                 });
                 tokio::select! {
                     biased;
@@ -332,10 +325,6 @@ impl NativeOperation {
         self.signature.validate_return(&value)?;
         Ok(value)
     }
-
-    fn panic_error(&self) -> Diagnostic {
-        BWErr::NativePanic(self.signature.normalized().into()).into()
-    }
 }
 
 struct GuardedFuture {
@@ -347,24 +336,36 @@ struct GuardedFuture {
 impl Future for GuardedFuture {
     type Output = Result<Owned<Literal>, OwnedDiagnostic>;
     fn poll(mut self: Pin<&mut Self>, context: &mut TaskContext<'_>) -> Poll<Self::Output> {
-        catch_unwind(AssertUnwindSafe(|| self.future.as_mut().poll(context)))
-            .unwrap_or_else(|_| {
-                Poll::Ready(Err(
-                    BWErr::NativePanic(self.signature.normalized().into()).into()
-                ))
-            })
-            .map(|result| {
-                result.map(Owned::new).map_err(|error| {
-                    OwnedDiagnostic::new(admit_error(
-                        &self.limits,
-                        &self.signature,
-                        error,
-                        false,
-                        false,
-                    ))
-                })
-            })
+        match catch_unwind(AssertUnwindSafe(|| self.future.as_mut().poll(context))) {
+            Ok(result) => {
+                result.map(|result| admit_callback_result(result, &self.limits, &self.signature))
+            }
+            Err(_) => Poll::Ready(Err(OwnedDiagnostic::new(panic_error(
+                &self.limits,
+                &self.signature,
+            )))),
+        }
     }
+}
+
+fn panic_error(limits: &DiagnosticLimits, signature: &StatementSignature) -> Diagnostic {
+    limits.borrowed_detail(
+        BWErr::NativePanic,
+        signature.normalized(),
+        Some(signature.header()),
+        false,
+        std::iter::empty(),
+    )
+}
+
+fn admit_callback_result(
+    result: DiagnosticResult<Literal>,
+    limits: &DiagnosticLimits,
+    signature: &StatementSignature,
+) -> Result<Owned<Literal>, OwnedDiagnostic> {
+    result
+        .map(Owned::new)
+        .map_err(|error| OwnedDiagnostic::new(admit_error(limits, signature, error, false, false)))
 }
 
 // Only internal, previously admitted emergency records can skip another admission.

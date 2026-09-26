@@ -53,6 +53,8 @@ pub enum Input {
     OperationDiagnosticLimit,
     BorrowedDiagnosticBoundary,
     BorrowedDiagnosticLimit,
+    OperationPanicBoundary,
+    OperationPanicLimit,
 }
 
 #[derive(Clone)]
@@ -261,5 +263,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::BorrowedDiagnosticBoundary, stdout: "", code: None, error: None },
         Case { id: "borrowed-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::BorrowedDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
+        Case { id: "operation-panic-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::OperationPanicBoundary, stdout: "", code: None, error: None },
+        Case { id: "operation-panic-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::OperationPanicLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
     ]
 }
