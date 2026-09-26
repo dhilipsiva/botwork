@@ -44,7 +44,7 @@ Failures must be observable before expanding the interpreter. Start here so subs
 
 - [x] Add Rust unit tests for parsing, operators, and evaluation, plus CLI integration tests that assert exit status, stdout, and stderr. See [testing instructions](docs/testing.md).
 - [ ] Turn both `examples/*.botwork` scripts into behavior checks with expected results. Successful process exit alone does not prove correct execution.
-- [ ] Capture the confirmed regressions in milestone 2 before fixing each one, including minimal scripts that fail independently.
+- [x] Capture the confirmed regressions in milestone 2 before fixing each one, including minimal scripts that fail independently. See [regression tests](tests/regressions.rs) and [how to reproduce them](docs/testing.md#known-defects).
 - [ ] **Fix successful exit on failure.** Return a nonzero status for syntax errors and uncaught evaluation errors. Both malformed input and `Log |undefined|` currently exit with status `0`. Keep successfully handled `Try/Catch` errors distinct. Start in [src/main.rs](src/main.rs).
 - [ ] Replace `dbg!` output with a defined user interface: normal `Log` output on stdout, diagnostics on stderr, and optional debug tracing. Do not expose Rust debug representations as the normal script output format.
 - [ ] Set up CI for `cargo test`, compilation, formatting, and agreed Clippy checks. Establish the baseline without unrelated cleanup.
