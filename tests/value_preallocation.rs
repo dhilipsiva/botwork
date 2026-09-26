@@ -58,6 +58,32 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn retained_value_failure_precedes_the_assignment_copy() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::RetainedValueLimits,
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        retained_values: RetainedValueLimits {
+            values: 0,
+            ..RetainedValueLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let payload = Literal::String("x".repeat(length));
+    context
+        .register_native("Host", move |_| Ok(payload.clone()))
+        .unwrap();
+    let program = Program::parse("allocation", "|x| = Host").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result.unwrap_err().to_string().contains("retained values"));
+    assert_eq!(large, 1, "Only the host result allocates its string");
+}
+
+#[test]
 fn rejected_concatenation_does_not_allocate_result_or_format_operand_payloads() {
     let length = 64 * 1024;
     let left = Literal::String("a".repeat(length));

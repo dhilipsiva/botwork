@@ -112,6 +112,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R8 — Input admission.** Bound each encoded source and cumulative bytes/source count/raw tokens/root names across ordered input loading. Check file length before decoding; preflight raw JSON nesting, array shape, and decoded string/key bytes (including Unicode escapes) before allocation. Keep bounded raw visitors and last-key-wins conversion; admit child metrics before inserting decoded values. Apply the default value-depth ceiling during parsing while retaining the separate raw nesting guard for discarded data. Preserve file-then-flag overrides, exact numbers, bounded origin/path diagnostics, BW8001 resource failures, and BW7001 semantic errors. [Input budgets](input-variables.md#input-resource-budgets) define counts, zero/local configuration, error priority, compatibility, and remaining runtime/host limits.
 
+## Retained Variable Bounds
+
+**R9 — Stored-value admission.** Reserve aggregate live value/node/payload allowance before publishing variable storage and before assignment copies. Count shared storage once across root/call/module frames, cached globals, saved bindings, access snapshots, and public Context clones. Release after the final owner drops; replacements and atomic input batches require peak headroom. Latch requesting-context failures with BW8001, preserve prior bindings, and unwind frames/iterators/handlers reliably. Engine runs start independent trackers. [Retained-value rules](retained-values.md) specify defaults, exact counts, stop/clone behavior, concurrency, and remaining metadata/temporary/snapshot scope.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -174,3 +178,5 @@ R6 evidence in `tests/value_limits.rs` and `src/core/value_limits/tests.rs` cove
 R7 evidence in `tests/value_preallocation.rs` and value/evaluator unit tests uses thread-local allocator observations, owned-data pointer checks, exact metrics, overflow assertions, duplicate-key/effect traces, and assignment preservation. Two host corpus cases pin duplicate replacement and static rejection before callback effects.
 
 R8 evidence in `tests/input_limits.rs`, input-limit unit tests, the original input suite, and allocator observations covers counts, Unicode escapes, raw/decode depth, duplicates/overrides, bounded reads, error origin/path handling, local settings, and pre-effect CLI rejection. Two host corpus cases and a Rust example pin exact source/token/value budgets.
+
+R9 evidence in `tests/retained_values.rs`, reservation/evaluator unit tests, and allocation observations covers exact/zero/default counters, atomic root batches, overflow, pre-copy rejection, call/module/loop/handler cleanup, shared snapshots/clones, concurrent reservations, and independent failures/runs. Two host corpus cases and a Rust example pin peak replacement and destination preservation.

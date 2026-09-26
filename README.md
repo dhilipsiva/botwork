@@ -51,6 +51,9 @@ cargo run -- --file examples/20-input-variables.botwork \
   --vars-file examples/inputs/defaults.json --var 'name="Ada"' --var 'attempts=3'
 ```
 
+[Retained-value budgets](docs/retained-values.md) bound variable storage across calls,
+modules, and cloned contexts, releasing capacity when stored values are dropped.
+
 Or you can create a file from below sample and pass the path to cargo run
 
 

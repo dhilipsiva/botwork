@@ -28,13 +28,16 @@ use super::{
 mod import_limits;
 pub(crate) use import_limits::ImportResource;
 pub use import_limits::{ImportLimits, MAX_MODULE_CHAIN_DEPTH};
+mod retained_values;
+pub use retained_values::RetainedValueLimits;
+pub(crate) use retained_values::{StoredValue, ValueReservation};
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
 pub const MAX_IMPORT_DEPTH: usize = 16;
 pub const MAX_PARSER_CALLER_DEPTH: usize = 16;
 
-/// Run budgets. Aggregate retained values and hard native termination
+/// Run budgets. Temporary allocations and hard native termination
 /// have separate contracts; these limits do not make execution a sandbox.
 #[derive(Clone, Debug)]
 pub struct RunLimits {
@@ -47,6 +50,7 @@ pub struct RunLimits {
     pub ast: AstLimits,
     pub imports: ImportLimits,
     pub values: ValueLimits,
+    pub retained_values: RetainedValueLimits,
 }
 
 impl Default for RunLimits {
@@ -61,6 +65,7 @@ impl Default for RunLimits {
             ast: AstLimits::default(),
             imports: ImportLimits::default(),
             values: ValueLimits::default(),
+            retained_values: RetainedValueLimits::default(),
         }
     }
 }
@@ -342,12 +347,14 @@ struct BudgetState {
     used: AtomicU64,
     active: AtomicUsize,
     imports: Mutex<[usize; 5]>,
+    retained_values: Arc<retained_values::RetainedValues>,
     stopped: Mutex<Option<BWErr>>,
 }
 
 pub(crate) struct RunBudget(Arc<BudgetState>);
 
-// Public Context clones retain separate counters. Modules explicitly share budgets.
+// Context clones copy work counters but share live allocation accounting.
+// Modules explicitly share all budgets.
 impl Clone for RunBudget {
     fn clone(&self) -> Self {
         Self(Arc::new(BudgetState {
@@ -356,6 +363,7 @@ impl Clone for RunBudget {
             used: AtomicU64::new(self.used()),
             active: AtomicUsize::new(0),
             imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
+            retained_values: Arc::clone(&self.0.retained_values),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -370,6 +378,9 @@ impl Clone for RunBudget {
 impl RunBudget {
     pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
+            retained_values: Arc::new(retained_values::RetainedValues::new(
+                limits.retained_values.clone(),
+            )),
             limits,
             control,
             used: AtomicU64::new(0),

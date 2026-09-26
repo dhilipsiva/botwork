@@ -348,3 +348,20 @@ assert_eq!(name, "x");
 assert_eq!(value.to_string(), "[1, 2]");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Configure Retained Values
+
+Stored values reserve aggregate capacity before publication. Replacing a binding needs room for both old and new values.
+
+```rust
+use botwork::core::run::{Engine, RetainedValueLimits, RunLimits, RunOptions, RunOutcome};
+let run = Engine::default().run_source("retention", "|x| = |1|\n|x| = |2|", RunOptions {
+    limits: RunLimits {
+        retained_values: RetainedValueLimits { values: 1, ..RetainedValueLimits::default() },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+assert_eq!(run.variables["x"].to_string(), "1");
+```

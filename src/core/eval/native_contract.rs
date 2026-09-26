@@ -49,10 +49,12 @@ fn malformed_resolved_calls_reject_arity_before_visiting_any_argument() {
 #[test]
 fn invalid_nested_host_arguments_never_reach_native_or_custom_bodies() {
     let mut context = context();
-    context.set_variable(
-        "invalid".into(),
-        Literal::Map([("x".into(), Literal::Array(vec![Literal::Float(f32::NAN)]))].into()),
-    );
+    context
+        .set_variable(
+            "invalid".into(),
+            Literal::Map([("x".into(), Literal::Array(vec![Literal::Float(f32::NAN)]))].into()),
+        )
+        .unwrap();
     evaluate_program(
         &Program::parse(
             "native-contract.botwork",
@@ -133,7 +135,9 @@ fn signature_queries_observe_lexical_shadowing_and_restore_parent_visibility() {
 #[test]
 fn collection_access_retains_the_original_base_across_effectful_index_calls() {
     let mut context = Context::default();
-    context.set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]));
+    context
+        .set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]))
+        .unwrap();
     context
         .register_callback(
             "<test Swap>",
@@ -144,7 +148,9 @@ fn collection_access_retains_the_original_base_across_effectful_index_calls() {
                     Arc::strong_count(context.get_variable_binding("data").unwrap()),
                     2
                 );
-                context.set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]));
+                context
+                    .set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]))
+                    .unwrap();
                 Ok(Literal::Int(0))
             }),
         )
@@ -164,13 +170,58 @@ fn collection_access_retains_the_original_base_across_effectful_index_calls() {
 #[test]
 fn context_clones_share_immutable_value_storage_and_isolate_replacement_bindings() {
     let mut original = Context::default();
-    original.set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]));
+    original
+        .set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]))
+        .unwrap();
     let mut cloned = original.clone();
     assert!(Arc::ptr_eq(
         original.get_variable_binding("data").unwrap(),
         cloned.get_variable_binding("data").unwrap()
     ));
-    cloned.set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]));
+    cloned
+        .set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]))
+        .unwrap();
     assert_eq!(original.get_variable("data").unwrap().to_string(), "[1]");
     assert_eq!(cloned.get_variable("data").unwrap().to_string(), "[2]");
+}
+
+#[test]
+fn effectful_access_keeps_the_old_value_reservation_until_lookup_finishes() {
+    use crate::core::run::RetainedValueLimits;
+    let mut context = Context::with_limits(RunLimits {
+        retained_values: RetainedValueLimits {
+            values: 2,
+            ..RetainedValueLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]))
+        .unwrap();
+    context
+        .register_callback(
+            "<test Swap>",
+            "Swap",
+            Arc::new(|_, context| {
+                context
+                    .set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]))
+                    .unwrap();
+                // The original access snapshot still occupies the other stored allocation.
+                context
+                    .set_variable("extra".into(), Literal::None)
+                    .map_err(Diagnostic::into_error)?;
+                Ok(Literal::Int(0))
+            }),
+        )
+        .unwrap();
+    let error = evaluate_program_detailed(
+        &Program::parse("snapshot", "|result| = |data[@{Swap}]|").unwrap(),
+        &mut context,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("retained values"));
+    assert_eq!(context.frames[0].variables["data"].value.to_string(), "[2]");
+    assert!(!context.frames[0].variables.contains_key("result"));
+    assert!(!context.frames[0].variables.contains_key("extra"));
 }

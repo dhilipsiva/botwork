@@ -25,6 +25,8 @@ pub enum Input {
     ConstructionLimit,
     JsonBudgetBoundary,
     JsonBudgetLimit,
+    RetentionBoundary,
+    RetentionLimit,
 }
 
 #[derive(Clone)]
@@ -177,5 +179,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::JsonBudgetBoundary, stdout: "", code: None, error: None },
         Case { id: "input-budget-limit", positive: &[], invalid: &["R8"], boundary: &[],
             input: Input::JsonBudgetLimit, stdout: "", code: Some("BW8001"), error: Some("input raw nodes") },
+        Case { id: "retention-boundary", positive: &["R9"], invalid: &[], boundary: &["R9"],
+            input: Input::RetentionBoundary, stdout: "", code: None, error: None },
+        Case { id: "retention-limit", positive: &[], invalid: &["R9"], boundary: &[],
+            input: Input::RetentionLimit, stdout: "", code: Some("BW8001"), error: Some("retained values") },
     ]
 }

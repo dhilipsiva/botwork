@@ -414,6 +414,34 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::RetentionBoundary | Input::RetentionLimit => {
+                use botwork::core::run::{Engine, RetainedValueLimits, RunLimits, RunOptions};
+                let run = Engine::default().run_source(
+                    case.id,
+                    "|x| = |1|\n|x| = |2|",
+                    RunOptions {
+                        limits: RunLimits {
+                            retained_values: RetainedValueLimits {
+                                values: if case.error.is_some() { 1 } else { 2 },
+                                nodes: 2,
+                                payload_bytes: 8,
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(run.variables["x"].to_string(), "1");
+                } else {
+                    assert_eq!(run.result.unwrap().to_string(), "2");
+                    assert_eq!(run.variables["x"].to_string(), "2");
+                }
+                continue;
+            }
             Input::JsonBudgetBoundary | Input::JsonBudgetLimit => {
                 use botwork::core::{
                     input::{parse_variables_with_limits, InputLimits},

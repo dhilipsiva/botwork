@@ -18,7 +18,10 @@ use super::{
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Rule},
     operation::OperationControl,
-    run::{EvaluationGuard, RunBudget, RunEnvironment, RunLimits, SourceFailure},
+    run::{
+        EvaluationGuard, RunBudget, RunEnvironment, RunLimits, SourceFailure, StoredValue,
+        ValueReservation,
+    },
     signature::{StatementOrigin, StatementSignature},
     value_limits::Owned,
 };
@@ -73,7 +76,7 @@ impl StmtType {
 
 #[derive(Clone, Default)]
 struct Frame {
-    variables: HashMap<String, Arc<Literal>>,
+    variables: HashMap<String, Arc<StoredValue>>,
     statements: HashMap<String, StmtType>,
     namespaces: HashMap<String, Span>,
     dependency_depth: usize,
@@ -147,7 +150,7 @@ impl Context {
         self.frames[0]
             .variables
             .iter()
-            .map(|(name, value)| (name.clone(), value.as_ref().clone()))
+            .map(|(name, value)| (name.clone(), value.value.clone()))
             .collect()
     }
 
@@ -223,6 +226,25 @@ impl Context {
             .check(value)
             .map(|_| ())
             .map_err(|error| self.retain_limit(Diagnostic::new(error)))
+    }
+
+    fn reserve_value(&self, value: &Literal) -> DiagnosticResult<Option<ValueReservation>> {
+        self.checkpoint()?;
+        let size = self
+            .limits()
+            .values
+            .check(value)
+            .map_err(|error| self.retain_limit(Diagnostic::new(error)))?;
+        self.budget
+            .as_ref()
+            .map(|budget| budget.reserve_value(size))
+            .transpose()
+    }
+
+    fn store_value(&self, value: Literal) -> DiagnosticResult<Arc<StoredValue>> {
+        let value = Owned::new(value);
+        let reservation = self.reserve_value(&value)?;
+        Ok(Arc::new(StoredValue::new(value.into_inner(), reservation)))
     }
 
     pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
@@ -325,12 +347,13 @@ impl Context {
             })?;
         }
         self.checkpoint()?;
-        self.frames[0].variables.extend(
-            variables
-                .into_inner()
-                .into_iter()
-                .map(|(name, value)| (name, Arc::new(value))),
-        );
+        let bindings = variables
+            .into_inner()
+            .into_iter()
+            .map(|(name, value)| self.store_value(value).map(|value| (name, value)))
+            .collect::<DiagnosticResult<HashMap<_, _>>>()?;
+        self.checkpoint()?;
+        self.frames[0].variables.extend(bindings);
         Ok(())
     }
 
@@ -341,10 +364,11 @@ impl Context {
     }
 
     fn get_variable_ref(&self, name: &str) -> Result<&Literal, BWErr> {
-        self.get_variable_binding(name).map(AsRef::as_ref)
+        self.get_variable_binding(name)
+            .map(|binding| &binding.value)
     }
 
-    fn get_variable_binding(&self, name: &str) -> Result<&Arc<Literal>, BWErr> {
+    fn get_variable_binding(&self, name: &str) -> Result<&Arc<StoredValue>, BWErr> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
@@ -356,10 +380,13 @@ impl Context {
         Err(BWErr::VariableNotDefined(name.to_owned()))
     }
 
-    fn set_variable(&mut self, name: String, literal: Literal) -> Option<Arc<Literal>> {
-        self.frames[self.current]
-            .variables
-            .insert(name, Arc::new(literal))
+    fn set_variable(
+        &mut self,
+        name: String,
+        literal: Literal,
+    ) -> DiagnosticResult<Option<Arc<StoredValue>>> {
+        let value = self.store_value(literal)?;
+        Ok(self.frames[self.current].variables.insert(name, value))
     }
 
     fn get_statement(&self, signature: &str) -> Option<(StmtType, usize)> {
@@ -668,8 +695,12 @@ fn invoke_resolved(
                     .parameters
                     .iter()
                     .zip(arguments)
-                    .map(|(parameter, value)| (parameter.text.clone(), Arc::new(value)))
-                    .collect(),
+                    .map(|(parameter, value)| {
+                        context
+                            .store_value(value)
+                            .map(|value| (parameter.text.clone(), value))
+                    })
+                    .collect::<DiagnosticResult<HashMap<_, _>>>()?,
                 parent: Some(owner),
                 ..Frame::default()
             };
@@ -870,19 +901,23 @@ fn evaluate_access(
 ) -> RuntimeResult {
     // Retain an immutable snapshot across effectful index calls without copying
     // the whole variable container. Only the selected result is copied.
-    let container = if let ExprKind::Variable(name) = &base.kind {
+    let binding;
+    let temporary;
+    let mut value = if let ExprKind::Variable(name) = &base.kind {
         #[cfg(test)]
         context
             .expression_visits
             .borrow_mut()
             .push(base.span.text().to_owned());
-        Arc::clone(
+        binding = Arc::clone(
             context
                 .get_variable_binding(name)
                 .map_err(|error| Diagnostic::new(error).at_expression(&base.span))?,
-        )
+        );
+        &binding.value
     } else {
-        Arc::new(evaluate_expression(base, context)?)
+        temporary = evaluate_expression(base, context)?;
+        &temporary
     };
     let error = |segment: &AccessSegment, reason: String| {
         let mut path = base.span.text().trim().to_owned();
@@ -909,7 +944,6 @@ fn evaluate_access(
         })
         .at_expression(span)
     };
-    let mut value = container.as_ref();
     for segment in segments {
         // Evaluate this key before checking its receiver/type; do not evaluate
         // any later key until this lookup succeeds.
@@ -989,7 +1023,7 @@ fn evaluate_for(
     let result = (|| {
         for value in values {
             context.tick()?;
-            context.set_variable(binding.to_owned(), value);
+            context.set_variable(binding.to_owned(), value)?;
             match evaluate_block(body, context)? {
                 Completion::Normal(_) | Completion::Continue => (),
                 Completion::Break => break,
@@ -1040,7 +1074,9 @@ fn evaluate_handler(
         context
             .check_value(&value)
             .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
-        context.set_variable(name.text.clone(), value.into_inner())
+        context
+            .set_variable(name.text.clone(), value.into_inner())
+            .map_err(|error| error.at(&name.span).while_handling(original.clone()))?
     } else {
         None
     };
@@ -1079,7 +1115,12 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
                 }
                 AssignmentValue::Call(call) => invoke(call, context)?,
             };
-            context.set_variable(name.text.clone(), value.clone());
+            // Reserve the stored copy before cloning its potentially large payload.
+            let reservation = context.reserve_value(&value)?;
+            let stored = Arc::new(StoredValue::new(value.clone(), reservation));
+            context.frames[context.current]
+                .variables
+                .insert(name.text.clone(), stored);
             Ok(Completion::Normal(value))
         }
         StatementKind::Define(definition) => {

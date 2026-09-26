@@ -14,12 +14,12 @@ fn record(values: &[Literal], context: &mut Context) -> LiteralResult {
         ("__events", Literal::String(value.to_string())),
         ("__depths", Literal::Int(depth)),
     ] {
-        let Literal::Array(events) =
-            Arc::make_mut(context.frames[0].variables.get_mut(key).unwrap())
-        else {
+        let Literal::Array(mut events) = context.frames[0].variables[key].value.clone() else {
             panic!("test event array");
         };
         events.push(entry);
+        let stored = context.store_value(Literal::Array(events)).unwrap();
+        context.frames[0].variables.insert(key.into(), stored);
     }
     Ok(value)
 }
@@ -27,7 +27,9 @@ fn record(values: &[Literal], context: &mut Context) -> LiteralResult {
 pub(super) fn context() -> Context {
     let mut context = Context::default();
     for key in ["__events", "__depths"] {
-        context.set_variable(key.into(), Literal::Array(vec![]));
+        context
+            .set_variable(key.into(), Literal::Array(vec![]))
+            .unwrap();
     }
     context
         .register_callback("<test Record>", "Record |value|", Arc::new(record))
@@ -122,10 +124,14 @@ fn nested_collection_entries_keep_source_order_even_for_overwritten_keys() {
         let names = ["first", "second", "third", "fourth", "fifth"];
         for (index, name) in names.iter().enumerate() {
             if Some(*name) != failing {
-                context.set_variable((*name).into(), Literal::Int(index as i32 + 1));
+                context
+                    .set_variable((*name).into(), Literal::Int(index as i32 + 1))
+                    .unwrap();
             }
         }
-        context.set_variable("answer".into(), Literal::Int(99));
+        context
+            .set_variable("answer".into(), Literal::Int(99))
+            .unwrap();
         let result = run(
             "|answer| = |[first, {z: second, a: third, z: fourth}, fifth]|",
             &mut context,
@@ -159,8 +165,12 @@ fn branch_conditions_run_once_and_only_until_a_branch_is_selected() {
         (false, false, "else", vec!["first", "second"]),
     ] {
         let mut context = context();
-        context.set_variable("first".into(), Literal::Bool(first));
-        context.set_variable("second".into(), Literal::Bool(second));
+        context
+            .set_variable("first".into(), Literal::Bool(first))
+            .unwrap();
+        context
+            .set_variable("second".into(), Literal::Bool(second))
+            .unwrap();
         run("If |first| { Record |\"first\"| } Else If |second| { Record |\"second\"| } Else { Record |\"else\"| }", &mut context).unwrap();
         let observed: Vec<_> = visits(&context)
             .into_iter()
@@ -180,7 +190,9 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
         ] {
             for in_handler in [false, true] {
                 let mut context = context();
-                context.set_variable("item".into(), Literal::Int(99));
+                context
+                    .set_variable("item".into(), Literal::Int(99))
+                    .unwrap();
                 let mut frame = Frame {
                     parent: Some(0),
                     ..Frame::default()
@@ -189,12 +201,12 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                     "none" => {
                         frame
                             .variables
-                            .insert("item".into(), Arc::new(Literal::None));
+                            .insert("item".into(), context.store_value(Literal::None).unwrap());
                     }
                     "local" => {
                         frame
                             .variables
-                            .insert("item".into(), Arc::new(Literal::Int(7)));
+                            .insert("item".into(), context.store_value(Literal::Int(7)).unwrap());
                     }
                     "absent" => {
                         context.frames[0].variables.remove("item");
@@ -363,8 +375,12 @@ fn recursive_traces_preserve_each_frame_and_unwind_before_the_callers_handler() 
         )
         .unwrap();
         for _ in 0..2 {
-            context.set_variable("__events".into(), Literal::Array(vec![]));
-            context.set_variable("__depths".into(), Literal::Array(vec![]));
+            context
+                .set_variable("__events".into(), Literal::Array(vec![]))
+                .unwrap();
+            context
+                .set_variable("__depths".into(), Literal::Array(vec![]))
+                .unwrap();
             run(
                 "Try { |answer| = Walk |3| } Catch { Record |[\"caught\", n]| }",
                 &mut context,
@@ -413,7 +429,9 @@ fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_dis
             ("rethrow", "Rethrow"),
         ] {
             let mut context = context();
-            context.set_variable("error".into(), Literal::Int(99));
+            context
+                .set_variable("error".into(), Literal::Int(99))
+                .unwrap();
             let mut frame = Frame {
                 parent: Some(0),
                 ..Frame::default()
@@ -422,12 +440,13 @@ fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_dis
                 "none" => {
                     frame
                         .variables
-                        .insert("error".into(), Arc::new(Literal::None));
+                        .insert("error".into(), context.store_value(Literal::None).unwrap());
                 }
                 "local" => {
-                    frame
-                        .variables
-                        .insert("error".into(), Arc::new(Literal::Int(7)));
+                    frame.variables.insert(
+                        "error".into(),
+                        context.store_value(Literal::Int(7)).unwrap(),
+                    );
                 }
                 "absent" => {
                     context.frames[0].variables.remove("error");
