@@ -308,3 +308,11 @@ fn composition_example_checks_nested_results_effect_order_and_recovery() {
         ],
     );
 }
+
+#[test]
+fn local_import_example_checks_namespaces_results_and_collision_recovery() {
+    assert_example(
+        "19-local-imports.botwork",
+        &["14", "[1, 2]", "BW6003", "10"],
+    );
+}

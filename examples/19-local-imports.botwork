@@ -1,0 +1,12 @@
+Import |"modules/arithmetic.botwork"| As |math|
+Import |"modules/arithmetic.botwork"| As |again|
+
+Log |@{math::Double |3|} + @{again::Double |4|}|
+Log |@{math::Pair |1| with |2|}|
+
+Try {
+    Import |"modules/arithmetic.botwork"| As |math|
+} Catch |error| {
+    Log |error.code|
+}
+Log |@{math::Double |5|}|

@@ -26,6 +26,9 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW5001 | Operation cancellation | Inspect completed effects; use fresh control for an intentional retry |
 | BW5002 | Operation deadline | Inspect completed effects and choose an appropriate new deadline |
 | BW5003 | Async runtime failure | Keep a Tokio runtime with time enabled alive through operation completion |
+| BW6001 | Module loading | Check the source-relative local .botwork path, permissions, and UTF-8 contents/path |
+| BW6002 | Import cycle | Move shared definitions into a module outside the reported cycle |
+| BW6003 | Namespace collision | Use a distinct alias or remove the same-scope qualified declaration |
 
 Ordinary source calls with the wrong arity normally fail signature resolution as BW2002; BW2004 represents a resolved signature/count mismatch. Numeric conversion remains a runtime error despite the legacy `ParsingIntegerError` name. CLI argument parsing and file-loading errors are outside this language-error catalog. Hints describe repairs without changing or automatically rerunning the script.
 
@@ -54,7 +57,7 @@ Call stacks are snapshots captured before unwinding. Any call that fails during 
 
 Try/Catch still handles evaluation failures only. A successful handler consumes its error and emits no diagnostic. If the handler fails, its failure is primary and the handled error remains in `causes`. Nested handler failures retain all original spans/stacks in handling order, innermost first. A captured diagnostic includes the current caller even if Catch handles it before that caller unwinds. `Display` renders causes; `std::error::Error::source()` exposes the first handled cause, or the underlying category error when there is none.
 
-Each handled cause retains its own code and guidance; a handler's undefined-variable failure does not recategorize the original arithmetic failure. Imports, adapter-cause compatibility, and bounded diagnostic resources remain separate roadmap work. Success output, failure status, argument order, and language scope/completion behavior retain their contracts.
+Each handled cause retains its own code and guidance; a handler's undefined-variable failure does not recategorize the original arithmetic failure. Local imports retain these codes, ranges, causes, and entered callers while adding related import sites. Adapter-cause compatibility and bounded diagnostic resources remain separate roadmap work. Success output, failure status, argument order, and language scope/completion behavior retain their contracts.
 
 
 ## DSL Metadata
@@ -72,6 +75,8 @@ Each handled cause retains its own code and guidance; a handler's undefined-vari
 
 A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `line`, `column`, `end_line`, and `end_column`. Coordinates are decimal strings, not i32 values, so metadata never truncates a source offset. Byte and end-position semantics match `Span`. Missing source/definition sites are present with None values; they are not absent keys.
 
-`details` contains `name` for BW2001; `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. Being representable as metadata does not make syntax/validation errors catchable.
+`details` contains `name` for BW2001; `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. A file cannot catch its own pre-execution syntax/validation failure. An importer can inspect such a failure during runtime loading, retaining its original code.
 
 Metadata copies have no mutable connection to the active error. Rethrow uses that error's shared identity, retains its original span/stack/causes, and adds a related rethrow location. The same error is not appended as its own cause. Fresh errors, even at identical source locations, remain distinct. The Rust diagnostic error field now uses `Arc<BWErr>` so cloning a diagnostic preserves identity; legacy `BWErr` APIs retain their return types and categories.
+
+For BW6003, `details` contains string fields `namespace`, `original`, and `duplicate`. BW6001/BW6002 use `reason`. An importer can catch an imported module's parse/validation error during runtime loading; the module itself executes no statements before successful validation. Related import sites and original module locations remain available through inspection/rethrow.

@@ -128,6 +128,7 @@ pub struct StatementSignature {
     returns: ValueKinds,
     description: String,
     errors: Vec<StatementError>,
+    namespace: Option<String>,
 }
 
 impl StatementSignature {
@@ -176,6 +177,7 @@ impl StatementSignature {
             returns: ValueKinds::ANY,
             description: String::new(),
             errors: vec![],
+            namespace: None,
         }
     }
 
@@ -233,6 +235,28 @@ impl StatementSignature {
     pub fn header(&self) -> &Span {
         &self.header
     }
+
+    /// Qualified display name while retaining the original definition's header span.
+    pub fn display_header(&self) -> String {
+        match &self.namespace {
+            Some(namespace) => format!("{namespace}::{}", self.header.text().trim()),
+            None => self.header.text().trim().into(),
+        }
+    }
+
+    pub(crate) fn qualified(&self, namespace: &str) -> Self {
+        let mut signature = self.clone();
+        signature.normalized = format!(
+            "{}::{}",
+            ast::normalize_sentence(namespace),
+            self.normalized
+        );
+        signature.namespace = Some(match &self.namespace {
+            Some(nested) => format!("{namespace}::{nested}"),
+            None => namespace.into(),
+        });
+        signature
+    }
     pub fn origin(&self) -> StatementOrigin {
         self.origin
     }
@@ -250,7 +274,7 @@ impl StatementSignature {
     }
 
     pub fn help(&self) -> String {
-        let mut lines = vec![self.header.text().trim().to_owned()];
+        let mut lines = vec![self.display_header()];
         if !self.description.is_empty() {
             lines.push(self.description.clone());
         }

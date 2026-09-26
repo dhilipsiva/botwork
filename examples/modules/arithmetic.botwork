@@ -1,0 +1,3 @@
+|factor| = |2|
+Double |value| { Return |value * factor| }
+Pair |left| with |right| { Return |[left, right]| }

@@ -31,6 +31,9 @@ pub enum DiagnosticCode {
     Cancelled,
     Timeout,
     AsyncRuntime,
+    ImportRead,
+    ImportCycle,
+    DuplicateNamespace,
 }
 
 impl DiagnosticCode {
@@ -54,6 +57,9 @@ impl DiagnosticCode {
             Self::Cancelled => "BW5001",
             Self::Timeout => "BW5002",
             Self::AsyncRuntime => "BW5003",
+            Self::ImportRead => "BW6001",
+            Self::ImportCycle => "BW6002",
+            Self::DuplicateNamespace => "BW6003",
         }
     }
 }
@@ -85,6 +91,9 @@ impl BWErr {
             Self::Cancelled(_) => DiagnosticCode::Cancelled,
             Self::Timeout(_) => DiagnosticCode::Timeout,
             Self::AsyncRuntime(_) => DiagnosticCode::AsyncRuntime,
+            Self::ImportRead(_) => DiagnosticCode::ImportRead,
+            Self::ImportCycle(_) => DiagnosticCode::ImportCycle,
+            Self::DuplicateNamespace { .. } => DiagnosticCode::DuplicateNamespace,
         }
     }
 
@@ -108,6 +117,9 @@ impl BWErr {
             Self::Cancelled(_) => "Inspect completed effects and use a fresh operation control for an intentional retry.".into(),
             Self::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.".into(),
             Self::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.".into(),
+            Self::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.".into(),
+            Self::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.".into(),
+            Self::DuplicateNamespace { .. } => "Choose a distinct namespace or remove conflicting declarations in this scope; the original remains registered.".into(),
         }
     }
 }
@@ -235,6 +247,15 @@ impl Diagnostic {
                 ("segment", text(segment)),
                 ("reason", text(reason)),
             ]),
+            BWErr::DuplicateNamespace {
+                namespace,
+                original,
+                duplicate,
+            } => value_map([
+                ("namespace", text(namespace)),
+                ("original", text(original)),
+                ("duplicate", text(duplicate)),
+            ]),
             BWErr::ParameterMissingError(reason)
             | BWErr::ParsingError(reason)
             | BWErr::SignatureError(reason)
@@ -247,6 +268,8 @@ impl Diagnostic {
             | BWErr::Cancelled(reason)
             | BWErr::Timeout(reason)
             | BWErr::AsyncRuntime(reason)
+            | BWErr::ImportRead(reason)
+            | BWErr::ImportCycle(reason)
             | BWErr::NativePanic(reason) => value_map([("reason", text(reason))]),
         };
         value_map([

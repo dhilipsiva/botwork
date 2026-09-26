@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 41 cases against the 28 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 43 cases against the 29 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -36,15 +36,18 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | F5 | native-return | native-invalid-return | native-return |
 | F6 | signature-valid | signature-invalid | signature-valid |
 | F7 | async-success | async-expired | async-success |
+| M1 | import-success | import-cycle | import-success |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
 ## Execution and Maintenance
 
-Run `cargo test --locked --test conformance --test cli_harness`, then repeat with `--release`. CI's normal test matrix executes both profiles. The 34 script cases run through Cargo's built CLI in isolated temporary working directories. Each checks exact stdout, status `0`/`1`, empty success stderr, or the expected failure message and source filename. A five-second timeout terminates and reaps a stuck process. Runner tests check timeout recovery, stream separation, and workspace cleanup.
+Run `cargo test --locked --test conformance --test cli_harness`, then repeat with `--release`. CI's normal test matrix executes both profiles. The 36 script cases run through Cargo's built CLI in isolated temporary working directories. Each checks exact stdout, status `0`/`1`, empty success stderr, or the expected failure message and source filename. A five-second timeout terminates and reaps a stuck process. Runner tests check timeout recovery, stream separation, and workspace cleanup.
 
 The structural host case exercises the public Rust equality API with NaN and both infinities, directly and nested in arrays/maps, on both operand sides. All 36 combinations across equality/inequality require an arithmetic error, even when the other value has a different kind. Valid DSL source cannot construct these non-finite host values. Two additional host cases register and invoke native callbacks, checking zero arguments, None and minimum-i32 returns, nested non-finite rejection, and native call context. Two signature cases verify shared metadata/help, accepted kind unions, return kinds, and rejection before callback effects. Two async operation cases check success and expired-deadline rejection before callback construction.
 
 Successful scripts currently generate stdout only; filesystem/report artifacts must extend the case contract when those operations arrive. The corpus does not claim adapter, resource-limit, fuzz, or performance coverage. Failure labels report toolchain, OS/architecture, profile, timeout, deterministic seed status, and adapter absence.
 
 Register every new fixture and tag its rules/categories in the case table. Every failure also pins its stable diagnostic code; CLI checks require its bracketed code, and host checks query `BWErr::code()` directly. The inventory reads rule IDs from specification paragraphs and fails on missing category evidence, unknown tags, duplicate IDs/tags, invalid status/code expectations, or unregistered fixture files. Adding a new specification rule therefore requires cases in the same change. Preserve old minimal regressions when broadening the corpus, and follow the [reproduction procedure](regression-reproduction.md).
+
+The two import cases materialize supporting modules inside the isolated workspace before invoking the CLI: the arithmetic module used by example `19`, or a minimal self-import cycle. Their stdout/status/code/source assertions use the same process contract as single-file cases.

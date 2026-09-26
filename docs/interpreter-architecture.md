@@ -97,7 +97,7 @@ Internal statement execution returns `Result<Completion, Diagnostic>`. `Completi
 
 Branches and Try/Catch pass control outcomes upward. A handler runs only for an evaluation error; a failed return expression is still an error until its value exists. For/While consume their own Break/Continue and propagate Return. A custom invocation consumes Return, preserving its exact value; fallthrough produces None. No control flags are stored in the context.
 
-Runtime boundaries retain defensive checks for escaping controls, including a callee attempting to control its caller's loop. Public entry points reject invalid placement before execution, so a script cannot catch or bypass a placement error.
+Runtime boundaries retain defensive checks for escaping controls, including a callee attempting to control its caller's loop. Public entry points reject invalid placement before execution, so a file cannot execute or catch its own placement error. An importer can handle the failed load without executing the invalid file.
 
 ## Catch State and Metadata
 
@@ -107,7 +107,7 @@ Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones 
 
 ## Remaining Interpreter Work
 
-Resource limits, imports, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
 
@@ -222,3 +222,14 @@ Async factories must return promptly and defer effects into the future. Future p
 Blocking callbacks run through `spawn_blocking`, with an explicit nonzero maximum shared by operation clones. Capacity waiting is cancellable, and a permit remains held until its worker exits. A stop request signals the worker, aborts it if still queued, then awaits completion before returning the primary cancellation/timeout. A worker failure during that drain remains a structured cause. Blocking callbacks must use checkpoints and bounded waits so they can finish cooperatively; no hard termination deadline is promised for uncooperative in-process work. Tokio [cannot abort started blocking callbacks](https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html). Integrations needing hard termination require isolated workers under the later shutdown contract.
 
 If a host drops a blocking invocation instead of requesting cancellation and awaiting it, its worker is signalled but cannot be joined synchronously by Drop. The worker can continue until it cooperates; its permit remains held meanwhile. Keep the runtime alive until owned work finishes. Cancellation does not undo completed external effects or guarantee an effect never happened; adapters must expose appropriate retry/idempotency semantics. Whole-run cancellation, teardown, reporting outcomes, bounded parallel runs, and async DSL dispatch remain explicit roadmap work.
+
+
+## Local Module Loading
+
+`StatementKind::Import` stores a decoded literal path, its original span, and an alias Name. The evaluator's imports module resolves source-relative paths using the Context's captured working directory, canonicalizes module identity, and tracks an active load chain separately from completed cache entries. Whole-module parsing/validation precedes initialization. Errors keep their category/span and gain related import sites; importer handlers can catch these runtime loading failures.
+
+Each loaded module retains an immutable root Frame snapshot, containing initialized values, definitions, native callbacks, and any imported namespaces. Host operations are inherited from the visible native registry; caller variables/custom definitions are not copied. Imported entries retain a module Arc, export key, qualified shared metadata, and import span. Calls evaluate/validate arguments in the caller, then execute the resolved export using an isolated module context and fresh invocation frame. Caller call stacks are retained for diagnostics; handlers and locals remain separate. Nested imports still use the defining source file.
+
+Contexts own cache maps and requested-to-canonical path mappings. Isolated initialization/call contexts copy those maps and merge successful dependency additions back even after a parent fails. Completed module Frames reference only dependency modules and source owners, never a Context/cache, avoiding ownership cycles. Context clones copy cache maps and share immutable completed modules. A Weak-source test checks that dropping the final context releases cached sources. Cache lifetime and native captures do not establish future parallel-run isolation guarantees.
+
+Namespace registration checks the whole prefix before module initialization and publishes exports/alias only on success. Same-frame aliases protect their prefix from later declaration writes. Lookup stops at the nearest namespace owner if an export is absent, and listing/completion apply the same whole-namespace shadowing. Qualified metadata uses `display_header()` for labels while retaining the actual definition's header span for source navigation. See [module semantics](language.md#local-modules) for cache/retry and capability rules.

@@ -35,6 +35,8 @@ Use `cargo run -- --list-statements` to list built-ins, or
 Rust hosts can [register statements with checked signatures](docs/interpreter-architecture.md#shared-signature-metadata).
 Use [call expressions](docs/language.md#calls-inside-expressions), such as `@{Double |3|}`,
 to compose statement results inside other expressions.
+[Local modules](docs/language.md#local-modules) use `Import |"helpers.botwork"| As |helpers|`
+and qualified calls such as `helpers::Double |3|`.
 
 Or you can create a file from below sample and pass the path to cargo run
 

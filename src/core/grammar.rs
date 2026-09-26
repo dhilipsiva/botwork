@@ -80,6 +80,16 @@ pub enum BWErr {
     Timeout(String),
     #[error("Async runtime failure: {0}")]
     AsyncRuntime(String),
+    #[error("Loading module failed: {0}")]
+    ImportRead(String),
+    #[error("Import cycle: {0}")]
+    ImportCycle(String),
+    #[error("Duplicate namespace `{namespace}` at {duplicate}; first occupied at {original}")]
+    DuplicateNamespace {
+        namespace: String,
+        original: String,
+        duplicate: String,
+    },
 }
 
 #[derive(Clone, Debug, Default)]

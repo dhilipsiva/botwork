@@ -1,10 +1,14 @@
 use pest::iterators::Pair;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     io::{self, Write},
     panic::{catch_unwind, AssertUnwindSafe},
+    path::PathBuf,
     sync::Arc,
 };
+
+mod imports;
+use imports::{LoadedModule, ModuleCache};
 
 use super::{
     ast::{
@@ -46,12 +50,20 @@ enum StmtType {
         definition: Arc<Definition>,
         metadata: Arc<StatementSignature>,
     },
+    Imported {
+        module: Arc<LoadedModule>,
+        exported: String,
+        metadata: Arc<StatementSignature>,
+        import_site: Span,
+    },
 }
 
 impl StmtType {
     fn metadata(&self) -> &StatementSignature {
         match self {
-            Self::Native { metadata, .. } | Self::UserDefined { metadata, .. } => metadata,
+            Self::Native { metadata, .. }
+            | Self::UserDefined { metadata, .. }
+            | Self::Imported { metadata, .. } => metadata,
         }
     }
 }
@@ -60,6 +72,7 @@ impl StmtType {
 struct Frame {
     variables: HashMap<String, Arc<Literal>>,
     statements: HashMap<String, StmtType>,
+    namespaces: HashMap<String, Span>,
     // Definitions are not first-class values, so lexical owners remain on the stack.
     parent: Option<usize>,
 }
@@ -76,6 +89,9 @@ pub struct Context {
     current: usize,
     calls: Vec<CallFrame>,
     handlers: Vec<HandledError>,
+    modules: ModuleCache,
+    loading: Vec<PathBuf>,
+    working_directory: Result<PathBuf, String>,
     #[cfg(test)]
     expression_visits: std::cell::RefCell<Vec<String>>,
 }
@@ -87,6 +103,9 @@ impl Default for Context {
             current: 0,
             calls: vec![],
             handlers: vec![],
+            modules: ModuleCache::default(),
+            loading: vec![],
+            working_directory: std::env::current_dir().map_err(|error| error.to_string()),
             #[cfg(test)]
             expression_visits: Default::default(),
         }
@@ -131,6 +150,12 @@ impl Context {
             let frame = &self.frames[frame_index];
             if let Some(statement) = frame.statements.get(signature) {
                 return Some((statement, frame_index));
+            }
+            if signature
+                .split_once("::")
+                .is_some_and(|(namespace, _)| frame.namespaces.contains_key(namespace))
+            {
+                return None;
             }
             index = frame.parent;
         }
@@ -184,12 +209,20 @@ impl Context {
     /// Visible metadata in normalized order, with lexical shadowing resolved.
     pub fn statement_signatures(&self) -> Vec<&StatementSignature> {
         let mut visible = BTreeMap::new();
+        let mut hidden = HashSet::new();
         let mut index = Some(self.current);
         while let Some(owner) = index {
             let frame = &self.frames[owner];
             for (key, statement) in &frame.statements {
+                if key
+                    .split_once("::")
+                    .is_some_and(|(namespace, _)| hidden.contains(namespace))
+                {
+                    continue;
+                }
                 visible.entry(key).or_insert_with(|| statement.metadata());
             }
+            hidden.extend(frame.namespaces.keys().map(String::as_str));
             index = frame.parent;
         }
         visible.into_values().collect()
@@ -254,6 +287,11 @@ impl Context {
         span: &Span,
         statement: StmtType,
     ) -> DiagnosticResult<()> {
+        if let Some((namespace, _)) = signature.split_once("::") {
+            if let Some(original) = self.frames[self.current].namespaces.get(namespace) {
+                return Err(imports::namespace_collision(namespace, original, span));
+            }
+        }
         let statements = &mut self.frames[self.current].statements;
         if let Some(original) = statements.get(signature) {
             let (origin, origin_span) = match original {
@@ -263,6 +301,9 @@ impl Context {
                 ),
                 StmtType::UserDefined { definition, .. } => {
                     (definition.span.location(), &definition.span)
+                }
+                StmtType::Imported { metadata, .. } => {
+                    (metadata.header().location(), metadata.header())
                 }
             };
             return Err(Diagnostic::new(BWErr::DuplicateStatement {
@@ -350,7 +391,23 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
             Ok(value)
         })
         .collect::<DiagnosticResult<Vec<_>>>()?;
+    invoke_resolved(call, definition, owner, arguments, context)
+}
+
+fn invoke_resolved(
+    call: &Call,
+    definition: StmtType,
+    owner: usize,
+    arguments: Vec<Literal>,
+    context: &mut Context,
+) -> RuntimeResult {
     match definition {
+        StmtType::Imported {
+            module,
+            exported,
+            import_site,
+            ..
+        } => imports::invoke_imported(call, &module, &exported, arguments, &import_site, context),
         StmtType::Native { callback, metadata } => context.with_call(
             CallFrame {
                 signature: call.signature.clone(),
@@ -717,6 +774,12 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             Ok(Completion::Normal(Literal::None))
         }
         StatementKind::Invoke(call) => invoke(call, context).map(Completion::Normal),
+        StatementKind::Import {
+            path,
+            path_span,
+            namespace,
+        } => imports::evaluate_import(path, path_span, namespace, &statement.span, context)
+            .map(Completion::Normal),
         StatementKind::If {
             condition,
             then_branch,

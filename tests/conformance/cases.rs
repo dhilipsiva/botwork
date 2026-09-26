@@ -8,6 +8,8 @@ pub enum Input {
     SignatureInvalid,
     AsyncSuccess,
     AsyncExpired,
+    ImportSuccess,
+    ImportCycle,
 }
 
 #[derive(Clone)]
@@ -123,5 +125,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::AsyncSuccess, stdout: "", code: None, error: None },
         Case { id: "async-expired", positive: &[], invalid: &["F7"], boundary: &[],
             input: Input::AsyncExpired, stdout: "", code: Some("BW5002"), error: Some("Operation deadline expired") },
+        Case { id: "import-success", positive: &["M1"], invalid: &[], boundary: &["M1"],
+            input: Input::ImportSuccess, stdout: "14\n[1, 2]\nBW6003\n10\n", code: None, error: None },
+        Case { id: "import-cycle", positive: &[], invalid: &["M1"], boundary: &[],
+            input: Input::ImportCycle, stdout: "", code: Some("BW6002"), error: Some("Import cycle:") },
     ]
 }

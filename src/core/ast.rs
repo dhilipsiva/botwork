@@ -154,6 +154,7 @@ impl Statement {
             StatementKind::Break => "break",
             StatementKind::Continue => "continue",
             StatementKind::Rethrow => "rethrow",
+            StatementKind::Import { .. } => "import",
         }
     }
 }
@@ -189,6 +190,11 @@ pub enum StatementKind {
     Break,
     Continue,
     Rethrow,
+    Import {
+        path: String,
+        path_span: Span,
+        namespace: Name,
+    },
 }
 
 #[derive(Clone, Copy, Default)]
@@ -272,6 +278,7 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> DiagnosticR
             )
         }
         StatementKind::Assign { .. }
+        | StatementKind::Import { .. }
         | StatementKind::Invoke(_)
         | StatementKind::Return(_)
         | StatementKind::Break
@@ -485,6 +492,7 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
         Rule::stmt_assign
         | Rule::stmt_define
         | Rule::stmt_invoke
+        | Rule::stmt_import
         | Rule::stmt_if
         | Rule::stmt_for
         | Rule::stmt_while
@@ -623,6 +631,14 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
         Rule::stmt_break => StatementKind::Break,
         Rule::stmt_continue => StatementKind::Continue,
         Rule::stmt_rethrow => StatementKind::Rethrow,
+        Rule::stmt_import => {
+            let path = required(&mut inner)?;
+            StatementKind::Import {
+                path_span: Span::of(&path, source),
+                path: decode_string(path)?,
+                namespace: lower_name(required(&mut inner)?, source),
+            }
+        }
         _ => return Err(invalid("statement")),
     };
     finish(inner)?;

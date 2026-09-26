@@ -84,6 +84,25 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
         (BWErr::Cancelled("stopped".into()), Cancelled, "BW5001"),
         (BWErr::Timeout("deadline".into()), Timeout, "BW5002"),
         (
+            BWErr::ImportRead("missing file".into()),
+            ImportRead,
+            "BW6001",
+        ),
+        (
+            BWErr::ImportCycle("a -> b -> a".into()),
+            ImportCycle,
+            "BW6002",
+        ),
+        (
+            BWErr::DuplicateNamespace {
+                namespace: "math".into(),
+                original: "first:1:1".into(),
+                duplicate: "second:1:1".into(),
+            },
+            DuplicateNamespace,
+            "BW6003",
+        ),
+        (
             BWErr::AsyncRuntime("runtime".into()),
             AsyncRuntime,
             "BW5003",
@@ -125,6 +144,7 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "BW2002" => &["call"],
             "BW2003" => &["duplicate", "original", "signature"],
             "BW3004" => &["path", "reason", "segment"],
+            "BW6003" => &["duplicate", "namespace", "original"],
             _ => &["reason"],
         };
         assert_eq!(

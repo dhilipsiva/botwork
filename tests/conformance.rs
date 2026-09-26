@@ -338,6 +338,23 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_async_case(&case);
                 continue;
             }
+            Input::ImportSuccess => {
+                fs::create_dir_all(harness.workspace.join("modules")).unwrap();
+                fs::write(
+                    harness.workspace.join("modules/arithmetic.botwork"),
+                    include_str!("../examples/modules/arithmetic.botwork"),
+                )
+                .unwrap();
+                include_str!("../examples/19-local-imports.botwork")
+            }
+            Input::ImportCycle => {
+                fs::write(
+                    harness.workspace.join("cycle.botwork"),
+                    "Import |\"cycle.botwork\"| As |again|",
+                )
+                .unwrap();
+                "Import |\"cycle.botwork\"| As |cycle|"
+            }
         };
         let output = harness
             .run(case.id, source, Duration::from_secs(5))
