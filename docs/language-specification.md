@@ -92,6 +92,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R3 — Shared runtime budgets.** Apply default step/call limits, combined evaluation depth, active import depth, and parser-entry stack headroom to Engine, CLI, and Context execution. Configure limits locally; reject unsupported ceilings before effects. Count active statements, expressions, and dispatch wrappers together, including re-exports. Share budgets across imported contexts; persist counters across low-level evaluations. Release depth guards and restore temporary bindings during unwinding. Latched resource/cancellation/deadline stops bypass Catch. [Runtime rules](embedded-runs.md) define exact defaults, counting, CLI flags, cloning, cooperative deadlines, and remaining aggregate/host limits.
 
+## Owned Syntax Bounds
+
+**R4 — Tree admission.** Check all reachable owned syntax before recursive control validation or effects. Bound node count/depth and individual/aggregate source owners, including host-reassembled programs and unreachable bodies. Count shared source allocations once and repeated syntax occurrences individually. Use an iterative walk with width-independent pending work. Apply configured budgets to Engine/Context/module/Pair entry points and defaults to Program/CLI entry points; report BW8001 or unsupported-configuration BW7002. [AST rules](ast-limits.md) define exact counts, public configuration, source identity, diagnostic locations, and remaining allocation/aggregate-state limits.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -144,3 +148,5 @@ R1 evidence in `tests/embedded_runs.rs` covers reuse/fresh state, retained resul
 R2 evidence in `tests/syntax_limits.rs` covers source/nesting/operator/Else-If boundaries, lexical quote/comment handling, public Pest entry points, configured/concurrent guards, bounded error sources, imported/reused programs, and adversarial CLI rejection before effects. Two corpus fixtures pin maximum accepted results and an expression-limit error.
 
 R3 evidence in `tests/runtime_limits.rs` covers combined stack stress, recursive imports, cached re-exports, zero/exact ceilings, persistent/cloned contexts, parser-pair controls, cleanup/call sites, default CLI loop limits, explicit flags, and configuration errors. The host boundary and CLI recursion corpus cases pin success and BW8001.
+
+R4 evidence in `src/core/ast_limits/tests.rs` and `tests/ast_limits.rs` covers exact counts, adversarial depth/width, hidden/shared source owners, configuration, raised budgets, public entry points, import stop propagation, and CLI pre-effect rejection. Two host corpus cases and an executed Rust example pin admission before execution.

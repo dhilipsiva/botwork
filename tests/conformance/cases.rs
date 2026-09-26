@@ -15,6 +15,8 @@ pub enum Input {
     EmbeddedSuccess,
     EmbeddedLimit,
     RuntimeBoundary,
+    AstBoundary,
+    AstLimit,
 }
 
 #[derive(Clone)]
@@ -147,5 +149,9 @@ pub fn cases() -> Vec<Case> {
         Case { id: "runtime-boundary", positive: &["R3"], invalid: &[], boundary: &["R3"],
             input: Input::RuntimeBoundary, stdout: "", code: None, error: None },
         failure("runtime-recursion", include_str!("runtime-recursion.botwork"), "", "BW8001", "call depth", &["R3"]),
+        Case { id: "ast-boundary", positive: &["R4"], invalid: &[], boundary: &["R4"],
+            input: Input::AstBoundary, stdout: "", code: None, error: None },
+        Case { id: "ast-limit", positive: &[], invalid: &["R4"], boundary: &[],
+            input: Input::AstLimit, stdout: "", code: Some("BW8001"), error: Some("AST nodes") },
     ]
 }

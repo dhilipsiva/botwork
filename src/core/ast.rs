@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use pest::{iterators::Pair, Parser};
 
+use super::ast_limits::{self, AstLimits};
 use super::diagnostic::{Diagnostic, DiagnosticResult};
 use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
 use super::syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES};
@@ -113,6 +114,18 @@ impl Program {
         source_bytes: usize,
         limits: &SyntaxLimits,
     ) -> DiagnosticResult<Self> {
+        Self::parse_with_budgets(name, source, source_bytes, limits, &AstLimits::default())
+    }
+
+    /// Parse with independent source/syntax and owned-tree admission budgets.
+    pub fn parse_with_budgets(
+        name: &str,
+        source: &str,
+        source_bytes: usize,
+        limits: &SyntaxLimits,
+        ast_limits: &AstLimits,
+    ) -> DiagnosticResult<Self> {
+        ast_limits.validate()?;
         check_source(name, source, source_bytes, limits)?;
         let source = Arc::new(SourceFile {
             name: name.to_owned(),
@@ -127,18 +140,28 @@ impl Program {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let program = Self { source, statements };
-        program.validate_detailed()?;
+        program.validate_with_limits(ast_limits, source_bytes)?;
         Ok(program)
     }
 
     /// Check control placement and parameter names, including unreachable bodies.
     /// This does not evaluate expressions or resolve names.
     pub fn validate(&self) -> Result<(), BWErr> {
-        validate_script(&self.statements)
+        self.validate_detailed().map_err(Diagnostic::into_error)
     }
 
     pub fn validate_detailed(&self) -> DiagnosticResult<()> {
-        validate_script_detailed(&self.statements)
+        self.validate_with_limits(&AstLimits::default(), DEFAULT_SOURCE_BYTES)
+    }
+
+    /// Admit all reachable nodes and source owners before control validation.
+    pub fn validate_with_limits(
+        &self,
+        limits: &AstLimits,
+        source_bytes: usize,
+    ) -> DiagnosticResult<()> {
+        ast_limits::check_program(self, limits, source_bytes)?;
+        validate_control_script_detailed(&self.statements)
     }
 }
 
@@ -242,11 +265,7 @@ struct ControlScope {
     in_catch: bool,
 }
 
-pub(crate) fn validate_script(statements: &[Statement]) -> Result<(), BWErr> {
-    validate_script_detailed(statements).map_err(Diagnostic::into_error)
-}
-
-pub(crate) fn validate_script_detailed(statements: &[Statement]) -> DiagnosticResult<()> {
+pub(crate) fn validate_control_script_detailed(statements: &[Statement]) -> DiagnosticResult<()> {
     validate_statements(statements, ControlScope::default())
 }
 

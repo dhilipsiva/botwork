@@ -207,6 +207,13 @@ impl Context {
         error
     }
 
+    fn limits(&self) -> RunLimits {
+        self.budget
+            .as_ref()
+            .map(|budget| budget.limits().clone())
+            .unwrap_or_default()
+    }
+
     pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
         let limits = self
             .budget
@@ -226,8 +233,14 @@ impl Context {
             .as_ref()
             .map(|budget| budget.limits().clone())
             .unwrap_or_default();
-        Program::parse_bounded(name, source, limits.source_bytes, &limits.syntax)
-            .map_err(|error| self.retain_limit(error))
+        Program::parse_with_budgets(
+            name,
+            source,
+            limits.source_bytes,
+            &limits.syntax,
+            &limits.ast,
+        )
+        .map_err(|error| self.retain_limit(error))
     }
 
     pub(crate) fn read_source(&self, path: &std::path::Path) -> Result<String, SourceFailure> {
@@ -1098,7 +1111,11 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
 /// Execute one script-level statement with source locations and entered-call frames.
 pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) -> RuntimeResult {
     context.checkpoint()?;
-    ast::validate_script_detailed(std::slice::from_ref(statement))?;
+    let statements = std::slice::from_ref(statement);
+    let limits = context.limits();
+    super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
+        .map_err(|error| context.retain_limit(error))?;
+    ast::validate_control_script_detailed(statements)?;
     finish_script(evaluate_statement(statement, context)?)
 }
 
@@ -1110,7 +1127,10 @@ pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResu
 /// Validate and execute a program while preserving structured diagnostic causes.
 pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> RuntimeResult {
     context.checkpoint()?;
-    program.validate_detailed()?;
+    let limits = context.limits();
+    program
+        .validate_with_limits(&limits.ast, limits.source_bytes)
+        .map_err(|error| context.retain_limit(error))?;
     let mut result = Literal::None;
     for statement in &program.statements {
         result = finish_script(evaluate_statement(statement, context)?)?;
@@ -1129,11 +1149,15 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
 /// Parser-pair compatibility with detailed execution errors.
 pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
     context.checkpoint()?;
-    match ast::from_pair(pair)? {
+    let node = ast::from_pair(pair)?;
+    let limits = context.limits();
+    super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)
+        .map_err(|error| context.retain_limit(error))?;
+    match node {
         Node::Statement(statement) => execute_statement_detailed(&statement, context),
         Node::Expression(expression) => evaluate_expression(&expression, context),
         Node::Block(block) => {
-            ast::validate_script_detailed(&block.statements)?;
+            ast::validate_control_script_detailed(&block.statements)?;
             finish_script(evaluate_block(&block, context)?)
         }
         Node::None => Ok(Literal::None),

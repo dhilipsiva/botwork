@@ -130,7 +130,7 @@ impl BWErr {
             Self::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.".into(),
             Self::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.".into(),
             Self::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.".into(),
-            Self::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/evaluation/import limits within documented ceilings.".into(),
+            Self::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/AST/evaluation/import limits within documented ceilings.".into(),
             Self::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.".into(),
             Self::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.".into(),
             Self::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.".into(),

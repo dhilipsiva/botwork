@@ -107,7 +107,7 @@ Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones 
 
 ## Remaining Interpreter Work
 
-Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine, Context, and CLI execution share source/syntax guards and step/call/evaluation/import-initialization depth budgets. Host-AST structure, aggregate memory, and hard host termination remain open. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine, Context, and CLI execution share source/syntax guards and step/call/evaluation/import-initialization depth budgets. [Owned syntax admission](ast-limits.md) bounds tree structure and source ownership; aggregate retained memory and hard host termination remain open. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
 
@@ -288,3 +288,25 @@ assert_eq!(report.steps, 2);
 ## Source Preflight
 
 `syntax_limits` scans source before entering the generated Pest parser. The public Pest-compatible wrapper lives in grammar.rs, keeping maintained guard code in coverage scope while excluding generated code. Program parsing uses the private generated parser only after a successful preflight. Guard failures retain a bounded source prefix and typed resource diagnostics. Engine options tighten syntax limits locally; CLI and legacy module reads use the default byte cap. [Source-limit rules](syntax-limits.md) specify counting, lexical contexts, fixed ceilings, and compatibility.
+
+
+## Configure Owned Syntax Admission
+
+Set tree budgets independently of execution steps and parser syntax limits. Reassembled programs are checked before effects; shared source owners count once.
+
+```rust
+use botwork::core::{ast::Program, ast_limits::AstLimits, run::{Engine, RunLimits, RunOptions, RunOutcome}};
+let mut program = Program::parse("host", "|x| = |1|")?;
+program.statements.push(program.statements[0].clone());
+let run = Engine::default().run_program(&program, RunOptions {
+    limits: RunLimits {
+        ast: AstLimits { nodes: 5, ..AstLimits::default() },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+assert!(run.variables.is_empty());
+assert_eq!(run.steps, 0);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

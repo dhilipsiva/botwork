@@ -371,6 +371,40 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 );
                 continue;
             }
+            Input::AstBoundary | Input::AstLimit => {
+                use botwork::core::{
+                    ast::Program,
+                    ast_limits::AstLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let mut program = Program::parse("ast-corpus", "|x| = |1|").unwrap();
+                program.statements.push(program.statements[0].clone());
+                let run = Engine::default().run_program(
+                    &program,
+                    RunOptions {
+                        limits: RunLimits {
+                            ast: AstLimits {
+                                nodes: if case.error.is_some() { 5 } else { 6 },
+                                depth: 2,
+                                source_bytes: program.source.text().len(),
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(run.variables.is_empty());
+                    assert_eq!(run.steps, 0);
+                } else {
+                    assert_eq!(run.result.unwrap().to_string(), "1");
+                    assert_eq!(run.steps, 4);
+                }
+                continue;
+            }
             Input::ImportSuccess => {
                 fs::create_dir_all(harness.workspace.join("modules")).unwrap();
                 fs::write(

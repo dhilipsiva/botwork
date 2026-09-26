@@ -15,6 +15,7 @@ use std::{
 
 use super::{
     ast::Program,
+    ast_limits::AstLimits,
     diagnostic::{Diagnostic, DiagnosticCode, DiagnosticResult},
     eval::{evaluate_program_detailed, Context},
     grammar::{BWErr, Literal, LiteralResult},
@@ -38,6 +39,7 @@ pub struct RunLimits {
     pub evaluation_depth: usize,
     pub import_depth: usize,
     pub syntax: SyntaxLimits,
+    pub ast: AstLimits,
 }
 
 impl Default for RunLimits {
@@ -49,12 +51,14 @@ impl Default for RunLimits {
             evaluation_depth: MAX_EVALUATION_DEPTH,
             import_depth: MAX_IMPORT_DEPTH,
             syntax: SyntaxLimits::default(),
+            ast: AstLimits::default(),
         }
     }
 }
 
 impl RunLimits {
     pub(crate) fn validate(&self) -> DiagnosticResult<()> {
+        self.ast.validate()?;
         if self.import_depth > MAX_IMPORT_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
                 "Import initialization depth cannot exceed {MAX_IMPORT_DEPTH}"
