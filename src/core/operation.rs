@@ -15,6 +15,7 @@ use super::{
     diagnostic::{Diagnostic, DiagnosticResult},
     grammar::{validate_value, BWErr, Literal},
     signature::{StatementOrigin, StatementSignature},
+    value_limits::{Owned, ValueLimits},
 };
 
 /// Clones share cancellation; children receive parent cancellation without cancelling parents.
@@ -109,6 +110,7 @@ enum Implementation {
 pub struct NativeOperation {
     signature: Arc<StatementSignature>,
     implementation: Implementation,
+    value_limits: ValueLimits,
 }
 
 impl NativeOperation {
@@ -165,6 +167,7 @@ impl NativeOperation {
         Ok(Self {
             signature: Arc::new(signature),
             implementation,
+            value_limits: ValueLimits::default(),
         })
     }
 
@@ -172,22 +175,33 @@ impl NativeOperation {
         &self.signature
     }
 
+    pub fn with_value_limits(mut self, limits: ValueLimits) -> DiagnosticResult<Self> {
+        limits.validate()?;
+        self.value_limits = limits;
+        Ok(self)
+    }
+
     /// Validate values before entry, run once, and validate the result before publication.
     /// Dropping an async invocation drops its future; dropping a blocking invocation
     /// requests cancellation but cannot synchronously join its worker.
-    pub async fn invoke(
+    pub fn invoke(
         &self,
         values: Vec<Literal>,
         control: OperationControl,
-    ) -> DiagnosticResult<Literal> {
-        self.invoke_inner(values, control)
-            .await
-            .map_err(|error| error.at(self.signature.header()))
+    ) -> impl Future<Output = DiagnosticResult<Literal>> + Send + '_ {
+        // Wrap ownership before the first poll: dropping an unpolled invocation
+        // must also release rejected deep host input without recursive destruction.
+        let values = Owned::new(values);
+        async move {
+            self.invoke_inner(values, control)
+                .await
+                .map_err(|error| error.at(self.signature.header()))
+        }
     }
 
     async fn invoke_inner(
         &self,
-        values: Vec<Literal>,
+        values: Owned<Vec<Literal>>,
         control: OperationControl,
     ) -> DiagnosticResult<Literal> {
         control.checkpoint()?;
@@ -198,6 +212,7 @@ impl NativeOperation {
             .into());
         }
         for (index, value) in values.iter().enumerate() {
+            self.value_limits.check(value)?;
             validate_value(value)?;
             self.signature.validate_argument(index, value)?;
         }
@@ -208,8 +223,10 @@ impl NativeOperation {
         let _cancel_on_drop = child.cancellation.clone().drop_guard();
         let value = match &self.implementation {
             Implementation::Async(callback) => {
-                let future = catch_unwind(AssertUnwindSafe(|| callback(values, child.clone())))
-                    .map_err(|_| self.panic_error())?;
+                let future = catch_unwind(AssertUnwindSafe(|| {
+                    callback(values.into_inner(), child.clone())
+                }))
+                .map_err(|_| self.panic_error())?;
                 let future = GuardedFuture {
                     future,
                     signature: Arc::clone(&self.signature),
@@ -233,10 +250,13 @@ impl NativeOperation {
                 let mut worker = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
                     worker_control.checkpoint()?;
-                    catch_unwind(AssertUnwindSafe(|| callback(values, worker_control)))
-                        .unwrap_or_else(|_| {
-                            Err(BWErr::NativePanic(signature.normalized().into()).into())
-                        })
+                    catch_unwind(AssertUnwindSafe(|| {
+                        callback(values.into_inner(), worker_control)
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err(BWErr::NativePanic(signature.normalized().into()).into())
+                    })
+                    .map(Owned::new)
                 });
                 tokio::select! {
                     biased;
@@ -257,9 +277,10 @@ impl NativeOperation {
             }
         };
         child.checkpoint()?;
+        self.value_limits.check(&value)?;
         validate_value(&value)?;
         self.signature.validate_return(&value)?;
-        Ok(value)
+        Ok(value.into_inner())
     }
 
     fn panic_error(&self) -> Diagnostic {
@@ -273,12 +294,14 @@ struct GuardedFuture {
 }
 
 impl Future for GuardedFuture {
-    type Output = DiagnosticResult<Literal>;
+    type Output = DiagnosticResult<Owned<Literal>>;
     fn poll(mut self: Pin<&mut Self>, context: &mut TaskContext<'_>) -> Poll<Self::Output> {
-        catch_unwind(AssertUnwindSafe(|| self.future.as_mut().poll(context))).unwrap_or_else(|_| {
-            Poll::Ready(Err(
-                BWErr::NativePanic(self.signature.normalized().into()).into()
-            ))
-        })
+        catch_unwind(AssertUnwindSafe(|| self.future.as_mut().poll(context)))
+            .unwrap_or_else(|_| {
+                Poll::Ready(Err(
+                    BWErr::NativePanic(self.signature.normalized().into()).into()
+                ))
+            })
+            .map(|result| result.map(Owned::new))
     }
 }

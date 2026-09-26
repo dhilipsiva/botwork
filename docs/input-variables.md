@@ -34,3 +34,5 @@ Input failure cannot be caught by the script because execution has not begun. JS
 ## Rust Hosts
 
 `core::input::{parse_variables, parse_variable, load_variables}` return owned values with detailed errors. `Context::set_input_variables` validates all names and nested finite values before atomically replacing root bindings; omitted bindings remain. Context clones copy binding maps and share immutable storage, so later replacements are independent. See the executed [Rust input example](interpreter-architecture.md#input-variables).
+
+Installed values also pass [per-value admission](value-limits.md). JSON conversion still has its independent 128-container guard; an otherwise valid JSON document can exceed the tighter execution value-depth/node/payload budgets. Value resource failures use BW8001 and precede root installation or script effects. JSON preallocation/total-input bounds remain separate work.

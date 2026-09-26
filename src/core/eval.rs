@@ -16,10 +16,11 @@ use super::{
         ExprKind, Name, Node, Program, Span, Statement, StatementKind, UnaryOp,
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
-    grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Operate, Rule},
+    grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Rule},
     operation::OperationControl,
     run::{EvaluationGuard, RunBudget, RunEnvironment, RunLimits, SourceFailure},
     signature::{StatementOrigin, StatementSignature},
+    value_limits::Owned,
 };
 
 #[cfg(test)]
@@ -215,6 +216,14 @@ impl Context {
             .unwrap_or_default()
     }
 
+    fn check_value(&self, value: &Literal) -> DiagnosticResult<()> {
+        self.limits()
+            .values
+            .check(value)
+            .map(|_| ())
+            .map_err(|error| self.retain_limit(Diagnostic::new(error)))
+    }
+
     pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
         let limits = self
             .budget
@@ -303,8 +312,11 @@ impl Context {
         &mut self,
         variables: BTreeMap<String, Literal>,
     ) -> DiagnosticResult<()> {
-        for (name, value) in &variables {
+        let variables = Owned::new(variables);
+        self.checkpoint()?;
+        for (name, value) in variables.iter() {
             super::input::validate_name("host variables", name)?;
+            self.check_value(value)?;
             validate_value(value).map_err(|_| {
                 Diagnostic::new(BWErr::InputError(format!(
                     "host variables: {name:?}: values must contain only finite floats"
@@ -313,6 +325,7 @@ impl Context {
         }
         self.frames[0].variables.extend(
             variables
+                .into_inner()
                 .into_iter()
                 .map(|(name, value)| (name, Arc::new(value))),
         );
@@ -635,10 +648,11 @@ fn invoke_resolved(
                             .at(&call.span)
                             .capture_stack(&context.calls)
                     });
-                let result = context.after_operation(result)?;
+                let result = context.after_operation(result.map(Owned::new))?;
+                context.check_value(&result)?;
                 validate_value(&result)?;
                 metadata.validate_return(&result)?;
-                Ok(result)
+                Ok(result.into_inner())
             },
         ),
         StmtType::UserDefined {
@@ -685,11 +699,17 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> RuntimeResul
             .at_expression(&expression.span)
             .capture_stack(&context.calls)
     })?;
-    evaluate_expression_inner(expression, context).map_err(|error| {
-        error
-            .at_expression(&expression.span)
-            .capture_stack(&context.calls)
-    })
+    evaluate_expression_inner(expression, context)
+        .and_then(|value| {
+            let value = Owned::new(value);
+            context.check_value(&value)?;
+            Ok(value.into_inner())
+        })
+        .map_err(|error| {
+            error
+                .at_expression(&expression.span)
+                .capture_stack(&context.calls)
+        })
 }
 
 fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> RuntimeResult {
@@ -747,8 +767,11 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Runtim
             }
             _ => operator
                 .to_rule()
-                .operate_unary(evaluate_expression(operand, context)?)
-                .map_err(Into::into),
+                .operate_unary_bounded(
+                    evaluate_expression(operand, context)?,
+                    &context.limits().values,
+                )
+                .map_err(|error| context.retain_limit(Diagnostic::new(error))),
         },
         ExprKind::Binary {
             operator,
@@ -776,8 +799,8 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Runtim
             let right = evaluate_expression(right, context)?;
             operator
                 .to_rule()
-                .operate_binary(left, right)
-                .map_err(Into::into)
+                .operate_binary_bounded(left, right, &context.limits().values)
+                .map_err(|error| context.retain_limit(Diagnostic::new(error)))
         }
     }
 }
@@ -953,8 +976,15 @@ fn evaluate_handler(
     context: &mut Context,
 ) -> CompletionResult {
     let owner = context.current;
-    let previous =
-        binding.and_then(|name| context.set_variable(name.text.clone(), original.to_value()));
+    let previous = if let Some(name) = binding {
+        let value = Owned::new(original.to_value());
+        context
+            .check_value(&value)
+            .map_err(|error| error.at(&name.span).while_handling(original.clone()))?;
+        context.set_variable(name.text.clone(), value.into_inner())
+    } else {
+        None
+    };
     context.handlers.push(HandledError {
         invocation: owner,
         diagnostic: original.clone(),

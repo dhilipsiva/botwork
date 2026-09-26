@@ -372,6 +372,46 @@ pub trait Operate {
 
 impl Operate for Rule {
     fn operate_binary(&self, lhs: Literal, rhs: Literal) -> LiteralResult {
+        self.operate_binary_bounded(lhs, rhs, &super::value_limits::ValueLimits::default())
+    }
+
+    fn operate_unary(&self, rhs: Literal) -> LiteralResult {
+        self.operate_unary_bounded(rhs, &super::value_limits::ValueLimits::default())
+    }
+}
+
+impl Rule {
+    pub fn operate_binary_bounded(
+        &self,
+        lhs: Literal,
+        rhs: Literal,
+        limits: &super::value_limits::ValueLimits,
+    ) -> LiteralResult {
+        let lhs = super::value_limits::Owned::new(lhs);
+        let rhs = super::value_limits::Owned::new(rhs);
+        limits.check(&lhs)?;
+        limits.check(&rhs)?;
+        let result = super::value_limits::Owned::new(
+            self.operate_binary_unchecked(lhs.into_inner(), rhs.into_inner())?,
+        );
+        limits.check(&result)?;
+        Ok(result.into_inner())
+    }
+
+    pub fn operate_unary_bounded(
+        &self,
+        rhs: Literal,
+        limits: &super::value_limits::ValueLimits,
+    ) -> LiteralResult {
+        let rhs = super::value_limits::Owned::new(rhs);
+        limits.check(&rhs)?;
+        let result =
+            super::value_limits::Owned::new(self.operate_unary_unchecked(rhs.into_inner())?);
+        limits.check(&result)?;
+        Ok(result.into_inner())
+    }
+
+    fn operate_binary_unchecked(&self, lhs: Literal, rhs: Literal) -> LiteralResult {
         if matches!(self, Rule::equal | Rule::not_equal) {
             let are_equal = values_equal(&lhs, &rhs)?;
             return Ok(Literal::Bool(if *self == Rule::equal {
@@ -489,7 +529,7 @@ impl Operate for Rule {
         }
     }
 
-    fn operate_unary(&self, rhs: Literal) -> LiteralResult {
+    fn operate_unary_unchecked(&self, rhs: Literal) -> LiteralResult {
         if matches!(self, Rule::minus) && matches!(rhs, Literal::Int(_) | Literal::Float(_)) {
             validate_numeric_operand(&rhs)?;
         }

@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 55 cases against the 35 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 57 cases against the 36 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -43,6 +43,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R3 | runtime-boundary | runtime-recursion | runtime-boundary |
 | R4 | ast-boundary | ast-limit | ast-boundary |
 | R5 | import-budget-boundary | import-budget-limit | import-budget-boundary |
+| R6 | value-boundary | value-limit | value-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -63,3 +64,5 @@ The two import cases materialize supporting modules inside the isolated workspac
 Two AST host cases repeat a parsed statement, verify shared-source accounting and exact six-node admission, and reject a five-node budget before any binding or execution step.
 
 Two import-budget host cases materialize one module, import it under two namespaces with exactly one load/source/path allowance, then exercise exact binding admission or rejection before the final assignment.
+
+Two value host cases admit an array at exact node/depth/payload/entry limits or reject it before input installation, root assignment, and execution steps.

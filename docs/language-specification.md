@@ -100,6 +100,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R5 — Import admission.** Share cumulative load/source/path/binding/metadata budgets across module initialization and calls. Bound reads before decoding/parsing, retain charges for failed work, and reuse cached sources without another load. Check cached dependency depth as well as pending ancestors; atomically admit namespace/export publication before copying metadata. Preserve completed initialization effects and dependencies on late failure while publishing no partial namespace. Latch BW8001 across handlers and reject unsupported graph ceilings with BW7002. [Import limits](import-limits.md) define counts, defaults, ordering, aliases, zero/clone behavior, and remaining memory/host limitations.
 
+## Value Bounds
+
+**R6 — Value admission.** Bound each explicit value's nodes, depth, string/key bytes, container entries, and total payload. Apply local admission at root input, native/operation argument/result, expression-result, Catch-binding, and operator boundaries. Validate all root inputs before installation; latch Context/Engine resource stops and retain cancellation priority. Release rejected owned host data iteratively, including early failures and unpolled operations. Preserve interpreter cleanup and original failures when Catch binding admission fails. [Value rules](value-limits.md) define exact accounting, defaults, public APIs, implicit None completion, finite/kind validation, ownership, and remaining preallocation/aggregate limits.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -156,3 +160,5 @@ R3 evidence in `tests/runtime_limits.rs` covers combined stack stress, recursive
 R4 evidence in `src/core/ast_limits/tests.rs` and `tests/ast_limits.rs` covers exact counts, adversarial depth/width, hidden/shared source owners, configuration, raised budgets, public entry points, import stop propagation, and CLI pre-effect rejection. Two host corpus cases and an executed Rust example pin admission before execution.
 
 R5 evidence in `tests/import_limits.rs` covers exact/zero/configuration budgets, retries, cache aliases/removal, nested calls, context clones, cold/cached/empty dependency chains, exponential fanout, metadata, and CLI load limits. Reservation/qualification unit tests cover arithmetic, atomicity, and Unicode; two host corpus cases pin cached source reuse and binding failures.
+
+R6 evidence in `tests/value_limits.rs` and `src/core/value_limits/tests.rs` covers exact resource metrics, checked arithmetic, Unicode, adversarial depth, all owned boundaries, async/blocking cancellation, dropped futures, local configuration, operator inputs/results, and Catch/call/iterator cleanup. Two host corpus cases and an executed Rust example verify admission before publication.

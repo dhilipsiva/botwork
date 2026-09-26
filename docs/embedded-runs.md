@@ -26,6 +26,7 @@ Neither directory nor environment configuration mutates process-global state. Na
 | `syntax` | Nesting 32, operator units 64; combined ceiling 66 | Local [parser guards](syntax-limits.md), tighten-only fixed syntax ceilings |
 | `ast` | 65,536 nodes, depth 128, aggregate source 8 MiB | [Owned syntax admission](ast-limits.md), before control validation and effects |
 | `imports` | 128 loads, 8 MiB source, 512 paths, 16,384 bindings, 8 MiB metadata, dependency depth 32 | Cumulative [import admission](import-limits.md), including cached re-exports |
+| `values` | 65,536 nodes, depth 64, 1 MiB strings, 64 KiB keys, 16,384 entries, 8 MiB payload | [Per-value admission and owned cleanup](value-limits.md) |
 
 Zero is permitted: an empty run needs no steps/calls, and nonempty source exceeds a zero byte budget. Signed integer negation counts its operand even though conversion handles sign/magnitude together. Short-circuited operands consume no steps. Loops revisit their condition/body expressions; empty For bodies still charge iterations. Initializations and calls across modules share the run's counter. Call depth is checked after signature/arity resolution and before argument effects.
 

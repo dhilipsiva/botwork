@@ -414,6 +414,44 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::ValueBoundary | Input::ValueLimit => {
+                use botwork::core::{
+                    run::{Engine, RunLimits, RunOptions},
+                    value_limits::ValueLimits,
+                };
+                let run = Engine::default().run_source(
+                    "value-corpus",
+                    "|out| = |x|",
+                    RunOptions {
+                        variables: BTreeMap::from([(
+                            "x".into(),
+                            Literal::Array(vec![Literal::Int(1), Literal::Int(2)]),
+                        )]),
+                        limits: RunLimits {
+                            values: ValueLimits {
+                                nodes: 3,
+                                depth: 2,
+                                payload_bytes: 8,
+                                entries: if case.error.is_some() { 1 } else { 2 },
+                                ..ValueLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(run.variables.is_empty());
+                    assert_eq!(run.steps, 0);
+                } else {
+                    assert_eq!(run.result.unwrap().to_string(), "[1, 2]");
+                    assert_eq!(run.steps, 2);
+                }
+                continue;
+            }
             Input::ImportBudgetBoundary | Input::ImportBudgetLimit => {
                 use botwork::core::run::{Engine, ImportLimits, RunLimits, RunOptions};
                 let module = "Read { Return |7| }";

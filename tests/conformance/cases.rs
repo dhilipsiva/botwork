@@ -19,6 +19,8 @@ pub enum Input {
     AstLimit,
     ImportBudgetBoundary,
     ImportBudgetLimit,
+    ValueBoundary,
+    ValueLimit,
 }
 
 #[derive(Clone)]
@@ -159,5 +161,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::ImportBudgetBoundary, stdout: "", code: None, error: None },
         Case { id: "import-budget-limit", positive: &[], invalid: &["R5"], boundary: &[],
             input: Input::ImportBudgetLimit, stdout: "", code: Some("BW8001"), error: Some("imported bindings") },
+        Case { id: "value-boundary", positive: &["R6"], invalid: &[], boundary: &["R6"],
+            input: Input::ValueBoundary, stdout: "", code: None, error: None },
+        Case { id: "value-limit", positive: &[], invalid: &["R6"], boundary: &[],
+            input: Input::ValueLimit, stdout: "", code: Some("BW8001"), error: Some("value container entries") },
     ]
 }

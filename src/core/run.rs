@@ -22,6 +22,7 @@ use super::{
     operation::OperationControl,
     signature::StatementSignature,
     syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
+    value_limits::{Owned, ValueLimits},
 };
 
 mod import_limits;
@@ -45,6 +46,7 @@ pub struct RunLimits {
     pub syntax: SyntaxLimits,
     pub ast: AstLimits,
     pub imports: ImportLimits,
+    pub values: ValueLimits,
 }
 
 impl Default for RunLimits {
@@ -58,6 +60,7 @@ impl Default for RunLimits {
             syntax: SyntaxLimits::default(),
             ast: AstLimits::default(),
             imports: ImportLimits::default(),
+            values: ValueLimits::default(),
         }
     }
 }
@@ -65,6 +68,7 @@ impl Default for RunLimits {
 impl RunLimits {
     pub(crate) fn validate(&self) -> DiagnosticResult<()> {
         self.ast.validate()?;
+        self.values.validate()?;
         if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
             return Err(BWErr::RunConfiguration(format!(
                 "Module dependency depth cannot exceed {MAX_MODULE_CHAIN_DEPTH}"
@@ -304,12 +308,13 @@ impl Engine {
 
     fn run(
         &self,
-        options: RunOptions,
+        mut options: RunOptions,
         execute: impl FnOnce(&mut Context) -> DiagnosticResult<Literal>,
     ) -> RunResult {
         let start = Instant::now();
         let control_start = tokio::time::Instant::now();
         let mut context = self.template.clone();
+        let variables = Owned::new(std::mem::take(&mut options.variables));
         let result = (|| {
             options.control.checkpoint()?;
             options.limits.validate()?;
@@ -317,7 +322,7 @@ impl Engine {
             context.working_directory = Ok(environment.directory.clone());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
             context.environment = Some(environment);
-            context.set_input_variables(options.variables)?;
+            context.set_input_variables(variables.into_inner())?;
             context.checkpoint()?;
             let result = execute(&mut context);
             context.after_operation(result)

@@ -310,3 +310,24 @@ assert!(run.variables.is_empty());
 assert_eq!(run.steps, 0);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+
+## Configure Value Admission
+
+Value limits apply to root input before any binding is installed. Owned rejected values are released iteratively.
+
+```rust
+use std::collections::BTreeMap;
+use botwork::core::{grammar::Literal, run::{Engine, RunLimits, RunOptions, RunOutcome}, value_limits::ValueLimits};
+let run = Engine::default().run_source("input", "", RunOptions {
+    variables: BTreeMap::from([("value".into(), Literal::Array(vec![Literal::Int(1), Literal::Int(2)]))]),
+    limits: RunLimits {
+        values: ValueLimits { entries: 1, ..ValueLimits::default() },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+assert!(run.variables.is_empty());
+assert_eq!(run.steps, 0);
+```
