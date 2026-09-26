@@ -156,3 +156,131 @@ fn admitted_unicode_name_errors_remain_catchable_with_unchanged_source_coordinat
         source.find("absént").unwrap().to_string()
     );
 }
+
+#[test]
+fn formatted_signature_errors_preserve_exact_metadata_and_rejected_returns_keep_completed_effects()
+{
+    use botwork::core::{
+        grammar::Literal,
+        signature::{StatementSignature, ValueKind},
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    for returning in [false, true] {
+        let entries = Arc::new(AtomicUsize::new(0));
+        let entered = entries.clone();
+        let signature = StatementSignature::native("Read |value|").unwrap();
+        let signature = if returning {
+            signature.returns(ValueKind::String)
+        } else {
+            signature.parameter("value", ValueKind::Int).unwrap()
+        };
+        let mut engine = Engine::default();
+        engine
+            .register_native_with_signature(signature, move |_, _| {
+                entered.fetch_add(1, Ordering::SeqCst);
+                Ok(Literal::Bool(true))
+            })
+            .unwrap();
+        let source = "Outer { Read |true| }\nOuter";
+        let baseline = engine
+            .run_source("signature", source, RunOptions::default())
+            .result
+            .unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::IncompatibleType);
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        let exact = DiagnosticLimits {
+            text_bytes: size.text_bytes,
+            source_bytes: size.source_bytes,
+            call_frames: size.call_frames,
+            ..DiagnosticLimits::default()
+        };
+        let accepted = engine
+            .run_source("signature", source, options(exact.clone()))
+            .result
+            .unwrap_err();
+        assert_eq!(
+            accepted.to_value().to_string(),
+            baseline.to_value().to_string()
+        );
+        let rejected = engine
+            .run_source(
+                "signature",
+                source,
+                options(DiagnosticLimits {
+                    text_bytes: size.text_bytes - 1,
+                    ..exact
+                }),
+            )
+            .result
+            .unwrap_err();
+        assert_eq!(rejected.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(rejected.causes[0].code(), DiagnosticCode::IncompatibleType);
+        assert_eq!(
+            rejected.causes[0].omissions.as_ref().unwrap().call_frames,
+            size.call_frames
+        );
+        let run = engine.run_source(
+            "handler",
+            "|before| = |1|\nTry { Read |true| } Catch { |caught| = |true| }\n|after| = |2|",
+            options(DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            }),
+        );
+        assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+        assert_eq!(run.variables["before"].to_string(), "1");
+        assert!(!run.variables.contains_key("caught") && !run.variables.contains_key("after"));
+        assert_eq!(
+            entries.load(Ordering::SeqCst),
+            if returning { 4 } else { 0 }
+        );
+    }
+}
+
+#[test]
+fn rejected_argument_message_keeps_required_effects_and_skips_later_arguments_and_entry() {
+    use botwork::core::{
+        grammar::Literal,
+        signature::{StatementSignature, ValueKind},
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let effects = Arc::new(AtomicUsize::new(0));
+    let touched = effects.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Touch", move |_, _| {
+            touched.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::Bool(true))
+        })
+        .unwrap();
+    engine
+        .register_native("Later", |_, _| panic!("later argument entered"))
+        .unwrap();
+    engine
+        .register_native_with_signature(
+            StatementSignature::native("Read |first| Then |second|")
+                .unwrap()
+                .parameter("first", ValueKind::Int)
+                .unwrap(),
+            |_, _| panic!("callee entered"),
+        )
+        .unwrap();
+    let run = engine.run_source(
+        "arguments",
+        "Read |@{ Touch }| Then |@{ Later }|",
+        options(DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        }),
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    let error = run.result.unwrap_err();
+    assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+    assert_eq!(effects.load(Ordering::SeqCst), 1);
+}

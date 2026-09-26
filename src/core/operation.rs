@@ -253,7 +253,8 @@ impl NativeOperation {
         for (index, value) in values.iter().enumerate() {
             self.value_limits.check(value)?;
             validate_value(value)?;
-            self.signature.validate_argument(index, value)?;
+            self.signature
+                .validate_argument(index, value, |message| self.signature_error(message))?;
         }
         tokio::runtime::Handle::try_current()
             .map_err(|_| BWErr::AsyncRuntime("Invoke operations inside a Tokio runtime".into()))?;
@@ -322,8 +323,19 @@ impl NativeOperation {
         child.checkpoint()?;
         self.value_limits.check(&value)?;
         validate_value(&value)?;
-        self.signature.validate_return(&value)?;
+        self.signature
+            .validate_return(&value, |message| self.signature_error(message))?;
         Ok(value)
+    }
+
+    fn signature_error(&self, message: std::fmt::Arguments<'_>) -> Diagnostic {
+        self.diagnostic_limits.formatted_detail(
+            BWErr::OperationIncompatibleError,
+            message,
+            Some(self.signature.header()),
+            false,
+            std::iter::empty(),
+        )
     }
 }
 

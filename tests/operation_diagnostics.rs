@@ -165,6 +165,98 @@ async fn cancellation_then_panic_keeps_stop_priority_at_every_operation_stage() 
 }
 
 #[tokio::test]
+async fn formatted_operation_argument_and_return_errors_obey_exact_and_rejected_boundaries() {
+    use botwork::core::signature::ValueKind;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for blocking in [false, true] {
+        for returning in [false, true] {
+            let entries = Arc::new(AtomicUsize::new(0));
+            let entered = entries.clone();
+            let signature = StatementSignature::native("Read |value|").unwrap();
+            let signature = if returning {
+                signature.returns(ValueKind::String)
+            } else {
+                signature.parameter("value", ValueKind::Int).unwrap()
+            };
+            let original = if blocking {
+                NativeOperation::blocking(signature, NonZeroUsize::new(1).unwrap(), move |_, _| {
+                    entered.fetch_add(1, Ordering::SeqCst);
+                    Ok(Literal::Bool(true))
+                })
+                .unwrap()
+            } else {
+                NativeOperation::asynchronous(signature, move |_, _| {
+                    entered.fetch_add(1, Ordering::SeqCst);
+                    async { Ok(Literal::Bool(true)) }
+                })
+                .unwrap()
+            };
+            let baseline = original
+                .invoke(vec![Literal::Bool(true)], OperationControl::default())
+                .await
+                .unwrap_err();
+            let size = DiagnosticLimits::default().check(&baseline).unwrap();
+            for fits in [false, true] {
+                let operation = original
+                    .clone()
+                    .with_diagnostic_limits(DiagnosticLimits {
+                        text_bytes: size.text_bytes - usize::from(!fits),
+                        source_bytes: size.source_bytes,
+                        ..DiagnosticLimits::default()
+                    })
+                    .unwrap();
+                let parent = OperationControl::default();
+                let error = operation
+                    .invoke(vec![Literal::Bool(true)], parent.clone())
+                    .await
+                    .unwrap_err();
+                if fits {
+                    assert_eq!(
+                        error.to_value().to_string(),
+                        baseline.to_value().to_string()
+                    );
+                } else {
+                    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                    assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+                    assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
+                }
+                assert!(!parent.is_cancelled());
+            }
+            assert_eq!(
+                entries.load(Ordering::SeqCst),
+                if returning { 3 } else { 0 }
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn observed_operation_stop_precedes_wrong_return_type_construction() {
+    use botwork::core::signature::ValueKind;
+    let operation = NativeOperation::asynchronous(
+        StatementSignature::native("Stop")
+            .unwrap()
+            .returns(ValueKind::Int),
+        |_, control| async move {
+            control.cancel();
+            Ok(Literal::Bool(true))
+        },
+    )
+    .unwrap()
+    .with_diagnostic_limits(DiagnosticLimits {
+        text_bytes: 0,
+        ..DiagnosticLimits::default()
+    })
+    .unwrap();
+    let error = operation
+        .invoke(vec![], OperationControl::default())
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::Cancelled);
+    assert!(error.omissions.is_some());
+}
+
+#[tokio::test]
 async fn exact_diagnostic_dimensions_preserve_identity_and_lower_limits_reject_both_adapters() {
     for blocking in [false, true] {
         let original = detailed();

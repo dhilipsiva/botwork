@@ -12,6 +12,8 @@ Apply admission again to complete invocation failures, including argument/value 
 
 Factory, poll, and worker panic details also use [borrowed construction admission](diagnostic-construction.md#operation-panics) before copying the normalized signature. Generated bounded panic evidence passes through internal handoff without losing its original category to a second emergency summary. Raw callback errors remain fully measured.
 
+Signature argument/return failures use [formatted construction admission](diagnostic-construction.md#formatted-signature-failures), counting streamed message bytes before allocation. Wrong arguments reject before callback entry; wrong returns preserve completed effects and remain subordinate to observed stops.
+
 ## Stops and Ownership
 
 Observe child cancellation/deadlines after callback completion, including failures returned during the same completion. Keep the observed stop primary and retain admitted callback evidence when the combined tree fits. If the stop tree exceeds diagnostic quotas, return its bounded original-category summary with the quota failure as its cause; record omitted causes explicitly. A callback-reported cancellation category alone does not signal an observed stop.

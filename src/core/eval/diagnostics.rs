@@ -5,6 +5,24 @@ mod tests;
 use crate::core::diagnostic::DiagnosticCode;
 
 impl Context {
+    pub(super) fn formatted_error(
+        &self,
+        category: fn(String) -> BWErr,
+        message: std::fmt::Arguments<'_>,
+        span: Option<&Span>,
+        expression: bool,
+    ) -> Diagnostic {
+        let stopped = self.checkpoint().err();
+        let error = self.limits().diagnostics.formatted_detail(
+            category,
+            message,
+            span,
+            expression,
+            self.calls.iter().map(|record| &record.frame),
+        );
+        self.finish_constructed_error(error, stopped, span, expression)
+    }
+
     pub(super) fn detail_error(
         &self,
         category: fn(String) -> BWErr,
@@ -20,6 +38,16 @@ impl Context {
             expression,
             self.calls.iter().map(|record| &record.frame),
         );
+        self.finish_constructed_error(error, stopped, span, expression)
+    }
+
+    fn finish_constructed_error(
+        &self,
+        error: Diagnostic,
+        stopped: Option<Diagnostic>,
+        span: Option<&Span>,
+        expression: bool,
+    ) -> Diagnostic {
         if let Some(stopped) = stopped {
             // Preserve a prior observed stop before a construction quota can latch.
             self.diagnostic(stopped.while_handling(error), span, expression)

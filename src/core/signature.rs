@@ -335,12 +335,17 @@ impl StatementSignature {
         lines.join("\n")
     }
 
-    pub(crate) fn validate_argument(&self, index: usize, value: &Literal) -> Result<(), BWErr> {
+    pub(crate) fn validate_argument(
+        &self,
+        index: usize,
+        value: &Literal,
+        error: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+    ) -> DiagnosticResult<()> {
         let parameter = &self.parameters[index];
         if parameter.accepted.contains(value.kind()) {
             return Ok(());
         }
-        Err(BWErr::OperationIncompatibleError(format!(
+        Err(error(format_args!(
             "Parameter `{}` (argument {}) of `{}` requires {}; got {}",
             parameter.name,
             index + 1,
@@ -350,11 +355,15 @@ impl StatementSignature {
         )))
     }
 
-    pub(crate) fn validate_return(&self, value: &Literal) -> Result<(), BWErr> {
+    pub(crate) fn validate_return(
+        &self,
+        value: &Literal,
+        error: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+    ) -> DiagnosticResult<()> {
         if self.returns.contains(value.kind()) {
             return Ok(());
         }
-        Err(BWErr::OperationIncompatibleError(format!(
+        Err(error(format_args!(
             "Return value of `{}` requires {}; got {}",
             self.normalized,
             self.returns,

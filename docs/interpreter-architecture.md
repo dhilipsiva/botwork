@@ -605,3 +605,20 @@ assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
 assert_eq!(error.causes[0].code(), DiagnosticCode::UndefinedStatement);
 assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
 ```
+
+## Formatted Signature Errors
+
+Signature argument/return details are counted before their initial message allocation. Quota failures preserve the original incompatible-type category and skip rejected callback entry.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, grammar::Literal, operation::{NativeOperation, OperationControl}, signature::{StatementSignature, ValueKind}};
+let signature = StatementSignature::native("Read |value|")?.parameter("value", ValueKind::Int)?;
+let operation = NativeOperation::asynchronous(signature, |_, _| async { panic!("rejected callback entered") })?
+    .with_diagnostic_limits(DiagnosticLimits { text_bytes: 0, ..DiagnosticLimits::default() })?;
+let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build()?;
+let error = runtime.block_on(operation.invoke(vec![Literal::Bool(true)], OperationControl::default())).unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+assert!(error.causes[0].omissions.is_some());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```

@@ -145,3 +145,150 @@ fn empty_details_and_invalid_configuration_preserve_category_without_source_owne
     assert_eq!(error.causes[0].code(), DiagnosticCode::NativePanic);
     assert!(error.causes[0].omissions.as_ref().unwrap().source.is_none());
 }
+
+#[test]
+fn formatted_details_match_exact_raw_byte_counts_and_preserve_context() {
+    let program = Program::parse("é", "|x| = |1|").unwrap();
+    let span = &program.statements[0].span;
+    let frames = [CallFrame {
+        signature: "read".into(),
+        call_site: span.clone(),
+        definition_site: None,
+    }];
+    let message = "Parameter `é` needs Int | Float; got Bool (argument 12)";
+    let baseline = Diagnostic::new(BWErr::OperationIncompatibleError(message.into()))
+        .at_expression(span)
+        .capture_stack(frames.iter());
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    let kinds = crate::core::signature::ValueKinds::one(crate::core::signature::ValueKind::Int)
+        .union(crate::core::signature::ValueKinds::one(
+            crate::core::signature::ValueKind::Float,
+        ));
+    for fits in [false, true] {
+        let limits = DiagnosticLimits {
+            text_bytes: size.text_bytes - usize::from(!fits),
+            source_bytes: size.source_bytes,
+            ..DiagnosticLimits::default()
+        };
+        let error = limits.formatted_detail(
+            BWErr::OperationIncompatibleError,
+            format_args!(
+                "Parameter `{}` needs {kinds}; got {} (argument {})",
+                "é", "Bool", 12
+            ),
+            Some(span),
+            true,
+            frames.iter(),
+        );
+        if fits {
+            assert_eq!(
+                error.to_value().to_string(),
+                baseline.to_value().to_string()
+            );
+        } else {
+            assert!(error.is_emergency());
+            assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().call_frames, 1);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 0);
+        }
+    }
+}
+
+#[test]
+fn formatting_writers_enforce_overflow_and_unicode_boundaries_without_partial_count_changes() {
+    let mut count = Counter {
+        bytes: usize::MAX,
+        maximum: usize::MAX,
+    };
+    assert!(count.write_str("x").is_err());
+    assert_eq!(count.bytes, usize::MAX);
+    let mut count = Counter {
+        bytes: 2,
+        maximum: 3,
+    };
+    assert!(count.write_str("é").is_err());
+    assert_eq!(count.bytes, 2);
+    count.write_str("x").unwrap();
+    assert_eq!(count.bytes, 3);
+    let mut output = BoundedText {
+        text: String::new(),
+        maximum: 3,
+    };
+    assert!(output.write_str("é🦀").is_err());
+    assert_eq!(output.text, "é");
+    output.write_str("x").unwrap();
+    assert_eq!(output.text, "éx");
+}
+
+#[test]
+fn formatted_prefixes_mark_truncation_once_and_stop_visiting_later_fragments() {
+    use std::cell::Cell;
+    struct Fragments<'a>(&'a Cell<usize>);
+    impl fmt::Display for Fragments<'_> {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for _ in 0..1000 {
+                self.0.set(self.0.get() + 1);
+                formatter.write_str("🦀")?;
+            }
+            Ok(())
+        }
+    }
+    let visits = Cell::new(0);
+    let error = DiagnosticLimits {
+        text_bytes: 7,
+        ..DiagnosticLimits::default()
+    }
+    .formatted_detail(
+        BWErr::OperationIncompatibleError,
+        format_args!("{}", Fragments(&visits)),
+        None,
+        false,
+        std::iter::empty(),
+    );
+    assert_eq!(visits.get(), 66); // one count attempt, then 64 complete prefix chars plus overflow
+    let summary = &error.causes[0];
+    assert_eq!(summary.omissions.as_ref().unwrap().detail_fields, 1);
+    let BWErr::OperationIncompatibleError(detail) = summary.error.as_ref() else {
+        panic!("category")
+    };
+    assert!(detail.len() <= SUMMARY_DETAIL_BYTES && detail.ends_with("…[truncated]"));
+    let exact = "é".repeat(128);
+    assert_eq!(
+        formatted_prefix(format_args!("{exact}")),
+        (exact.clone(), false)
+    );
+    let (shortened, truncated) = formatted_prefix(format_args!("{exact}x"));
+    assert!(truncated && shortened.len() <= SUMMARY_DETAIL_BYTES);
+}
+
+#[test]
+fn formatted_construction_rejects_context_before_full_message_formatting() {
+    let program = Program::parse("source", "|x| = |1|").unwrap();
+    let error = DiagnosticLimits {
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    }
+    .formatted_detail(
+        BWErr::OperationIncompatibleError,
+        format_args!("{}", "é".repeat(2048)),
+        Some(&program.statements[0].span),
+        false,
+        std::iter::empty(),
+    );
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert!(error.is_emergency());
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+    let accepted = DiagnosticLimits {
+        text_bytes: 6,
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    }
+    .formatted_detail(
+        BWErr::OperationIncompatibleError,
+        format_args!(""),
+        None,
+        false,
+        std::iter::empty(),
+    );
+    assert_eq!(accepted.code(), DiagnosticCode::IncompatibleType);
+}

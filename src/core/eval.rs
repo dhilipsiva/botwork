@@ -804,9 +804,14 @@ fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
             let value = evaluate_expression(argument, context)?;
             validate_value(&value)
                 .map_err(|error| Diagnostic::new(error).at_expression(&argument.span))?;
-            metadata
-                .validate_argument(index, &value)
-                .map_err(|error| Diagnostic::new(error).at_expression(&argument.span))?;
+            metadata.validate_argument(index, &value, |message| {
+                context.formatted_error(
+                    BWErr::OperationIncompatibleError,
+                    message,
+                    Some(&argument.span),
+                    true,
+                )
+            })?;
             Ok(value)
         })
         .collect::<DiagnosticResult<Vec<_>>>()?;
@@ -864,7 +869,14 @@ fn invoke_resolved(
             let result = context.after_operation(result.map(Owned::new))?;
             context.check_value(&result)?;
             validate_value(&result)?;
-            metadata.validate_return(&result)?;
+            metadata.validate_return(&result, |message| {
+                context.formatted_error(
+                    BWErr::OperationIncompatibleError,
+                    message,
+                    Some(&call.span),
+                    false,
+                )
+            })?;
             match known_result {
                 Some(reservation) => Ok(TemporaryValue::new(result.into_inner(), reservation)),
                 None => context.temporary(result.into_inner()),
@@ -904,7 +916,14 @@ fn invoke_resolved(
                                 // Reject unconsumed controls at their invocation boundary.
                                 completion => finish_script(completion)?,
                             };
-                            metadata.validate_return(&value)?;
+                            metadata.validate_return(&value, |message| {
+                                context.formatted_error(
+                                    BWErr::OperationIncompatibleError,
+                                    message,
+                                    Some(&call.span),
+                                    false,
+                                )
+                            })?;
                             Ok(value)
                         })
                 },

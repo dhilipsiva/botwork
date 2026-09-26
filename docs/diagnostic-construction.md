@@ -1,6 +1,6 @@
 # Diagnostic Detail Construction
 
-Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
+Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Signature argument/return failures measure their formatted details first. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
 
 ## Admission Before Copying
 
@@ -18,8 +18,18 @@ NativeOperation applies the same pre-copy check to factory panics, future-poll p
 
 Keep generated, already admitted panic diagnostics separate from raw callback errors. Worker/poll handoff preserves bounded panic evidence without admitting its emergency wrapper as a new original error. Raw host-returned diagnostics always pass their own full measurement. Repeated invocations and blocking capacity remain usable after rejection; observed cancellation/timeout keeps the [operation priority rules](operation-diagnostics.md). Zero operation quotas do not latch the parent control or sibling operations.
 
+## Formatted Signature Failures
+
+Argument and return-kind errors first admit their source/call skeleton, then stream the diagnostic detail into a byte counter. Names, normalized signatures, argument numbers, accepted kind sets, and actual kind names are counted without allocating the message. Stop counting on quota exhaustion or checked-arithmetic overflow. After admission, allocate a buffer of the measured size; its writer also enforces that size. An error prefix uses a separate 256-byte writer and stops before later fragments after truncation, retaining valid UTF-8 and an explicit marker.
+
+These internal formatters stream deterministic strings and scalar values; they do not format full argument collections or accept arbitrary host Display implementations. Accepted detail wording remains unchanged. All raw message wording counts toward the existing text quota, together with label/call text. This is a construction check, separate from general diagnostic Display/rendering.
+
+Validate argument kinds after each required argument evaluates and before visiting later arguments or entering the callee. Validate return kinds after callback effects and the post-callback stop/value checks; preserve completed effects. Context construction failures latch and bypass Catch; standalone operations preserve their local failure and control rules. Both native and DSL metadata checks use this path, while unannotated DSL signatures continue to accept Any.
+
 ## Scope and Evidence
 
-This contract covers the named borrowed-detail paths. Formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
+This contract covers the named borrowed details and formatted signature failures. Other formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
 
 Unit checks compare constructed and ordinary diagnostics at exact quotas and exercise prospective dimensions, invalid/zero limits, Unicode caps, source release, and omitted-frame counts. Integration checks cover normal catchability, exact contexts, handler restoration, prior effects, Pair entry, independent clone latches, all operation panic stages, repeated worker use, and cancellation with panic. Allocation observations verify zero large copies for rejected missing names and operation factory/poll signatures, plus no extra synchronous panic-detail copy beyond the admitted active-call signature. R21 host corpus cases and an executed Rust example pin byte boundaries.
+
+Formatted-message checks cover exact raw bytes and context, counter overflow, Unicode chunk boundaries, early formatter stopping, empty messages, synchronous/async/blocking argument and return errors, required effects, skipped later arguments/callbacks, and stop priority. Four large-parameter/return allocation observations, two additional R21 cases, and a Rust example pin admission before initial message allocation.

@@ -8,7 +8,7 @@ mod tests;
 
 pub const SUMMARY_DETAIL_BYTES: usize = 256;
 pub const SUMMARY_SOURCE_NAME_BYTES: usize = 256;
-const TRUNCATED: &str = "…[truncated]";
+pub(super) const TRUNCATED: &str = "…[truncated]";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OmittedSource {
@@ -187,13 +187,31 @@ fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> 
 }
 
 pub(super) fn reject_borrowed_detail(
-    mut skeleton: Diagnostic,
+    skeleton: Diagnostic,
     category: fn(String) -> BWErr,
     detail: &str,
     violation: BWErr,
     pending_frames: usize,
 ) -> Diagnostic {
     let (detail, shortened) = prefix(detail, SUMMARY_DETAIL_BYTES);
+    reject_constructed_detail(
+        skeleton,
+        category,
+        detail,
+        shortened,
+        violation,
+        pending_frames,
+    )
+}
+
+pub(super) fn reject_constructed_detail(
+    mut skeleton: Diagnostic,
+    category: fn(String) -> BWErr,
+    detail: String,
+    shortened: bool,
+    violation: BWErr,
+    pending_frames: usize,
+) -> Diagnostic {
     skeleton.error = std::sync::Arc::new(category(detail));
     let mut error = rejected(skeleton, violation, pending_frames);
     error.causes[0]

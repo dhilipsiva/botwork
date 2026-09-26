@@ -58,6 +58,102 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn synchronous_signature_failures_reject_large_parameter_and_return_messages_before_allocation() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::{evaluate_program_detailed, Context},
+        signature::{StatementSignature, ValueKind},
+    };
+    let length = 64 * 1024;
+    let name = "x".repeat(length);
+    for returning in [false, true] {
+        let header = if returning {
+            name.clone()
+        } else {
+            format!("Read |{name}|")
+        };
+        let signature = StatementSignature::native(&header).unwrap();
+        let signature = if returning {
+            signature.returns(ValueKind::String)
+        } else {
+            signature.parameter(&name, ValueKind::Int).unwrap()
+        };
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 32,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        context
+            .register_native_with_signature(signature, move |_| {
+                assert!(returning, "rejected callee entered");
+                Ok(Literal::Bool(true))
+            })
+            .unwrap();
+        let program =
+            Program::parse("formatted", if returning { &name } else { "Read |true|" }).unwrap();
+        let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+        let error = result.unwrap_err();
+        assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        assert_eq!(large, usize::from(returning));
+    }
+}
+
+#[test]
+fn operation_signature_failures_reject_large_parameter_and_return_messages_before_allocation() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        operation::{NativeOperation, OperationControl},
+        signature::{StatementSignature, ValueKind},
+    };
+    let length = 64 * 1024;
+    let name = "x".repeat(length);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    for returning in [false, true] {
+        let header = if returning {
+            name.clone()
+        } else {
+            format!("Read |{name}|")
+        };
+        let signature = StatementSignature::native(&header).unwrap();
+        let signature = if returning {
+            signature.returns(ValueKind::String)
+        } else {
+            signature.parameter(&name, ValueKind::Int).unwrap()
+        };
+        let operation = NativeOperation::asynchronous(signature, move |_, _| {
+            assert!(returning, "rejected factory entered");
+            async { Ok(Literal::Bool(true)) }
+        })
+        .unwrap()
+        .with_diagnostic_limits(DiagnosticLimits {
+            text_bytes: 32,
+            ..DiagnosticLimits::default()
+        })
+        .unwrap();
+        let arguments = if returning {
+            vec![]
+        } else {
+            vec![Literal::Bool(true)]
+        };
+        let (result, large) = observe(length, || {
+            runtime.block_on(operation.invoke(arguments, OperationControl::default()))
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
 fn operation_factory_and_poll_panics_do_not_copy_rejected_large_signatures() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},
