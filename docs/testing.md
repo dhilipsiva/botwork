@@ -6,6 +6,7 @@ Run `cargo test` from the repository root. Run `cargo test --release` to check t
 - `src/core/eval/tests.rs` checks evaluation, state, conditions, collections, and error handling.
 - `tests/cli.rs` invokes Cargo's built CLI and checks exit status, stdout, and stderr independently. Inputs live under `tests/fixtures/`.
 - `tests/examples.rs` checks the exact expected stdout of the bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
+- `tests/language_contract.rs` records named expectations from the [core specification](language-specification.md), with active cases for implemented behavior and ignored cases for upcoming scope/control changes.
 
 Tests assert language behavior and error categories rather than Rust source line numbers or map iteration order. No external services or extra testing crates are required for the initial suite. Add a minimal regression before fixing a known defect; do not preserve defective behavior as an expected result.
 
@@ -55,6 +56,8 @@ These are baseline measurements, not release-gate results: 13 known regressions 
 ## Known Defects
 
 `tests/regressions.rs` captures intended behavior for the confirmed DSL defects. Each unfixed case is explicitly ignored with a reason so the ordinary suite reports pending work. Run `cargo test --test regressions -- --ignored` to reproduce those failures, or pass a test name to isolate one. Enable each case in the commit that fixes it; an ignored test is never evidence of a passing requirement.
+
+`tests/language_contract.rs` adds pending expectations for specification decisions: lexical lookup, invocation-local bindings and definitions, loop-variable restoration, and return values/control propagation. Run `cargo test --test language_contract -- --ignored` to reproduce those gaps. These expectations do not change the runtime by themselves. Run both suites with `--release` as well, and keep each ignore until the corresponding behavior is implemented. The specification's evidence table names remaining cases still needed for full conformance.
 
 The active collection-access regression temporarily permits the typed `UnsupportedAccessError` until access is implemented; arbitrary errors do not satisfy it. Evaluator and CLI tests verify [catchable unsupported access](language.md#collection-access-status), preserved assignments, and failure status without a panic. A `Try` without `Catch` is rejected during parsing; the active regression, parser cases, and CLI fixture verify this [error-handling contract](language.md#trycatch). Other regression expectations follow the accepted roadmap. The parameter-scope reproducers deliberately isolate argument binding from the separate final-return defect.
 

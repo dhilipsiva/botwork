@@ -1,6 +1,6 @@
 # Language Behavior
 
-This reference records implemented behavior as language TODOs are completed. It is not yet the complete language specification required by the roadmap.
+This reference records implemented behavior as language TODOs are completed. The [core language specification](language-specification.md) defines the intended semantics and identifies pending implementation work.
 
 ## Keywords and Names
 
@@ -30,7 +30,7 @@ Thus `1 + 2 == 3` means `(1 + 2) == 3`, and `1 < 2 == 3 < 4` compares two boolea
 
 Addition/subtraction and multiplication/division/remainder associate left within their respective levels: `20 - 5 - 2` gives `13`, and `12 / 3 / 2` gives `2.0`. Unary minus and logical negation remain supported, including `3 - -2` and `!(1 > 2)`. Invalid operand combinations produce type errors rather than implicit boolean/numeric coercion.
 
-Run `cargo run -- --file examples/03-precedence.botwork` for an executable example. Comparison-chain semantics and boolean short-circuiting remain separate roadmap work. In particular, `and` and `or` still evaluate both operands at this stage.
+Comparisons at the same level associate left as ordinary binary operators: `1 < 2 < 3` fails when comparing a boolean with an integer, while `1 == 2 == false` evaluates to `true`. Run `cargo run -- --file examples/03-precedence.botwork` for an executable precedence example. Boolean short-circuiting remains pending; `and` and `or` still evaluate both operands at this stage.
 
 ## Powers and Unary Operators
 

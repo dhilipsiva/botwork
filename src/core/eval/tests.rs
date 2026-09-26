@@ -73,12 +73,13 @@ fn custom_statements_starting_with_keyword_text_execute_normally() {
         "I f",
         "In order",
     ] {
-        let source = format!("{name} {{\n |answer| = |7|\n}}\n{name}");
-        let mut context = Context::default();
-        evaluate(&source, &mut context).unwrap();
+        // The trailing statement isolates name matching from the final-Return defect.
+        let source =
+            format!("{name} {{\n Return |7|\n |unreachable| = |missing|\n}}\n|answer| = {name}");
+        let result = evaluate(&source, &mut Context::default());
         assert!(
-            matches!(variable(&context, "answer"), Literal::Int(7)),
-            "{source}"
+            matches!(result, Ok(Literal::Int(7))),
+            "{source}: {result:?}"
         );
     }
 }

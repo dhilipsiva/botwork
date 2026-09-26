@@ -60,7 +60,7 @@ The following defects were reproduced during the DSL review. Relevant implementa
 
 ### Language Contract and Interpreter Structure
 
-- [ ] Write a short language specification covering evaluation order, precedence, value types, scope, statement return values, and catchable errors. Use it to define expected regression results.
+- [x] Write a short language specification covering evaluation order, precedence, value types, scope, statement return values, and catchable errors. The [core specification](docs/language-specification.md) fixes target semantics with rule IDs and named evidence, while distinguishing current behavior from pending changes. [Contract tests](tests/language_contract.rs) record additional scope, lifetime, and completion expectations; unresolved cases remain explicitly ignored until their implementation TODOs are completed.
 - [ ] Convert parsed input into an owned syntax tree with source spans. Store custom statement bodies once, preserve unevaluated expressions for short-circuiting, and stop reparsing source on each invocation.
 - [ ] Represent normal completion, `Return`, `Break`, and `Continue` explicitly. Propagate control flow through nested blocks; consume returns at invocation boundaries and loop controls at the appropriate loop.
 - [ ] Introduce invocation scopes. Specify variable lookup, assignments, recursion, loop-variable lifetime, and whether callers' variables are visible or mutable.
