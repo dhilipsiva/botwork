@@ -43,7 +43,7 @@ These README items already have implementations. Their checked status records th
 Failures must be observable before expanding the interpreter. Start here so subsequent changes have a reliable baseline.
 
 - [x] Add Rust unit tests for parsing, operators, and evaluation, plus CLI integration tests that assert exit status, stdout, and stderr. See [testing instructions](docs/testing.md).
-- [ ] Turn both `examples/*.botwork` scripts into behavior checks with expected results. Successful process exit alone does not prove correct execution.
+- [x] Turn both `examples/*.botwork` scripts into behavior checks with expected results. [Example tests](tests/examples.rs) verify full stdout, empty stderr, and successful status in debug and release, including the complete loop behavior.
 - [x] Capture the confirmed regressions in milestone 2 before fixing each one, including minimal scripts that fail independently. See [regression tests](tests/regressions.rs) and [how to reproduce them](docs/testing.md#known-defects).
 - [x] **Fix successful exit on failure.** Return a nonzero status for syntax errors and uncaught evaluation errors; keep successfully handled `Try/Catch` errors distinct. [CLI failure contract](docs/testing.md#cli-failure-contract) and active regression tests verify status `1`, stderr diagnostics, and fail-fast execution in [src/main.rs](src/main.rs).
 - [x] Replace `dbg!` output with a defined user interface: normal `Log` output on stdout, diagnostics on stderr, and optional `--debug` tracing. See [log output](docs/language.md#log-output); CLI and writer tests verify the output contract.

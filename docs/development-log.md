@@ -50,3 +50,10 @@ One TODO is selected, designed, implemented, verified, and committed before the 
 - **Design:** Remove the unconditional successful return after the loop's interruption handling. Preserve distinct `Continue`, `Break`, and pending-return paths; keep function-return defects tracked separately.
 - **Implementation:** Removed one premature return, enabled the recorded regression, and added cases for false conditions, repeated iterations, nested `Continue`/`Break`, and a condition becoming nonboolean.
 - **Verification:** Four new iteration tests failed against the previous implementation. All 52 active tests passed after the fix in debug and release; 13 unrelated regressions remain ignored. The false-condition test confirms the body is skipped, and loop-control tests confirm later body statements are skipped appropriately.
+
+## Check Bundled Example Behavior
+
+- **Plan:** Check complete results from both bundled examples after fixing strings, output, and ordinary While iteration.
+- **Design:** Invoke Cargo's actual CLI, compare exact expected output derived from the scripts, and independently assert successful status and empty stderr. Store expected lines in Rust strings to preserve intentional whitespace without opaque snapshots.
+- **Implementation:** Added `tests/examples.rs` for the expression and syntax demonstrations and documented how to run it.
+- **Verification:** Both examples passed in debug and release. Independent source review confirmed the expected 12 expression-output lines and 37 syntax-output lines, including the final product 27.5, custom result 18, and While values 3/4/5/6. The wider suite now has 54 active tests and 13 pending ignored regressions.
