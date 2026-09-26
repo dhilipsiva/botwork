@@ -343,6 +343,34 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_embedded_case(&case);
                 continue;
             }
+            Input::RuntimeBoundary => {
+                use botwork::core::{
+                    ast::Program,
+                    diagnostic::DiagnosticCode,
+                    eval::{evaluate_program_detailed, Context},
+                    run::RunLimits,
+                };
+                let mut context = Context::with_limits(RunLimits {
+                    steps: 4,
+                    evaluation_depth: 3,
+                    ..RunLimits::default()
+                })
+                .unwrap();
+                let program = Program::parse("runtime-boundary", "|x| = |1+2|").unwrap();
+                assert_eq!(
+                    evaluate_program_detailed(&program, &mut context)
+                        .unwrap()
+                        .to_string(),
+                    "3"
+                );
+                assert_eq!(
+                    evaluate_program_detailed(&program, &mut context)
+                        .unwrap_err()
+                        .code(),
+                    DiagnosticCode::ResourceLimit
+                );
+                continue;
+            }
             Input::ImportSuccess => {
                 fs::create_dir_all(harness.workspace.join("modules")).unwrap();
                 fs::write(

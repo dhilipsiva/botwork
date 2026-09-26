@@ -31,9 +31,10 @@ fn harness_keeps_streams_and_status_separate_and_removes_only_its_workspace() {
 fn timeout_terminates_and_reaps_a_nonterminating_script_and_allows_the_next_case() {
     let harness = Harness::new();
     let error = harness
-        .run(
+        .run_with_args(
             "nonterminating",
             "While |true| {}",
+            &["--max-steps", "18446744073709551615"],
             Duration::from_millis(100),
         )
         .unwrap_err();

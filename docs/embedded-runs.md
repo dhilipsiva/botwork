@@ -2,7 +2,7 @@
 
 `core::run::Engine` keeps reusable native registrations. `run_source(name, text, options)`, `run_program(&program, options)`, and `run_file(path, options)` synchronously execute in fresh contexts. Each run owns variables, custom definitions, namespace/module caches, handler state, and counters. Programs are immutable and reusable. Engine clones share native callback captures; hosts remain responsible for intentional shared state and callback synchronization.
 
-The executed [Rust example](interpreter-architecture.md#embedded-runs) demonstrates inputs, environment overlays, native registration, and structured results. The CLI still uses its existing Context path; CLI/legacy parsing has shared source/syntax guards; runtime step/call budgets still belong to Engine execution. Async-operation dispatch remains separate roadmap work.
+The executed [Rust example](interpreter-architecture.md#embedded-runs) demonstrates inputs, environment overlays, native registration, and structured results. Engine, CLI, and low-level Context execution share runtime budget defaults and stop behavior. Async-operation dispatch remains separate roadmap work.
 
 ## Configuration and Environment
 
@@ -21,11 +21,21 @@ Neither directory nor environment configuration mutates process-global state. Na
 | `source_bytes` | 1 MiB | Per entry/module source, UTF-8 bytes; reject before parsing |
 | `steps` | 1,000,000 | One per visited statement, expression node, and For iteration |
 | `call_depth` | 32 | Entered native/custom calls; imported wrappers do not add another level |
+| `evaluation_depth` | 96, fixed ceiling | Active statements, expressions, and dispatch frames, including imported wrappers |
+| `import_depth` | 16, fixed ceiling | Concurrent uncached module initializations; cached imports do not consume another level |
 | `syntax` | Nesting 32, operator units 64; combined ceiling 66 | Local [parser guards](syntax-limits.md), tighten-only fixed syntax ceilings |
 
 Zero is permitted: an empty run needs no steps/calls, and nonempty source exceeds a zero byte budget. Signed integer negation counts its operand even though conversion handles sign/magnitude together. Short-circuited operands consume no steps. Loops revisit their condition/body expressions; empty For bodies still charge iterations. Initializations and calls across modules share the run's counter. Call depth is checked after signature/arity resolution and before argument effects.
 
-File reads retain at most `source_bytes + 1` bytes before reporting BW8001, including when the cut splits UTF-8. `run_program` checks its retained source size before validation; previously assembled ASTs are host-owned input. Step/recursion/source failures latch for the run and cannot be caught to resume work. Higher budgets are an explicit host policy choice. Combined evaluator/host-AST depth, import depth/count, aggregate source/value/collection memory, and stricter preallocation bounds remain the next resource task. Current budgets do not make untrusted source safe to execute.
+File reads retain at most `source_bytes + 1` bytes before reporting BW8001, including when the cut splits UTF-8. `run_program` checks its retained source size before validation; previously assembled ASTs are host-owned input. Step/recursion/source failures latch for the run and cannot be caught to resume work. Step/call budgets may be raised explicitly; evaluation/import/syntax ceilings may only be tightened. Import parsing additionally rejects entry when more than 16 evaluation frames are active, reserving stack space for the parser. Host-AST structure, cached dependency chains, module counts, aggregate source/value/collection memory, and stricter preallocation bounds remain resource tasks. Current budgets do not make untrusted source safe to execute.
+
+## CLI and Low-Level Contexts
+
+The CLI accepts `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and `--timeout-ms`. For example, `cargo run -- --file examples/02-syntaxes.botwork --max-steps 10000 --timeout-ms 2000`. Limits produce BW8001/status 1; unsupported ceilings produce BW7002/status 1; malformed numbers or conflicts with statement-help modes produce status 2. Timeouts include loading/parsing but are observed cooperatively.
+
+`Context::default()` has the same runtime defaults. Use `Context::with_limits(limits)` or `Context::with_control(limits, control)` for local configuration; `checkpoint()` observes stops without charging steps. Counters persist across evaluations. Use a fresh context after a latched stop. Clones copy consumed counters and stop state independently, while sharing the supplied cancellation control. Modules share the caller's counters/control. Depth guards release on success, return, and failure.
+
+Context evaluates previously parsed input; use `Program::parse_bounded` to apply custom source/syntax settings to entry parsing. Context source/syntax settings govern imported sources. Engine applies its configured guards to entry sources and reusable programs too. No process-global parser or runtime settings are changed.
 
 ## Stop and Completion Rules
 

@@ -30,6 +30,8 @@ script errors return a nonzero exit status. Add `--debug` after `cargo run --`
 to trace top-level statement locations on stderr. See [language behavior](docs/language.md)
 and [testing instructions](docs/testing.md) for the implemented contracts.
 Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.
+[Runtime budgets](docs/embedded-runs.md#cli-and-low-level-contexts) stop excessive steps and recursion;
+configure `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and cooperative `--timeout-ms`.
 
 Use `cargo run -- --list-statements` to list built-ins, or
 `cargo run -- --statement-help 'Log |value|'` for parameter/return kinds and errors.

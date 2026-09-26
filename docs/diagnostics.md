@@ -30,7 +30,7 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW6002 | Import cycle | Move shared definitions into a module outside the reported cycle |
 | BW6003 | Namespace collision | Use a distinct alias or remove the same-scope qualified declaration |
 | BW7001 | Input variables | Use exact variable names and JSON with checked i32/finite f32 values and at most 128 nested containers |
-| BW7002 | Run configuration | Use an existing working directory, valid environment names/values, a representable timeout, and supported syntax ceilings |
+| BW7002 | Run configuration | Use an existing working directory, valid environment names/values, a representable timeout, and supported syntax/evaluation/import ceilings |
 | BW7003 | Entry source loading through Engine | Supply a readable UTF-8 file relative to the run directory |
 | BW8001 | Source/runtime resource limit | Reduce the workload or adjust configurable budgets within documented ceilings |
 

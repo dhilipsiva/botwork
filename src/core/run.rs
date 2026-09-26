@@ -7,7 +7,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     time::{Duration, Instant},
@@ -23,13 +23,20 @@ use super::{
     syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
 };
 
-/// Initial run budgets. Combined evaluation depth, value size, and hard native termination
+pub const DEFAULT_STEPS: u64 = 1_000_000;
+pub const MAX_EVALUATION_DEPTH: usize = 96;
+pub const MAX_IMPORT_DEPTH: usize = 16;
+pub const MAX_PARSER_CALLER_DEPTH: usize = 16;
+
+/// Initial run budgets. Aggregate imports, value size, and hard native termination
 /// have separate contracts; these limits do not make execution a sandbox.
 #[derive(Clone, Debug)]
 pub struct RunLimits {
     pub source_bytes: usize,
     pub steps: u64,
     pub call_depth: usize,
+    pub evaluation_depth: usize,
+    pub import_depth: usize,
     pub syntax: SyntaxLimits,
 }
 
@@ -37,10 +44,31 @@ impl Default for RunLimits {
     fn default() -> Self {
         Self {
             source_bytes: DEFAULT_SOURCE_BYTES,
-            steps: 1_000_000,
+            steps: DEFAULT_STEPS,
             call_depth: 32,
+            evaluation_depth: MAX_EVALUATION_DEPTH,
+            import_depth: MAX_IMPORT_DEPTH,
             syntax: SyntaxLimits::default(),
         }
+    }
+}
+
+impl RunLimits {
+    pub(crate) fn validate(&self) -> DiagnosticResult<()> {
+        if self.import_depth > MAX_IMPORT_DEPTH {
+            return Err(BWErr::RunConfiguration(format!(
+                "Import initialization depth cannot exceed {MAX_IMPORT_DEPTH}"
+            ))
+            .into());
+        }
+        if self.evaluation_depth > MAX_EVALUATION_DEPTH {
+            return Err(BWErr::RunConfiguration(format!(
+                "Evaluation depth cannot exceed {MAX_EVALUATION_DEPTH}"
+            ))
+            .into());
+        }
+        super::syntax_limits::check("", self.source_bytes, &self.syntax, false)
+            .map_err(|violation| Diagnostic::new(violation.error))
     }
 }
 
@@ -267,6 +295,8 @@ impl Engine {
         let control_start = tokio::time::Instant::now();
         let mut context = self.template.clone();
         let result = (|| {
+            options.control.checkpoint()?;
+            options.limits.validate()?;
             let environment = Arc::new(RunEnvironment::prepare(&options, control_start)?);
             context.working_directory = Ok(environment.directory.clone());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
@@ -289,6 +319,7 @@ struct BudgetState {
     limits: RunLimits,
     control: OperationControl,
     used: AtomicU64,
+    active: AtomicUsize,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -301,6 +332,7 @@ impl Clone for RunBudget {
             limits: self.0.limits.clone(),
             control: self.0.control.clone(),
             used: AtomicU64::new(self.used()),
+            active: AtomicUsize::new(0),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -313,11 +345,12 @@ impl Clone for RunBudget {
 }
 
 impl RunBudget {
-    fn new(limits: RunLimits, control: OperationControl) -> Self {
+    pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
             limits,
             control,
             used: AtomicU64::new(0),
+            active: AtomicUsize::new(0),
             stopped: Mutex::new(None),
         }))
     }
@@ -361,6 +394,33 @@ impl RunBudget {
             })
             .map(|_| ())
             .map_err(|_| self.limit("evaluation steps", self.0.limits.steps))
+    }
+
+    pub(crate) fn enter(&self) -> DiagnosticResult<EvaluationGuard> {
+        self.checkpoint()?;
+        self.0
+            .active
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |active| {
+                (active < self.0.limits.evaluation_depth).then(|| active + 1)
+            })
+            .map_err(|_| self.limit("evaluation depth", self.0.limits.evaluation_depth as u64))?;
+        Ok(EvaluationGuard(self.shared()))
+    }
+
+    pub(crate) fn check_parser_entry(&self) -> DiagnosticResult<()> {
+        self.checkpoint()?;
+        if self.0.active.load(Ordering::Relaxed) > MAX_PARSER_CALLER_DEPTH {
+            return Err(self.limit("parser caller depth", MAX_PARSER_CALLER_DEPTH as u64));
+        }
+        Ok(())
+    }
+}
+
+pub(crate) struct EvaluationGuard(RunBudget);
+
+impl Drop for EvaluationGuard {
+    fn drop(&mut self) {
+        self.0 .0.active.fetch_sub(1, Ordering::Relaxed);
     }
 }
 

@@ -14,6 +14,7 @@ pub enum Input {
     VariablesInvalid,
     EmbeddedSuccess,
     EmbeddedLimit,
+    RuntimeBoundary,
 }
 
 #[derive(Clone)]
@@ -143,5 +144,8 @@ pub fn cases() -> Vec<Case> {
             input: Input::EmbeddedLimit, stdout: "", code: Some("BW8001"), error: Some("evaluation steps") },
         success("syntax-boundary", include_str!("syntax-boundary.botwork"), "65\n1\n", &["R2"], &["R2"]),
         failure("syntax-limit", include_str!("syntax-limit.botwork"), "", "BW8001", "expression operators", &["R2"]),
+        Case { id: "runtime-boundary", positive: &["R3"], invalid: &[], boundary: &["R3"],
+            input: Input::RuntimeBoundary, stdout: "", code: None, error: None },
+        failure("runtime-recursion", include_str!("runtime-recursion.botwork"), "", "BW8001", "call depth", &["R3"]),
     ]
 }

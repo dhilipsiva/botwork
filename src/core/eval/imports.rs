@@ -125,6 +125,9 @@ fn load_module(
     if let Some(module) = context.modules.loaded.get(&canonical) {
         return Ok(Arc::clone(module));
     }
+    context
+        .check_import_depth()
+        .map_err(|error| error.at(span))?;
     let source = context
         .read_source(&canonical)
         .map_err(|error| match error {

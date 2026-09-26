@@ -107,7 +107,7 @@ Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones 
 
 ## Remaining Interpreter Work
 
-Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine runs have initial source/step/call-depth budgets; legacy Context/CLI source parsing has fixed syntax guards, while their runtime execution remains unbounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Broader resource limits, asynchronous DSL execution, and adapter integrations retain their own roadmap items. Engine, Context, and CLI execution share source/syntax guards and step/call/evaluation/import-initialization depth budgets. Host-AST structure, aggregate memory, and hard host termination remain open. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.
 

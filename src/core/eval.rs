@@ -17,7 +17,8 @@ use super::{
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Operate, Rule},
-    run::{RunBudget, RunEnvironment, SourceFailure},
+    operation::OperationControl,
+    run::{EvaluationGuard, RunBudget, RunEnvironment, RunLimits, SourceFailure},
     signature::{StatementOrigin, StatementSignature},
 };
 
@@ -110,7 +111,10 @@ impl Default for Context {
             loading: vec![],
             working_directory: std::env::current_dir().map_err(|error| error.to_string()),
             environment: None,
-            budget: None,
+            budget: Some(RunBudget::new(
+                RunLimits::default(),
+                OperationControl::default(),
+            )),
             #[cfg(test)]
             expression_visits: Default::default(),
         }
@@ -118,6 +122,25 @@ impl Default for Context {
 }
 
 impl Context {
+    /// A fresh context with local runtime budgets and an externally cancellable control.
+    /// Counters persist across evaluations; use a fresh context after budget exhaustion.
+    pub fn with_control(limits: RunLimits, control: OperationControl) -> DiagnosticResult<Self> {
+        control.checkpoint()?;
+        limits.validate()?;
+        Ok(Self {
+            budget: Some(RunBudget::new(limits, control)),
+            ..Self::default()
+        })
+    }
+
+    pub fn with_limits(limits: RunLimits) -> DiagnosticResult<Self> {
+        Self::with_control(limits, OperationControl::default())
+    }
+
+    fn enter_evaluation(&self) -> DiagnosticResult<Option<EvaluationGuard>> {
+        self.budget.as_ref().map(RunBudget::enter).transpose()
+    }
+
     pub(crate) fn root_variables(&self) -> BTreeMap<String, Literal> {
         self.frames[0]
             .variables
@@ -126,7 +149,8 @@ impl Context {
             .collect()
     }
 
-    pub(crate) fn checkpoint(&self) -> DiagnosticResult<()> {
+    /// Observe cancellation/deadline/latched limit failures without consuming a step.
+    pub fn checkpoint(&self) -> DiagnosticResult<()> {
         self.budget.as_ref().map_or(Ok(()), RunBudget::checkpoint)
     }
 
@@ -140,6 +164,20 @@ impl Context {
             if self.calls.len() >= budget.limits().call_depth {
                 return Err(budget.limit("call depth", budget.limits().call_depth as u64));
             }
+        }
+        Ok(())
+    }
+
+    fn check_import_depth(&self) -> DiagnosticResult<()> {
+        self.checkpoint()?;
+        if let Some(budget) = &self.budget {
+            if self.loading.len() >= budget.limits().import_depth {
+                return Err(budget.limit(
+                    "import initialization depth",
+                    budget.limits().import_depth as u64,
+                ));
+            }
+            budget.check_parser_entry()?;
         }
         Ok(())
     }
@@ -180,6 +218,9 @@ impl Context {
     }
 
     pub(crate) fn parse_source(&self, name: &str, source: &str) -> DiagnosticResult<Program> {
+        if let Some(budget) = &self.budget {
+            budget.check_parser_entry()?;
+        }
         let limits = self
             .budget
             .as_ref()
@@ -555,6 +596,9 @@ fn invoke_resolved(
     arguments: Vec<Literal>,
     context: &mut Context,
 ) -> RuntimeResult {
+    let _depth = context
+        .enter_evaluation()
+        .map_err(|error| error.at(&call.span).capture_stack(&context.calls))?;
     match definition {
         StmtType::Imported {
             module,
@@ -622,6 +666,11 @@ fn invoke_resolved(
 }
 
 fn evaluate_expression(expression: &Expr, context: &mut Context) -> RuntimeResult {
+    let _depth = context.enter_evaluation().map_err(|error| {
+        error
+            .at_expression(&expression.span)
+            .capture_stack(&context.calls)
+    })?;
     evaluate_expression_inner(expression, context).map_err(|error| {
         error
             .at_expression(&expression.span)
@@ -910,6 +959,9 @@ fn evaluate_handler(
 }
 
 fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
+    let _depth = context
+        .enter_evaluation()
+        .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))?;
     evaluate_statement_inner(statement, context)
         .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))
 }
@@ -1076,6 +1128,7 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
 
 /// Parser-pair compatibility with detailed execution errors.
 pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
+    context.checkpoint()?;
     match ast::from_pair(pair)? {
         Node::Statement(statement) => execute_statement_detailed(&statement, context),
         Node::Expression(expression) => evaluate_expression(&expression, context),
