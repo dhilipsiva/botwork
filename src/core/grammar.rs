@@ -143,6 +143,62 @@ fn validate_numeric_operand(value: &Literal) -> Result<(), BWErr> {
     Ok(())
 }
 
+fn numeric_pair(left: &Literal, right: &Literal) -> Option<(f64, f64)> {
+    fn widen(value: &Literal) -> Option<f64> {
+        match value {
+            Literal::Int(value) => Some(f64::from(*value)),
+            Literal::Float(value) => Some(f64::from(*value)),
+            _ => None,
+        }
+    }
+    // f64 represents every i32 and every finite f32 exactly. Comparisons must
+    // not first round an integer to f32 as mixed arithmetic deliberately does.
+    Some((widen(left)?, widen(right)?))
+}
+
+fn values_equal(left: &Literal, right: &Literal) -> Result<bool, BWErr> {
+    // Validate complete operands before any shape/value mismatch can return
+    // false, including host-provided non-finite values nested in collections.
+    let mut pending = vec![right, left];
+    while let Some(value) = pending.pop() {
+        validate_numeric_operand(value)?;
+        match value {
+            Literal::Array(values) => pending.extend(values),
+            Literal::Map(values) => pending.extend(values.values()),
+            _ => (),
+        }
+    }
+
+    // Use a work list rather than adding recursive comparison stack frames.
+    let mut pairs = vec![(left, right)];
+    while let Some((left, right)) = pairs.pop() {
+        if let Some((left, right)) = numeric_pair(left, right) {
+            if left != right {
+                return Ok(false);
+            }
+            continue;
+        }
+        match (left, right) {
+            (Literal::None, Literal::None) => (),
+            (Literal::Bool(left), Literal::Bool(right)) if left == right => (),
+            (Literal::String(left), Literal::String(right)) if left == right => (),
+            (Literal::Array(left), Literal::Array(right)) if left.len() == right.len() => {
+                pairs.extend(left.iter().zip(right));
+            }
+            (Literal::Map(left), Literal::Map(right)) if left.len() == right.len() => {
+                for (key, left) in left {
+                    let Some(right) = right.get(key) else {
+                        return Ok(false);
+                    };
+                    pairs.push((left, right));
+                }
+            }
+            _ => return Ok(false),
+        }
+    }
+    Ok(true)
+}
+
 fn float_power(base: f64, exponent: i32) -> LiteralResult {
     if base == 0.0 && exponent < 0 {
         return Err(BWErr::ArithmeticError(
@@ -176,6 +232,14 @@ pub trait Operate {
 
 impl Operate for Rule {
     fn operate_binary(&self, lhs: Literal, rhs: Literal) -> LiteralResult {
+        if matches!(self, Rule::equal | Rule::not_equal) {
+            let are_equal = values_equal(&lhs, &rhs)?;
+            return Ok(Literal::Bool(if *self == Rule::equal {
+                are_equal
+            } else {
+                !are_equal
+            }));
+        }
         let err = format!("{:?} {:?} {:?}", lhs, self, rhs);
         let err = Err(BWErr::OperationIncompatibleError(err));
         use Literal::*;
@@ -190,9 +254,7 @@ impl Operate for Rule {
             | less_than
             | less_than_or_equal
             | greater_than
-            | greater_than_or_equal
-            | equal
-            | not_equal => {
+            | greater_than_or_equal => {
                 matches!((&lhs, &rhs), (Int(_) | Float(_), Int(_) | Float(_)))
             }
             _ => false,
@@ -255,52 +317,17 @@ impl Operate for Rule {
             },
 
             // Binary Operations
-            less_than => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Bool(a < b)),
-                (Float(a), Int(b)) => Ok(Bool(a < b as f32)),
-                (Int(a), Float(b)) => Ok(Bool((a as f32) < b)),
-                (Float(a), Float(b)) => Ok(Bool(a < b)),
-                _ => err,
-            },
-            less_than_or_equal => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Bool(a <= b)),
-                (Float(a), Int(b)) => Ok(Bool(a <= b as f32)),
-                (Int(a), Float(b)) => Ok(Bool((a as f32) <= b)),
-                (Float(a), Float(b)) => Ok(Bool(a <= b)),
-                _ => err,
-            },
-            greater_than => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Bool(a > b)),
-                (Float(a), Int(b)) => Ok(Bool(a > b as f32)),
-                (Int(a), Float(b)) => Ok(Bool((a as f32) > b)),
-                (Float(a), Float(b)) => Ok(Bool(a > b)),
-                _ => err,
-            },
-            greater_than_or_equal => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Bool(a >= b)),
-                (Float(a), Int(b)) => Ok(Bool(a >= b as f32)),
-                (Int(a), Float(b)) => Ok(Bool((a as f32) >= b)),
-                (Float(a), Float(b)) => Ok(Bool(a >= b)),
-                _ => err,
-            },
-            not_equal => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Bool(a != b)),
-                (Float(a), Int(b)) => Ok(Bool(a != b as f32)),
-                (Int(a), Float(b)) => Ok(Bool((a as f32) != b)),
-                (Float(a), Float(b)) => Ok(Bool(a != b)),
-                (Bool(a), Bool(b)) => Ok(Bool(a != b)),
-                (String(a), String(b)) => Ok(Bool(a != b)),
-                _ => err,
-            },
-            equal => match (lhs, rhs) {
-                (Int(a), Int(b)) => Ok(Bool(a == b)),
-                (Float(a), Int(b)) => Ok(Bool(a == b as f32)),
-                (Int(a), Float(b)) => Ok(Bool((a as f32) == b)),
-                (Float(a), Float(b)) => Ok(Bool(a == b)),
-                (Bool(a), Bool(b)) => Ok(Bool(a == b)),
-                (String(a), String(b)) => Ok(Bool(a == b)),
-                _ => err,
-            },
+            less_than | less_than_or_equal | greater_than | greater_than_or_equal => {
+                match numeric_pair(&lhs, &rhs) {
+                    Some((left, right)) => Ok(Bool(match self {
+                        less_than => left < right,
+                        less_than_or_equal => left <= right,
+                        greater_than => left > right,
+                        _ => left >= right,
+                    })),
+                    Option::None => err,
+                }
+            }
 
             exponent => match (lhs, rhs) {
                 (Int(a), Int(b)) if b >= 0 => {

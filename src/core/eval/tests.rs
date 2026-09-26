@@ -388,6 +388,114 @@ fn minimum_integer_composes_in_collections_calls_and_float_operations() {
 }
 
 #[test]
+fn collection_equality_is_structural_with_exact_numeric_leaves() {
+    for (expression, expected) in [
+        ("[] == []", true),
+        ("{} == {}", true),
+        ("[1, 2] == [1.0, 2.0]", true),
+        ("[1, 2] == [2, 1]", false),
+        ("[1, 2] != [1]", true),
+        (
+            "{a: 1, b: [2, {c: true}]} == {b: [2.0, {c: true}], a: 1.0}",
+            true,
+        ),
+        ("{a: 1} == {b: 1}", false),
+        ("{a: 1} == {a: 1, b: 2}", false),
+        ("{a: [16777217]} == {a: [16777216.0]}", false),
+        ("[1] == [\"1\"]", false),
+        ("[false] == [0]", false),
+        ("1 + 2 == true", false),
+        ("\"é\" == \"é\"", false),
+        ("{\"é\": 1} == {\"é\": 1}", false),
+        ("[{}] == [[{}]]", false),
+        ("0.0 == -0.0", true),
+        ("0.1 == 0.10000001", false),
+        ("0.1 + 0.2 == 0.3", true),
+        ("0.1 + 0.2 - 0.3 == 0.0", true),
+        ("0.1 + 0.2 + 0.3 == 0.6", true),
+        ("16777217 == 16777216.0", false),
+        ("16777217 + 0.0 == 16777216.0", true),
+        ("16777217.0 == 16777216", true),
+        ("16777217.0 == 16777217", false),
+        ("2147483647 < 2147483648.0", true),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Bool(value)) if value == expected),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn equality_evaluates_both_operands_and_all_collection_values_before_comparing() {
+    let mut context = Context::default();
+    let result = evaluate("|answer| = |[1, 2] == [3, missing]|", &mut context);
+    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+    let visits: Vec<_> = context
+        .expression_visits
+        .borrow()
+        .iter()
+        .skip(1)
+        .map(|text| text.trim().to_owned())
+        .collect();
+    assert_eq!(visits, ["[1, 2]", "1", "2", "[3, missing]", "3", "missing"]);
+    let result = evaluate(
+        "|answer| = |[missing_first] != [missing_second]|",
+        &mut context,
+    );
+    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_first"));
+    let result = evaluate("|answer| = |true or [1] == [missing]|", &mut context);
+    assert!(matches!(result, Ok(Literal::Bool(true))));
+}
+
+#[test]
+fn equality_composes_with_none_results_collection_access_and_catch_recovery() {
+    let result = evaluate(
+        r#"Empty {}
+|none| = Empty
+|other| = Empty
+|values| = |{"result": none, "items": [1, 2]}|
+|noneMatches| = |[none == other, none != 0, values["result"] == none]|
+Same |left| with |right| { Return |left == right| }
+|match| = Same |values.items| with |[1.0, 2.0]|
+|preserved| = |7|
+Try { |preserved| = |[missing] == []| } Catch { |caught| = |true| }
+Try { |preserved| = |[] < []| } Catch { |orderingCaught| = |true| }
+|answer| = |[noneMatches, match, preserved, caught, orderingCaught]|"#,
+        &mut Context::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        result.to_string(),
+        "[[true, true, true], true, 7, true, true]"
+    );
+}
+
+#[test]
+fn decimal_float_literals_round_to_binary32_with_ties_to_even() {
+    for (expression, bits) in [
+        ("16777217.0", 16777216_f32.to_bits()),
+        ("16777219.0", 16777220_f32.to_bits()),
+        ("-16777217.0", (-16777216_f32).to_bits()),
+        ("0.1", 0x3dcc_cccd),
+        ("-0.0", 0x8000_0000),
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(
+            matches!(result, Ok(Literal::Float(value)) if value.to_bits() == bits),
+            "{expression}: {result:?}"
+        );
+    }
+}
+
+#[test]
 fn computed_access_mixes_indexes_literal_paths_and_arbitrary_string_keys() {
     for (path, expected) in [
         ("data.items[index].value", 8),
@@ -1317,7 +1425,7 @@ fn mixed_precedence_does_not_coerce_invalid_operand_types() {
         "1 and 2",
         "true + false",
         "1 < true",
-        "1 + 2 == true",
+        "1 + 2 < true",
         "!1",
         "-true",
     ] {

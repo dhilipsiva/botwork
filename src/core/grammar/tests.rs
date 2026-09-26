@@ -381,7 +381,7 @@ fn incompatible_types_take_priority_over_nonfinite_host_values() {
         ),
         (Rule::exponent, Literal::Int(4), Literal::Float(f32::NAN)),
         (
-            Rule::equal,
+            Rule::less_than,
             Literal::String("x".into()),
             Literal::Float(f32::NAN),
         ),
@@ -440,6 +440,241 @@ fn finite_float_rounding_and_underflow_remain_valid() {
         matches!(Rule::plus.operate_binary(Literal::Float(f32::MAX), Literal::Int(1)),
         Ok(Literal::Float(value)) if value == f32::MAX)
     );
+}
+
+#[test]
+fn mixed_numeric_comparisons_preserve_integer_precision_at_float_boundaries() {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+    for (left, right, ordering) in [
+        (Literal::Int(16777217), Literal::Float(16777216.0), Greater),
+        (Literal::Int(-16777217), Literal::Float(-16777216.0), Less),
+        (Literal::Int(i32::MAX), Literal::Float(2147483648.0), Less),
+        (Literal::Int(i32::MIN), Literal::Float(-2147483648.0), Equal),
+        (
+            Literal::Int(i32::MIN + 1),
+            Literal::Float(-2147483648.0),
+            Greater,
+        ),
+        (Literal::Int(16777216), Literal::Float(16777216.0), Equal),
+        (Literal::Int(0), Literal::Float(-0.0), Equal),
+        (Literal::Int(0), Literal::Float(f32::from_bits(1)), Less),
+        (Literal::Int(0), Literal::Float(-f32::from_bits(1)), Greater),
+        (Literal::Float(f32::MAX), Literal::Int(i32::MAX), Greater),
+        (Literal::Float(-f32::MAX), Literal::Int(i32::MIN), Less),
+    ] {
+        for (left, right, ordering) in [
+            (left.clone(), right.clone(), ordering),
+            (right, left, ordering.reverse()),
+        ] {
+            for (operator, expected) in [
+                (Rule::less_than, ordering == Less),
+                (Rule::less_than_or_equal, ordering != Greater),
+                (Rule::greater_than, ordering == Greater),
+                (Rule::greater_than_or_equal, ordering != Less),
+                (Rule::equal, ordering == Equal),
+                (Rule::not_equal, ordering != Equal),
+            ] {
+                let result = operator.operate_binary(left.clone(), right.clone());
+                assert!(
+                    matches!(result, Ok(Literal::Bool(value)) if value == expected),
+                    "{left:?} {operator:?} {right:?}: {result:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn equality_is_defined_for_every_finite_value_kind_without_coercion() {
+    let values = [
+        Literal::None,
+        Literal::Bool(false),
+        Literal::Int(0),
+        Literal::Float(0.0),
+        Literal::String("0".into()),
+        Literal::Array(vec![]),
+        Literal::Map(Default::default()),
+    ];
+    for (i, left) in values.iter().enumerate() {
+        for (j, right) in values.iter().enumerate() {
+            let expected = i == j || matches!((i, j), (2, 3) | (3, 2));
+            for (operator, expected) in [(Rule::equal, expected), (Rule::not_equal, !expected)] {
+                let result = operator.operate_binary(left.clone(), right.clone());
+                assert!(
+                    matches!(result, Ok(Literal::Bool(value)) if value == expected),
+                    "{left:?} {operator:?} {right:?}: {result:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn equality_rejects_nonfinite_values_even_in_unequal_or_nested_collections() {
+    for number in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        for invalid in [
+            Literal::Float(number),
+            Literal::Array(vec![Literal::Int(2), Literal::Float(number)]),
+            Literal::Map(
+                [(
+                    "nested".into(),
+                    Literal::Array(vec![Literal::Float(number)]),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+        ] {
+            for other in [
+                Literal::None,
+                Literal::Array(vec![]),
+                Literal::Array(vec![Literal::Int(1)]),
+                invalid.clone(),
+            ] {
+                for (left, right) in [(invalid.clone(), other.clone()), (other, invalid.clone())] {
+                    for operator in [Rule::equal, Rule::not_equal] {
+                        assert!(
+                            matches!(
+                                operator.operate_binary(left.clone(), right.clone()),
+                                Err(BWErr::ArithmeticError(_))
+                            ),
+                            "{left:?} {operator:?} {right:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn finite_value_equality_is_reflexive_symmetric_transitive_and_complementary() {
+    let values = [
+        Literal::None,
+        Literal::Int(0),
+        Literal::Float(-0.0),
+        Literal::Float(0.0),
+        Literal::Int(1),
+        Literal::Float(1.0),
+        Literal::Float(f32::from_bits(1)),
+        Literal::Int(16777216),
+        Literal::Float(16777216.0),
+        Literal::Int(16777217),
+        Literal::Bool(false),
+        Literal::String("0".into()),
+        Literal::Array(vec![Literal::Int(0)]),
+        Literal::Array(vec![Literal::Float(-0.0)]),
+        Literal::Map([("k".into(), Literal::Int(1))].into_iter().collect()),
+        Literal::Map([("k".into(), Literal::Float(1.0))].into_iter().collect()),
+    ];
+    let mut equal = vec![vec![false; values.len()]; values.len()];
+    for (i, left) in values.iter().enumerate() {
+        for (j, right) in values.iter().enumerate() {
+            let Literal::Bool(result) = Rule::equal
+                .operate_binary(left.clone(), right.clone())
+                .unwrap()
+            else {
+                panic!("equality must return a boolean")
+            };
+            equal[i][j] = result;
+            assert!(
+                matches!(Rule::not_equal.operate_binary(left.clone(), right.clone()),
+                Ok(Literal::Bool(unequal)) if unequal != result)
+            );
+        }
+    }
+    for i in 0..values.len() {
+        assert!(equal[i][i], "reflexivity at {i}");
+        for j in 0..values.len() {
+            assert_eq!(equal[i][j], equal[j][i], "symmetry at {i}, {j}");
+            for k in 0..values.len() {
+                if equal[i][j] && equal[j][k] {
+                    assert!(equal[i][k], "transitivity at {i}, {j}, {k}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ordering_remains_numeric_only_and_rejects_nonfinite_numeric_operands() {
+    for operator in [
+        Rule::less_than,
+        Rule::less_than_or_equal,
+        Rule::greater_than,
+        Rule::greater_than_or_equal,
+    ] {
+        for value in [
+            Literal::None,
+            Literal::Bool(false),
+            Literal::String("0".into()),
+            Literal::Array(vec![]),
+            Literal::Map(Default::default()),
+        ] {
+            for (left, right) in [
+                (value.clone(), Literal::Int(0)),
+                (Literal::Int(0), value.clone()),
+                (value.clone(), value),
+            ] {
+                assert!(matches!(
+                    operator.operate_binary(left, right),
+                    Err(BWErr::OperationIncompatibleError(_))
+                ));
+            }
+        }
+        for number in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            for (left, right) in [
+                (Literal::Float(number), Literal::Int(0)),
+                (Literal::Int(0), Literal::Float(number)),
+            ] {
+                assert!(matches!(
+                    operator.operate_binary(left, right),
+                    Err(BWErr::ArithmeticError(_))
+                ));
+            }
+        }
+    }
+}
+
+#[test]
+fn mixed_arithmetic_rounds_integer_operands_to_f32_before_the_operation() {
+    for (operator, left, right, expected) in [
+        (
+            Rule::plus,
+            Literal::Int(16777217),
+            Literal::Float(1.0),
+            16777216.0,
+        ),
+        (
+            Rule::minus,
+            Literal::Int(16777217),
+            Literal::Float(1.0),
+            16777215.0,
+        ),
+        (
+            Rule::multiply,
+            Literal::Int(16777217),
+            Literal::Float(1.0),
+            16777216.0,
+        ),
+        (
+            Rule::divide,
+            Literal::Int(16777217),
+            Literal::Int(1),
+            16777216.0,
+        ),
+        (
+            Rule::modulus,
+            Literal::Int(16777217),
+            Literal::Float(2.0),
+            0.0,
+        ),
+    ] {
+        let result = operator.operate_binary(left.clone(), right.clone());
+        assert!(
+            matches!(result, Ok(Literal::Float(value)) if value == expected),
+            "{left:?} {operator:?} {right:?}: {result:?}"
+        );
+    }
 }
 
 #[test]

@@ -14,6 +14,12 @@ Expression evaluation takes an immutable context. Collection lookup borrows a va
 
 Maps use exact string keys; arrays require ASCII digits for dot segments or nonnegative integer values for brackets. Bounds are checked without panicking on index overflow. Access errors include the path, failing segment, and reason; computed segments retain their bracket source text. Reads have no mutation operation. Indexed updates are reserved for future library statements returning replacement values.
 
+## Value Comparison
+
+`numeric_pair` widens integers and stored binary32 floats exactly to binary64 for all numeric comparisons. Arithmetic retains its separate binary32 conversion policy. `values_equal` first validates both complete value trees for non-finite host floats, then compares structural values using an explicit work list. Arrays compare positions; maps compare key sets and associated values independently of iteration order. Distinct nonnumeric kinds are unequal. Neither pass adds recursive comparison frames; source/value nesting and resource limits still require their own work.
+
+Equality runs before constructing generic incompatible-operator diagnostics, avoiding unnecessary formatting of entire collections on successful comparisons. Both operands have already evaluated before the value operator runs, so structural mismatches do not suppress expression errors or effects.
+
 ## Source Ownership and Locations
 
 Each program shares one `Arc<SourceFile>` containing its name and original UTF-8 text. Statement, expression, block, definition, identifier, and operator spans retain this source. Byte ranges use an exclusive end; `text()` returns the original range, including any whitespace consumed by that grammar node. Parenthesized operands retain their delimiters.

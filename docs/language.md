@@ -67,7 +67,7 @@ Division always returns a float. Division and remainder reject a zero divisor, i
 
 Powers require an integer exponent. A nonnegative exponent with an integer base returns an integer; a negative exponent or floating base returns a float. `0 ^ 0` is `1`, while zero to a negative power is an arithmetic error. Floating powers preserve integer exponent parity and use at most 32 repeated-squaring steps, wider intermediates, and one final rounding to `f32`. For example, `2 ^ -3` is `0.125`, and `2 ^ -149` remains a positive subnormal value.
 
-Float literal evaluation and supported numeric operations reject non-finite values/results. Operand-type errors take priority over checks on host-supplied non-finite values. Finite underflow to zero is allowed. Ordinary mixed arithmetic converts integer operands to `f32`; rounding can lose integer precision (`16777217 + 0.0` becomes `16777216`) or retain a finite maximum after a small addition. Floating powers instead convert their base exactly to `f64` for intermediate calculations. These checks do not redesign numeric precision, comparison, or host-value serialization contracts, which remain roadmap work.
+Float literal evaluation and supported numeric operations reject non-finite values/results. Unsupported operand-type errors take priority over checks on host-supplied non-finite values. Finite underflow to zero is allowed. Ordinary mixed arithmetic converts integer operands to `f32`; rounding can lose integer precision (`16777217 + 0.0` becomes `16777216`) or retain a finite maximum after a small addition. Floating powers instead convert their base exactly to `f64` for intermediate calculations. Equality accepts every value kind and validates nested floating values as described below. Host-value serialization remains separate roadmap work.
 
 Arithmetic errors can be handled by `Try/Catch`. An uncaught error stops execution and returns CLI status `1`; direct failed numeric assignments preserve their previous value. See [the arithmetic example](../examples/04-arithmetic-errors.botwork).
 
@@ -78,6 +78,42 @@ Integer literals support the full range `-2147483648` through `2147483647`. When
 Compound operands still evaluate before negation with the usual precedence and intermediate bounds. `--2147483648` overflows when the outer minus negates the minimum value. `-(2147483648 + 0)` fails while converting its positive operand. `-2147483648 ^ 0` likewise attempts the power first and fails on its positive base; `(-2147483648) ^ 0` is `1`. See [the signed-integer example](../examples/10-signed-integers.botwork).
 
 Parsing keeps numeric text unevaluated. Unused definitions, unselected branches, and skipped boolean operands do not trigger literal-conversion errors.
+
+## Numeric Precision and Comparison
+
+Integers are exact `i32` values. Decimal float literals round to IEEE binary32 (`f32`) using nearest-value rounding with ties to even; for example, `16777217.0` becomes `16777216.0`, while `16777219.0` becomes `16777220.0`. Binary floats cannot represent every decimal fraction. Signed zero and finite subnormal values are supported; overflow to infinity is an error and underflow to zero is allowed.
+
+| Operation | Conversion and result |
+| --- | --- |
+| Integer `+`, `-`, `*`, `%`; nonnegative integer powers | Checked exact `i32` result |
+| Mixed/float `+`, `-`, `*`, `%` | Convert integer operands to `f32` first, perform the binary32 operation, return finite `f32` |
+| `/`, including integer division | Convert integer operands to `f32` first, return finite `f32` |
+| Floating-base or negative-exponent power | Widen base exactly to `f64`, use integer repeated squaring, round the final result to finite `f32` |
+| Numeric equality and ordering | Compare stored values exactly by widening both to `f64`; return boolean |
+
+Every `i32` and finite `f32` value is exactly representable in `f64`, so comparisons do not round integers to floats first. `16777217 > 16777216.0` and `2147483647 < 2147483648.0` are true. Float-literal rounding has already happened: `16777217.0 == 16777216` is true. Arithmetic retains its documented rounding: `16777217 + 0.0 == 16777216.0` is also true. Comparison does not change either operand's value or type.
+
+There is no implicit string/boolean conversion, float-to-integer conversion, or approximate equality tolerance. Both signs of zero compare equal. Ordering (`<`, `<=`, `>`, `>=`) accepts numbers only; strings, booleans, None, arrays, and maps produce type errors. Ordering chains remain ordinary binary expressions.
+
+## Value Equality
+
+`==` and `!=` compare every pair of finite language values and return booleans. `!=` is the exact complement of `==`:
+
+| Values | Equal when |
+| --- | --- |
+| Numbers, including mixed integer/float | Their stored numeric values are exactly equal |
+| Booleans | They are both true or both false |
+| Strings | Their Unicode contents match exactly, without normalization or case folding |
+| None | Both values are None; an undefined variable still raises an error |
+| Arrays | Lengths match and values at every corresponding position are equal |
+| Maps | Exact string key sets match and every corresponding value is equal; insertion order is irrelevant |
+| Different nonnumeric kinds | Never: `1 == true`, `1 == "1"`, and `[] == {}` are false |
+
+Collection equality applies the same rules at every depth. Thus `[1, 2] == [1.0, 2.0]` is true, while `[1, 2] == [2, 1]` is false. Reads/copies compare by value, without identity or alias checks. Both operands and all their collection values evaluate in source order before comparison; `[1] == [2, missing]` still fails when reading `missing`.
+
+Host-supplied NaN and infinities are invalid language values. Equality checks both complete operands, including nested collections, before returning either boolean; an invalid float raises catchable `ArithmeticError` even when shapes or other values differ. This avoids results depending on map iteration order. Resource limits remain separate work.
+
+Compatibility: earlier prototypes returned type errors for collection/None equality and incompatible scalar kinds. They also rounded integer operands during mixed numeric comparisons. The rules above intentionally replace those behaviors. See [the comparison example](../examples/13-value-comparisons.botwork).
 
 ## Strings
 

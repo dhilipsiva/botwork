@@ -24,6 +24,8 @@ The collection-access example checks nested map/array paths, Unicode keys, call/
 
 The computed-access example adds variable indexes, quoted and empty map keys, temporary expression bases, and mixed bracket/dot paths. Unit instrumentation verifies that the base and each required index run once in order, with later keys skipped after failure. AST cases preserve bracket/decoded-key spans and reject malformed accesses and indexed assignments. CLI fixtures check bounds diagnostics and syntax rejection before any output, including malformed skipped operands; both owned and parser-pair execution APIs are covered.
 
+The value-comparison example checks exact mixed numeric comparisons, arithmetic rounding, structural array/map equality, None, and numeric-only ordering. Unit matrices cover all value-kind pairs, equality laws, all six numeric comparisons in both directions near precision/range boundaries, invalid nested host floats, decimal rounding, and operand evaluation order. A CLI fixture checks that valid collection equality prints before an uncaught ordering error stops execution.
+
 ## Coverage Measurement
 
 Use Python 3.9 or newer and the active Rust toolchain's LLVM tools:

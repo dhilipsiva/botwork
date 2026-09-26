@@ -86,6 +86,18 @@ fn signed_integer_overflow_fails_after_printing_the_valid_minimum() {
 }
 
 #[test]
+fn collection_ordering_fails_after_valid_equality_output() {
+    let path = fixture("invalid-collection-ordering.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"true\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("invalid-collection-ordering.botwork"));
+    assert!(diagnostic.contains("Operation performed on incompatible types:"));
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
 fn computed_access_failures_preserve_prior_output_and_stop_execution() {
     let path = fixture("computed-access-out-of-bounds.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);

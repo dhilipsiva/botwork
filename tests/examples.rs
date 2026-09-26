@@ -142,6 +142,29 @@ fn signed_integer_example_handles_boundaries_and_catchable_failures() {
 }
 
 #[test]
+fn comparison_example_preserves_precision_and_checks_structural_values() {
+    assert_example(
+        "13-value-comparisons.botwork",
+        &[
+            "false",
+            "true",
+            "true",
+            "true",
+            "true",
+            "true",
+            "false",
+            "true",
+            "false",
+            "false",
+            "true",
+            "true",
+            "ordering requires numbers",
+            "operands must evaluate first",
+        ],
+    );
+}
+
+#[test]
 fn computed_access_example_handles_arbitrary_keys_and_checked_indexes() {
     assert_example(
         "12-computed-access.botwork",
