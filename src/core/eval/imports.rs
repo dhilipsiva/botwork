@@ -386,10 +386,10 @@ pub(super) fn invoke_imported(
     call: &Call,
     module: &LoadedModule,
     exported: &str,
-    arguments: Vec<Literal>,
+    arguments: Vec<TemporaryValue>,
     import_site: &Span,
     context: &mut Context,
-) -> RuntimeResult {
+) -> TemporaryResult {
     let mut size = context.isolated_snapshot_size();
     module.frame.snapshot_size(&mut size);
     context.charge_snapshot(size).map_err(|error| {

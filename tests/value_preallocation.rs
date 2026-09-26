@@ -58,6 +58,208 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn temporary_variable_copy_is_admitted_before_payload_allocation() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        temporaries: TemporaryLimits {
+            payload_bytes: 0,
+            ..TemporaryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .set_input_variables(BTreeMap::from([(
+            "source".into(),
+            Literal::String("x".repeat(length)),
+        )]))
+        .unwrap();
+    let program = Program::parse("copy", "|target| = |source|").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("temporary value payload bytes"));
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn temporary_array_width_and_map_keys_reject_before_container_or_key_allocation() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let source = format!("|x| = |[{}]|", vec!["0"; 4096].join(","));
+    let array = Program::parse("array", &source).unwrap();
+    let map = Program::parse(
+        "map",
+        &format!("|x| = |{{\"{}\":0}}|", "x".repeat(64 * 1024)),
+    )
+    .unwrap();
+    for (program, limits, threshold, resource) in [
+        (
+            &array,
+            TemporaryLimits {
+                nodes: 1,
+                ..TemporaryLimits::default()
+            },
+            16 * 1024,
+            "temporary value nodes",
+        ),
+        (
+            &map,
+            TemporaryLimits {
+                payload_bytes: 0,
+                ..TemporaryLimits::default()
+            },
+            64 * 1024,
+            "temporary value payload bytes",
+        ),
+    ] {
+        let mut context = Context::with_limits(RunLimits {
+            temporaries: limits,
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let (result, large) = observe(threshold, || {
+            evaluate_program_detailed(program, &mut context)
+        });
+        assert!(result.unwrap_err().to_string().contains(resource));
+        assert_eq!(large, 0);
+    }
+}
+
+#[test]
+fn temporary_concat_overlap_rejects_before_growing_combined_storage() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        temporaries: TemporaryLimits {
+            payload_bytes: length,
+            ..TemporaryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .set_input_variables(BTreeMap::from([
+            ("left".into(), Literal::String("x".repeat(length / 2))),
+            ("right".into(), Literal::String("y".repeat(length / 2))),
+        ]))
+        .unwrap();
+    let program = Program::parse("concat", "|x| = |left+right|").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("temporary value payload bytes"));
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn builtin_log_temporary_rejection_avoids_its_output_copy() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        temporaries: TemporaryLimits {
+            payload_bytes: length,
+            ..TemporaryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context.init_statements();
+    context
+        .set_input_variables(BTreeMap::from([(
+            "value".into(),
+            Literal::String("x".repeat(length)),
+        )]))
+        .unwrap();
+    let program = Program::parse("log", "Log |value|").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("temporary value payload bytes"));
+    assert_eq!(large, 1, "Only the evaluated argument is copied");
+}
+
+#[test]
+fn container_construction_transfers_child_payload_without_copying_it() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    let string = "x".repeat(length);
+    let pointer = string.as_ptr();
+    let owned = Mutex::new(Some(Literal::String(string)));
+    let mut context = Context::default();
+    context
+        .register_native("Host", move |_| Ok(owned.lock().unwrap().take().unwrap()))
+        .unwrap();
+    evaluate_program_detailed(
+        &Program::parse("definition", "Wrap { Return |[@{ Host }]| }").unwrap(),
+        &mut context,
+    )
+    .unwrap();
+    let program = Program::parse("call", "Wrap").unwrap();
+    let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    let Literal::Array(values) = result.unwrap() else {
+        panic!()
+    };
+    let Literal::String(value) = &values[0] else {
+        panic!()
+    };
+    assert_eq!(value.as_ptr(), pointer);
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn temporary_argument_slots_reject_before_allocating_a_wide_argument_vector() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let mut context = Context::with_limits(RunLimits {
+        temporaries: TemporaryLimits {
+            values: 0,
+            ..TemporaryLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let parameters = (0..4096).map(|i| format!(" |p{i}|")).collect::<String>();
+    context
+        .register_native(&format!("Take{parameters}"), |_| {
+            panic!("unreachable callback")
+        })
+        .unwrap();
+    let program =
+        Program::parse("wide-arguments", &format!("Take{}", " |0|".repeat(4096))).unwrap();
+    let (result, large) = observe(16 * 1024, || {
+        evaluate_program_detailed(&program, &mut context)
+    });
+    assert!(result.unwrap_err().to_string().contains("temporary values"));
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn unique_engine_input_payload_moves_into_results_without_copying() {
     let length = 64 * 1024;
     let value = "x".repeat(length);

@@ -37,6 +37,8 @@ pub enum Input {
     SnapshotLimit,
     ResultBoundary,
     ResultLimit,
+    TemporaryBoundary,
+    TemporaryLimit,
 }
 
 #[derive(Clone)]
@@ -213,5 +215,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::ResultBoundary, stdout: "", code: None, error: None },
         Case { id: "result-limit", positive: &[], invalid: &["R14"], boundary: &[],
             input: Input::ResultLimit, stdout: "", code: Some("BW8001"), error: Some("result payload bytes") },
+        Case { id: "temporary-boundary", positive: &["R15"], invalid: &[], boundary: &["R15"],
+            input: Input::TemporaryBoundary, stdout: "", code: None, error: None },
+        Case { id: "temporary-limit", positive: &[], invalid: &["R15"], boundary: &[],
+            input: Input::TemporaryLimit, stdout: "", code: Some("BW8001"), error: Some("temporary value payload bytes") },
     ]
 }

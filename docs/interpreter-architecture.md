@@ -459,3 +459,20 @@ assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
 assert!(run.variables.is_empty());
 assert!(run.snapshot_error.is_some());
 ```
+
+## Bound Live Expression Values
+
+Concatenation admits the output while both operands remain charged.
+
+```rust
+use botwork::core::run::{Engine, RunLimits, RunOptions, RunOutcome, TemporaryLimits};
+let run = Engine::default().run_source("temporary", "|x| = |\"ab\" + \"cd\"|", RunOptions {
+    limits: RunLimits {
+        temporaries: TemporaryLimits { values: 3, nodes: 3, payload_bytes: 8 },
+        ..RunLimits::default()
+    },
+    ..RunOptions::default()
+});
+assert_eq!(run.outcome(), RunOutcome::Succeeded);
+assert_eq!(run.variables["x"].to_string(), "abcd");
+```

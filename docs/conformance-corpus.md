@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 73 cases against the 44 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 75 cases against the 45 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -52,6 +52,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R12 | registry-boundary | registry-limit | registry-boundary |
 | R13 | snapshot-boundary | snapshot-limit | snapshot-boundary |
 | R14 | result-boundary | result-limit | result-boundary |
+| R15 | temporary-boundary | temporary-limit | temporary-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -90,3 +91,5 @@ Two registry host cases admit a native signature at exact record/node/key/text/s
 Two snapshot host cases admit the fixed Engine template table at its exact entry budget or reject it before inputs and script effects.
 
 Two result host cases admit a terminal/root pair with nested UTF-8 keys at exact aggregate limits or reject its payload with an explicit omitted-snapshot diagnostic.
+
+Two temporary host cases admit exact concatenation operand/output headroom or reject its aggregate payload before publishing the assignment.

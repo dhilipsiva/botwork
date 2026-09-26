@@ -414,6 +414,38 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::TemporaryBoundary | Input::TemporaryLimit => {
+                use botwork::core::run::{
+                    Engine, RunLimits, RunOptions, RunOutcome, TemporaryLimits,
+                };
+                let run = Engine::default().run_source(
+                    case.id,
+                    "|x| = |\"ab\"+\"cd\"|",
+                    RunOptions {
+                        limits: RunLimits {
+                            temporaries: TemporaryLimits {
+                                values: 3,
+                                nodes: 3,
+                                payload_bytes: if case.error.is_some() { 7 } else { 8 },
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                assert!(run.snapshot_error.is_none());
+                if let Some(expected) = case.error {
+                    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+                    assert!(run.variables.is_empty());
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                } else {
+                    assert_eq!(run.outcome(), RunOutcome::Succeeded);
+                    assert_eq!(run.variables["x"].to_string(), "abcd");
+                }
+                continue;
+            }
             Input::ResultBoundary | Input::ResultLimit => {
                 use botwork::core::run::{Engine, ResultLimits, RunLimits, RunOptions, RunOutcome};
                 let run = Engine::default().run_source(

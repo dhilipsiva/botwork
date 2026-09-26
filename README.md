@@ -62,6 +62,8 @@ including native templates and imported wrappers. [Snapshot budgets](docs/snapsh
 admit frame/cache copies before table allocation and define host Clone ownership.
 [Result budgets](docs/result-limits.md) admit owned terminal/root exports, transfer
 unique payloads, and report omitted snapshots explicitly.
+[Temporary budgets](docs/temporary-limits.md) cover live expressions, arguments,
+collection construction, and operand/output overlap across calls and modules.
 
 Or you can create a file from below sample and pass the path to cargo run
 

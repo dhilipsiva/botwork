@@ -117,7 +117,7 @@ fn signature_queries_observe_lexical_shadowing_and_restore_parent_visibility() {
                     context.signature_for_call(&call).unwrap().help(),
                     signature.help()
                 );
-                Ok(Completion::Normal(Literal::None))
+                Ok(Completion::Normal(context.temporary(Literal::None)?))
             },
         )
         .unwrap();

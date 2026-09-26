@@ -24,6 +24,7 @@ fn evaluate_unvalidated_statement(source: &str, context: &mut Context) -> Litera
     };
     evaluate_statement(&statement, context)
         .and_then(finish_script)
+        .map(super::TemporaryValue::into_inner)
         .map_err(super::Diagnostic::into_error)
 }
 
@@ -195,8 +196,10 @@ fn for_restores_present_absent_and_none_bindings_on_every_completion() {
                 .map_err(super::Diagnostic::into_error);
             assert!(
                 match expected {
-                    "normal" => matches!(result, Ok(Completion::Normal(Literal::None))),
-                    "return" => matches!(result, Ok(Completion::Return(Literal::Int(7)))),
+                    "normal" =>
+                        matches!(&result, Ok(Completion::Normal(value)) if matches!(&**value, Literal::None)),
+                    "return" =>
+                        matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::Int(7))),
                     "error" => matches!(result, Err(BWErr::VariableNotDefined(_))),
                     _ => unreachable!(),
                 },

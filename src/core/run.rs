@@ -45,6 +45,9 @@ pub use snapshot_limits::SnapshotLimits;
 pub(crate) use snapshot_limits::SnapshotSize;
 mod result_limits;
 pub use result_limits::ResultLimits;
+mod temporary_values;
+pub use temporary_values::TemporaryLimits;
+pub(crate) use temporary_values::{TemporaryReservation, TemporaryValue};
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
@@ -70,6 +73,7 @@ pub struct RunLimits {
     pub retained_registry: RetainedRegistryLimits,
     pub snapshots: SnapshotLimits,
     pub results: ResultLimits,
+    pub temporaries: TemporaryLimits,
 }
 
 impl Default for RunLimits {
@@ -90,6 +94,7 @@ impl Default for RunLimits {
             retained_registry: RetainedRegistryLimits::default(),
             snapshots: SnapshotLimits::default(),
             results: ResultLimits::default(),
+            temporaries: TemporaryLimits::default(),
         }
     }
 }
@@ -397,6 +402,7 @@ struct BudgetState {
     retained_definitions: Arc<retained_definitions::RetainedDefinitions>,
     retained_names: Arc<retained_names::RetainedNames>,
     retained_registry: Arc<retained_registry::RetainedRegistry>,
+    temporary_values: Arc<temporary_values::TemporaryValues>,
     stopped: Mutex<Option<BWErr>>,
 }
 
@@ -417,6 +423,7 @@ impl Clone for RunBudget {
             retained_definitions: Arc::clone(&self.0.retained_definitions),
             retained_names: Arc::clone(&self.0.retained_names),
             retained_registry: Arc::clone(&self.0.retained_registry),
+            temporary_values: Arc::clone(&self.0.temporary_values),
             stopped: Mutex::new(
                 self.0
                     .stopped
@@ -431,6 +438,9 @@ impl Clone for RunBudget {
 impl RunBudget {
     pub(crate) fn new(limits: RunLimits, control: OperationControl) -> Self {
         Self(Arc::new(BudgetState {
+            temporary_values: Arc::new(temporary_values::TemporaryValues::new(
+                limits.temporaries.clone(),
+            )),
             retained_registry: Arc::new(retained_registry::RetainedRegistry::new(
                 limits.retained_registry.clone(),
             )),

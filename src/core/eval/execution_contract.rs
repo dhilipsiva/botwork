@@ -252,11 +252,14 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                     evaluate_block(&definition.body, &mut context).map_err(Diagnostic::into_error);
                 assert!(
                     match action {
-                        "return" => matches!(result, Ok(Completion::Return(Literal::Int(42)))),
-                        "bare" => matches!(result, Ok(Completion::Return(Literal::None))),
+                        "return" =>
+                            matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::Int(42))),
+                        "bare" =>
+                            matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::None)),
                         "error" =>
                             matches!(&result, Err(BWErr::VariableNotDefined(name)) if name == "missing_handler"),
-                        _ => matches!(result, Ok(Completion::Normal(Literal::None))),
+                        _ =>
+                            matches!(&result, Ok(Completion::Normal(value)) if matches!(&**value, Literal::None)),
                     },
                     "{prior}/{action}/{in_handler}: {result:?}"
                 );
@@ -461,12 +464,14 @@ fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_dis
             let result = evaluate_statement(&body.statements[0], &mut context);
             assert!(
                 match action {
-                    "normal" => matches!(result, Ok(Completion::Normal(Literal::None))),
+                    "normal" =>
+                        matches!(&result, Ok(Completion::Normal(value)) if matches!(&**value, Literal::None)),
                     "continue" => matches!(result, Ok(Completion::Continue)),
                     "break" => matches!(result, Ok(Completion::Break)),
                     "return" =>
-                        matches!(&result, Ok(Completion::Return(Literal::String(code))) if code == "BW2001"),
-                    "bare" => matches!(result, Ok(Completion::Return(Literal::None))),
+                        matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::String(code) if code == "BW2001")),
+                    "bare" =>
+                        matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::None)),
                     _ => matches!(&result, Err(error) if error.code().as_str() == "BW2001"),
                 },
                 "{prior}/{action}: {result:?}"
