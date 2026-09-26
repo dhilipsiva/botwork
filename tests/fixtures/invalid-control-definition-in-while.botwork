@@ -1,0 +1,7 @@
+Log |"before"|
+While |false| {
+    Never called {
+        Continue
+    }
+}
+Log |"unreachable"|

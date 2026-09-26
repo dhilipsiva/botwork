@@ -105,7 +105,15 @@ Output failures become evaluation errors. Errors are reported on stderr with a n
 
 Bare `Return` and custom statements that finish without returning a value produce `None` (displayed as `none`). Normally completed definitions and control constructs also produce `None`. Blocks and loops do not collect their statements' results into arrays; an explicit array or map return preserves that value. Assignment and native `Log` retain their value results. See [the control-flow example](../examples/08-control-flow.botwork).
 
-At runtime, a `Return` escaping script-level execution or a `Break`/`Continue` escaping its invocation or script yields `ControlFlowError`. No pending control state survives an invocation. Whole-file rejection of invalid placements, including unused definitions, is still planned; current guards operate only on executed paths. Invocation-local variables and definitions remain separate scope TODOs.
+No pending control state survives an invocation. Invocation-local variables and definitions remain separate scope TODOs.
+
+## Control-Placement Validation
+
+The complete program is checked before any execution. `Return` requires a custom-statement body; top-level Return is invalid, including inside a script-level loop. `Break` and `Continue` require an enclosing For/While in the same invocation. A custom definition nested inside a loop starts its own control scope and cannot break or continue that outer loop.
+
+Validation checks unused definitions, unselected branches, handlers that never run, and unreachable statements. For example, `Unused { Break }` fails even without a call to `Unused`. A valid `Break` inside `While |false| { Break }` remains allowed because the enclosing loop is present.
+
+Invalid placement produces `ControlFlowError` with the offending source file and one-based line/column; columns count Unicode scalars and each tab as one column. The CLI exits with status `1` before any Log output or debug trace. Try/Catch cannot recover these validation errors. Syntax errors are reported first; numeric conversions, name resolution, and expression evaluation still happen at runtime.
 
 ## Try/Catch
 

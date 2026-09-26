@@ -104,14 +104,21 @@ fn spans_keep_original_bytes_unicode_columns_crlf_tabs_and_nested_locations() {
 
 #[test]
 fn all_statement_forms_lower_without_evaluating_or_validating_control_placement() {
-    let program = Program::parse(
-        "statements.botwork",
-        "|x| = |1|\n|y| = Do work |x|\nDo work |input| { Return |input| }\n\
+    // Exercise raw lowering independently of the public program validator.
+    let source = Arc::new(SourceFile {
+        name: "statements.botwork".into(),
+        text: "|x| = |1|\n|y| = Do work |x|\nDo work |input| { Return |input| }\n\
          If |false| {} Else If |true| {} Else {}\n\
          For |item| In |[1]| { Break\n Continue }\nWhile |false| {}\n\
-         Try {} Catch { Return }\nReturn |missing|\nBreak\nContinue\nDo work |2|",
-    )
-    .unwrap();
+         Try {} Catch { Return }\nReturn |missing|\nBreak\nContinue\nDo work |2|"
+            .into(),
+    });
+    let statements = BWParser::parse(Rule::botwork, &source.text)
+        .unwrap()
+        .filter(|pair| pair.as_rule() != Rule::EOI)
+        .map(|pair| statement(pair, &source).unwrap())
+        .collect();
+    let program = Program { source, statements };
     assert_eq!(
         program
             .statements
@@ -169,6 +176,100 @@ fn all_statement_forms_lower_without_evaluating_or_validating_control_placement(
         handler.statements[0].kind,
         StatementKind::Return(None)
     ));
+}
+
+#[test]
+fn control_validation_rejects_invalid_placement_even_when_unreachable() {
+    for control in ["Return", "Return |missing|", "Break", "Continue"] {
+        for source in [
+            control.to_owned(),
+            format!("If |false| {{ {control} }}"),
+            format!("If |true| {{}} Else {{ {control} }}"),
+            format!("If |true| {{}} Else If |false| {{ {control} }}"),
+            format!("Try {{}} Catch {{ {control} }}"),
+            format!("Try {{ {control} }} Catch {{}}"),
+        ] {
+            let result = Program::parse("invalid.botwork", &source);
+            assert!(
+                matches!(result, Err(BWErr::ControlFlowError(_))),
+                "{source}: {result:?}"
+            );
+        }
+    }
+    for source in [
+        "For |item| In |[]| { Return }",
+        "While |false| { Return }",
+        "Unused { Break }",
+        "Unused { Continue }",
+        "Unused {\n Return |1|\n Break\n}",
+        "Unused {\n Return |1|\n Continue\n}",
+        "For |item| In |[]| { Unused { Break } }",
+        "While |false| { Unused { Continue } }",
+        "Outer { While |false| { Inner { Break } } }",
+        "For |item| In |[]| {}\nBreak",
+        "While |false| {}\nContinue",
+        "Unused { Return }\nReturn",
+    ] {
+        let result = Program::parse("invalid.botwork", source);
+        assert!(
+            matches!(result, Err(BWErr::ControlFlowError(_))),
+            "{source}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn control_validation_accepts_only_lexically_enclosing_targets() {
+    for source in [
+        "Valid { Return }",
+        "Valid {\n Return |1|\n Return |missing|\n}",
+        "For |item| In |[]| { Break\nContinue }",
+        "While |false| { Continue\nBreak }",
+        "Valid { For |item| In |[]| { Return } }",
+        "Valid { While |false| { Return } }",
+        "Valid { If |false| { Return } Else If |false| { Return } Else { Return } }",
+        "Valid { Try { Return } Catch { Return } }",
+        "While |false| { Try { Break } Catch { Continue } }",
+        "For |item| In |[]| { If |false| { Continue } Else { Break } }",
+        "While |false| { Inner { Return }\nBreak }",
+        "Outer {\n Inner { While |false| { Break }\nReturn }\nReturn\n}",
+        "While |false| { Inner {}\nContinue }",
+        "While |false| { While |false| {}\nBreak }",
+    ] {
+        let result = Program::parse("valid.botwork", source);
+        assert!(result.is_ok(), "{source}: {result:?}");
+    }
+}
+
+#[test]
+fn control_validation_reports_the_first_invalid_statement_with_its_location() {
+    let source = "# café\r\nIf |false| {\r\n\t|é| = |\"🙂\"|\r\n\tContinue\r\n}\r\nBreak";
+    let error = Program::parse("unicode.botwork", source).unwrap_err();
+    assert!(matches!(error, BWErr::ControlFlowError(message)
+        if message == "unicode.botwork:4:2: Continue requires an enclosing loop in the same invocation"));
+    let error = Program::parse("inline.botwork", "|é| = |\"🙂\"| Return").unwrap_err();
+    assert!(matches!(error, BWErr::ControlFlowError(message)
+        if message == "inline.botwork:1:13: Return requires a custom-statement body"));
+}
+
+#[test]
+fn control_validation_does_not_evaluate_expressions_or_replace_syntax_errors() {
+    for source in ["Return\n|broken| = |2 ^|", "Unused { Break }\nTry {}"] {
+        assert!(matches!(
+            Program::parse("bad.botwork", source),
+            Err(BWErr::ParsingError(_))
+        ));
+    }
+    for source in [
+        "Valid { Return |99999999999999999999999999999999| }",
+        "While |missing| { Break }",
+        "For |item| In |missing| { Continue }",
+        "Unknown |missing|",
+    ] {
+        assert!(Program::parse("valid.botwork", source).is_ok(), "{source}");
+    }
+    let error = Program::parse("invalid.botwork", "|value| = |missing|\nReturn").unwrap_err();
+    assert!(matches!(error, BWErr::ControlFlowError(_)));
 }
 
 #[test]

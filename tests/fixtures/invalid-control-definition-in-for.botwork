@@ -1,0 +1,7 @@
+Log |"before"|
+For |item| In |[]| {
+    Never called {
+        Break
+    }
+}
+Log |"unreachable"|

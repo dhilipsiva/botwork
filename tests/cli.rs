@@ -14,17 +14,63 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn assert_control_placement_failure(name: &str, line: usize, column: usize, keyword: &str) {
+    let path = fixture(name);
+    // Validation also precedes debug tracing: no statement is executed or traced.
+    for debug in [false, true] {
+        let mut arguments = vec!["--file", path.to_str().unwrap()];
+        if debug {
+            arguments.push("--debug");
+        }
+        let output = run(&arguments);
+        assert_eq!(output.status.code(), Some(1), "{name}, debug={debug}");
+        assert!(
+            output.stdout.is_empty(),
+            "{name}: validation must prevent earlier output: {:?}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        let diagnostic = String::from_utf8(output.stderr).unwrap();
+        assert!(diagnostic.contains("Invalid control flow:"), "{diagnostic}");
+        assert!(
+            diagnostic.contains(&format!("{name}:{line}:{column}: {keyword} requires ")),
+            "{diagnostic}"
+        );
+        assert!(!diagnostic.contains("panicked"), "{diagnostic}");
+        assert!(!diagnostic.contains("debug:"), "{diagnostic}");
+    }
+}
+
 #[test]
-fn escaped_control_fails_the_cli_without_panicking_or_running_the_tail() {
-    // Runtime guard until the separate whole-program placement validator is added.
-    let path = fixture("invalid-control.botwork");
-    let output = run(&["--file", path.to_str().unwrap()]);
-    assert_eq!(output.status.code(), Some(1));
-    assert_eq!(output.stdout, b"before\n");
-    let diagnostic = String::from_utf8(output.stderr).unwrap();
-    assert!(diagnostic.contains("invalid-control.botwork"));
-    assert!(diagnostic.contains("Invalid control flow: Return requires a custom-statement body"));
-    assert!(!diagnostic.contains("panicked"));
+fn invalid_control_placement_prevents_all_cli_execution() {
+    assert_control_placement_failure("invalid-control.botwork", 2, 13, "Return");
+}
+
+#[test]
+fn invalid_control_in_unused_definitions_is_rejected_before_execution() {
+    assert_control_placement_failure("invalid-control-unused-break.botwork", 3, 5, "Break");
+    assert_control_placement_failure("invalid-control-unused-continue.botwork", 3, 5, "Continue");
+}
+
+#[test]
+fn nested_definitions_cannot_inherit_their_enclosing_loops_for_control_placement() {
+    assert_control_placement_failure("invalid-control-definition-in-for.botwork", 4, 9, "Break");
+    assert_control_placement_failure(
+        "invalid-control-definition-in-while.botwork",
+        4,
+        9,
+        "Continue",
+    );
+}
+
+#[test]
+fn invalid_control_in_unselected_branches_and_nested_catches_is_rejected() {
+    assert_control_placement_failure("invalid-control-false-branch.botwork", 3, 5, "Break");
+    assert_control_placement_failure("invalid-control-nested-catch.botwork", 5, 9, "Return");
+}
+
+#[test]
+fn invalid_control_diagnostics_preserve_unicode_crlf_and_tab_locations() {
+    assert_control_placement_failure("invalid-control-unicode.botwork", 2, 20, "Return");
 }
 
 #[test]

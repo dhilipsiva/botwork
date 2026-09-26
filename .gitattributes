@@ -1,0 +1,2 @@
+# Preserve CRLF in the source-location diagnostic fixture.
+/tests/fixtures/invalid-control-unicode.botwork -text whitespace=cr-at-eol

@@ -1,0 +1,5 @@
+Log |"before"|
+Never called {
+    Break
+}
+Log |"unreachable"|

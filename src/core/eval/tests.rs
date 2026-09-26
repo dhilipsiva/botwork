@@ -9,6 +9,22 @@ fn variable(context: &Context, name: &str) -> Literal {
     context.get_variable(name).unwrap()
 }
 
+// Bypass public validation only to exercise defensive runtime completion guards.
+fn evaluate_unvalidated_statement(source: &str, context: &mut Context) -> LiteralResult {
+    use super::{ast, evaluate_statement, finish_script, Node, Rule};
+    use crate::core::grammar::BWParser;
+    use pest::Parser;
+
+    let pair = BWParser::parse(Rule::botwork, source)
+        .unwrap()
+        .next()
+        .unwrap();
+    let Node::Statement(statement) = ast::from_pair(pair).unwrap() else {
+        panic!("expected statement");
+    };
+    finish_script(evaluate_statement(&statement, context)?)
+}
+
 #[test]
 fn normally_completed_controls_do_not_collect_body_results() {
     for source in [
@@ -61,13 +77,12 @@ fn return_expression_is_evaluated_once_before_control_transfer() {
 
 #[test]
 fn escaped_control_is_an_error_and_does_not_poison_the_context() {
-    // Runtime boundary guards; whole-program placement validation is still pending.
     for control in ["Return |7|", "Return", "Break", "Continue"] {
         for source in [control.to_owned(), format!("If |true| {{ {control} }}")] {
             let mut context = Context::default();
             assert!(
                 matches!(
-                    evaluate(&source, &mut context),
+                    evaluate_unvalidated_statement(&source, &mut context),
                     Err(BWErr::ControlFlowError(_))
                 ),
                 "{source}"
@@ -83,11 +98,10 @@ fn escaped_control_is_an_error_and_does_not_poison_the_context() {
 
 #[test]
 fn callee_loop_control_cannot_escape_to_a_callers_loop() {
-    // These are runtime guards until invalid placement is rejected before execution.
     for control in ["Break", "Continue"] {
         let mut context = Context::default();
-        let source = format!("Escape {{ {control} }}\nEscape");
-        let error = evaluate(&source, &mut context).unwrap_err();
+        evaluate_unvalidated_statement(&format!("Escape {{ {control} }}"), &mut context).unwrap();
+        let error = evaluate("Escape", &mut context).unwrap_err();
         assert!(matches!(error, BWErr::ControlFlowError(message) if message.contains(control)));
         let source = "Fresh { Return |9| }\n|caught| = |0|\n|count| = |0|\n\
                       For |item| In |[1, 2, 3]| {\n\

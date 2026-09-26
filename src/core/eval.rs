@@ -280,8 +280,7 @@ fn evaluate_statement(statement: &Statement, context: &mut Context) -> Completio
     }
 }
 
-// Runtime guards for public entry points and invocation boundaries. Whole-program
-// placement validation, including unused definitions, has its own TODO.
+// Retain runtime boundary guards even though public entry points validate placement.
 fn finish_script(completion: Completion) -> LiteralResult {
     match completion {
         Completion::Normal(value) => Ok(value),
@@ -300,16 +299,18 @@ fn finish_script(completion: Completion) -> LiteralResult {
 /// Evaluate an already parsed, owned statement at script level in this context.
 ///
 /// Definitions retain their syntax tree and source spans after the program is dropped.
-/// Escaping control flow is an error; custom calls consume their own returns.
+/// The entire statement is validated before execution; custom calls consume their returns.
 pub fn execute_statement(statement: &Statement, context: &mut Context) -> LiteralResult {
+    ast::validate_script(std::slice::from_ref(statement))?;
     finish_script(evaluate_statement(statement, context)?)
 }
 
-/// Evaluate a program without parsing or rebuilding its statements.
+/// Validate the complete program, then execute without parsing or rebuilding it.
 pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResult {
+    program.validate()?;
     let mut result = Literal::None;
     for statement in &program.statements {
-        result = execute_statement(statement, context)?;
+        result = finish_script(evaluate_statement(statement, context)?)?;
     }
     Ok(result)
 }
@@ -322,7 +323,10 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
     match ast::from_pair(pair)? {
         Node::Statement(statement) => execute_statement(&statement, context),
         Node::Expression(expression) => evaluate_expression(&expression, context),
-        Node::Block(block) => finish_script(evaluate_block(&block, context)?),
+        Node::Block(block) => {
+            ast::validate_script(&block.statements)?;
+            finish_script(evaluate_block(&block, context)?)
+        }
         Node::None => Ok(Literal::None),
     }
 }

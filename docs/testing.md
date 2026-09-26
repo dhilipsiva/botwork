@@ -3,9 +3,9 @@
 Run `cargo test` from the repository root. Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
 
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
-- `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, and original byte/line/column spans.
+- `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, original byte/line/column spans, and control-placement validation.
 - `src/core/eval/tests.rs` checks evaluation, state, conditions, collections, and error handling.
-- `tests/ast_execution.rs` checks execution after source/program ownership ends, deferred numeric errors, and the parser-pair compatibility entry point.
+- `tests/ast_execution.rs` checks execution after source/program ownership ends, deferred numeric errors, parser-pair compatibility, and validation before effects for extracted/assembled syntax.
 - `tests/cli.rs` invokes Cargo's built CLI and checks exit status, stdout, and stderr independently. Inputs live under `tests/fixtures/`.
 - `tests/examples.rs` checks the exact expected stdout of the bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
 - `tests/language_contract.rs` records named expectations from the [core specification](language-specification.md), with active cases for implemented behavior and ignored cases for upcoming scope changes.
@@ -65,11 +65,13 @@ These are baseline measurements, not release-gate results: 13 known regressions 
 
 `tests/language_contract.rs` retains pending expectations for lexical lookup, invocation-local bindings and definitions, and loop-variable restoration. Return values and control propagation now have active checks. Run `cargo test --test language_contract -- --ignored` to reproduce the remaining gaps. Run both suites with `--release` as well, and keep each ignore until the corresponding behavior is implemented. The specification's evidence table names remaining cases still needed for full conformance.
 
-The active collection-access regression temporarily permits the typed `UnsupportedAccessError` until access is implemented; arbitrary errors do not satisfy it. Evaluator and CLI tests verify [catchable unsupported access](language.md#collection-access-status), preserved assignments, and failure status without a panic. A `Try` without `Catch` is rejected during parsing; the active regression, parser cases, and CLI fixture verify this [error-handling contract](language.md#trycatch). Control-flow unit, compatibility, and CLI cases verify runtime boundary guards; whole-program placement validation is still pending. Other regression expectations follow the accepted roadmap.
+The active collection-access regression temporarily permits the typed `UnsupportedAccessError` until access is implemented; arbitrary errors do not satisfy it. Evaluator and CLI tests verify [catchable unsupported access](language.md#collection-access-status), preserved assignments, and failure status without a panic. A `Try` without `Catch` is rejected during parsing; the active regression, parser cases, and CLI fixture verify this [error-handling contract](language.md#trycatch). Whole-program control validation has AST, library, compatibility, and CLI checks; runtime guard tests deliberately bypass validation internally to exercise the defensive paths. Other regression expectations follow the accepted roadmap.
 
 ## CLI Failure Contract
 
-Successful scripts, including errors handled by `Try/Catch`, exit with status `0`. File-read failures, syntax errors, and uncaught evaluation errors exit with status `1` and write a diagnostic to stderr containing the input path. Invalid command-line arguments are rejected by clap. An uncaught runtime error stops execution before the following statement. Syntax diagnostics retain the parser's line and column information.
+Successful scripts, including errors handled by `Try/Catch`, exit with status `0`. File-read failures, syntax/control-placement errors, and uncaught evaluation errors exit with status `1` and write a diagnostic to stderr containing the input path. Invalid command-line arguments are rejected by clap. An uncaught runtime error stops execution before the following statement. Syntax and placement failures prevent all execution and debug traces; their diagnostics include line and column information.
+
+The `invalid-control-*` fixtures cover unused and nested definitions, skipped branches, handlers, and exact source locations. The Unicode fixture intentionally uses CRLF; `.gitattributes` preserves those bytes and recognizes CRLF during whitespace checks.
 
 ## Continuous Integration
 

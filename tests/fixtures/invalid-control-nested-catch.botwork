@@ -1,0 +1,10 @@
+Log |"before"|
+Try {
+    Try {
+    } Catch {
+        Return |7|
+    }
+} Catch {
+    Log |"outer handler"|
+}
+Log |"unreachable"|

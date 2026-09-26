@@ -2,7 +2,7 @@
 
 ## Parse Once, Execute Owned Syntax
 
-`Program::parse(name, source)` in [ast.rs](../src/core/ast.rs) parses the complete input with Pest and converts its pairs into owned statements and expressions. The returned program has no lifetime dependency on the caller's string. Syntax errors prevent execution of the whole program.
+`Program::parse(name, source)` in [ast.rs](../src/core/ast.rs) parses the complete input with Pest, converts its pairs into owned statements and expressions, then validates control placement. The returned program has no lifetime dependency on the caller's string. Syntax and placement errors prevent execution of the whole program.
 
 The tree represents assignments, calls, definitions, branches, loops, error handlers, and control statements explicitly. Expressions retain their operator, operands, and grouping. The Pratt parser builds this structure; it no longer evaluates values. Map entries stay in source order until evaluation.
 
@@ -14,7 +14,13 @@ Each program shares one `Arc<SourceFile>` containing its name and original UTF-8
 
 `line_column()` reports one-based lines and Unicode scalar columns. A tab occupies one column; CRLF counts as one line ending. Columns are not display widths or grapheme counts. Span ranges and source contents are private so callers cannot invalidate slicing boundaries.
 
-`Statement::kind()` exposes an immutable view of typed syntax for inspection. `kind_name()` supplies the existing CLI trace labels. Runtime errors do not yet include these spans or statement call stacks; structured diagnostics remain a separate TODO.
+`Statement::kind()` exposes an immutable view of typed syntax for inspection. `kind_name()` supplies the existing CLI trace labels. Control-placement errors use the offending statement's original file, line, and column. Runtime errors do not yet include these spans or statement call stacks; structured diagnostics remain a separate TODO.
+
+## Validate Control Placement
+
+`Program::validate()` walks all statements in source order, including unused definitions, skipped branches and handlers, and statements after an unconditional control transfer. It tracks whether a custom definition and a loop enclose each statement. Entering a definition resets loop permission; entering a loop preserves definition permission. Branches and handlers inherit both. `Return` requires a custom body; `Break` and `Continue` require a loop in that same body or at script level.
+
+The first invalid placement returns `ControlFlowError` with the offending statement's original span. Validation does not evaluate expressions, convert numbers, resolve names, or catch errors. Full parsing/lowering finishes before validation, so syntax errors take precedence.
 
 ## Reuse Definitions
 
@@ -34,9 +40,9 @@ context.init_statements(); // Register native Log.
 let result = evaluate_program(&program, &mut context).expect("successful execution");
 ```
 
-`evaluate_program` runs owned statements in order. `execute_statement` permits the CLI to emit its existing trace before each statement. Neither entry point invokes the parser. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.
+`evaluate_program` validates its entire statement list before executing any statement. This also checks programs assembled by Rust callers from extracted syntax nodes. `execute_statement` validates its subtree at script scope. Neither entry point invokes the parser; internal loops and invocations do not repeat validation. The CLI finishes parsing/validation before any statement trace or output. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.
 
-The existing `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Prefer the program API when executing a whole file; separate compatibility calls otherwise allocate separate source owners.
+The existing `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once, validates the resulting statement/block at script scope, and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Validation covers only the supplied subtree, so use the program API to reject a later invalid statement before earlier effects in a whole file. Separate compatibility calls allocate separate source owners.
 
 ## Completion Outcomes
 
@@ -44,10 +50,10 @@ Internal statement execution returns `Result<Completion, BWErr>`. `Completion` d
 
 Branches and Try/Catch pass control outcomes upward. A handler runs only for an evaluation error; a failed return expression is still an error until its value exists. For/While consume their own Break/Continue and propagate Return. A custom invocation consumes Return, preserving its exact value; fallthrough produces None. No control flags are stored in the context.
 
-Script-level execution and standalone parser-pair blocks reject escaping controls with `ControlFlowError`. Invocation boundaries also reject escaping loop controls, preventing a callee from controlling its caller's loop. These runtime guards do not validate unused branches or definitions. Whole-file placement validation remains a separate TODO; until then, an invalid callee control can produce a runtime error caught by its caller.
+Runtime boundaries retain defensive checks for escaping controls, including a callee attempting to control its caller's loop. Public entry points reject invalid placement before execution, so a script cannot catch or bypass a placement error.
 
 ## Remaining Interpreter Work
 
-Invocation scopes, control-placement validation, and resource limits retain their own roadmap items. Parameter binding still uses shared context variables, and For bindings are not yet restored. The completion refactor does not establish those scope guarantees or complete language conformance.
+Invocation scopes and resource limits retain their own roadmap items. Parameter binding still uses shared context variables, and For bindings are not yet restored. The completion and placement changes do not establish those scope guarantees or complete language conformance.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

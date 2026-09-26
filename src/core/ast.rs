@@ -91,7 +91,15 @@ impl Program {
             .filter(|pair| pair.as_rule() != Rule::EOI)
             .map(|pair| statement(pair, &source))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { source, statements })
+        let program = Self { source, statements };
+        program.validate()?;
+        Ok(program)
+    }
+
+    /// Check control placement in every statement, including unreachable bodies.
+    /// This does not evaluate expressions or resolve names.
+    pub fn validate(&self) -> Result<(), BWErr> {
+        validate_script(&self.statements)
     }
 }
 
@@ -151,6 +159,83 @@ pub enum StatementKind {
     Return(Option<Expr>),
     Break,
     Continue,
+}
+
+#[derive(Clone, Copy, Default)]
+struct ControlScope {
+    in_definition: bool,
+    in_loop: bool,
+}
+
+pub(crate) fn validate_script(statements: &[Statement]) -> Result<(), BWErr> {
+    validate_statements(statements, ControlScope::default())
+}
+
+fn validate_statements(statements: &[Statement], scope: ControlScope) -> Result<(), BWErr> {
+    for statement in statements {
+        validate_statement(statement, scope)?;
+    }
+    Ok(())
+}
+
+fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), BWErr> {
+    match &statement.kind {
+        StatementKind::Return(_) if !scope.in_definition => Err(control_placement_error(
+            statement,
+            "Return requires a custom-statement body",
+        )),
+        StatementKind::Break if !scope.in_loop => Err(control_placement_error(
+            statement,
+            "Break requires an enclosing loop in the same invocation",
+        )),
+        StatementKind::Continue if !scope.in_loop => Err(control_placement_error(
+            statement,
+            "Continue requires an enclosing loop in the same invocation",
+        )),
+        StatementKind::Define(definition) => validate_statements(
+            &definition.body.statements,
+            ControlScope {
+                in_definition: true,
+                in_loop: false,
+            },
+        ),
+        StatementKind::For { body, .. } | StatementKind::While { body, .. } => validate_statements(
+            &body.statements,
+            ControlScope {
+                in_loop: true,
+                ..scope
+            },
+        ),
+        StatementKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            validate_statements(&then_branch.statements, scope)?;
+            match else_branch {
+                Some(ElseBranch::Block(block)) => validate_statements(&block.statements, scope),
+                Some(ElseBranch::If(statement)) => validate_statement(statement, scope),
+                None => Ok(()),
+            }
+        }
+        StatementKind::Try { body, handler } => {
+            validate_statements(&body.statements, scope)?;
+            validate_statements(&handler.statements, scope)
+        }
+        StatementKind::Assign { .. }
+        | StatementKind::Invoke(_)
+        | StatementKind::Return(_)
+        | StatementKind::Break
+        | StatementKind::Continue => Ok(()),
+    }
+}
+
+fn control_placement_error(statement: &Statement, message: &str) -> BWErr {
+    let (line, column) = statement.span.line_column();
+    BWErr::ControlFlowError(format!(
+        "{}:{line}:{column}: {message}",
+        statement.span.source().name()
+    ))
 }
 
 #[derive(Clone, Debug)]
