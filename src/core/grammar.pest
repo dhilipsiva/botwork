@@ -58,7 +58,7 @@ seperator = _{ ":" }
 integer = @{ NUMBER+ }
 float   = @{ NUMBER+ ~ "." ~ NUMBER+ }
 
-string           =  { string_delimiter ~ string_content ~ string_delimiter }
+string           = ${ string_delimiter ~ string_content ~ string_delimiter }
 string_content   = ${ (string_escape | !(string_delimiter | "\\") ~ ANY)* }
 string_delimiter = _{ "\"" }
 string_escape    = _{ "\\" ~ ("\"" | "\\" | "n") }

@@ -155,3 +155,49 @@ fn separate_contexts_do_not_share_variables() {
         Err(BWErr::VariableNotDefined(_))
     ));
 }
+
+#[test]
+fn strings_decode_supported_escapes_once_and_preserve_unicode() {
+    for (source, expected) in [
+        (r#"|s| = |""|"#, ""),
+        (r#"|s| = |"hello"|"#, "hello"),
+        (r#"|s| = |"  hello  "|"#, "  hello  "),
+        ("|s| = |\"\t hello\t\"|", "\t hello\t"),
+        ("|s| = |\"# literal\"|", "# literal"),
+        ("|s| = |\"### literal\"|", "### literal"),
+        (r#"|s| = |"தமிழ் café 🦀"|"#, "தமிழ் café 🦀"),
+        (r#"|s| = |"a\nb\"c\\d"|"#, "a\nb\"c\\d"),
+        (r#"|s| = |"\\n"|"#, "\\n"),
+        (r#"|s| = |"| # { }"|"#, "| # { }"),
+        ("|s| = |\"line one\nline two\"|", "line one\nline two"),
+    ] {
+        let result = evaluate(source, &mut Context::default()).unwrap();
+        assert!(
+            matches!(&result, Literal::String(value) if value == expected),
+            "source {source:?}: expected {expected:?}, got {result:?}"
+        );
+    }
+}
+
+#[test]
+fn decoded_strings_concatenate_without_source_delimiters() {
+    let result = evaluate(r#"|s| = |"hello " + "world"|"#, &mut Context::default()).unwrap();
+    assert!(matches!(result, Literal::String(value) if value == "hello world"));
+}
+
+#[test]
+fn map_keys_remain_identifiers_while_string_values_are_decoded() {
+    let result = evaluate(
+        r#"|m| = |{label: "hello", nested: {value: "a\nb"}}|"#,
+        &mut Context::default(),
+    )
+    .unwrap();
+    let Literal::Map(values) = result else {
+        panic!("expected map");
+    };
+    assert!(matches!(values.get("label"), Some(Literal::String(value)) if value == "hello"));
+    let Some(Literal::Map(nested)) = values.get("nested") else {
+        panic!("expected nested map");
+    };
+    assert!(matches!(nested.get("value"), Some(Literal::String(value)) if value == "a\nb"));
+}

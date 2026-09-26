@@ -102,14 +102,12 @@ fn true_or_does_not_evaluate_the_right_operand() {
 }
 
 #[test]
-#[ignore = "known defect: string values retain source quotation marks"]
 fn string_concatenation_combines_decoded_values() {
     let result = evaluate("|answer| = |(\"a\" + \"b\") == \"ab\"|").unwrap();
     assert!(matches!(result, Literal::Bool(true)), "{result:?}");
 }
 
 #[test]
-#[ignore = "known defect: string escape sequences remain encoded"]
 fn string_escapes_are_decoded() {
     let result = evaluate(r#"|answer| = |"a\nb\"c\\d"|"#).unwrap();
     assert!(

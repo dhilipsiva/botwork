@@ -137,3 +137,10 @@ fn array_concatenation_preserves_order() {
     assert!(matches!(result, Literal::Array(values)
         if matches!(values.as_slice(), [Literal::Int(1), Literal::Int(2)])));
 }
+
+#[test]
+fn unsupported_string_escapes_are_rejected() {
+    for source in [r#"|s| = |"\t"|"#, r#"|s| = |"\q"|"#, r#"|s| = |"\u1234"|"#] {
+        assert!(BWParser::parse(Rule::botwork, source).is_err(), "{source}");
+    }
+}

@@ -250,6 +250,28 @@ fn boolean_false(_pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
 }
 
 fn string(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
+    let content = pair
+        .into_inner()
+        .next()
+        .ok_or_else(|| BWErr::ParsingError("Missing string content".into()))?;
+    let mut value = String::new();
+    let mut chars = content.as_str().chars();
+    while let Some(character) = chars.next() {
+        if character == '\\' {
+            value.push(match chars.next() {
+                Some('n') => '\n',
+                Some('"') => '"',
+                Some('\\') => '\\',
+                _ => return Err(BWErr::ParsingError("Invalid string escape".into())),
+            });
+        } else {
+            value.push(character);
+        }
+    }
+    Ok(Literal::String(value))
+}
+
+fn keyword(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
     Ok(Literal::String(pair.as_str().into()))
 }
 
@@ -508,7 +530,7 @@ pub fn botwork(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
         Rule::array => array,
         Rule::ident => ident,
         Rule::map => map,
-        Rule::keyword => string,
+        Rule::keyword => keyword,
         Rule::integer => integer,
         Rule::float => float,
         Rule::string => string,
