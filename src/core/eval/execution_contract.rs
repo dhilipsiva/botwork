@@ -396,3 +396,127 @@ fn recursive_traces_preserve_each_frame_and_unwind_before_the_callers_handler() 
         }
     }
 }
+
+#[test]
+fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_disposal() {
+    for prior in ["absent", "none", "local", "inherited"] {
+        for (action, ending) in [
+            ("normal", "|error| = |0|"),
+            ("continue", "Continue"),
+            ("break", "Break"),
+            ("return", "Return |error.code|"),
+            ("bare", "Return\n"),
+            ("error", "|x| = |missing_handler|"),
+            ("return-error", "Return |missing_return|"),
+            ("rethrow", "Rethrow"),
+        ] {
+            let mut context = context();
+            context.set_variable("error".into(), Literal::Int(99));
+            let mut frame = Frame {
+                parent: Some(0),
+                ..Frame::default()
+            };
+            match prior {
+                "none" => {
+                    frame.variables.insert("error".into(), Literal::None);
+                }
+                "local" => {
+                    frame.variables.insert("error".into(), Literal::Int(7));
+                }
+                "absent" => {
+                    context.frames[0].variables.remove("error");
+                }
+                _ => (),
+            }
+            context.frames.push(frame);
+            context.current = 1;
+            let source = format!(
+                "Holder {{ For |item| In |[1]| {{\n\
+                Try {{ |x| = |missing_body| }} Catch |error| {{\n\
+                Record |error.code|\n{ending}\n}}\n}} }}"
+            );
+            let program = Program::parse("catch-cleanup.botwork", &source).unwrap();
+            let StatementKind::Define(definition) = program.statements[0].kind() else {
+                panic!("holder")
+            };
+            let StatementKind::For { body, .. } = definition.body.statements[0].kind() else {
+                panic!("loop")
+            };
+            // Inspect the handler exit before the loop or invocation can consume it.
+            let result = evaluate_statement(&body.statements[0], &mut context);
+            assert!(
+                match action {
+                    "normal" => matches!(result, Ok(Completion::Normal(Literal::None))),
+                    "continue" => matches!(result, Ok(Completion::Continue)),
+                    "break" => matches!(result, Ok(Completion::Break)),
+                    "return" =>
+                        matches!(&result, Ok(Completion::Return(Literal::String(code))) if code == "BW2001"),
+                    "bare" => matches!(result, Ok(Completion::Return(Literal::None))),
+                    _ => matches!(&result, Err(error) if error.code().as_str() == "BW2001"),
+                },
+                "{prior}/{action}: {result:?}"
+            );
+            if let Err(error) = &result {
+                assert_eq!(error.causes.len(), usize::from(action != "rethrow"));
+                let expected = match action {
+                    "rethrow" => "missing_body",
+                    "return-error" => "missing_return",
+                    _ => "missing_handler",
+                };
+                assert!(
+                    matches!(error.error.as_ref(), BWErr::VariableNotDefined(name) if name == expected)
+                );
+            }
+            assert_eq!(events(&context), ["BW2001"]);
+            let restored = context.get_variable("error");
+            assert!(
+                match prior {
+                    "absent" => matches!(restored, Err(BWErr::VariableNotDefined(_))),
+                    "none" => matches!(restored, Ok(Literal::None)),
+                    "local" => matches!(restored, Ok(Literal::Int(7))),
+                    _ => matches!(restored, Ok(Literal::Int(99))),
+                },
+                "{prior}/{action}: {restored:?}"
+            );
+            assert_eq!(
+                context.frames[1].variables.contains_key("error"),
+                ["local", "none"].contains(&prior)
+            );
+            assert!(context.handlers.is_empty());
+            assert!(context.calls.is_empty());
+            assert_eq!(context.current, 1);
+            assert_eq!(context.frames.len(), 2);
+        }
+    }
+}
+
+#[test]
+fn defensive_rethrow_guard_does_not_consume_an_unrelated_callers_handler() {
+    let mut context = context();
+    context.handlers.push(HandledError {
+        invocation: 0,
+        diagnostic: Diagnostic::new(BWErr::VariableNotDefined("original".into())),
+    });
+    let program = Program::parse("guard.botwork", "Try {} Catch { Rethrow }").unwrap();
+    let StatementKind::Try { handler, .. } = program.statements[0].kind() else {
+        panic!("try")
+    };
+    let statement = &handler.statements[0];
+    // Deliberately bypass public placement validation to check the runtime boundary.
+    let error = context
+        .with_invocation(
+            Frame {
+                parent: Some(0),
+                ..Frame::default()
+            },
+            |context| evaluate_statement(statement, context),
+        )
+        .unwrap_err();
+    assert!(matches!(error.error.as_ref(), BWErr::ControlFlowError(_)));
+    assert_eq!(context.current, 0);
+    assert_eq!(context.handlers.len(), 1);
+    let error = evaluate_statement(statement, &mut context).unwrap_err();
+    assert!(matches!(error.error.as_ref(), BWErr::VariableNotDefined(name) if name == "original"));
+    assert!(error.causes.is_empty());
+    assert_eq!(context.handlers.len(), 1);
+}

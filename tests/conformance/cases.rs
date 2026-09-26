@@ -97,6 +97,9 @@ pub fn cases() -> Vec<Case> {
         failure("required-catch", include_str!("../fixtures/missing-catch.botwork"), "", "BW1001", "Parsing error:", &["F1"]),
         failure("diagnostic-stack", include_str!("../fixtures/diagnostic-stack.botwork"), "", "BW2001", "diagnostic-stack.botwork:2:17", &["F3"]),
         Case { boundary: &["F3"], ..failure("diagnostic-handler", include_str!("../fixtures/diagnostic-handler.botwork"), "", "BW2001", "while handling:", &["F3"]) },
+        success("catch-inspection", include_str!("../../examples/17-catch-details.botwork"), "BW2001\nmissing\noutside\nrethrowing\n[\"BW3002\", true]\noutside\nBW2001\n", &["F4"], &[]),
+        failure("rethrow-outside", include_str!("../fixtures/rethrow-outside-catch.botwork"), "", "BW1002", "Rethrow requires", &["F4"]),
+        Case { boundary: &["F4"], ..failure("rethrow-original", include_str!("../fixtures/rethrow-original.botwork"), "BW3002\n", "BW3002", "rethrow:", &["F4"]) },
         Case { id: "structural-host-invalid", positive: &[], invalid: &["V6"], boundary: &[],
             input: Input::NonFiniteHost, stdout: "", code: Some("BW3002"), error: Some("Non-finite floating-point operand") },
     ]

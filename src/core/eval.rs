@@ -9,7 +9,7 @@ use std::{
 use super::{
     ast::{
         self, AccessSegment, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr,
-        ExprKind, Node, Program, Statement, StatementKind, UnaryOp,
+        ExprKind, Name, Node, Program, Statement, StatementKind, UnaryOp,
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
@@ -50,10 +50,17 @@ struct Frame {
 }
 
 #[derive(Clone)]
+struct HandledError {
+    invocation: usize,
+    diagnostic: Diagnostic,
+}
+
+#[derive(Clone)]
 pub struct Context {
     frames: Vec<Frame>,
     current: usize,
     calls: Vec<CallFrame>,
+    handlers: Vec<HandledError>,
     #[cfg(test)]
     expression_visits: std::cell::RefCell<Vec<String>>,
 }
@@ -64,6 +71,7 @@ impl Default for Context {
             frames: vec![Frame::default()],
             current: 0,
             calls: vec![],
+            handlers: vec![],
             #[cfg(test)]
             expression_visits: Default::default(),
         }
@@ -466,6 +474,32 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Comp
     Ok(Completion::Normal(Literal::None))
 }
 
+fn evaluate_handler(
+    binding: Option<&Name>,
+    handler: &Block,
+    original: Diagnostic,
+    context: &mut Context,
+) -> CompletionResult {
+    let owner = context.current;
+    let previous =
+        binding.and_then(|name| context.set_variable(name.text.clone(), original.to_value()));
+    context.handlers.push(HandledError {
+        invocation: owner,
+        diagnostic: original.clone(),
+    });
+    let result = evaluate_block(handler, context).map_err(|error| error.while_handling(original));
+    context.handlers.pop();
+    if let Some(name) = binding {
+        let variables = &mut context.frames[owner].variables;
+        if let Some(value) = previous {
+            variables.insert(name.text.clone(), value);
+        } else {
+            variables.remove(&name.text);
+        }
+    }
+    result
+}
+
 fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
     evaluate_statement_inner(statement, context)
         .map_err(|error| error.at(&statement.span).capture_stack(&context.calls))
@@ -539,11 +573,13 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             body,
         } => evaluate_for(&binding.text, iterable, body, context),
         StatementKind::While { condition, body } => evaluate_while(condition, body, context),
-        StatementKind::Try { body, handler } => match evaluate_block(body, context) {
+        StatementKind::Try {
+            body,
+            binding,
+            handler,
+        } => match evaluate_block(body, context) {
             Ok(value) => Ok(value),
-            Err(original) => {
-                evaluate_block(handler, context).map_err(|error| error.while_handling(original))
-            }
+            Err(original) => evaluate_handler(binding.as_ref(), handler, original, context),
         },
         StatementKind::Return(expression) => {
             let value = match expression {
@@ -554,6 +590,22 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
         }
         StatementKind::Break => Ok(Completion::Break),
         StatementKind::Continue => Ok(Completion::Continue),
+        StatementKind::Rethrow => {
+            match context
+                .handlers
+                .last()
+                .filter(|handler| handler.invocation == context.current)
+            {
+                Some(handler) => Err(handler
+                    .diagnostic
+                    .clone()
+                    .with_related("rethrow", &statement.span)),
+                None => Err(BWErr::ControlFlowError(
+                    "Rethrow requires an enclosing Catch in the same invocation".into(),
+                )
+                .into()),
+            }
+        }
     }
 }
 

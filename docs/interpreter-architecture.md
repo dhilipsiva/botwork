@@ -36,7 +36,7 @@ Each program shares one `Arc<SourceFile>` containing its name and original UTF-8
 
 ## Validate Controls and Parameter Names
 
-`Program::validate()` walks all statements in source order, including unused definitions, skipped branches and handlers, and statements after an unconditional control transfer. It tracks whether a custom definition and a loop enclose each statement. Entering a definition resets loop permission; entering a loop preserves definition permission. Branches and handlers inherit both. `Return` requires a custom body; `Break` and `Continue` require a loop in that same body or at script level.
+`Program::validate()` walks all statements in source order, including unused definitions, skipped branches and handlers, and statements after an unconditional control transfer. It tracks whether a custom definition and a loop enclose each statement. Entering a definition resets loop permission; entering a loop preserves definition permission. Branches and handlers inherit both. `Return` requires a custom body; `Break` and `Continue` require a loop in that same body or at script level. Rethrow requires a lexical Catch in the same invocation; entering a definition resets Catch permission as well as loop permission.
 
 The first invalid placement returns `ControlFlowError` with the offending statement's original span. Validation does not evaluate expressions, convert numbers, resolve names, or catch errors. Full parsing/lowering finishes before validation, so syntax errors take precedence.
 
@@ -97,8 +97,14 @@ Branches and Try/Catch pass control outcomes upward. A handler runs only for an 
 
 Runtime boundaries retain defensive checks for escaping controls, including a callee attempting to control its caller's loop. Public entry points reject invalid placement before execution, so a script cannot catch or bypass a placement error.
 
+## Catch State and Metadata
+
+Try creates a handler record only after a runtime error. Optional binding metadata is an owned Literal map; a saved current-frame value or absence is restored on every handler outcome before invocation cleanup. Active handler records carry their owning invocation index, so defensive Rethrow checks cannot use an unrelated caller's error. Nested handlers push/pop independently.
+
+Diagnostics share immutable error identity through `Arc<BWErr>`. Rethrow clones the original context and adds its own related location; handler error propagation avoids attaching that same identity as a self-cause. Fresh errors with matching text/spans remain distinct. A nested Try can catch a rethrow normally. Metadata changes cannot change the retained error, and successful handling leaves no pending state. Position metadata uses decimal strings to preserve usize coordinates within the current i32-only DSL.
+
 ## Remaining Interpreter Work
 
-Resource limits, imports, Catch inspection/rethrow, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
+Resource limits, imports, and adapter APIs retain their own roadmap items. Recursion is supported but not yet bounded. Core value, naming, Unicode, scope, and completion checks do not establish exhaustive language conformance or the release quality gates.
 
 [AST unit tests](../src/core/ast/tests.rs) check tree structure and spans. [Execution tests](../tests/ast_execution.rs) exercise ownership and compatibility, and evaluator tests verify shared definition identity and skipped operand evaluation. Both build profiles continue to run the full regression, contract, CLI, and example suites.

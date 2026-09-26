@@ -141,6 +141,30 @@ fn cli_diagnostics_expose_stable_codes_and_actionable_guidance() {
 }
 
 #[test]
+fn rethrow_placement_fails_before_output_and_valid_rethrow_preserves_the_original_diagnostic() {
+    assert_control_placement_failure("rethrow-outside-catch.botwork", 2, 1, "Rethrow");
+    let path = fixture("rethrow-original.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"BW3002\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostic.contains("[BW3002] Arithmetic error:"),
+        "{diagnostic}"
+    );
+    assert!(
+        diagnostic.contains("rethrow-original.botwork:2:10"),
+        "{diagnostic}"
+    );
+    assert!(
+        diagnostic.contains("rethrow-original.botwork:6:5"),
+        "{diagnostic}"
+    );
+    assert!(!diagnostic.contains("while handling:"), "{diagnostic}");
+    assert!(!diagnostic.contains("unreachable"), "{diagnostic}");
+}
+
+#[test]
 fn invalid_control_placement_prevents_all_cli_execution() {
     assert_control_placement_failure("invalid-control.botwork", 2, 13, "Return");
 }

@@ -30,7 +30,7 @@ lazy_static::lazy_static! {
 }
 
 /// botwork Err
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum BWErr {
     #[error("Variable not defined: {0}")]
     VariableNotDefined(String),

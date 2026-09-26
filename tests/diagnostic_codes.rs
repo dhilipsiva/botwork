@@ -92,6 +92,31 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "document {code}"
         );
         let diagnostic = Diagnostic::new(error);
+        let Literal::Map(metadata) = diagnostic.to_value() else {
+            panic!("metadata map")
+        };
+        assert_eq!(metadata["code"].to_string(), code);
+        assert_eq!(metadata["help"].to_string(), diagnostic.help());
+        assert_eq!(
+            metadata["message"].to_string(),
+            diagnostic.error.to_string()
+        );
+        assert!(matches!(metadata["source"], Literal::None));
+        let Literal::Map(details) = &metadata["details"] else {
+            panic!("details map")
+        };
+        let expected_keys: &[&str] = match code {
+            "BW1003" => &["duplicate", "name", "original"],
+            "BW2001" => &["name"],
+            "BW2002" => &["call"],
+            "BW2003" => &["duplicate", "original", "signature"],
+            "BW3004" => &["path", "reason", "segment"],
+            _ => &["reason"],
+        };
+        assert_eq!(
+            details.keys().map(String::as_str).collect::<BTreeSet<_>>(),
+            expected_keys.iter().copied().collect()
+        );
         assert_eq!(diagnostic.code(), category);
         assert!(diagnostic.to_string().starts_with(&format!("[{code}] ")));
         assert!(diagnostic.to_string().contains("\n  help: "));

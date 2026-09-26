@@ -10,7 +10,7 @@ reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
 // The literal prechecks below retain contextual diagnostics for absent keywords.
 control_keyword = @{
     (^"if" | ^"in" | ^"else" | ^"for" | ^"break" | ^"return"
-        | ^"continue" | ^"while" | ^"try" | ^"catch")
+        | ^"continue" | ^"while" | ^"try" | ^"catch" | ^"rethrow")
     ~ &(" " | "\t" | "\r" | "\n" | "|" | "{" | "}" | "#" | "\\" | EOI)
 }
 IF       = _{ &^"if" ~ &control_keyword ~ ^"if" }
@@ -23,8 +23,9 @@ CONTINUE = _{ &^"continue" ~ &control_keyword ~ ^"continue" }
 WHILE    = _{ &^"while" ~ &control_keyword ~ ^"while" }
 TRY      = _{ &^"try" ~ &control_keyword ~ ^"try" }
 CATCH    = _{ &^"catch" ~ &control_keyword ~ ^"catch" }
+RETHROW  = _{ &^"rethrow" ~ &control_keyword ~ ^"rethrow" }
 
-reserved_parts = _{ IF | ELSE | FOR | BREAK | RETURN | CONTINUE | WHILE | TRY | CATCH }
+reserved_parts = _{ IF | ELSE | FOR | BREAK | RETURN | CONTINUE | WHILE | TRY | CATCH | RETHROW }
 
 COMMENT       = _{ comment_block | comment_line }
 comment_block = @{ "###" ~ (!"###" ~ ANY)* ~ "###" }
@@ -32,14 +33,14 @@ comment_line  = @{ !"###" ~ "#" ~ (!("\r" | "\n") ~ ANY)* }
 
 continuation  = @{ "\\" ~ (" " | "\t")* ~ line_end }
 part          = @{ (!("|" | "{" | "}" | "\r" | "\n" | "#" | "\\") ~ ANY)+ }
-statements    = _{ stmt_break | stmt_continue | stmt_return | stmt_if | stmt_for | stmt_while | stmt_try | stmt_define | stmt_assign | stmt_invoke | line_end }
+statements    = _{ stmt_break | stmt_continue | stmt_return | stmt_rethrow | stmt_if | stmt_for | stmt_while | stmt_try | stmt_define | stmt_assign | stmt_invoke | line_end }
 stmt_assign   =  { param_define ~ line_end* ~ "=" ~ line_end* ~ (stmt_invoke | param_invoke) }
 stmt_if       =  { IF ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block ~ (line_end* ~ stmt_else)? }
 stmt_else     =  { ELSE ~ line_end* ~ (stmt_block | stmt_if) }
 stmt_for      =  { FOR ~ line_end* ~ param_define ~ line_end* ~ IN ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block }
 stmt_while    =  { WHILE ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block }
 stmt_try      =  { TRY ~ line_end* ~ stmt_block ~ line_end* ~ stmt_catch }
-stmt_catch    =  { CATCH ~ line_end* ~ stmt_block }
+stmt_catch    =  { CATCH ~ line_end* ~ (param_define ~ line_end*)? ~ stmt_block }
 stmt_define   =  { stmt_header ~ line_end* ~ stmt_block }
 stmt_header   =  { !reserved_parts ~ part ~ (continuation? ~ (param_define | part))* }
 stmt_invoke   =  { !reserved_parts ~ part ~ (continuation? ~ (param_invoke | part))* }
@@ -47,6 +48,7 @@ stmt_block    =  { "{" ~ statements* ~ "}" }
 stmt_break    =  { BREAK }
 stmt_continue =  { CONTINUE }
 stmt_return   =  { RETURN ~ (continuation? ~ param_invoke)? }
+stmt_rethrow  =  { RETHROW }
 param_invoke  =  { "|" ~ expression ~ "|" }
 param_define  = _{ "|" ~ ident ~ "|" }
 

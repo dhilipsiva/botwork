@@ -167,7 +167,7 @@ fn all_statement_forms_lower_without_evaluating_or_validating_control_placement(
     assert_eq!(binding.span.text(), "item");
     assert!(matches!(body.statements[0].kind, StatementKind::Break));
     assert!(matches!(body.statements[1].kind, StatementKind::Continue));
-    let StatementKind::Try { body, handler } = &program.statements[6].kind else {
+    let StatementKind::Try { body, handler, .. } = &program.statements[6].kind else {
         panic!("expected Try");
     };
     assert!(body.statements.is_empty());

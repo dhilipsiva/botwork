@@ -1,8 +1,11 @@
 //! Structured source diagnostics. Compatibility APIs can recover the original BWErr.
 
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, sync::Arc};
 
-use super::{ast::Span, grammar::BWErr};
+use super::{
+    ast::Span,
+    grammar::{BWErr, Literal},
+};
 
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
@@ -71,7 +74,7 @@ impl BWErr {
         match self {
             Self::VariableNotDefined(name) => format!("Define `{name}` before reading it in this lexical scope; check spelling and case."),
             Self::ParsingError(_) => "Check the indicated token and close every pipe, bracket, brace, quote, and block comment.".into(),
-            Self::ControlFlowError(_) => "Return needs a custom body; Break and Continue need a loop in the same invocation.".into(),
+            Self::ControlFlowError(_) => "Return needs a custom body; Break/Continue need a loop and Rethrow needs a Catch in the same invocation.".into(),
             Self::DuplicateParameter { .. } => "Give each parameter a distinct, case-sensitive name.".into(),
             Self::StatementNotDefined(_) => "Define the statement before calling it; check sentence punctuation and parameter positions/count.".into(),
             Self::DuplicateStatement { .. } => "Rename this declaration or remove the duplicate in this scope; the original remains registered.".into(),
@@ -100,9 +103,10 @@ pub struct RelatedLocation {
     pub span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Diagnostic {
-    pub error: Box<BWErr>,
+    /// Shared immutable identity lets rethrow retain the original error without self-causes.
+    pub error: Arc<BWErr>,
     pub span: Option<Span>,
     pub label: &'static str,
     /// Entered calls, innermost first. Failed argument binding adds no DSL frame.
@@ -123,7 +127,7 @@ impl Diagnostic {
 
     pub fn new(error: BWErr) -> Self {
         Self {
-            error: Box::new(error),
+            error: Arc::new(error),
             span: None,
             label: "source",
             call_stack: vec![],
@@ -156,7 +160,9 @@ impl Diagnostic {
     }
 
     pub(crate) fn while_handling(mut self, original: Diagnostic) -> Self {
-        self.causes.push(original);
+        if !Arc::ptr_eq(&self.error, &original.error) {
+            self.causes.push(original);
+        }
         self
     }
 
@@ -170,8 +176,124 @@ impl Diagnostic {
 
     /// Discard source/stack information for the original error-category API.
     pub fn into_error(self) -> BWErr {
-        *self.error
+        Arc::try_unwrap(self.error).unwrap_or_else(|error| (*error).clone())
     }
+
+    /// Owned DSL metadata. Coordinates are decimal strings to avoid i32 truncation.
+    pub fn to_value(&self) -> Literal {
+        let details = match self.error.as_ref() {
+            BWErr::VariableNotDefined(name) => value_map([("name", text(name))]),
+            BWErr::StatementNotDefined(call) => value_map([("call", text(call))]),
+            BWErr::DuplicateStatement {
+                signature,
+                original,
+                duplicate,
+            } => value_map([
+                ("signature", text(signature)),
+                ("original", text(original)),
+                ("duplicate", text(duplicate)),
+            ]),
+            BWErr::DuplicateParameter {
+                name,
+                original,
+                duplicate,
+            } => value_map([
+                ("name", text(name)),
+                ("original", text(original)),
+                ("duplicate", text(duplicate)),
+            ]),
+            BWErr::CollectionAccessError {
+                path,
+                segment,
+                reason,
+            } => value_map([
+                ("path", text(path)),
+                ("segment", text(segment)),
+                ("reason", text(reason)),
+            ]),
+            BWErr::ParameterMissingError(reason)
+            | BWErr::ParsingError(reason)
+            | BWErr::ParsingIntegerError(reason)
+            | BWErr::OperationIncompatibleError(reason)
+            | BWErr::ControlFlowError(reason)
+            | BWErr::ArithmeticError(reason)
+            | BWErr::OutputError(reason) => value_map([("reason", text(reason))]),
+        };
+        value_map([
+            ("code", text(self.code().as_str())),
+            ("message", text(&self.error.to_string())),
+            ("help", text(&self.help())),
+            ("details", details),
+            ("source", span_value(self.span.as_ref())),
+            (
+                "call_stack",
+                Literal::Array(
+                    self.call_stack
+                        .iter()
+                        .map(|frame| {
+                            value_map([
+                                ("signature", text(&frame.signature)),
+                                ("call_site", span_value(Some(&frame.call_site))),
+                                (
+                                    "definition_site",
+                                    span_value(frame.definition_site.as_ref()),
+                                ),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "related",
+                Literal::Array(
+                    self.related
+                        .iter()
+                        .map(|location| {
+                            value_map([
+                                ("message", text(&location.message)),
+                                ("source", span_value(Some(&location.span))),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "causes",
+                Literal::Array(self.causes.iter().map(Self::to_value).collect()),
+            ),
+        ])
+    }
+}
+
+fn text(value: &str) -> Literal {
+    Literal::String(value.to_owned())
+}
+
+fn value_map(entries: impl IntoIterator<Item = (&'static str, Literal)>) -> Literal {
+    Literal::Map(
+        entries
+            .into_iter()
+            .map(|(key, value)| (key.to_owned(), value))
+            .collect(),
+    )
+}
+
+fn span_value(span: Option<&Span>) -> Literal {
+    let Some(span) = span else {
+        return Literal::None;
+    };
+    let (line, column) = span.line_column();
+    let (end_line, end_column) = span.end_line_column();
+    value_map([
+        ("file", text(span.source().name())),
+        ("text", text(span.text())),
+        ("start_byte", text(&span.start().to_string())),
+        ("end_byte", text(&span.end().to_string())),
+        ("line", text(&line.to_string())),
+        ("column", text(&column.to_string())),
+        ("end_line", text(&end_line.to_string())),
+        ("end_column", text(&end_column.to_string())),
+    ])
 }
 
 impl From<BWErr> for Diagnostic {

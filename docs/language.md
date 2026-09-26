@@ -59,7 +59,7 @@ Outside strings, `|` delimits parameters/expressions, braces delimit blocks or m
 
 Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation, including a combining mark. This prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
 
-Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, and `Catch`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
+Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, `Catch`, and `Rethrow`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
 
 `In` follows the same keyword rules within `For |item| In |items| { ... }`, but remains available in custom names such as `In order`. Comments may separate complete tokens. Parentheses can delimit boolean operators: `(true)and(false)` is valid. See [the keyword example](../examples/06-keywords.botwork).
 
@@ -245,7 +245,7 @@ No pending control state survives an invocation, and its local variables and def
 
 ## Control-Placement Validation
 
-The complete program is checked before any execution. `Return` requires a custom-statement body; top-level Return is invalid, including inside a script-level loop. `Break` and `Continue` require an enclosing For/While in the same invocation. A custom definition nested inside a loop starts its own control scope and cannot break or continue that outer loop.
+The complete program is checked before any execution. `Return` requires a custom-statement body; top-level Return is invalid, including inside a script-level loop. `Break` and `Continue` require an enclosing For/While in the same invocation. Rethrow requires a Catch handler in the same invocation. A nested custom definition starts its own control scope and cannot control an outer loop or rethrow an outer handler's error, even if that definition is unused.
 
 Validation checks unused definitions, unselected branches, handlers that never run, and unreachable statements. For example, `Unused { Break }` fails even without a call to `Unused`. A valid `Break` inside `While |false| { Break }` remains allowed because the enclosing loop is present.
 
@@ -268,7 +268,30 @@ The try body runs once. If it succeeds, the handler is skipped. On an evaluation
 
 A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the entire file before execution, so this prevents even earlier `Log` statements from running. Syntax errors cannot be caught by a script. Write ordinary statements directly when no handler is intended.
 
-This contract covers evaluation errors, including the arithmetic failures described above. Valid `Return`, `Break`, and `Continue` pass through Try/Catch without running its handler. An error evaluating a return expression remains catchable, and a handler can return a fallback value or raise another error. [Structured diagnostics](diagnostics.md) retain original source locations and entered-call stacks. If a handler fails, its error is primary and the handled error remains as a cause; a successful handler consumes its error. DSL inspection/rethrow remains a separate roadmap item.
+This contract covers evaluation errors, including the arithmetic failures described above. Valid `Return`, `Break`, and `Continue` pass through Try/Catch without running its handler. An error evaluating a return expression remains catchable, and a handler can return a fallback value or raise another error. [Structured diagnostics](diagnostics.md) retain original source locations and entered-call stacks. If a handler fails, its error is primary and the handled error remains as a cause; a successful handler consumes its error. The optional Catch binding and Rethrow provide the inspection and propagation rules below.
+
+### Catch Details and Rethrow
+
+Use `Catch |error|` to inspect an owned diagnostic map. Check `error.code` before reading category-specific fields such as `error.details.name`. Plain `Catch { ... }` remains valid. The binding exists only while the handler runs: normal completion, Continue, Break, Return, failed return expressions, and errors restore its previous current-frame value or absence. Inherited bindings become visible again. Other handler assignments retain their ordinary scope. A skipped handler creates no binding.
+
+<!-- botwork-test: catch-inspection -->
+```botwork
+Try {
+    |value| = |1 / 0|
+} Catch |error| {
+    If |error.code == "BW3002"| {
+        Log |error.code|
+    } Else {
+        Rethrow
+    }
+}
+```
+
+Bare, case-insensitive `Rethrow` raises the active handler's original error with its original code, source, stack, and causes; its own location is added to related locations. It skips the handler's remaining statements. Rebinding or copying the metadata cannot alter that original error. An inner Try can catch a rethrow. Rethrowing the same error adds no self-cause; a different handler failure still preserves the original as a cause. A fresh failure at the same source is a distinct error.
+
+Rethrow has no value argument and cannot be used outside a lexical Catch in the same invocation. Validation checks unused/unreachable code before effects. `Rethrow` is now a reserved whole keyword; names such as `Rethrow!` and `Rethrowing` remain custom sentences. A standalone bound Catch parser pair cannot execute without its enclosing Try.
+
+The map exposes `code`, `message`, `help`, `details`, `source`, `call_stack`, `related`, and `causes`. Position/offset fields are exact decimal strings, preserving values beyond the DSL's i32 range. See the [metadata schema](diagnostics.md#dsl-metadata) and [catch example](../examples/17-catch-details.botwork). Metadata is ordinary owned data; returning it does not enable rethrow after the handler has finished.
 
 ## Collection Access
 

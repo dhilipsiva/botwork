@@ -238,6 +238,22 @@ fn collection_access_example_reads_nested_values_and_handles_errors() {
 }
 
 #[test]
+fn catch_details_example_inspects_errors_restores_bindings_and_rethrows_originals() {
+    assert_example(
+        "17-catch-details.botwork",
+        &[
+            "BW2001",
+            "missing",
+            "outside",
+            "rethrowing",
+            "[\"BW3002\", true]",
+            "outside",
+            "BW2001",
+        ],
+    );
+}
+
+#[test]
 fn syntax_example_executes_all_intended_paths() {
     assert_example(
         "02-syntaxes.botwork",

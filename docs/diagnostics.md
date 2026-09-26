@@ -29,7 +29,7 @@ Ordinary source calls with the wrong arity normally fail signature resolution as
 
 | Field | Meaning |
 | --- | --- |
-| `error` | Boxed original `BWErr`, retaining its category and details |
+| `error` | Shared immutable `Arc<BWErr>`, retaining its category, details, and identity |
 | `span` | Original UTF-8 source range, with source name, byte offsets, text, and scalar line/column |
 | `label` | Whether the range is an expression or other source syntax |
 | `call_stack` | Entered signatures, call sites, and optional definition sites |
@@ -48,4 +48,24 @@ Call stacks are snapshots captured before unwinding. A custom call that fails du
 
 Try/Catch still handles evaluation failures only. A successful handler consumes its error and emits no diagnostic. If the handler fails, its failure is primary and the handled error remains in `causes`. Nested handler failures retain all original spans/stacks in handling order, innermost first. A captured diagnostic includes the current caller even if Catch handles it before that caller unwinds. `Display` renders causes; `std::error::Error::source()` exposes the first handled cause, or the underlying category error when there is none.
 
-Each handled cause retains its own code and guidance; a handler's undefined-variable failure does not recategorize the original arithmetic failure. DSL inspection/rethrow, imports, adapter-cause compatibility, and bounded diagnostic resources remain separate roadmap work. Success output, failure status, argument order, and language scope/completion behavior retain their contracts.
+Each handled cause retains its own code and guidance; a handler's undefined-variable failure does not recategorize the original arithmetic failure. Imports, adapter-cause compatibility, and bounded diagnostic resources remain separate roadmap work. Success output, failure status, argument order, and language scope/completion behavior retain their contracts.
+
+
+## DSL Metadata
+
+`Catch |name|` binds the same owned value returned by `Diagnostic::to_value()`. It is a map with these fields:
+
+| Field | Value |
+| --- | --- |
+| `code`, `message`, `help` | Strings describing this error |
+| `details` | Category-specific map described below |
+| `source` | Source map, or None if no source exists |
+| `call_stack` | Innermost-first array of `{signature, call_site, definition_site}`; sites are source maps and native definition sites are None |
+| `related` | Array of `{message, source}` for declarations and rethrow sites |
+| `causes` | Array of diagnostic maps preserving handled errors |
+
+A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `line`, `column`, `end_line`, and `end_column`. Coordinates are decimal strings, not i32 values, so metadata never truncates a source offset. Byte and end-position semantics match `Span`. Missing source/definition sites are present with None values; they are not absent keys.
+
+`details` contains `name` for BW2001; `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. Being representable as metadata does not make syntax/validation errors catchable.
+
+Metadata copies have no mutable connection to the active error. Rethrow uses that error's shared identity, retains its original span/stack/causes, and adds a related rethrow location. The same error is not appended as its own cause. Fresh errors, even at identical source locations, remain distinct. The Rust diagnostic error field now uses `Arc<BWErr>` so cloning a diagnostic preserves identity; legacy `BWErr` APIs retain their return types and categories.

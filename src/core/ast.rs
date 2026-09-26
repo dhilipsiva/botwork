@@ -169,6 +169,7 @@ impl Statement {
             StatementKind::Return(_) => "return",
             StatementKind::Break => "break",
             StatementKind::Continue => "continue",
+            StatementKind::Rethrow => "rethrow",
         }
     }
 }
@@ -197,17 +198,20 @@ pub enum StatementKind {
     },
     Try {
         body: Block,
+        binding: Option<Name>,
         handler: Block,
     },
     Return(Option<Expr>),
     Break,
     Continue,
+    Rethrow,
 }
 
 #[derive(Clone, Copy, Default)]
 struct ControlScope {
     in_definition: bool,
     in_loop: bool,
+    in_catch: bool,
 }
 
 pub(crate) fn validate_script(statements: &[Statement]) -> Result<(), BWErr> {
@@ -239,6 +243,10 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> DiagnosticR
             statement,
             "Continue requires an enclosing loop in the same invocation",
         )),
+        StatementKind::Rethrow if !scope.in_catch => Err(control_placement_error(
+            statement,
+            "Rethrow requires an enclosing Catch in the same invocation",
+        )),
         StatementKind::Define(definition) => {
             let mut parameters = HashMap::new();
             for parameter in &definition.parameters {
@@ -257,6 +265,7 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> DiagnosticR
                 ControlScope {
                     in_definition: true,
                     in_loop: false,
+                    in_catch: false,
                 },
             )
         }
@@ -279,15 +288,22 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> DiagnosticR
                 None => Ok(()),
             }
         }
-        StatementKind::Try { body, handler } => {
+        StatementKind::Try { body, handler, .. } => {
             validate_statements(&body.statements, scope)?;
-            validate_statements(&handler.statements, scope)
+            validate_statements(
+                &handler.statements,
+                ControlScope {
+                    in_catch: true,
+                    ..scope
+                },
+            )
         }
         StatementKind::Assign { .. }
         | StatementKind::Invoke(_)
         | StatementKind::Return(_)
         | StatementKind::Break
-        | StatementKind::Continue => Ok(()),
+        | StatementKind::Continue
+        | StatementKind::Rethrow => Ok(()),
     }
 }
 
@@ -477,6 +493,17 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
     let span = Span::of(&pair, &source);
     match pair.as_rule() {
         Rule::EOI | Rule::logical_not | Rule::seperator => Ok(Node::None),
+        Rule::stmt_catch
+            if pair
+                .clone()
+                .into_inner()
+                .any(|child| child.as_rule() == Rule::ident) =>
+        {
+            Err(BWErr::ControlFlowError(format!(
+                "{}: Catch binding requires an enclosing Try",
+                span.location()
+            )))
+        }
         Rule::stmt_block | Rule::stmt_catch | Rule::stmt_else => {
             block(pair, &source).map(Node::Block)
         }
@@ -490,6 +517,7 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
         | Rule::stmt_return
         | Rule::stmt_break
         | Rule::stmt_continue => statement(pair, &source).map(Node::Statement),
+        Rule::stmt_rethrow => statement(pair, &source).map(Node::Statement),
         _ => expression(pair, &source).map(Node::Expression),
     }
     .map_err(|error| Diagnostic::new(error).at(&span))
@@ -593,10 +621,19 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
         Rule::stmt_try => {
             let body = block(required(&mut inner)?, source)?;
             let mut handler = required(&mut inner)?.into_inner();
-            let handler_block = block(required(&mut handler)?, source)?;
+            let first = required(&mut handler)?;
+            let (binding, handler_block) = if first.as_rule() == Rule::ident {
+                (
+                    Some(lower_name(first, source)),
+                    block(required(&mut handler)?, source)?,
+                )
+            } else {
+                (None, block(first, source)?)
+            };
             finish(handler)?;
             StatementKind::Try {
                 body,
+                binding,
                 handler: handler_block,
             }
         }
@@ -608,6 +645,7 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
         ),
         Rule::stmt_break => StatementKind::Break,
         Rule::stmt_continue => StatementKind::Continue,
+        Rule::stmt_rethrow => StatementKind::Rethrow,
         _ => return Err(invalid("statement")),
     };
     finish(inner)?;
@@ -616,7 +654,7 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
 
 fn block(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Block, BWErr> {
     let span = Span::of(&pair, source);
-    // Else and Catch wrappers are accepted by the compatibility entry point.
+    // Else and unbound Catch wrappers are accepted by the compatibility entry point.
     let mut statements = Vec::new();
     for pair in pair.into_inner() {
         if pair.as_rule() == Rule::stmt_block {

@@ -1,0 +1,8 @@
+Try {
+    Log |1 / 0|
+} Catch |problem| {
+    Log |problem.code|
+    |problem| = |{code: "changed"}|
+    Rethrow
+}
+Log |"unreachable"|

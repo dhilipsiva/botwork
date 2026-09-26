@@ -1,0 +1,23 @@
+|problem| = |"outside"|
+Try { Log |missing| } Catch |problem| {
+    Log |problem.code|
+    Log |problem.details.name|
+}
+Log |problem|
+
+Try {
+    Try { Log |1 / 0| } Catch |problem| {
+        Log |"rethrowing"|
+        |problem| = |{code: "changed"}|
+        Rethrow
+    }
+} Catch |problem| {
+    Log |[problem.code, problem.causes == []]|
+}
+Log |problem|
+
+Fallback {
+    Try { Return |missing| } Catch |problem| { Return |problem.code| }
+}
+|result| = Fallback
+Log |result|
