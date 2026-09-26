@@ -1,0 +1,10 @@
+|map| = |{items: [3, {"display name": 7}], "01": 8, "": 9}|
+|key| = |"display name"|
+|index| = |1|
+Log |[map.items.0, map.items[index][key], map.01, map[""], [5, 6].01]|
+Log |[[] == [], {} == {}, {a: [1, 2.0]} == {"a": [1.0, 2]}, [1] != [2], [1] == {a: 1}]|
+Empty {}
+|none| = Empty
+Log |[none == none, {a: none}.a == none, none == false]|
+Try { Log |map.items[2]| } Catch { Log |"end is out of bounds"| }
+Try { Log |[][0]| } Catch { Log |"empty is out of bounds"| }

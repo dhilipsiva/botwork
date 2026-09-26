@@ -1,0 +1,26 @@
+|x| = |10|
+Read root { Return |x| }
+Pair |x| with |other| { Return |[x, other]| }
+Outer |x| {
+    Read local { Return |x| }
+    |x| = |x + 1|
+    |root| = Read root
+    |local| = Read local
+    |arguments| = Pair |1| with |x|
+    Return |[root, local, arguments]|
+}
+|result| = Outer |99|
+Log |result|
+Log |x|
+|x| = |11|
+|current| = Read root
+Log |current|
+Bad {
+    |x| = |0|
+    Local {}
+    |failure| = |missing|
+}
+|answer| = |7|
+Try { |answer| = Bad } Catch { Log |x| }
+Try { Local } Catch { Log |"local discarded"| }
+Log |answer|

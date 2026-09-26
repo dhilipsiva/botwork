@@ -64,6 +64,8 @@ The library's program evaluator returns the final top-level statement's normal r
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
 
+The [conformance corpus](conformance-corpus.md) maps all current rule IDs to positive, invalid-input, and boundary cases. Its inventory rejects gaps when rules change, and its CLI/host checks run in both profiles alongside the detailed evidence below.
+
 | Rules | Evidence and current status |
 | --- | --- |
 | E1, F2 | CLI tests `syntax_failure_prevents_execution_of_the_whole_program`, `invalid_control_placement_prevents_all_cli_execution`, and `runtime_failure_preserves_prior_output_but_skips_later_statements`, plus contract `definitions_become_available_when_executed`, pass. `assembled_programs_are_validated_before_any_assignment_or_definition` verifies library entry-point validation before effects. |

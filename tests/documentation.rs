@@ -1,42 +1,17 @@
 #[path = "support/markdown.rs"]
 mod markdown;
 
+#[path = "support/cli_harness.rs"]
+mod cli_harness;
+
+use cli_harness::Harness;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
-
-struct Workspace(PathBuf);
-
-impl Workspace {
-    fn create() -> Self {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/doc-examples");
-        fs::create_dir_all(&root).unwrap();
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        for attempt in 0..100 {
-            let path = root.join(format!("{}-{nonce}-{attempt}", std::process::id()));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => panic!("create documentation workspace: {error}"),
-            }
-        }
-        panic!("unique documentation workspace");
-    }
-}
-
-impl Drop for Workspace {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
 
 fn markdown_files(root: &Path, files: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(root).unwrap() {
@@ -104,20 +79,7 @@ fn every_documented_botwork_example_matches_its_cli_output() {
         ),
     ]);
     let mut seen = BTreeSet::new();
-    let workspace = Workspace::create();
-    let toolchain = Command::new("rustc").arg("--version").output().unwrap();
-    assert!(toolchain.status.success());
-    let environment = format!(
-        "{} / {}-{} / {} / locked dependencies / timeout=5s / seed=none / adapters=none",
-        String::from_utf8_lossy(&toolchain.stdout).trim(),
-        std::env::consts::OS,
-        std::env::consts::ARCH,
-        if cfg!(debug_assertions) {
-            "debug"
-        } else {
-            "release"
-        }
-    );
+    let harness = Harness::new();
     for (document, blocks) in documents() {
         for block in blocks
             .into_iter()
@@ -132,40 +94,16 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 .get(id)
                 .unwrap_or_else(|| panic!("{document}:{}: register output for {id}", block.line));
             assert_eq!(&document, expected_document, "{id}: unexpected document");
-            let source = workspace.0.join(format!("{id}.botwork"));
-            fs::write(&source, &block.source).unwrap();
-            let stdout_path = workspace.0.join(format!("{id}.stdout"));
-            let stderr_path = workspace.0.join(format!("{id}.stderr"));
-            let mut child = Command::new(env!("CARGO_BIN_EXE_botwork"))
-                .arg("--file")
-                .arg(&source)
-                .stdin(Stdio::null())
-                .stdout(fs::File::create(&stdout_path).unwrap())
-                .stderr(fs::File::create(&stderr_path).unwrap())
-                .spawn()
-                .unwrap();
-            let start = Instant::now();
-            let status = loop {
-                if let Some(status) = child.try_wait().unwrap() {
-                    break status;
-                }
-                if start.elapsed() >= Duration::from_secs(5) {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    panic!(
-                        "{document}:{} ({id}) timed out; {environment}\n{}",
-                        block.line, block.source
-                    );
-                }
-                thread::sleep(Duration::from_millis(5));
-            };
-            let diagnostic = fs::read(&stderr_path).unwrap();
+            let output = harness
+                .run(id, &block.source, Duration::from_secs(5))
+                .unwrap_or_else(|error| panic!("{document}:{}: {error}", block.line));
+            let diagnostic = output.stderr;
             let label = format!(
-                "{document}:{} ({id}); {environment}\n{}",
-                block.line, block.source
+                "{document}:{} ({id}); {}; timeout=5s\n{}",
+                block.line, harness.environment, block.source
             );
             assert_eq!(
-                status.code(),
+                output.status.code(),
                 Some(0),
                 "{label}\n{}",
                 String::from_utf8_lossy(&diagnostic)
@@ -175,7 +113,7 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 "{label}: {}",
                 String::from_utf8_lossy(&diagnostic)
             );
-            assert_eq!(&fs::read(stdout_path).unwrap(), stdout, "{label}");
+            assert_eq!(&output.stdout, stdout, "{label}");
         }
     }
     assert_eq!(

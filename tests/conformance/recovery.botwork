@@ -1,0 +1,14 @@
+Log |"before"|
+|answer| = |7|
+Try {
+    Log |"completed effect"|
+    |answer| = |missing|
+    Log |"unreachable"|
+} Catch { Log |answer| }
+Try {
+    Try { Log |missing_body| } Catch { Log |missing_handler| }
+} Catch { Log |"outer handler"| }
+Try { Later } Catch { Log |"not hoisted"| }
+Later { Log |"registered later"| }
+Later
+Log |[false and (1 / 0), true or missing]|

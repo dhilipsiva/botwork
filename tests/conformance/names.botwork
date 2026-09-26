@@ -1,0 +1,18 @@
+Écho value |தமிழ்| { Return |தமிழ்| }
+|answer| = ÉCHOVALUE |"தமிழ்"|
+Log |answer|
+Try { écho value |autre| {} } Catch { Log |"collision preserves original"| }
+|answer| = éCHO value |7|
+Log |answer|
+|café| = |1|
+|café| = |2|
+|Café| = |3|
+|trué| = |4|
+Log |[café, café, Café, trué]|
+Shadow {
+    écho value |value| { Return |value + 1| }
+    |result| = Écho value |7|
+    Return |result|
+}
+|shadow| = Shadow
+Log |shadow|

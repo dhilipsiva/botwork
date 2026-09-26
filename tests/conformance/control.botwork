@@ -1,0 +1,24 @@
+|sum| = |0|
+For |item| In |[1, 2, 3, 4]| {
+    Try {
+        If |item == 2| { Continue }
+        If |item == 4| { Break }
+        |sum| = |sum + item|
+    } Catch { Log |"unexpected handler"| }
+}
+|i| = |0|
+While |i < 2| { |i| = |i + 1| }
+Pick {
+    For |item| In |[1, 2]| {
+        While |true| {
+            Try { Return |7| } Catch { Log |"unexpected return handler"| }
+        }
+    }
+    Log |"unreachable"|
+}
+|result| = Pick
+Log |[result, sum, i]|
+For |item| In |[]| { Log |"unexpected iteration"| }
+While |false| { Log |"unexpected iteration"| }
+Try { Log |item| } Catch { Log |"iterator absent"| }
+Log |[false and missing, true or missing]|

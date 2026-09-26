@@ -1,0 +1,16 @@
+Empty {}
+|none| = Empty
+Log |[none, true, -1, 1.5, "é", [], {}]|
+|original| = |{items: [1]}|
+|copy| = |original|
+|copy| = |{items: [2]}|
+Log |[original.items.0, copy.items.0]|
+Log |{z: 1, a: 2, z: 3}|
+Log |1 == 1 == 1|
+Bare { Return }
+Fallthrough { |value| = |7| }
+Explicit { Return |["ok"]| }
+|bare| = Bare
+|fallthrough| = Fallthrough
+|explicit| = Explicit
+Log |[bare, fallthrough, explicit]|
