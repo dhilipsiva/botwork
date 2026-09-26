@@ -47,3 +47,11 @@ The try body runs once. If it succeeds, the handler is skipped. On an evaluation
 A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the entire file before execution, so this prevents even earlier `Log` statements from running. Syntax errors cannot be caught by a script. Write ordinary statements directly when no handler is intended.
 
 This contract covers returned evaluation errors. Converting arithmetic panics into catchable errors, preserving structured error causes, and correcting nested `Return` remain separate roadmap items.
+
+## Collection Access Status
+
+Dot access such as `m.a`, `items.0`, or `m.items.0` is accepted syntax but is not implemented yet. Evaluating it returns `UnsupportedAccessError` with a diagnostic such as `Collection access is unsupported: m.items.0`. No base-variable lookup or index conversion is attempted, so an undefined base receives the same unsupported-feature error.
+
+The error propagates through expressions, collections, conditions, and call arguments. A direct assignment such as `|answer| = |m.a|` preserves the destination's previous value when access fails; caller-state preservation during custom calls remains a separate defect. `Try/Catch` can handle the error; an uncaught error stops execution with CLI status `1`. Access in an unselected `If` branch is not evaluated. Malformed paths remain syntax errors.
+
+This temporary contract prevents interpreter panics. Actual key/index lookup and its missing-key, bounds, and type errors remain planned work; its implementation must replace the temporary unsupported-access expectations in the tests.

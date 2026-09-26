@@ -1,0 +1,7 @@
+Try {
+    Log |missing.items.0|
+    Log |"must not execute"|
+} Catch {
+    Log |"caught"|
+}
+Log |"after"|

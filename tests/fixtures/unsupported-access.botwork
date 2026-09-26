@@ -1,0 +1,4 @@
+Log |"before"|
+|m| = |{items: [7]}|
+Log |m.items.0|
+Log |"must not execute"|

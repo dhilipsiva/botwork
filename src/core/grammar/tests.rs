@@ -86,6 +86,14 @@ fn rejects_missing_or_malformed_catch_handlers() {
 }
 
 #[test]
+fn malformed_collection_paths_remain_syntax_errors() {
+    for path in ["m.", "m..a", "items.-1", "m.[0]", "m.0a"] {
+        let source = format!("|answer| = |{path}|");
+        assert!(BWParser::parse(Rule::botwork, &source).is_err(), "{source}");
+    }
+}
+
+#[test]
 fn integer_operators_produce_expected_values() {
     for (operator, lhs, rhs, expected) in [
         (Rule::plus, 5, 3, 8),

@@ -340,6 +340,10 @@ fn ident(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
     globals.get_variable(&ident)
 }
 
+fn dot_path(pair: Pair<Rule>, _globals: &mut Context) -> LiteralResult {
+    Err(BWErr::UnsupportedAccessError(pair.as_str().to_owned()))
+}
+
 fn stmt_if(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
     let mut inner = pair.clone().into_inner();
     let condition = inner
@@ -536,6 +540,7 @@ pub fn botwork(pair: Pair<Rule>, globals: &mut Context) -> LiteralResult {
         Rule::unary => pratt_parse,
         Rule::array => array,
         Rule::ident => ident,
+        Rule::dot_path => dot_path,
         Rule::map => map,
         Rule::keyword => keyword,
         Rule::integer => integer,

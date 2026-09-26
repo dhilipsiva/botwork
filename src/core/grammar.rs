@@ -43,6 +43,8 @@ pub enum BWErr {
     ParsingIntegerError(String),
     #[error("Operation performed on incompatible types: {0}")]
     OperationIncompatibleError(String),
+    #[error("Collection access is unsupported: {0}")]
+    UnsupportedAccessError(String),
     #[error("Writing output failed: {0}")]
     OutputError(String),
 }

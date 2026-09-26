@@ -171,6 +171,68 @@ fn collection_literals_evaluate_nested_expressions() {
 }
 
 #[test]
+fn unsupported_access_reports_the_path_and_preserves_assignment_state() {
+    for path in [
+        "m.a",
+        "m.a.0",
+        "items.0",
+        "missing.a",
+        "δ.α",
+        "items.999999999999999999999",
+    ] {
+        let mut context = Context::default();
+        evaluate("|answer| = |9|", &mut context).unwrap();
+        let error = evaluate(&format!("|answer| = |{path}|"), &mut context).unwrap_err();
+        assert!(matches!(&error, BWErr::UnsupportedAccessError(found) if found == path));
+        assert!(error.to_string().contains("unsupported"), "{error}");
+        assert!(error.to_string().contains(path), "{error}");
+        assert!(matches!(variable(&context, "answer"), Literal::Int(9)));
+        evaluate("|answer| = |10|", &mut context).unwrap();
+        assert!(matches!(variable(&context, "answer"), Literal::Int(10)));
+    }
+}
+
+#[test]
+fn unsupported_access_propagates_through_expression_contexts() {
+    for source in [
+        "|answer| = |1 + m.a|",
+        "|answer| = |[m.a]|",
+        "|answer| = |{value: m.a}|",
+        "If |m.a| {}",
+        "While |m.a| {}",
+        "For |item| in |m.a| {}",
+        "Log |m.a|",
+        "Inspect |value| {}\nInspect |m.a|",
+    ] {
+        let mut context = Context::default();
+        context.init_statements();
+        evaluate("|m| = |{a: 7}|", &mut context).unwrap();
+        let error = evaluate(source, &mut context).unwrap_err();
+        assert!(matches!(&error, BWErr::UnsupportedAccessError(path) if path == "m.a"));
+        assert!(
+            error.to_string().contains("unsupported"),
+            "{source}: {error}"
+        );
+        assert!(error.to_string().contains("m.a"), "{source}: {error}");
+    }
+}
+
+#[test]
+fn unsupported_access_is_catchable_and_skipped_branches_do_not_evaluate_it() {
+    let mut context = Context::default();
+    evaluate(
+        "|answer| = |9|\nTry {\n |answer| = |m.a|\n} Catch {\n\
+         |caught| = |true|\n}\nIf |false| {\n |answer| = |m.a|\n}\n\
+         |after| = |answer + 1|",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "answer"), Literal::Int(9)));
+    assert!(matches!(variable(&context, "caught"), Literal::Bool(true)));
+    assert!(matches!(variable(&context, "after"), Literal::Int(10)));
+}
+
+#[test]
 fn separate_contexts_do_not_share_variables() {
     let mut first = Context::default();
     let mut second = Context::default();
