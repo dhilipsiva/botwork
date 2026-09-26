@@ -1,0 +1,7 @@
+Try {
+    |value| = |body_missing|
+} Catch {
+    Log |"handler"|
+    |value| = |handler_missing|
+}
+Log |"must not execute"|

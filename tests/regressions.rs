@@ -160,7 +160,6 @@ fn arithmetic_failure_can_be_caught() {
 }
 
 #[test]
-#[ignore = "known defect: grammar accepts Try without the Catch required by evaluation"]
 fn try_requires_a_catch_clause() {
     assert!(BWParser::parse(Rule::botwork, "Try {\n |x| = |1|\n}").is_err());
 }

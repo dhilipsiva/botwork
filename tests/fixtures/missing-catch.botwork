@@ -1,0 +1,5 @@
+Log |"before"|
+Try {
+    Log |"body"|
+}
+Log |"after"|

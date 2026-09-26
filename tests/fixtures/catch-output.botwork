@@ -1,0 +1,9 @@
+Log |"before"|
+Try {
+    Log |"trying"|
+    |value| = |missing|
+    Log |"must not execute"|
+} Catch {
+    Log |"caught"|
+}
+Log |"after"|

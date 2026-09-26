@@ -70,6 +70,40 @@ fn caught_evaluation_error_succeeds_without_diagnostics() {
 }
 
 #[test]
+fn missing_catch_is_a_syntax_error_before_any_execution() {
+    let path = fixture("missing-catch.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        output.stdout.is_empty(),
+        "a syntax error must prevent prior Log output"
+    );
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("missing-catch.botwork"));
+    assert!(diagnostic.contains("expected stmt_catch"));
+}
+
+#[test]
+fn catch_runs_once_and_execution_continues_after_a_handled_failure() {
+    let path = fixture("catch-output.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"before\ntrying\ncaught\nafter\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn handler_failure_stops_execution_and_fails_the_cli() {
+    let path = fixture("catch-failure.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"handler\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("catch-failure.botwork"));
+    assert!(diagnostic.contains("Variable not defined: handler_missing"));
+}
+
+#[test]
 fn runtime_error_reports_file_and_variable_and_stops_execution() {
     let path = fixture("runtime-error.botwork");
     let output = run(&["--file", path.to_str().unwrap()]);

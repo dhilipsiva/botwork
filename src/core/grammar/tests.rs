@@ -52,6 +52,40 @@ fn parses_empty_program() {
 }
 
 #[test]
+fn try_catch_has_both_blocks_in_empty_mixed_case_and_nested_forms() {
+    for source in [
+        "Try {} Catch {}",
+        "tRy\t{\r\n} cAtCh {\r\n}",
+        "Try {\n |x| = |1|\n} Catch {\n |x| = |2|\n}",
+        "Try { Try {} Catch {} } Catch {}",
+    ] {
+        let mut program = BWParser::parse(Rule::botwork, source).unwrap();
+        let statement = program.next().unwrap();
+        assert_eq!(statement.as_rule(), Rule::stmt_try, "{source}");
+        let children: Vec<_> = statement.into_inner().map(|pair| pair.as_rule()).collect();
+        assert_eq!(children, [Rule::stmt_block, Rule::stmt_catch], "{source}");
+        assert_eq!(program.next().unwrap().as_rule(), Rule::EOI);
+        assert!(program.next().is_none());
+    }
+}
+
+#[test]
+fn rejects_missing_or_malformed_catch_handlers() {
+    for source in [
+        "Try {}",
+        "Try { |x| = |1| }",
+        "Catch {}",
+        "Try {} Catch",
+        "Try {} Catch {",
+        "Try {} Catch {} Catch {}",
+        "Try { Try {} } Catch {}",
+        "Try {} Catch { Try {} }",
+    ] {
+        assert!(BWParser::parse(Rule::botwork, source).is_err(), "{source}");
+    }
+}
+
+#[test]
 fn integer_operators_produce_expected_values() {
     for (operator, lhs, rhs, expected) in [
         (Rule::plus, 5, 3, 8),

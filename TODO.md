@@ -84,7 +84,7 @@ The following defects were reproduced during the DSL review. Relevant implementa
 - [ ] **Match complete keywords.** Accept identifiers such as `order` and statement names such as `Format report`; reserved-word prefixes must not reject valid names or split them into control statements.
 - [ ] **Handle accepted collection-access syntax.** `m.a` currently parses and panics. Return a clear unsupported-feature error until milestone 3 implements access; never route valid user input to `unreachable!()`.
 - [ ] **Make arithmetic failures catchable.** `1 % 0` inside `Try/Catch` must produce a DSL error and execute the catch block. Define division by zero, integer overflow, exponent bounds, and invalid operand behavior consistently across debug and release builds.
-- [ ] **Align optional `Catch` syntax and execution.** The grammar accepts `Try { ... }`, but evaluation requires a catch block before executing it. Decide whether catch is required and enforce the same contract in both places.
+- [x] **Align `Catch` syntax and execution.** `Try` requires exactly one `Catch` block. The grammar rejects missing or malformed handlers before any script execution; parser, evaluator, and CLI tests verify valid nesting, skipped handlers on success, and propagation of handler failures. See [Try/Catch](docs/language.md#trycatch).
 
 ## 3. Complete Core Language Features and Runtime Contracts
 

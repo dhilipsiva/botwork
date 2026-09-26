@@ -29,3 +29,21 @@ Output failures become evaluation errors. Errors are reported on stderr with a n
 `While |condition| { ... }` evaluates its boolean condition before each iteration, including the first. A false condition skips the body. Normal completion and `Continue` reevaluate the condition; `Continue` skips the rest of the current body. `Break` exits the loop immediately. A condition that is not boolean raises an evaluation error, including when its type changes during execution.
 
 Nested `Return` propagation remains a tracked defect; the completed loop-iteration fix does not establish correct function-return behavior.
+
+## Try/Catch
+
+`Try` requires exactly one `Catch` block. Use the existing `} Catch {` layout: `Catch` starts on the same line as the try block's closing brace. Both blocks may be empty; keywords are case-insensitive, and complete `Try/Catch` statements may nest.
+
+```botwork
+Try {
+    |value| = |missing|
+} Catch {
+    Log |"recovered"|
+}
+```
+
+The try body runs once. If it succeeds, the handler is skipped. On an evaluation error, the remaining try-body statements are skipped and the handler runs once. A successful handler resumes execution after the whole construct. An error in the handler propagates to an enclosing try or becomes an uncaught error; it does not rerun the same handler. Work completed before an error is preserved.
+
+A missing, orphaned, or malformed `Catch` is a syntax error. The CLI parses the entire file before execution, so this prevents even earlier `Log` statements from running. Syntax errors cannot be caught by a script. Write ordinary statements directly when no handler is intended.
+
+This contract covers returned evaluation errors. Converting arithmetic panics into catchable errors, preserving structured error causes, and correcting nested `Return` remain separate roadmap items.

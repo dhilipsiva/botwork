@@ -115,6 +115,31 @@ fn successful_try_does_not_execute_catch() {
 }
 
 #[test]
+fn a_failing_handler_propagates_its_error() {
+    let mut context = Context::default();
+    let result = evaluate(
+        "Try { |x| = |body_missing| } Catch { |x| = |handler_missing| }",
+        &mut context,
+    );
+    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "handler_missing"));
+}
+
+#[test]
+fn outer_catch_handles_inner_handler_failure_once() {
+    let mut context = Context::default();
+    evaluate(
+        "|count| = |0|\nTry {\n Try {\n |x| = |body_missing|\n } Catch {\n\
+         |count| = |count + 1|\n |x| = |handler_missing|\n }\n\
+         |count| = |999|\n} Catch {\n |count| = |count + 10|\n}\n\
+         |after| = |true|",
+        &mut context,
+    )
+    .unwrap();
+    assert!(matches!(variable(&context, "count"), Literal::Int(11)));
+    assert!(matches!(variable(&context, "after"), Literal::Bool(true)));
+}
+
+#[test]
 fn custom_statement_names_ignore_case_and_spaces() {
     let mut context = Context::default();
     evaluate(
