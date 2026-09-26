@@ -40,6 +40,9 @@ pub use retained_names::RetainedNameLimits;
 mod retained_registry;
 pub use retained_registry::RetainedRegistryLimits;
 pub(crate) use retained_registry::{RegistryPlan, RegistryReservation};
+mod snapshot_limits;
+pub use snapshot_limits::SnapshotLimits;
+pub(crate) use snapshot_limits::SnapshotSize;
 
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
@@ -63,6 +66,7 @@ pub struct RunLimits {
     pub retained_definitions: RetainedDefinitionLimits,
     pub retained_names: RetainedNameLimits,
     pub retained_registry: RetainedRegistryLimits,
+    pub snapshots: SnapshotLimits,
 }
 
 impl Default for RunLimits {
@@ -81,6 +85,7 @@ impl Default for RunLimits {
             retained_definitions: RetainedDefinitionLimits::default(),
             retained_names: RetainedNameLimits::default(),
             retained_registry: RetainedRegistryLimits::default(),
+            snapshots: SnapshotLimits::default(),
         }
     }
 }
@@ -345,7 +350,7 @@ impl Engine {
     ) -> RunResult {
         let start = Instant::now();
         let control_start = tokio::time::Instant::now();
-        let mut context = self.template.clone();
+        let mut context = Context::default();
         let variables = Owned::new(std::mem::take(&mut options.variables));
         let result = (|| {
             options.control.checkpoint()?;
@@ -354,7 +359,7 @@ impl Engine {
             context.working_directory = Ok(environment.directory.clone());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
             context.environment = Some(environment);
-            context.admit_native_registry()?;
+            context.copy_native_template(&self.template)?;
             context.set_input_variables(variables.into_inner())?;
             context.checkpoint()?;
             let result = execute(&mut context);
@@ -375,6 +380,7 @@ struct BudgetState {
     used: AtomicU64,
     active: AtomicUsize,
     imports: Mutex<[usize; 5]>,
+    snapshots: Mutex<[usize; 2]>,
     retained_values: Arc<retained_values::RetainedValues>,
     retained_definitions: Arc<retained_definitions::RetainedDefinitions>,
     retained_names: Arc<retained_names::RetainedNames>,
@@ -394,6 +400,7 @@ impl Clone for RunBudget {
             used: AtomicU64::new(self.used()),
             active: AtomicUsize::new(0),
             imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
+            snapshots: Mutex::new(*self.0.snapshots.lock().unwrap_or_else(|e| e.into_inner())),
             retained_values: Arc::clone(&self.0.retained_values),
             retained_definitions: Arc::clone(&self.0.retained_definitions),
             retained_names: Arc::clone(&self.0.retained_names),
@@ -429,6 +436,7 @@ impl RunBudget {
             used: AtomicU64::new(0),
             active: AtomicUsize::new(0),
             imports: Mutex::new([0; 5]),
+            snapshots: Mutex::new([0; 2]),
             stopped: Mutex::new(None),
         }))
     }

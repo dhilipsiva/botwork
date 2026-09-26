@@ -414,6 +414,38 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::SnapshotBoundary | Input::SnapshotLimit => {
+                use botwork::core::run::{
+                    Engine, RunLimits, RunOptions, RunOutcome, SnapshotLimits,
+                };
+                let engine = Engine::default();
+                let run = engine.run_source(
+                    case.id,
+                    "|x| = |7|",
+                    RunOptions {
+                        limits: RunLimits {
+                            snapshots: SnapshotLimits {
+                                entries: usize::from(case.error.is_none()),
+                                path_bytes: 0,
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                if let Some(expected) = case.error {
+                    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+                    assert!(run.variables.is_empty());
+                    assert_eq!(run.steps, 0);
+                    let error = run.result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                } else {
+                    assert_eq!(run.outcome(), RunOutcome::Succeeded);
+                    assert_eq!(run.variables["x"].to_string(), "7");
+                }
+                continue;
+            }
             Input::RegistryBoundary | Input::RegistryLimit => {
                 use botwork::core::{
                     ast::Program,

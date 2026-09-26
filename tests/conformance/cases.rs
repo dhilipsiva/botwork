@@ -33,6 +33,8 @@ pub enum Input {
     NameLimit,
     RegistryBoundary,
     RegistryLimit,
+    SnapshotBoundary,
+    SnapshotLimit,
 }
 
 #[derive(Clone)]
@@ -201,5 +203,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::RegistryBoundary, stdout: "", code: None, error: None },
         Case { id: "registry-limit", positive: &[], invalid: &["R12"], boundary: &[],
             input: Input::RegistryLimit, stdout: "", code: Some("BW8001"), error: Some("registry text bytes") },
+        Case { id: "snapshot-boundary", positive: &["R13"], invalid: &[], boundary: &["R13"],
+            input: Input::SnapshotBoundary, stdout: "", code: None, error: None },
+        Case { id: "snapshot-limit", positive: &[], invalid: &["R13"], boundary: &[],
+            input: Input::SnapshotLimit, stdout: "", code: Some("BW8001"), error: Some("snapshot table entries") },
     ]
 }

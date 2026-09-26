@@ -22,6 +22,6 @@ Call exit, temporary binding removal, failed module initialization, and final Co
 
 ## Scope and Evidence
 
-This contract covers variable keys, including inputs, locals, parameters, iterators, and Catch bindings. Declaration/signature labels, statement/namespace names, and borrowed metadata queries use the separate [registry contract](retained-registry.md). Diagnostic name copies, root result snapshots, and frame/cache hash-table storage retain separate accounting tasks. Counts exclude allocator capacity/overhead and arbitrary host allocations.
+This contract covers variable keys, including inputs, locals, parameters, iterators, and Catch bindings. Declaration/signature labels, statement/namespace names, and borrowed metadata queries use the separate [registry contract](retained-registry.md). [Snapshot budgets](snapshot-limits.md) bound frame/cache copy work. Diagnostic name copies and owned root results retain separate accounting tasks. Counts exclude allocator capacity/overhead and arbitrary host allocations.
 
 Unit tests check exact/zero/overflow counters, atomicity, UTF-8 lookup/hash identity, shared ownership, release, and clone failures. `tests/retained_names.rs` covers Unicode, defaults/raised limits, input batches, deep rejected host values, replacement, calls/modules, loop/handler restoration, effects, concurrency, and CLI recovery. Allocation observations verify name rejection before key/value copies and payload-free Context name snapshots. R11 corpus cases and a Rust doctest pin exact key reuse and aggregate rejection.

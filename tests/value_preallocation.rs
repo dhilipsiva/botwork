@@ -58,6 +58,106 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn checked_context_copy_rejects_before_allocating_variable_table() {
+    use botwork::core::{eval::Context, run::SnapshotLimits};
+    let mut context = Context::with_limits(RunLimits {
+        snapshots: SnapshotLimits {
+            entries: 0,
+            ..SnapshotLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .set_input_variables(
+            (0..4096)
+                .map(|i| (format!("v{i}"), Literal::None))
+                .collect(),
+        )
+        .unwrap();
+    let (result, large) = observe(16 * 1024, || context.try_clone());
+    assert!(result
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("snapshot table entries"));
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn engine_snapshot_rejects_before_copying_template_table() {
+    use botwork::core::run::SnapshotLimits;
+    let mut engine = Engine::default();
+    for i in 0..1024 {
+        engine
+            .register_native(&format!("Host {i}"), |_, _| Ok(Literal::None))
+            .unwrap();
+    }
+    let options = RunOptions {
+        inherit_environment: false,
+        limits: RunLimits {
+            snapshots: SnapshotLimits {
+                entries: 0,
+                ..SnapshotLimits::default()
+            },
+            ..RunLimits::default()
+        },
+        ..RunOptions::default()
+    };
+    let (run, large) = observe(16 * 1024, || engine.run_source("snapshot", "", options));
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert!(run
+        .result
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot table entries"));
+    assert_eq!(large, 0);
+}
+
+#[test]
+fn imported_snapshot_rejects_before_copying_wide_module_frame() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::SnapshotLimits,
+    };
+    let directory =
+        std::env::temp_dir().join(format!("botwork-frame-allocation-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("wide.botwork");
+    let source = (0..4096)
+        .map(|i| format!("|v{i}| = |0|\n"))
+        .collect::<String>()
+        + "Read {}";
+    std::fs::write(&path, source).unwrap();
+    let mut context = Context::with_limits(RunLimits {
+        snapshots: SnapshotLimits {
+            entries: 1,
+            ..SnapshotLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let program = Program::parse(
+        "import",
+        &format!(
+            "Import |{}| As |m|",
+            serde_json::to_string(path.to_str().unwrap()).unwrap()
+        ),
+    )
+    .unwrap();
+    evaluate_program_detailed(&program, &mut context).unwrap();
+    let call = Program::parse("call", "m::Read").unwrap();
+    let (result, large) = observe(16 * 1024, || evaluate_program_detailed(&call, &mut context));
+    std::fs::remove_dir_all(directory).unwrap();
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("snapshot table entries"));
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn retained_value_failure_precedes_the_assignment_copy() {
     use botwork::core::{
         ast::Program,

@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 69 cases against the 42 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 71 cases against the 43 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -50,6 +50,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R10 | definition-boundary | definition-limit | definition-boundary |
 | R11 | name-boundary | name-limit | name-boundary |
 | R12 | registry-boundary | registry-limit | registry-boundary |
+| R13 | snapshot-boundary | snapshot-limit | snapshot-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -84,3 +85,5 @@ Two retained-definition host cases share one source's exact text/name budget acr
 Two variable-name host cases reuse an exact-budget key during replacement or reject a new Unicode spelling at the aggregate byte boundary while preserving the earlier binding.
 
 Two registry host cases admit a native signature at exact record/node/key/text/source limits or reject its metadata strings without publishing a registration.
+
+Two snapshot host cases admit the fixed Engine template table at its exact entry budget or reject it before inputs and script effects.

@@ -32,6 +32,6 @@ Metadata listing/completion returns borrowed signatures from admitted records in
 
 ## Remaining Scope and Evidence
 
-Counts exclude allocator capacity/overhead, frame/cache table snapshots, callback captures, expression/results, and diagnostics. Parsing, namespace normalization, and supplied host descriptors precede registry retention admission. This is not an exact process-memory ceiling.
+Counts exclude allocator capacity/overhead, callback captures, expression/results, and diagnostics. Frame/cache table copies use separate [snapshot budgets](snapshot-limits.md). Parsing, namespace normalization, and supplied host descriptors precede registry retention admission. This is not an exact process-memory ceiling.
 
 Reservation tests cover exact metrics, checked arithmetic, atomicity, source/key sharing, lifetime cycles, and 8,000 concurrent registration/release operations. `tests/retained_registry.rs` covers local/cloned/module ownership, atomic namespaces, zero/raised/default limits, collisions, native-template admission/order, Unicode queries, source release, concurrency, and CLI recovery. Allocation observations pin pre-copy rejection and shared Context/template/imported-native payloads. The combined deep-import/parser regression also runs after separating declaration/publication scratch state from recursive loading frames. R12 corpus cases and an executed Rust example pin exact native metadata budgets.

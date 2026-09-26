@@ -8,6 +8,7 @@ use std::{
 };
 
 mod imports;
+mod snapshots;
 use imports::{LoadedModule, ModuleCache};
 
 use super::{
@@ -91,7 +92,7 @@ struct StoredNamespace {
     _registry: Option<Arc<RegistryReservation>>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 struct Frame {
     variables: HashMap<RetainedName, Arc<StoredValue>>,
     statements: HashMap<Arc<str>, StmtType>,
@@ -107,6 +108,9 @@ struct HandledError {
     diagnostic: Diagnostic,
 }
 
+/// Execution state. Infallible Clone is a host-owned copy outside snapshot work
+/// admission; use try_clone for checked table/path copying. Stored payloads and
+/// live retention trackers are shared; work counters and stop latches are copied.
 #[derive(Clone)]
 pub struct Context {
     frames: Vec<Frame>,

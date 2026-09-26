@@ -1,12 +1,46 @@
 use super::*;
-use crate::core::run::ImportResource;
+use crate::core::run::{ImportResource, SnapshotSize};
 use std::{fs, path::Path};
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(super) struct ModuleCache {
     loaded: HashMap<PathBuf, Arc<LoadedModule>>,
     resolved: HashMap<PathBuf, PathBuf>,
 }
+
+impl Clone for ModuleCache {
+    fn clone(&self) -> Self {
+        Self {
+            loaded: self
+                .loaded
+                .iter()
+                .map(|(key, value)| (key.clone(), Arc::clone(value)))
+                .collect(),
+            resolved: self
+                .resolved
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+        }
+    }
+}
+
+impl ModuleCache {
+    pub(super) fn snapshot_size(&self, size: &mut SnapshotSize) {
+        size.entries(self.loaded.len());
+        size.entries(self.resolved.len());
+        for path in self.loaded.keys() {
+            size.path(path);
+        }
+        for (requested, canonical) in &self.resolved {
+            size.path(requested);
+            size.path(canonical);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;
 
 pub(super) struct LoadedModule {
     frame: Frame,
@@ -279,21 +313,8 @@ fn load_module(
         .to_str()
         .ok_or_else(|| failure("Module paths must be valid UTF-8".into()))?;
     let program = context.parse_source(source_name, &source)?;
-    let mut module_context = isolated(Frame::default(), context);
-    // Modules inherit visible host operations, never caller variables/custom definitions.
-    for metadata in context.statement_signatures() {
-        let (statement, _) = context
-            .get_statement(metadata.normalized())
-            .expect("visible entry");
-        if matches!(statement, StmtType::Native { .. }) {
-            let key = statement.registry().map_or_else(
-                || Arc::from(metadata.normalized()),
-                |reservation| Arc::clone(&reservation.key),
-            );
-            module_context.frames[0].statements.insert(key, statement);
-        }
-    }
-    module_context.loading.push(canonical.clone());
+    let mut module_context =
+        prepare_module_context(context, &canonical).map_err(|error| error.at(span))?;
     let result = evaluate_program_detailed(&program, &mut module_context);
     merge_cache(context, &mut module_context);
     result?;
@@ -305,6 +326,38 @@ fn load_module(
         .loaded
         .insert(canonical, Arc::clone(&module));
     Ok(module)
+}
+
+// Keep snapshot measurement/selection storage off recursive module-loading frames.
+#[inline(never)]
+fn prepare_module_context(context: &Context, canonical: &Path) -> DiagnosticResult<Context> {
+    let natives: Vec<_> = context
+        .statement_signatures()
+        .into_iter()
+        .filter_map(|metadata| {
+            context
+                .get_statement_ref(metadata.normalized())
+                .map(|(statement, _)| statement)
+                .filter(|statement| matches!(statement, StmtType::Native { .. }))
+        })
+        .collect();
+    let mut size = context.isolated_snapshot_size();
+    size.entries(natives.len());
+    size.path(canonical);
+    context.charge_snapshot(size)?;
+    let mut module_context = isolated(Frame::default(), context);
+    // Modules inherit visible host operations, never caller variables/custom definitions.
+    for statement in natives {
+        let key = statement.registry().map_or_else(
+            || Arc::from(statement.metadata().normalized()),
+            |reservation| Arc::clone(&reservation.key),
+        );
+        module_context.frames[0]
+            .statements
+            .insert(key, statement.clone());
+    }
+    module_context.loading.push(canonical.to_owned());
+    Ok(module_context)
 }
 
 fn isolated(frame: Frame, context: &Context) -> Context {
@@ -324,14 +377,9 @@ fn isolated(frame: Frame, context: &Context) -> Context {
 }
 
 fn merge_cache(context: &mut Context, module_context: &mut Context) {
-    context
-        .modules
-        .loaded
-        .extend(module_context.modules.loaded.drain());
-    context
-        .modules
-        .resolved
-        .extend(module_context.modules.resolved.drain());
+    // The caller is suspended during isolated execution; the child contains its
+    // complete cache plus new entries. Transfer ownership without another grow/copy.
+    context.modules = std::mem::take(&mut module_context.modules);
 }
 
 pub(super) fn invoke_imported(
@@ -342,6 +390,13 @@ pub(super) fn invoke_imported(
     import_site: &Span,
     context: &mut Context,
 ) -> RuntimeResult {
+    let mut size = context.isolated_snapshot_size();
+    module.frame.snapshot_size(&mut size);
+    context.charge_snapshot(size).map_err(|error| {
+        error
+            .at(&call.span)
+            .with_related("imported here", import_site)
+    })?;
     let mut module_context = isolated(module.frame.clone(), context);
     let (definition, owner) = module_context
         .get_statement(exported)
