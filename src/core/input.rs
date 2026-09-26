@@ -1,6 +1,6 @@
 //! JSON input conversion without evaluating DSL expressions or changing host state.
 
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, io::Read, path::PathBuf};
 
 use pest::Parser;
 use serde_json::value::RawValue;
@@ -9,6 +9,12 @@ use super::{
     diagnostic::{Diagnostic, DiagnosticResult},
     grammar::{BWErr, BWParser, Literal, Rule},
 };
+
+mod limits;
+mod raw;
+use super::value_limits::ValueSize;
+pub use limits::InputLimits;
+use limits::{resource, Budget};
 
 /// Maximum container nesting in one JSON document, including its root object.
 pub const MAX_JSON_DEPTH: usize = 128;
@@ -33,36 +39,6 @@ pub(crate) fn validate_name(origin: &str, name: &str) -> DiagnosticResult<()> {
     }
 }
 
-// RawValue scans iteratively and does not apply serde_json's usual depth guard.
-// Bound all containers before recursive conversion, including overwritten keys.
-fn check_depth(origin: &str, text: &str) -> DiagnosticResult<()> {
-    let (mut depth, mut quoted, mut escaped) = (0usize, false, false);
-    for byte in text.bytes() {
-        if quoted {
-            if escaped {
-                escaped = false;
-            } else if byte == b'\\' {
-                escaped = true;
-            } else if byte == b'"' {
-                quoted = false;
-            }
-        } else {
-            match byte {
-                b'"' => quoted = true,
-                b'[' | b'{' => {
-                    depth += 1;
-                    if depth > MAX_JSON_DEPTH {
-                        return Err(invalid(origin, "$", "JSON exceeds 128 nested containers"));
-                    }
-                }
-                b']' | b'}' => depth = depth.saturating_sub(1),
-                _ => {}
-            }
-        }
-    }
-    Ok(())
-}
-
 fn decode<'a, T: serde::Deserialize<'a>>(
     origin: &str,
     path: &str,
@@ -71,31 +47,92 @@ fn decode<'a, T: serde::Deserialize<'a>>(
     serde_json::from_str(text).map_err(|error| invalid(origin, path, error))
 }
 
-fn convert(origin: &str, path: &str, raw: &RawValue) -> DiagnosticResult<Literal> {
+fn path_key(path: &str, key: &str) -> String {
+    let end = key
+        .char_indices()
+        .nth(32)
+        .map_or(key.len(), |(index, _)| index);
+    let preview = &key[..end];
+    let parent_end = path
+        .char_indices()
+        .nth(128)
+        .map_or(path.len(), |(index, _)| index);
+    format!(
+        "{}{}[{preview:?}{}]",
+        &path[..parent_end],
+        if parent_end < path.len() { "…" } else { "" },
+        if end < key.len() { "…" } else { "" }
+    )
+}
+
+fn convert(
+    origin: &str,
+    path: &str,
+    raw: &RawValue,
+    limits: &InputLimits,
+    depth: usize,
+) -> DiagnosticResult<(Literal, ValueSize)> {
+    limits
+        .values
+        .check_size(ValueSize {
+            nodes: 1,
+            depth,
+            payload_bytes: 0,
+        })
+        .map_err(|error| resource(origin, error))?;
     let text = raw.get();
-    match text.as_bytes()[0] {
-        b'n' => Ok(Literal::None),
-        b't' | b'f' => decode(origin, path, text).map(Literal::Bool),
-        b'"' => decode(origin, path, text).map(Literal::String),
+    let value = match text.as_bytes()[0] {
+        b'n' => Literal::None,
+        b't' | b'f' => Literal::Bool(decode(origin, path, text)?),
+        b'"' => {
+            let (_, bytes) = limits::string_extent(text.as_bytes(), 0);
+            limits
+                .values
+                .string_size(bytes)
+                .map_err(|error| resource(origin, error))?;
+            Literal::String(decode(origin, path, text)?)
+        }
         b'[' => {
-            let values: Vec<&RawValue> = decode(origin, path, text)?;
-            values
-                .into_iter()
-                .enumerate()
-                .map(|(index, value)| convert(origin, &format!("{path}[{index}]"), value))
-                .collect::<DiagnosticResult<_>>()
-                .map(Literal::Array)
+            let raw = raw::array(origin, path, text, limits)?;
+            let mut size = limits
+                .values
+                .container_header(raw.len())
+                .map_err(|error| resource(origin, error))?;
+            let mut values = Vec::with_capacity(raw.len());
+            for (index, raw) in raw.into_iter().enumerate() {
+                let (value, child) =
+                    convert(origin, &format!("{path}[{index}]"), raw, limits, depth + 1)?;
+                limits
+                    .values
+                    .add_child(&mut size, child)
+                    .map_err(|error| resource(origin, error))?;
+                values.push(value);
+            }
+            return Ok((Literal::Array(values), size));
         }
         b'{' => {
-            let values: BTreeMap<String, &RawValue> = decode(origin, path, text)?;
-            values
-                .into_iter()
-                .map(|(key, value)| {
-                    let value = convert(origin, &format!("{path}[{key:?}]"), value)?;
-                    Ok((key, value))
-                })
-                .collect::<DiagnosticResult<_>>()
-                .map(Literal::Map)
+            let raw = raw::map(origin, path, text, limits, false)?;
+            let mut size = limits
+                .values
+                .container_header(raw.len())
+                .map_err(|error| resource(origin, error))?;
+            for key in raw.keys() {
+                limits
+                    .values
+                    .add_bytes(&mut size, key.len())
+                    .map_err(|error| resource(origin, error))?;
+            }
+            let mut values = std::collections::HashMap::new();
+            for (key, raw) in raw {
+                let (value, child) =
+                    convert(origin, &path_key(path, &key), raw, limits, depth + 1)?;
+                limits
+                    .values
+                    .add_child(&mut size, child)
+                    .map_err(|error| resource(origin, error))?;
+                values.insert(key, value);
+            }
+            return Ok((Literal::Map(values), size));
         }
         _ if text.contains(['.', 'e', 'E']) => {
             let value: f32 = text
@@ -108,19 +145,26 @@ fn convert(origin: &str, path: &str, raw: &RawValue) -> DiagnosticResult<Literal
                     "decimal exceeds the finite f32 range",
                 ));
             }
-            Ok(Literal::Float(value))
+            Literal::Float(value)
         }
-        _ => text
-            .parse::<i32>()
-            .map(Literal::Int)
-            .map_err(|_| invalid(origin, path, "integer is outside -2147483648..2147483647")),
-    }
+        _ => Literal::Int(
+            text.parse::<i32>()
+                .map_err(|_| invalid(origin, path, "integer is outside -2147483648..2147483647"))?,
+        ),
+    };
+    let size = limits
+        .values
+        .check(&value)
+        .map_err(|error| resource(origin, error))?;
+    Ok((value, size))
 }
 
-/// Parse a JSON object into root variables. Duplicate object keys use the last value.
-/// Decimal/exponent tokens round directly to f32; integer tokens must fit i32.
-pub fn parse_variables(origin: &str, text: &str) -> DiagnosticResult<BTreeMap<String, Literal>> {
-    check_depth(origin, text)?;
+fn variables_from_text(
+    origin: &str,
+    text: &str,
+    budget: &mut Budget<'_>,
+) -> DiagnosticResult<BTreeMap<String, Literal>> {
+    budget.preflight(origin, text)?;
     let root: &RawValue = decode(origin, "$", text)?;
     if !root.get().starts_with('{') {
         return Err(invalid(
@@ -129,26 +173,71 @@ pub fn parse_variables(origin: &str, text: &str) -> DiagnosticResult<BTreeMap<St
             "expected a JSON object of variable names and values",
         ));
     }
-    let values: BTreeMap<String, &RawValue> = decode(origin, "$", root.get())?;
+    let values = raw::map(origin, "$", root.get(), budget.limits, true)?;
     values
         .into_iter()
-        .map(|(name, value)| {
+        .map(|(name, raw)| {
             validate_name(origin, &name)?;
-            let value = convert(origin, &format!("$[{name:?}]"), value)?;
+            let (value, _) = convert(origin, &path_key("$", &name), raw, budget.limits, 1)?;
             Ok((name, value))
         })
         .collect()
 }
 
-/// Parse one NAME=JSON setting. Split only at the first equals sign; do not trim names.
-pub fn parse_variable(origin: &str, setting: &str) -> DiagnosticResult<(String, Literal)> {
+fn variable_from_setting(
+    origin: &str,
+    setting: &str,
+    budget: &mut Budget<'_>,
+) -> DiagnosticResult<(String, Literal)> {
     let (name, text) = setting
         .split_once('=')
         .ok_or_else(|| invalid(origin, "$", "expected NAME=JSON"))?;
+    budget
+        .limits
+        .values
+        .key_size(name.len())
+        .map_err(|error| resource(origin, error))?;
     validate_name(origin, name)?;
-    check_depth(origin, text)?;
+    budget.preflight(origin, text)?;
     let raw: &RawValue = decode(origin, "$", text)?;
-    Ok((name.into(), convert(origin, &format!("$[{name:?}]"), raw)?))
+    budget.variable_count(origin, 1)?;
+    let (value, _) = convert(origin, &path_key("$", name), raw, budget.limits, 1)?;
+    Ok((name.into(), value))
+}
+
+/// Parse a JSON object into root variables. Duplicate object keys use the last value.
+/// Decimal/exponent tokens round directly to f32; integer tokens must fit i32.
+pub fn parse_variables(origin: &str, text: &str) -> DiagnosticResult<BTreeMap<String, Literal>> {
+    parse_variables_with_limits(origin, text, &InputLimits::default())
+}
+
+/// Parse a root object with fresh source, token, name, and decoded-value budgets.
+pub fn parse_variables_with_limits(
+    origin: &str,
+    text: &str,
+    limits: &InputLimits,
+) -> DiagnosticResult<BTreeMap<String, Literal>> {
+    let mut budget = Budget::new(limits)?;
+    budget.source(origin)?;
+    budget.bytes(origin, text.len())?;
+    variables_from_text(origin, text, &mut budget)
+}
+
+/// Parse one NAME=JSON setting. Split only at the first equals sign; do not trim names.
+pub fn parse_variable(origin: &str, setting: &str) -> DiagnosticResult<(String, Literal)> {
+    parse_variable_with_limits(origin, setting, &InputLimits::default())
+}
+
+/// Parse one setting; source-byte accounting includes its name and equals sign.
+pub fn parse_variable_with_limits(
+    origin: &str,
+    setting: &str,
+    limits: &InputLimits,
+) -> DiagnosticResult<(String, Literal)> {
+    let mut budget = Budget::new(limits)?;
+    budget.source(origin)?;
+    budget.bytes(origin, setting.len())?;
+    variable_from_setting(origin, setting, &mut budget)
 }
 
 /// Read files in order, then explicit settings in order. Later values replace whole
@@ -158,14 +247,42 @@ pub fn load_variables(
     files: &[PathBuf],
     settings: &[String],
 ) -> DiagnosticResult<BTreeMap<String, Literal>> {
+    load_variables_with_limits(files, settings, &InputLimits::default())
+}
+
+/// Bound reads and share cumulative budgets across all files, then settings.
+pub fn load_variables_with_limits(
+    files: &[PathBuf],
+    settings: &[String],
+    limits: &InputLimits,
+) -> DiagnosticResult<BTreeMap<String, Literal>> {
+    let mut budget = Budget::new(limits)?;
     let mut variables = BTreeMap::new();
     for file in files {
         let origin = file.display().to_string();
-        let text = fs::read_to_string(file).map_err(|error| invalid(&origin, "$", error))?;
-        variables.extend(parse_variables(&origin, &text)?);
+        budget.source(&origin)?;
+        let file = fs::File::open(file).map_err(|error| invalid(&origin, "$", error))?;
+        let mut bytes = Vec::new();
+        file.take((budget.remaining() as u64).saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|error| invalid(&origin, "$", error))?;
+        budget.bytes(&origin, bytes.len())?;
+        let text = String::from_utf8(bytes).map_err(|error| invalid(&origin, "$", error))?;
+        for (name, value) in variables_from_text(&origin, &text, &mut budget)? {
+            if !variables.contains_key(&name) {
+                budget.variable_count(&origin, variables.len() + 1)?;
+            }
+            variables.insert(name, value);
+        }
     }
     for (index, setting) in settings.iter().enumerate() {
-        let (name, value) = parse_variable(&format!("--var #{}", index + 1), setting)?;
+        let origin = format!("--var #{}", index + 1);
+        budget.source(&origin)?;
+        budget.bytes(&origin, setting.len())?;
+        let (name, value) = variable_from_setting(&origin, setting, &mut budget)?;
+        if !variables.contains_key(&name) {
+            budget.variable_count(&origin, variables.len() + 1)?;
+        }
         variables.insert(name, value);
     }
     Ok(variables)

@@ -210,12 +210,24 @@ fn duplicate_json_keys_use_the_last_value_before_conversion() {
 
 #[test]
 fn nesting_limit_counts_containers_and_ignores_escaped_string_delimiters() {
+    use botwork::core::value_limits::MAX_VALUE_DEPTH;
     let nested = |depth| format!("{}0{}", "[".repeat(depth), "]".repeat(depth));
-    parse_variable("flag", &format!("x={}", nested(MAX_JSON_DEPTH))).unwrap();
+    parse_variable("flag", &format!("x={}", nested(MAX_VALUE_DEPTH - 1))).unwrap();
+    assert_eq!(
+        parse_variable("flag", &format!("x={}", nested(MAX_JSON_DEPTH)))
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::ResourceLimit
+    );
     assert!(parse_variable("flag", &format!("x={}", nested(MAX_JSON_DEPTH + 1))).is_err());
     parse_variables(
         "data",
-        &format!(r#"{{"x":{}}}"#, nested(MAX_JSON_DEPTH - 1)),
+        &format!(r#"{{"x":{}}}"#, nested(MAX_VALUE_DEPTH - 1)),
+    )
+    .unwrap();
+    parse_variables(
+        "data",
+        &format!(r#"{{"x":{},"x":0}}"#, nested(MAX_JSON_DEPTH - 1)),
     )
     .unwrap();
     assert!(parse_variables(

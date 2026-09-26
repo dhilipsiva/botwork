@@ -414,6 +414,40 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 .unwrap();
                 include_str!("../examples/19-local-imports.botwork")
             }
+            Input::JsonBudgetBoundary | Input::JsonBudgetLimit => {
+                use botwork::core::{
+                    input::{parse_variables_with_limits, InputLimits},
+                    value_limits::ValueLimits,
+                };
+                let source = r#"{"x":[1,2]}"#;
+                let result = parse_variables_with_limits(
+                    "input-corpus",
+                    source,
+                    &InputLimits {
+                        source_bytes: source.len(),
+                        total_bytes: source.len(),
+                        sources: 1,
+                        variables: 1,
+                        raw_nodes: if case.error.is_some() { 4 } else { 5 },
+                        values: ValueLimits {
+                            nodes: 3,
+                            depth: 2,
+                            entries: 2,
+                            payload_bytes: 8,
+                            ..ValueLimits::default()
+                        },
+                    },
+                );
+                if let Some(expected) = case.error {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(error.span.unwrap().source().text().is_empty());
+                } else {
+                    assert_eq!(result.unwrap()["x"].to_string(), "[1, 2]");
+                }
+                continue;
+            }
             Input::ConstructionBoundary | Input::ConstructionLimit => {
                 use botwork::core::{
                     run::{Engine, RunLimits, RunOptions},

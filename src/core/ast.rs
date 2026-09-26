@@ -36,6 +36,17 @@ pub struct Span {
 }
 
 impl Span {
+    /// An input origin without retaining its payload; location refers to input start.
+    pub(crate) fn input_origin(name: &str) -> Self {
+        Self {
+            source: Arc::new(SourceFile {
+                name: name.into(),
+                text: String::new(),
+            }),
+            start: 0,
+            end: 0,
+        }
+    }
     pub fn source(&self) -> &Arc<SourceFile> {
         &self.source
     }

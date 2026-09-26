@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 59 cases against the 37 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 61 cases against the 38 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -45,6 +45,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R5 | import-budget-boundary | import-budget-limit | import-budget-boundary |
 | R6 | value-boundary | value-limit | value-boundary |
 | R7 | construction-boundary | construction-limit | construction-boundary |
+| R8 | input-budget-boundary | input-budget-limit | input-budget-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -69,3 +70,5 @@ Two import-budget host cases materialize one module, import it under two namespa
 Two value host cases admit an array at exact node/depth/payload/entry limits or reject it before input installation, root assignment, and execution steps.
 
 Two construction host cases trace duplicate-key callback effects at exact retained budgets and reject known excessive array width before any child callback.
+
+Two input-budget host cases parse one object at exact source/token/name/value limits or reject a deficient raw-token allowance without retaining the JSON payload in diagnostics.

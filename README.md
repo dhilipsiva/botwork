@@ -43,7 +43,8 @@ to compose statement results inside other expressions.
 [Local modules](docs/language.md#local-modules) use `Import |"helpers.botwork"| As |helpers|`
 and qualified calls such as `helpers::Double |3|`.
 
-Supply [input variables](docs/input-variables.md) from JSON files and repeatable overrides:
+Supply [input variables](docs/input-variables.md) from JSON files and repeatable overrides.
+[Input budgets](docs/input-variables.md#input-resource-budgets) bound reads and decoded values before execution:
 
 ```sh
 cargo run -- --file examples/20-input-variables.botwork \

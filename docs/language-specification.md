@@ -108,6 +108,10 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **R7 — Construction admission.** Check decoded strings and borrowed values before copying. Preflight concatenated results after ordered operand evaluation; reuse owned storage without cloning array elements. Check known array width/minimum shape and distinct map keys before child effects or container allocation. Admit each required child's metrics before parent insertion, replace duplicate-key node/payload contributions, and stop before later children on failure. Keep all duplicate value effects in source order and preserve previous assignments on rejection. [Construction rules](value-limits.md#checks-before-construction-and-copying) define resource-failure priority, temporary-value scope, allocation evidence, and remaining aggregate/input bounds.
 
+## Input Bounds
+
+**R8 — Input admission.** Bound each encoded source and cumulative bytes/source count/raw tokens/root names across ordered input loading. Check file length before decoding; preflight raw JSON nesting, array shape, and decoded string/key bytes (including Unicode escapes) before allocation. Keep bounded raw visitors and last-key-wins conversion; admit child metrics before inserting decoded values. Apply the default value-depth ceiling during parsing while retaining the separate raw nesting guard for discarded data. Preserve file-then-flag overrides, exact numbers, bounded origin/path diagnostics, BW8001 resource failures, and BW7001 semantic errors. [Input budgets](input-variables.md#input-resource-budgets) define counts, zero/local configuration, error priority, compatibility, and remaining runtime/host limits.
+
 ## Evidence and Implementation Gaps
 
 Test names below are executable expectations, not a claim that every clause has exhaustive coverage. Run `cargo test --test language_contract --test regressions` for the current contract and regression cases. All current cases are active. Also run release mode and add new cases as the remaining roadmap contracts are implemented.
@@ -168,3 +172,5 @@ R5 evidence in `tests/import_limits.rs` covers exact/zero/configuration budgets,
 R6 evidence in `tests/value_limits.rs` and `src/core/value_limits/tests.rs` covers exact resource metrics, checked arithmetic, Unicode, adversarial depth, all owned boundaries, async/blocking cancellation, dropped futures, local configuration, operator inputs/results, and Catch/call/iterator cleanup. Two host corpus cases and an executed Rust example verify admission before publication.
 
 R7 evidence in `tests/value_preallocation.rs` and value/evaluator unit tests uses thread-local allocator observations, owned-data pointer checks, exact metrics, overflow assertions, duplicate-key/effect traces, and assignment preservation. Two host corpus cases pin duplicate replacement and static rejection before callback effects.
+
+R8 evidence in `tests/input_limits.rs`, input-limit unit tests, the original input suite, and allocator observations covers counts, Unicode escapes, raw/decode depth, duplicates/overrides, bounded reads, error origin/path handling, local settings, and pre-effect CLI rejection. Two host corpus cases and a Rust example pin exact source/token/value budgets.

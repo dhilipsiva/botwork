@@ -236,7 +236,7 @@ Namespace registration checks the whole prefix before module initialization and 
 
 ## Input Variables
 
-`core::input` parses JSON files/settings without evaluating expressions. Borrowed raw JSON tokens retain their original numeric spelling for direct checked i32/f32 conversion; object keys remain ordinary strings. A preliminary scan caps container nesting at 128, including discarded duplicate values, before recursive conversion. JSON payload size and broader runtime budgets remain separate work.
+`core::input` parses JSON files/settings without evaluating expressions. Borrowed raw JSON tokens retain their original numeric spelling for direct checked i32/f32 conversion; object keys remain ordinary strings. A preliminary scan caps container nesting at 128, including discarded duplicate values, before recursive conversion. [Input budgets](input-variables.md#input-resource-budgets) now bound encoded size/tokens, raw container/string admission, decoded values, and merged names. Aggregate runtime state remains separate work.
 
 ```rust
 use botwork::core::{
@@ -330,4 +330,21 @@ let run = Engine::default().run_source("input", "", RunOptions {
 assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
 assert!(run.variables.is_empty());
 assert_eq!(run.steps, 0);
+```
+
+
+## Configure Input Decoding
+
+Input budgets apply before root installation and share counters across an ordered file/flag load. Individual parse calls start fresh counters.
+
+```rust
+use botwork::core::{input::{InputLimits, parse_variable_with_limits}, value_limits::ValueLimits};
+let limits = InputLimits {
+    source_bytes: 7, total_bytes: 7, sources: 1, raw_nodes: 3, variables: 1,
+    values: ValueLimits { nodes: 3, depth: 2, entries: 2, payload_bytes: 8, ..ValueLimits::default() }
+};
+let (name, value) = parse_variable_with_limits("flag", "x=[1,2]", &limits)?;
+assert_eq!(name, "x");
+assert_eq!(value.to_string(), "[1, 2]");
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```

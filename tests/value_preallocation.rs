@@ -369,3 +369,38 @@ fn oversized_source_strings_and_keys_are_rejected_before_payload_copying() {
         assert_eq!(large, 0);
     }
 }
+
+#[test]
+fn json_preflight_avoids_escape_buffers_and_wide_raw_arrays() {
+    use botwork::core::{
+        diagnostic::DiagnosticCode,
+        input::{parse_variable_with_limits, InputLimits},
+    };
+    let length = 64 * 1024;
+    let setting = format!("x=\"{}\"", r"\u0061".repeat(length));
+    let limits = InputLimits {
+        values: ValueLimits {
+            string_bytes: 3,
+            ..ValueLimits::default()
+        },
+        ..InputLimits::default()
+    };
+    let (result, large) = observe(length, || {
+        parse_variable_with_limits("escaped", &setting, &limits)
+    });
+    assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(large, 0);
+    let setting = format!("x=[{}null]", "null,".repeat(10_000));
+    let limits = InputLimits {
+        values: ValueLimits {
+            entries: 8,
+            ..ValueLimits::default()
+        },
+        ..InputLimits::default()
+    };
+    let (result, large) = observe(1024, || {
+        parse_variable_with_limits("array", &setting, &limits)
+    });
+    assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(large, 0);
+}
