@@ -4,7 +4,7 @@ The [core specification](language-specification.md) defines evaluation, scope, a
 
 ## Evaluation Order
 
-`src/core/eval/execution_contract.rs` observes expression visits through the evaluator's existing test-only instrumentation. Current argument expressions are pure: custom/native calls cannot be nested inside expressions. Visit traces therefore check actual evaluation count/order without inventing effectful expression syntax. Revisit this matrix when call composition or the native API changes.
+`src/core/eval/execution_contract.rs` observes expression visits through the evaluator's test-only instrumentation. Visit traces check evaluation count/order for ordinary expressions. The effectful call-composition matrix below adds actual native/custom callback traces for nested expression calls, including first-error stopping and completed effects.
 
 - A three-argument call evaluates each argument once in caller scope before any body statement. Failure in each argument position stops later arguments and all body effects, preserves caller bindings, and installs no frame. An unresolved signature visits no arguments.
 - Nested array/map construction follows source order, including values for overwritten map keys. Each failure position skips later entries and preserves the assignment destination.
@@ -32,3 +32,7 @@ Recursive traces check descent, unwind order, local helper lookup, repeated invo
 `tests/fixtures/execution-order.botwork` checks real Log output for recursive calls, failed arguments, caller preservation, loop restoration before handlers, and repeated returns through Try/For. `execution-order-error.botwork` checks the first failing native argument, preserved prior output, skipped callee/caller tails, stderr, and nonzero status.
 
 Run `cargo test --lib execution_contract` and `cargo test --test cli`, then repeat with `--release`. CI's existing debug/release matrix runs these checks with the full suite. Other evaluator tests cover short-circuit selection, computed indexes, arithmetic boundaries, validation before effects, and writer failures.
+
+## Effectful call composition
+
+`tests/call_composition.rs` extends the visitation matrix with native and DSL event traces for nested argument calls, collection elements and duplicate keys, computed bases/indexes, conditions, Return operands, and recursive calls. It checks skipped resolution/effects under short-circuiting, first-error stopping, typed-argument rejection before entry, and preserved caller state. Example `18` and CLI fixtures check real stdout, malformed syntax before output, and completed effects before failure. Collection snapshot tests verify immutable storage survives replacement during an index call without copying the whole container.

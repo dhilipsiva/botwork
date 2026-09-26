@@ -1,0 +1,23 @@
+# Calls inside expressions use an explicit @{ ... } boundary.
+Double |number| { Return |number * 2| }
+Pair |left| with |right| { Return |[left, right]| }
+
+Log |1 + @{Double |@{Double |3|}|}|
+Log |@{Pair |2| with |3|}[1]|
+Log |false and @{Missing statement}|
+
+Factorial |n| {
+    If |n == 0| { Return |1| }
+    Return |n * @{Factorial |n - 1|}|
+}
+Log |@{Factorial |5|}|
+
+Trace |label| returning |value| {
+    Log |label|
+    Return |value|
+}
+Log |@{Pair |@{Trace |"first"| returning |1|}| with |@{Trace |"second"| returning |2|}|}|
+
+Try { Log |@{Double |missing|}| } Catch |error| {
+    Log |error.code|
+}

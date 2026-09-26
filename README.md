@@ -33,6 +33,8 @@ and [testing instructions](docs/testing.md) for the implemented contracts.
 Use `cargo run -- --list-statements` to list built-ins, or
 `cargo run -- --statement-help 'Log |value|'` for parameter/return kinds and errors.
 Rust hosts can [register statements with checked signatures](docs/interpreter-architecture.md#shared-signature-metadata).
+Use [call expressions](docs/language.md#calls-inside-expressions), such as `@{Double |3|}`,
+to compose statement results inside other expressions.
 
 Or you can create a file from below sample and pass the path to cargo run
 

@@ -58,6 +58,24 @@ fn statement_help_rejects_invalid_unknown_and_conflicting_requests() {
     }
 }
 
+#[test]
+fn invalid_call_composition_fails_before_output_and_valid_call_effects_stop_at_first_error() {
+    let path = fixture("invalid-call-composition.botwork");
+    let output = run(&["--file", path.to_str().unwrap(), "--debug"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("BW1001"));
+    assert!(!diagnostic.contains("debug:"));
+    let path = fixture("call-composition-error.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"completed first\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("BW2001"));
+    assert!(diagnostic.contains("expression: missing"));
+}
+
 fn assert_control_placement_failure(name: &str, line: usize, column: usize, keyword: &str) {
     let path = fixture(name);
     // Validation also precedes debug tracing: no statement is executed or traced.

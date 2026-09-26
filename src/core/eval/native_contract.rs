@@ -129,3 +129,48 @@ fn signature_queries_observe_lexical_shadowing_and_restore_parent_visibility() {
     );
     assert!(context.statement_signature("Child").unwrap().is_none());
 }
+
+#[test]
+fn collection_access_retains_the_original_base_across_effectful_index_calls() {
+    let mut context = Context::default();
+    context.set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]));
+    context
+        .register_callback(
+            "<test Swap>",
+            "Swap",
+            Arc::new(|_, context| {
+                // One root binding and one access snapshot; the value tree was not copied.
+                assert_eq!(
+                    Arc::strong_count(context.get_variable_binding("data").unwrap()),
+                    2
+                );
+                context.set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]));
+                Ok(Literal::Int(0))
+            }),
+        )
+        .unwrap();
+    let program = Program::parse("snapshot.botwork", "|result| = |data[@{Swap}]|").unwrap();
+    assert!(matches!(
+        evaluate_program(&program, &mut context),
+        Ok(Literal::Int(1))
+    ));
+    assert_eq!(context.get_variable("data").unwrap().to_string(), "[2]");
+    assert_eq!(
+        Arc::strong_count(context.get_variable_binding("data").unwrap()),
+        1
+    );
+}
+
+#[test]
+fn context_clones_share_immutable_value_storage_and_isolate_replacement_bindings() {
+    let mut original = Context::default();
+    original.set_variable("data".into(), Literal::Array(vec![Literal::Int(1)]));
+    let mut cloned = original.clone();
+    assert!(Arc::ptr_eq(
+        original.get_variable_binding("data").unwrap(),
+        cloned.get_variable_binding("data").unwrap()
+    ));
+    cloned.set_variable("data".into(), Literal::Array(vec![Literal::Int(2)]));
+    assert_eq!(original.get_variable("data").unwrap().to_string(), "[1]");
+    assert_eq!(cloned.get_variable("data").unwrap().to_string(), "[2]");
+}

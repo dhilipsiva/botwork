@@ -1,0 +1,2 @@
+Log |"must not execute"|
+|value| = |@{ Log |1| {} }|

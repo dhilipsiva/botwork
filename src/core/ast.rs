@@ -348,6 +348,7 @@ pub enum ExprKind {
     Bool(bool),
     String(String),
     Variable(String),
+    Call(Box<Call>),
     Access {
         base: Box<Expr>,
         segments: Vec<AccessSegment>,
@@ -817,6 +818,12 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
                 operator_span,
                 operand,
             }
+        }
+        Rule::call_expression => {
+            let mut inner = pair.into_inner();
+            let call = call(required(&mut inner)?, source)?;
+            finish(inner)?;
+            ExprKind::Call(Box::new(call))
         }
         Rule::param_invoke | Rule::braced_expression => {
             let grouped = pair.as_rule() == Rule::braced_expression;

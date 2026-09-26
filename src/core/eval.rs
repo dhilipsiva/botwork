@@ -1,6 +1,5 @@
 use pest::iterators::Pair;
 use std::{
-    borrow::Cow,
     collections::{BTreeMap, HashMap},
     io::{self, Write},
     panic::{catch_unwind, AssertUnwindSafe},
@@ -59,7 +58,7 @@ impl StmtType {
 
 #[derive(Clone, Default)]
 struct Frame {
-    variables: HashMap<String, Literal>,
+    variables: HashMap<String, Arc<Literal>>,
     statements: HashMap<String, StmtType>,
     // Definitions are not first-class values, so lexical owners remain on the stack.
     parent: Option<usize>,
@@ -100,6 +99,10 @@ impl Context {
     }
 
     fn get_variable_ref(&self, name: &str) -> Result<&Literal, BWErr> {
+        self.get_variable_binding(name).map(AsRef::as_ref)
+    }
+
+    fn get_variable_binding(&self, name: &str) -> Result<&Arc<Literal>, BWErr> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
@@ -111,8 +114,10 @@ impl Context {
         Err(BWErr::VariableNotDefined(name.to_owned()))
     }
 
-    fn set_variable(&mut self, name: String, literal: Literal) -> Option<Literal> {
-        self.frames[self.current].variables.insert(name, literal)
+    fn set_variable(&mut self, name: String, literal: Literal) -> Option<Arc<Literal>> {
+        self.frames[self.current]
+            .variables
+            .insert(name, Arc::new(literal))
     }
 
     fn get_statement(&self, signature: &str) -> Option<(StmtType, usize)> {
@@ -369,7 +374,7 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
                     .parameters
                     .iter()
                     .zip(arguments)
-                    .map(|(parameter, value)| (parameter.text.clone(), value))
+                    .map(|(parameter, value)| (parameter.text.clone(), Arc::new(value)))
                     .collect(),
                 parent: Some(owner),
                 ..Frame::default()
@@ -398,7 +403,7 @@ fn invoke_inner(call: &Call, context: &mut Context) -> RuntimeResult {
     }
 }
 
-fn evaluate_expression(expression: &Expr, context: &Context) -> RuntimeResult {
+fn evaluate_expression(expression: &Expr, context: &mut Context) -> RuntimeResult {
     evaluate_expression_inner(expression, context).map_err(|error| {
         error
             .at_expression(&expression.span)
@@ -406,7 +411,7 @@ fn evaluate_expression(expression: &Expr, context: &Context) -> RuntimeResult {
     })
 }
 
-fn evaluate_expression_inner(expression: &Expr, context: &Context) -> RuntimeResult {
+fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> RuntimeResult {
     #[cfg(test)]
     context
         .expression_visits
@@ -427,6 +432,7 @@ fn evaluate_expression_inner(expression: &Expr, context: &Context) -> RuntimeRes
         ExprKind::Bool(value) => Ok(Literal::Bool(*value)),
         ExprKind::String(value) => Ok(Literal::String(value.clone())),
         ExprKind::Variable(name) => context.get_variable(name).map_err(Into::into),
+        ExprKind::Call(call) => invoke(call, context),
         ExprKind::Access { base, segments } => evaluate_access(base, segments, context),
         ExprKind::Array(elements) => elements
             .iter()
@@ -493,22 +499,26 @@ fn evaluate_expression_inner(expression: &Expr, context: &Context) -> RuntimeRes
     }
 }
 
-fn evaluate_access(base: &Expr, segments: &[AccessSegment], context: &Context) -> RuntimeResult {
-    // Expressions cannot change bindings. Borrow a variable's containers throughout
-    // index evaluation, or own a temporary base, then copy only the selected result.
+fn evaluate_access(
+    base: &Expr,
+    segments: &[AccessSegment],
+    context: &mut Context,
+) -> RuntimeResult {
+    // Retain an immutable snapshot across effectful index calls without copying
+    // the whole variable container. Only the selected result is copied.
     let container = if let ExprKind::Variable(name) = &base.kind {
         #[cfg(test)]
         context
             .expression_visits
             .borrow_mut()
             .push(base.span.text().to_owned());
-        Cow::Borrowed(
+        Arc::clone(
             context
-                .get_variable_ref(name)
+                .get_variable_binding(name)
                 .map_err(|error| Diagnostic::new(error).at_expression(&base.span))?,
         )
     } else {
-        Cow::Owned(evaluate_expression(base, context)?)
+        Arc::new(evaluate_expression(base, context)?)
     };
     let error = |segment: &AccessSegment, reason: String| {
         let mut path = base.span.text().trim().to_owned();
@@ -623,7 +633,9 @@ fn evaluate_for(
         Ok(Completion::Normal(Literal::None))
     })();
     if let Some(value) = previous {
-        context.set_variable(binding.to_owned(), value);
+        context.frames[context.current]
+            .variables
+            .insert(binding.to_owned(), value);
     } else {
         context.frames[context.current].variables.remove(binding);
     }

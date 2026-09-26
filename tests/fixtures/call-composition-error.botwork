@@ -1,0 +1,9 @@
+Trace |label| returning |value| {
+    Log |label|
+    Return |value|
+}
+Pair |left| with |right| {
+    Log |"body must not execute"|
+    Return |[left, right]|
+}
+|result| = |@{Pair |@{Trace |"completed first"| returning |1|} + missing| with |@{Trace |"later must not execute"| returning |2|}|}|

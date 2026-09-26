@@ -298,3 +298,13 @@ fn syntax_example_executes_all_intended_paths() {
         ],
     );
 }
+
+#[test]
+fn composition_example_checks_nested_results_effect_order_and_recovery() {
+    assert_example(
+        "18-call-composition.botwork",
+        &[
+            "13", "3", "false", "120", "first", "second", "[1, 2]", "BW2001",
+        ],
+    );
+}

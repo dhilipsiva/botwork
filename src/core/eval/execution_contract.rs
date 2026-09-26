@@ -14,7 +14,9 @@ fn record(values: &[Literal], context: &mut Context) -> LiteralResult {
         ("__events", Literal::String(value.to_string())),
         ("__depths", Literal::Int(depth)),
     ] {
-        let Literal::Array(events) = context.frames[0].variables.get_mut(key).unwrap() else {
+        let Literal::Array(events) =
+            Arc::make_mut(context.frames[0].variables.get_mut(key).unwrap())
+        else {
             panic!("test event array");
         };
         events.push(entry);
@@ -185,10 +187,14 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                 };
                 match prior {
                     "none" => {
-                        frame.variables.insert("item".into(), Literal::None);
+                        frame
+                            .variables
+                            .insert("item".into(), Arc::new(Literal::None));
                     }
                     "local" => {
-                        frame.variables.insert("item".into(), Literal::Int(7));
+                        frame
+                            .variables
+                            .insert("item".into(), Arc::new(Literal::Int(7)));
                     }
                     "absent" => {
                         context.frames[0].variables.remove("item");
@@ -414,10 +420,14 @@ fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_dis
             };
             match prior {
                 "none" => {
-                    frame.variables.insert("error".into(), Literal::None);
+                    frame
+                        .variables
+                        .insert("error".into(), Arc::new(Literal::None));
                 }
                 "local" => {
-                    frame.variables.insert("error".into(), Literal::Int(7));
+                    frame
+                        .variables
+                        .insert("error".into(), Arc::new(Literal::Int(7)));
                 }
                 "absent" => {
                     context.frames[0].variables.remove("error");

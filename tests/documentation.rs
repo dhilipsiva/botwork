@@ -50,6 +50,13 @@ fn documents() -> Vec<(String, Vec<markdown::Block>)> {
 fn every_documented_botwork_example_matches_its_cli_output() {
     let expected = BTreeMap::from([
         (
+            "call-composition",
+            (
+                "docs/language.md",
+                include_bytes!("doc-examples/call-composition.stdout").as_slice(),
+            ),
+        ),
+        (
             "catch-inspection",
             (
                 "docs/language.md",

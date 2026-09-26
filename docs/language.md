@@ -308,3 +308,24 @@ Evaluate the base once, then each bracket expression once immediately before its
 A missing variable yields `VariableNotDefined`. Missing map keys, invalid indexes, bounds failures, and traversal through scalars or None yield catchable `CollectionAccessError`. It identifies the path, failing segment (brackets included for computed keys), and reason. Dot names are canonicalized; bracket contents retain their source spelling. A present None-valued entry succeeds. Errors preserve a failed assignment's destination.
 
 Reads return independent values without changing their source container. Both dot and bracket indexed assignment are syntax errors. Updates are reserved for the planned collection library: operations will return replacement collections for ordinary variable assignment; no dedicated indexed-update syntax is introduced. These update statements are not implemented yet. Access works in expressions, conditions, arguments, returns, and loop iterables. See examples [11](../examples/11-collection-access.botwork) and [12](../examples/12-computed-access.botwork).
+
+
+## Calls inside expressions
+
+Use `@{ Sentence |argument| }` to use a custom or native statement's result wherever an expression is allowed. The `@{` opener is adjacent; the closing brace ends exactly one call. Ordinary standalone calls and `|answer| = Sentence |argument|` remain supported.
+
+<!-- botwork-test: call-composition -->
+```botwork
+Double |number| { Return |number * 2| }
+Pair |left| with |right| { Return |[left, right]| }
+Log |1 + @{Double |@{Double |3|}|}|
+Log |@{Pair |2| with |3|}[1]|
+```
+
+Calls are primary expressions: postfix collection access applies to their result, and normal unary/power/binary precedence follows. Use them in arguments, arrays/maps, conditions, computed indexes, loop iterables, and Return operands. They return the same owned value as ordinary calls; bare Return/fallthrough still yield None. They do not bypass lexical scope or permit loop controls to escape an invocation. See [example 18](../examples/18-call-composition.botwork).
+
+Resolve the outer signature before any argument call runs. Evaluate and validate arguments once, left to right, in the caller; enter the body/callback only after all succeed. Collection elements/map values also evaluate in source order, including overwritten duplicate keys. Short-circuit `and`/`or` skip unselected calls entirely. While evaluates its condition calls on each check, including the final false check. A failed expression stops later calls and preserves a failed assignment's destination; completed effects remain completed.
+
+Collection access snapshots the base once before computed keys. Evaluate each key call immediately before validating/looking up that segment, and skip subsequent keys after failure. Returned values remain independent of their source. Runtime diagnostics retain entered calls and the innermost failure; successfully completed sibling argument calls are not active stack frames. Catch inspection and Rethrow retain their existing rules.
+
+Line breaks are allowed after the opener and before the closing brace. Within the sentence, existing explicit backslash continuation rules apply; argument expressions can span lines normally. Empty calls, multiple statements, definitions, assignments, and control blocks inside the delimiters are syntax errors before execution. Bare sentence syntax or `Name(...)` is not a call expression. String contents such as `"@{ text }"` stay literal.
