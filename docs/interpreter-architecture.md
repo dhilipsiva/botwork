@@ -6,11 +6,13 @@
 
 The tree represents assignments, calls, definitions, branches, loops, error handlers, and control statements explicitly. Expressions retain their operator, operands, and grouping. The Pratt parser builds this structure; it no longer evaluates values. Map entries stay in source order until evaluation.
 
-Strings are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. Dot access stores its root and parsed path segments with their source spans; comments and whitespace do not become part of names. Array-index conversion remains deferred until lookup.
+Strings and quoted map keys are decoded during construction. Numeric literals retain their source spelling and convert only when evaluated. Consequently an out-of-range number remains a catchable runtime error and does not fail inside an unselected branch or unused definition. `ExprKind::Access` stores a base expression and ordered `AccessSegment` values: literal names or computed expressions with bracket spans. Comments and whitespace do not become part of dot names. Array-index conversion remains deferred until lookup. Postfix access binds before power and unary operators; grouped bases preserve their parentheses in source spans.
 
 Unary syntax retains its operator and operand spans. At runtime, a minus directly wrapping an integer atom converts the signed text together so the minimum `i32` literal is representable. Negation of compound expressions still evaluates the operand first and uses checked arithmetic; power grouping remains unchanged.
 
-Collection lookup borrows each container through lexical variable lookup and clones only the selected value. Maps use exact segment strings; arrays require ASCII digits and check bounds without panicking on index overflow. Access errors include the canonical path, failing segment, and reason. Reads have no mutation operation; computed access and indexed-update syntax remain separate language work.
+Expression evaluation takes an immutable context. Collection lookup borrows a variable's containers, or owns a computed base using `Cow`, then clones only the selected value. Computed keys evaluate once in order, immediately before receiver/key validation and lookup; a failed step skips later expressions. This preserves borrowing while allowing indexes to read the same context. Test-only expression visitation uses interior mutability and is absent from production builds.
+
+Maps use exact string keys; arrays require ASCII digits for dot segments or nonnegative integer values for brackets. Bounds are checked without panicking on index overflow. Access errors include the path, failing segment, and reason; computed segments retain their bracket source text. Reads have no mutation operation. Indexed updates are reserved for future library statements returning replacement values.
 
 ## Source Ownership and Locations
 

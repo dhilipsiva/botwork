@@ -50,17 +50,18 @@ param_define  = _{ "|" ~ ident ~ "|" }
 expression        =  { infix | expression_inner }
 infix             = _{ expression_inner ~ (binary_operator ~ expression_inner)+ }
 expression_inner  = _{ unary | power }
-braced_expression = _{ "(" ~ expression ~ ")" }
+braced_expression =  { "(" ~ expression ~ ")" }
 unary             =  { unary_operator ~ expression_inner }
 power             =  { primary ~ (exponent ~ expression_inner)? }
-primary           = _{ literal | dot_path | ident | braced_expression }
-dot_path          =  { ident ~ ("." ~ (ident | integer))+ }
+primary           =  { (literal | ident | braced_expression) ~ (named_access | computed_access)* }
+named_access      =  { "." ~ (ident | integer) }
+computed_access   =  { "[" ~ expression ~ "]" }
 literal           = _{ map | array | string | float | integer | boolean }
 array             =  { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
 ident             = @{ !reserved ~ LETTER ~ ident_continue* }
 
 map       =  { "{" ~ (map_pair ~ ("," ~ map_pair)*)? ~ "}" }
-map_pair  =  { keyword ~ seperator ~ expression }
+map_pair  =  { (keyword | string) ~ seperator ~ expression }
 keyword   = @{ ident }
 seperator = _{ ":" }
 

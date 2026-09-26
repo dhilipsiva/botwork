@@ -1,0 +1,5 @@
+Log |"before"|
+|data| = |{"items": [7]}|
+|index| = |1|
+Log |data["items"][index]|
+Log |"must not execute"|

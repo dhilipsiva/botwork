@@ -6,6 +6,26 @@ use botwork::core::{
 use pest::Parser;
 
 #[test]
+fn computed_access_works_through_owned_and_pair_execution_after_setup_is_dropped() {
+    let mut context = Context::default();
+    {
+        let source = String::from("|data| = |{\"some key\": [7, 8]}|\n|index| = |1|\nRead { Return |data[\"some key\"][index]| }");
+        let program = Program::parse("setup.botwork", &source).unwrap();
+        evaluate_program(&program, &mut context).unwrap();
+    }
+    let program = Program::parse("call.botwork", "|answer| = Read").unwrap();
+    assert!(matches!(
+        evaluate_program(&program, &mut context),
+        Ok(Literal::Int(8))
+    ));
+    let pair = BWParser::parse(Rule::expression, "data[\"some key\"][index - 1]")
+        .unwrap()
+        .next()
+        .unwrap();
+    assert!(matches!(botwork(pair, &mut context), Ok(Literal::Int(7))));
+}
+
+#[test]
 fn an_owned_program_executes_after_the_input_string_is_dropped() {
     let program = {
         let source = String::from("|answer| = |2 ^ 3 ^ 2|");

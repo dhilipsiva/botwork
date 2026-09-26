@@ -1,0 +1,22 @@
+# Bracket indexes compose with literal paths and expressions.
+|data| = |{"item list": [{name: "first", price: 5}, {name: "second", price: 7}], "Content-Type": "application/json", "": "empty key"}|
+|key| = |"item list"|
+|index| = |1|
+Log |data[key][index].name|
+Log |data["Content-Type"]|
+Log |data[""]|
+Log |([2] + [3])[index] ^ 2|
+
+Price |index| { Return |data[key][index].price| }
+|price| = Price |0|
+Log |price|
+|total| = |0|
+For |index| In |[0, 1]| {
+    |total| = |total + data[key][index].price|
+}
+Log |total|
+
+Try { Log |data[key][-1]| } Catch { Log |"caught negative index"| }
+Try { Log |data[key]["0"]| } Catch { Log |"caught index type"| }
+Try { Log |data["missing"]| } Catch { Log |"caught missing key"| }
+Log |false and data[missing]|

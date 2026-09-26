@@ -144,13 +144,14 @@ fn failed_arguments_install_no_frame_or_partial_bindings_and_stop_in_order() {
         &mut context,
     )
     .unwrap();
-    context.expression_visits.clear();
+    context.expression_visits.borrow_mut().clear();
     let result = evaluate("Triple |x + 1| with |missing| and |1 / 0|", &mut context);
     assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
     let visits: Vec<_> = context
         .expression_visits
+        .borrow()
         .iter()
-        .map(|text| text.trim())
+        .map(|text| text.trim().to_owned())
         .collect();
     assert_eq!(visits, ["x + 1", "x", "1", "missing"]);
     assert!(matches!(variable(&context, "x"), Literal::Int(10)));
@@ -364,7 +365,10 @@ fn signed_literal_conversion_is_deferred_and_errors_remain_catchable() {
     let mut context = Context::default();
     let result = evaluate("|answer| = |-2147483648|", &mut context);
     assert!(matches!(result, Ok(Literal::Int(i32::MIN))));
-    assert_eq!(context.expression_visits, ["-2147483648", "2147483648"]);
+    assert_eq!(
+        *context.expression_visits.borrow(),
+        ["-2147483648", "2147483648"]
+    );
 }
 
 #[test]
@@ -381,6 +385,196 @@ fn minimum_integer_composes_in_collections_calls_and_float_operations() {
     assert_eq!(result.to_string(), "[-2147483648, {\"min\": -2147483648}]");
     let result = evaluate("|answer| = |-2147483648 / -1|", &mut Context::default());
     assert!(matches!(result, Ok(Literal::Float(value)) if value == 2147483648.0));
+}
+
+#[test]
+fn computed_access_mixes_indexes_literal_paths_and_arbitrary_string_keys() {
+    for (path, expected) in [
+        ("data.items[index].value", 8),
+        ("data[\"items\"][index - 1][key]", 7),
+        ("data.items[positions[0]].value", 8),
+        ("data[\"Content-\" + \"Type\"]", 9),
+        ("data[\"\"]", 10),
+        ("data[\"a.b[0]|#{}🙂\"]", 11),
+        ("data[\"line\\nquote\\\"slash\\\\\"]", 12),
+        ("data[\"00\"]", 13),
+        ("data[\"true\"]", 14),
+        ("data.items[index].value ^ 2", 64),
+        ("-data.items[index].value ^ 2", -64),
+        ("([4, 8])[index]", 8),
+        ("[4, 8][index]", 8),
+        ("{items: [7, 8]}.items[index]", 8),
+        ("([4] + [8])[index]", 8),
+    ] {
+        let source = format!(
+            r#"|index| = |1|
+|key| = |"value"|
+|positions| = |[1]|
+|data| = |{{items: [{{value: 7}}, {{value: 8}}], "Content-Type": 9, "": 10, "a.b[0]|#{{}}🙂": 11, "line\nquote\"slash\\": 12, "00": 13, "true": 14}}|
+|answer| = |{path}|"#
+        );
+        let result = evaluate(&source, &mut Context::default());
+        assert!(
+            matches!(result, Ok(Literal::Int(value)) if value == expected),
+            "{path}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn computed_access_requires_exact_key_types_and_checked_array_bounds() {
+    for (path, segment, reason) in [
+        ("data.items[-1]", "[-1]", "nonnegative integer"),
+        (
+            "data.items[-2147483648]",
+            "[-2147483648]",
+            "nonnegative integer",
+        ),
+        ("data.items[2]", "[2]", "out of bounds for length 2"),
+        ("data.items[2147483647]", "[2147483647]", "out of bounds"),
+        ("data.items[1.0]", "[1.0]", "nonnegative integer"),
+        ("data.items[\"0\"]", "[\"0\"]", "nonnegative integer"),
+        ("data.items[true]", "[true]", "nonnegative integer"),
+        ("data.items[[]]", "[[]]", "nonnegative integer"),
+        ("data.items[{}]", "[{}]", "nonnegative integer"),
+        ("data.items[none]", "[none]", "nonnegative integer"),
+        ("data[0]", "[0]", "map key must be a string"),
+        ("data[false]", "[false]", "map key must be a string"),
+        ("data[none]", "[none]", "map key must be a string"),
+        (
+            "data[\"Missing\"]",
+            "[\"Missing\"]",
+            "map key does not exist",
+        ),
+        ("data.items[0][0]", "[0]", "neither a map nor an array"),
+        ("data.empty[0]", "[0]", "out of bounds for length 0"),
+        ("none[0]", "[0]", "neither a map nor an array"),
+        ("\"text\"[0]", "[0]", "neither a map nor an array"),
+    ] {
+        let mut context = Context::default();
+        context.set_variable("none".into(), Literal::None);
+        let source = format!("|data| = |{{items: [7, 8], empty: []}}|\n|answer| = |{path}|");
+        let error = evaluate(&source, &mut context).unwrap_err();
+        assert!(
+            matches!(&error, BWErr::CollectionAccessError { path: found, segment: part, reason: detail }
+            if found == path && part == segment && detail.contains(reason)),
+            "{path}: {error}"
+        );
+    }
+}
+
+#[test]
+fn computed_access_stops_at_the_first_error_and_preserves_assignments() {
+    for (expression, expected) in [
+        ("missing[index]", "variable:missing"),
+        ("data[index][later]", "variable:index"),
+        ("data[\"absent\"][later]", "access:[\"absent\"]"),
+        ("data.items[3][later]", "access:[3]"),
+        ("data.items[0][index]", "variable:index"),
+        ("data.items[1 / 0]", "arithmetic"),
+        ("data.items[2147483648]", "integer"),
+        ("(1 / 0)[index]", "arithmetic"),
+    ] {
+        let mut context = Context::default();
+        evaluate("|data| = |{items: [7]}|\n|answer| = |99|", &mut context).unwrap();
+        let error = evaluate(&format!("|answer| = |{expression}|"), &mut context).unwrap_err();
+        let actual = match error {
+            BWErr::VariableNotDefined(name) => format!("variable:{name}"),
+            BWErr::CollectionAccessError { segment, .. } => format!("access:{segment}"),
+            BWErr::ArithmeticError(_) => "arithmetic".into(),
+            BWErr::ParsingIntegerError(_) => "integer".into(),
+            error => panic!("{expression}: {error}"),
+        };
+        assert_eq!(actual, expected, "{expression}");
+        assert!(matches!(variable(&context, "answer"), Literal::Int(99)));
+    }
+}
+
+#[test]
+fn computed_access_composes_with_calls_loops_catches_and_boolean_selection() {
+    let result = evaluate(
+        r#"|index| = |1|
+|data| = |{"item list": [{value: 2}, {value: 3}]}|
+Read |index| { Return |data["item list"][index].value| }
+|selected| = Read |0|
+|total| = |0|
+For |index| In |[0, 1]| {
+    |total| = |total + data["item list"][index].value|
+}
+Try { |total| = |data["item list"][-1]| } Catch { |caught| = |true| }
+|skipped| = |false and data[missing]|
+|answer| = |[selected, total, index, caught, skipped, true or data[2147483648]]|"#,
+        &mut Context::default(),
+    )
+    .unwrap();
+    assert_eq!(result.to_string(), "[2, 5, 1, true, false, true]");
+}
+
+#[test]
+fn computed_reads_preserve_none_entries_and_return_independent_values() {
+    let mut context = Context::default();
+    context.set_variable("none".into(), Literal::None);
+    let result = evaluate(
+        r#"|data| = |{"empty": none, "items": [1, 2], "0": 7, "00": 8}|
+|copy| = |data["items"]|
+|copy| = |copy + [3]|
+|answer| = |[data["empty"], data["items"], copy, data["0"], data["00"]]|"#,
+        &mut context,
+    )
+    .unwrap();
+    assert_eq!(result.to_string(), "[none, [1, 2], [1, 2, 3], 7, 8]");
+}
+
+#[test]
+fn computed_access_visits_its_base_and_required_indexes_once_in_order() {
+    for (expression, expected) in [
+        (
+            "data[index][\"rows\"][offset].value",
+            vec!["data", "index", "\"rows\"", "offset"],
+        ),
+        ("[7, 8][index]", vec!["[7, 8]", "7", "8", "index"]),
+        ("data[99][unvisited]", vec!["data", "99"]),
+        ("missing[unvisited]", vec!["missing"]),
+        ("data[index].absent[unvisited]", vec!["data", "index"]),
+        ("7[missing][unvisited]", vec!["7", "missing"]),
+        ("false and data[unvisited]", vec!["false"]),
+    ] {
+        let mut context = Context::default();
+        evaluate(
+            "|data| = |[{rows: [{value: 7}]}]|\n|index| = |0|\n|offset| = |0|",
+            &mut context,
+        )
+        .unwrap();
+        context.expression_visits.borrow_mut().clear();
+        let _result = evaluate(&format!("|answer| = |{expression}|"), &mut context);
+        let visits: Vec<_> = context
+            .expression_visits
+            .borrow()
+            .iter()
+            .skip(1)
+            .map(|text| text.trim().to_owned())
+            .collect();
+        assert_eq!(visits, expected, "{expression}");
+    }
+}
+
+#[test]
+fn quoted_map_keys_use_existing_string_decoding_and_source_order() {
+    let result = evaluate(
+        r#"|answer| = |{a: 1, "a": 2, "\n": 3, "\\n": 4}["a"]|"#,
+        &mut Context::default(),
+    );
+    assert!(matches!(result, Ok(Literal::Int(2))), "{result:?}");
+    for expression in [
+        r#"{"a": missing_first, "a": missing_second}["a"]"#,
+        r#"{"a": missing_first}[missing_second]"#,
+    ] {
+        let result = evaluate(
+            &format!("|answer| = |{expression}|"),
+            &mut Context::default(),
+        );
+        assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_first"));
+    }
 }
 
 #[test]
@@ -538,10 +732,10 @@ fn return_and_break_stop_before_another_while_condition() {
         let result = evaluate(&source, &mut context).unwrap();
         if control.starts_with("Return") {
             assert!(matches!(result, Literal::Int(7)));
-            assert_eq!(context.expression_visits, ["true", "7"]);
+            assert_eq!(*context.expression_visits.borrow(), ["true", "7"]);
         } else {
             assert!(matches!(result, Literal::None));
-            assert_eq!(context.expression_visits, ["true"]);
+            assert_eq!(*context.expression_visits.borrow(), ["true"]);
         }
     }
 }
@@ -555,7 +749,10 @@ fn return_expression_is_evaluated_once_before_control_transfer() {
         &mut context,
     );
     assert!(matches!(result, Ok(Literal::Int(7))), "{result:?}");
-    assert_eq!(context.expression_visits, ["true", "3 + 4", "3 ", "4"]);
+    assert_eq!(
+        *context.expression_visits.borrow(),
+        ["true", "3 + 4", "3 ", "4"]
+    );
 }
 
 #[test]
@@ -674,11 +871,11 @@ fn boolean_operators_skip_irrelevant_values_and_failures() {
                 "{source}: {result:?}"
             );
             assert_eq!(
-                context.expression_visits.len(),
+                context.expression_visits.borrow().len(),
                 2,
                 "{source}: only root and left may be evaluated"
             );
-            assert_eq!(context.expression_visits[1].trim(), left);
+            assert_eq!(context.expression_visits.borrow()[1].trim(), left);
         }
     }
 }
@@ -696,7 +893,7 @@ fn boolean_operators_reject_the_left_type_before_visiting_the_right() {
                 "{source}: {result:?}"
             );
             assert_eq!(
-                context.expression_visits.len(),
+                context.expression_visits.borrow().len(),
                 2,
                 "{source}: invalid left must stop evaluation"
             );
@@ -725,9 +922,10 @@ fn boolean_truth_tables_evaluate_required_operands_once_in_order() {
                 );
                 let visits = context
                     .expression_visits
+                    .borrow()
                     .iter()
                     .skip(1)
-                    .map(|text| text.trim())
+                    .map(|text| text.trim().to_owned())
                     .collect::<Vec<_>>();
                 if (operator == "and" && !left) || (operator == "or" && left) {
                     assert_eq!(visits, ["left"]);
@@ -782,7 +980,7 @@ fn required_boolean_operands_preserve_errors_and_type_requirements() {
                 "{source}: {result:?}"
             );
             assert_eq!(
-                context.expression_visits.len(),
+                context.expression_visits.borrow().len(),
                 3,
                 "{source}: both operands must be evaluated once"
             );
@@ -840,8 +1038,8 @@ fn ordinary_binary_operators_still_evaluate_the_right_operand() {
         let mut context = Context::default();
         let result = evaluate(&format!("|answer| = |{expression}|"), &mut context);
         assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
-        assert_eq!(context.expression_visits.len(), 3);
-        assert_eq!(context.expression_visits[2].trim(), "missing");
+        assert_eq!(context.expression_visits.borrow().len(), 3);
+        assert_eq!(context.expression_visits.borrow()[2].trim(), "missing");
     }
 }
 
@@ -875,11 +1073,11 @@ fn binary_evaluation_does_not_visit_the_right_operand_after_a_left_error() {
     let error = evaluate("|answer| = |missing_left + (1 / 0)|", &mut context).unwrap_err();
     assert!(matches!(error, BWErr::VariableNotDefined(name) if name == "missing_left"));
     assert_eq!(
-        context.expression_visits.len(),
+        context.expression_visits.borrow().len(),
         2,
         "only binary root and left operand may be visited"
     );
-    assert_eq!(context.expression_visits[1].trim(), "missing_left");
+    assert_eq!(context.expression_visits.borrow()[1].trim(), "missing_left");
 }
 
 #[test]

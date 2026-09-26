@@ -1,5 +1,6 @@
 use pest::iterators::Pair;
 use std::{
+    borrow::Cow,
     collections::HashMap,
     io::{self, Write},
     sync::Arc,
@@ -7,8 +8,8 @@ use std::{
 
 use super::{
     ast::{
-        self, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr, ExprKind, Name,
-        Node, Program, Statement, StatementKind, UnaryOp,
+        self, AccessSegment, AssignmentValue, BinaryOp, Block, Call, Definition, ElseBranch, Expr,
+        ExprKind, Node, Program, Statement, StatementKind, UnaryOp,
     },
     grammar::{finite_float, BWErr, Literal, LiteralResult, Operate, Rule},
 };
@@ -45,7 +46,7 @@ pub struct Context {
     frames: Vec<Frame>,
     current: usize,
     #[cfg(test)]
-    expression_visits: Vec<String>,
+    expression_visits: std::cell::RefCell<Vec<String>>,
 }
 
 impl Default for Context {
@@ -54,7 +55,7 @@ impl Default for Context {
             frames: vec![Frame::default()],
             current: 0,
             #[cfg(test)]
-            expression_visits: Vec::new(),
+            expression_visits: Default::default(),
         }
     }
 }
@@ -167,10 +168,11 @@ fn invoke(call: &Call, context: &mut Context) -> LiteralResult {
     }
 }
 
-fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResult {
+fn evaluate_expression(expression: &Expr, context: &Context) -> LiteralResult {
     #[cfg(test)]
     context
         .expression_visits
+        .borrow_mut()
         .push(expression.span.text().to_owned());
 
     match &expression.kind {
@@ -187,7 +189,7 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
         ExprKind::Bool(value) => Ok(Literal::Bool(*value)),
         ExprKind::String(value) => Ok(Literal::String(value.clone())),
         ExprKind::Variable(name) => context.get_variable(name),
-        ExprKind::Access { root, segments } => evaluate_access(root, segments, context),
+        ExprKind::Access { base, segments } => evaluate_access(base, segments, context),
         ExprKind::Array(elements) => elements
             .iter()
             .map(|element| evaluate_expression(element, context))
@@ -209,6 +211,7 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
                 #[cfg(test)]
                 context
                     .expression_visits
+                    .borrow_mut()
                     .push(operand.span.text().to_owned());
                 format!("-{text}")
                     .parse::<i32>()
@@ -247,42 +250,85 @@ fn evaluate_expression(expression: &Expr, context: &mut Context) -> LiteralResul
     }
 }
 
-fn evaluate_access(root: &Name, segments: &[Name], context: &Context) -> LiteralResult {
-    let error = |segment: &Name, reason: String| BWErr::CollectionAccessError {
-        path: std::iter::once(root.text.as_str())
-            .chain(segments.iter().map(|part| part.text.as_str()))
-            .collect::<Vec<_>>()
-            .join("."),
-        segment: segment.text.clone(),
-        reason,
+fn evaluate_access(base: &Expr, segments: &[AccessSegment], context: &Context) -> LiteralResult {
+    // Expressions cannot change bindings. Borrow a variable's containers throughout
+    // index evaluation, or own a temporary base, then copy only the selected result.
+    let container = if let ExprKind::Variable(name) = &base.kind {
+        #[cfg(test)]
+        context
+            .expression_visits
+            .borrow_mut()
+            .push(base.span.text().to_owned());
+        Cow::Borrowed(context.get_variable_ref(name)?)
+    } else {
+        Cow::Owned(evaluate_expression(base, context)?)
     };
-    // Borrow the path's containers and copy only the selected result.
-    let mut value = context.get_variable_ref(&root.text)?;
-    for segment in segments {
-        value = match value {
-            Literal::Map(values) => values
-                .get(&segment.text)
-                .ok_or_else(|| error(segment, "map key does not exist".into()))?,
-            Literal::Array(values) => {
-                if segment.text.is_empty()
-                    || !segment.text.bytes().all(|byte| byte.is_ascii_digit())
-                {
-                    return Err(error(
-                        segment,
-                        "array index must contain ASCII decimal digits".into(),
-                    ));
+    let error = |segment: &AccessSegment, reason: String| {
+        let mut path = base.span.text().trim().to_owned();
+        for part in segments {
+            match part {
+                AccessSegment::Literal(name) => {
+                    path.push('.');
+                    path.push_str(&name.text);
                 }
-                segment
-                    .text
-                    .parse::<usize>()
-                    .ok()
-                    .and_then(|index| values.get(index))
-                    .ok_or_else(|| {
-                        error(
+                AccessSegment::Computed { span, .. } => path.push_str(span.text().trim()),
+            }
+        }
+        BWErr::CollectionAccessError {
+            path,
+            segment: match segment {
+                AccessSegment::Literal(name) => name.text.clone(),
+                AccessSegment::Computed { span, .. } => span.text().trim().to_owned(),
+            },
+            reason,
+        }
+    };
+    let mut value = container.as_ref();
+    for segment in segments {
+        // Evaluate this key before checking its receiver/type; do not evaluate
+        // any later key until this lookup succeeds.
+        let key = match segment {
+            AccessSegment::Literal(_) => None,
+            AccessSegment::Computed { index, .. } => Some(evaluate_expression(index, context)?),
+        };
+        value = match value {
+            Literal::Map(values) => {
+                let name = match (segment, &key) {
+                    (AccessSegment::Literal(name), _) => &name.text,
+                    (_, Some(Literal::String(name))) => name,
+                    _ => return Err(error(segment, "map key must be a string".into())),
+                };
+                values
+                    .get(name)
+                    .ok_or_else(|| error(segment, "map key does not exist".into()))?
+            }
+            Literal::Array(values) => {
+                let index = match (segment, &key) {
+                    (AccessSegment::Literal(name), _) => {
+                        if name.text.is_empty()
+                            || !name.text.bytes().all(|byte| byte.is_ascii_digit())
+                        {
+                            return Err(error(
+                                segment,
+                                "array index must contain ASCII decimal digits".into(),
+                            ));
+                        }
+                        name.text.parse::<usize>().ok()
+                    }
+                    (_, Some(Literal::Int(index))) if *index >= 0 => usize::try_from(*index).ok(),
+                    _ => {
+                        return Err(error(
                             segment,
-                            format!("array index is out of bounds for length {}", values.len()),
-                        )
-                    })?
+                            "array index must be a nonnegative integer".into(),
+                        ))
+                    }
+                };
+                index.and_then(|index| values.get(index)).ok_or_else(|| {
+                    error(
+                        segment,
+                        format!("array index is out of bounds for length {}", values.len()),
+                    )
+                })?
             }
             _ => return Err(error(segment, "value is neither a map nor an array".into())),
         };

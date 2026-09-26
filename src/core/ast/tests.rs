@@ -337,9 +337,10 @@ fn numeric_conversion_remains_deferred_and_strings_decode_once() {
     let string = assigned_expression(r#""é\n\"\\n""#);
     assert!(matches!(string.kind, ExprKind::String(text) if text == "é\n\"\\n"));
     let access = assigned_expression("missing.items.9999999999999999999999999999");
-    assert!(matches!(access.kind, ExprKind::Access { root, segments }
-            if root.text == "missing" && segments[0].text == "items"
-            && segments[1].text == "9999999999999999999999999999"));
+    assert!(matches!(access.kind, ExprKind::Access { base, segments }
+            if matches!(&base.kind, ExprKind::Variable(name) if name == "missing")
+            && matches!(&segments[0], AccessSegment::Literal(name) if name.text == "items")
+            && matches!(&segments[1], AccessSegment::Literal(name) if name.text == "9999999999999999999999999999")));
 }
 
 #[test]
@@ -366,17 +367,96 @@ fn collection_entries_keep_source_order_duplicate_keys_and_key_spans() {
 #[test]
 fn collection_paths_retain_parsed_segments_and_their_original_spans() {
     let expression = assigned_expression("data ### ignored.dot ### . café . 00");
-    let ExprKind::Access { root, segments } = &expression.kind else {
+    let ExprKind::Access { base, segments } = &expression.kind else {
         panic!("access expression");
     };
-    assert_eq!(root.text, "data");
-    assert_eq!(root.span.text(), "data");
+    assert!(matches!(&base.kind, ExprKind::Variable(name) if name == "data"));
+    assert_eq!(base.span.text(), "data");
     assert_eq!(segments.len(), 2);
-    assert_eq!(segments[0].text, "café");
-    assert_eq!(segments[0].span.text(), "café");
-    assert_eq!(segments[1].text, "00");
-    assert_eq!(segments[1].span.text(), "00");
+    for (segment, expected) in segments.iter().zip(["café", "00"]) {
+        let AccessSegment::Literal(name) = segment else {
+            panic!("literal segment")
+        };
+        assert_eq!(name.text, expected);
+        assert_eq!(name.span.text(), expected);
+    }
     assert!(expression.span.text().contains("ignored.dot"));
+}
+
+#[test]
+fn computed_access_preserves_base_bracket_and_nested_expression_spans() {
+    let expression = assigned_expression("(data) ### outside ### [ café + 1 ].items[positions[0]]");
+    let ExprKind::Access { base, segments } = &expression.kind else {
+        panic!("access")
+    };
+    assert_eq!(base.span.text(), "(data)");
+    assert!(matches!(&base.kind, ExprKind::Variable(name) if name == "data"));
+    assert_eq!(segments.len(), 3);
+    let AccessSegment::Computed { span, index } = &segments[0] else {
+        panic!("computed")
+    };
+    assert_eq!(span.text(), "[ café + 1 ]");
+    assert_eq!(index.span.text().trim(), "café + 1");
+    assert!(Arc::ptr_eq(span.source(), expression.span.source()));
+    let ExprKind::Binary { left, .. } = &index.kind else {
+        panic!("binary index")
+    };
+    assert_eq!(left.span.text().trim(), "café");
+    assert_eq!(
+        &span.source().text()[left.span.start()..left.span.end()],
+        left.span.text()
+    );
+    assert!(matches!(&segments[1], AccessSegment::Literal(name) if name.text == "items"));
+    let AccessSegment::Computed { span, index } = &segments[2] else {
+        panic!("computed")
+    };
+    assert_eq!(span.text(), "[positions[0]]");
+    assert!(matches!(&index.kind, ExprKind::Access { .. }));
+}
+
+#[test]
+fn quoted_map_key_spans_retain_source_while_text_is_decoded_once() {
+    let expression = assigned_expression(r#"{"é\n": 1, "\\n": 2, "": 3, plain: 4}"#);
+    let ExprKind::Map(entries) = expression.kind else {
+        panic!("map")
+    };
+    assert_eq!(
+        entries
+            .iter()
+            .map(|(key, _)| key.text.as_str())
+            .collect::<Vec<_>>(),
+        ["é\n", "\\n", "", "plain"]
+    );
+    assert_eq!(entries[0].0.span.text(), r#""é\n""#);
+    assert_eq!(entries[1].0.span.text(), r#""\\n""#);
+    assert_eq!(entries[2].0.span.text(), "\"\"");
+}
+
+#[test]
+fn malformed_computed_reads_and_all_indexed_assignments_are_syntax_errors() {
+    for source in [
+        "|answer| = |data[]|",
+        "|answer| = |data[0|",
+        "|answer| = |data[0, 1]|",
+        "|answer| = |data[1 + ]|",
+        "|answer| = |data.[0]|",
+        "|answer| = |data[0].|",
+        "|answer| = |false and data[]|",
+        "|answer| = |true or data[]|",
+        "|data[0]| = |7|",
+        "|data.item[0]| = |7|",
+        r#"|data["key"]| = |7|"#,
+        r#"|answer| = |{"bad\t": 1}|"#,
+        "|answer| = |{[key]: 1}|",
+    ] {
+        assert!(
+            matches!(
+                Program::parse("invalid.botwork", source),
+                Err(BWErr::ParsingError(_))
+            ),
+            "{source}"
+        );
+    }
 }
 
 #[test]

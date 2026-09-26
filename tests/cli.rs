@@ -86,6 +86,39 @@ fn signed_integer_overflow_fails_after_printing_the_valid_minimum() {
 }
 
 #[test]
+fn computed_access_failures_preserve_prior_output_and_stop_execution() {
+    let path = fixture("computed-access-out-of-bounds.botwork");
+    let output = run(&["--file", path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"before\n");
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostic.contains("computed-access-out-of-bounds.botwork"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("Collection access failed: data[\"items\"][index] at `[index]`: array index is out of bounds for length 1"), "{diagnostic}");
+    assert!(!diagnostic.contains("panicked"));
+}
+
+#[test]
+fn malformed_skipped_computed_access_prevents_all_cli_output() {
+    let path = fixture("invalid-computed-access.botwork");
+    for debug in [false, true] {
+        let mut arguments = vec!["--file", path.to_str().unwrap()];
+        if debug {
+            arguments.push("--debug");
+        }
+        let output = run(&arguments);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let diagnostic = String::from_utf8(output.stderr).unwrap();
+        assert!(diagnostic.contains("invalid-computed-access.botwork"));
+        assert!(!diagnostic.contains("panicked"));
+        assert!(!diagnostic.contains("debug:"));
+    }
+}
+
+#[test]
 fn help_describes_file_argument_on_stdout() {
     let output = run(&["--help"]);
     assert!(output.status.success());

@@ -22,6 +22,8 @@ The signed-integer example checks both range boundaries, leading zeroes, power g
 
 The collection-access example checks nested map/array paths, Unicode keys, call/loop composition, catchable failures, and skipped access. Unit tests cover exact map keys, index validation, oversized bounds, None versus absence, first-failure priority, comments between segments, and copy semantics.
 
+The computed-access example adds variable indexes, quoted and empty map keys, temporary expression bases, and mixed bracket/dot paths. Unit instrumentation verifies that the base and each required index run once in order, with later keys skipped after failure. AST cases preserve bracket/decoded-key spans and reject malformed accesses and indexed assignments. CLI fixtures check bounds diagnostics and syntax rejection before any output, including malformed skipped operands; both owned and parser-pair execution APIs are covered.
+
 ## Coverage Measurement
 
 Use Python 3.9 or newer and the active Rust toolchain's LLVM tools:

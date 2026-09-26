@@ -91,7 +91,7 @@ Three escape sequences are supported:
 | `\"` | A double quote |
 | `\\` | A backslash |
 
-Escapes are decoded once. For example, `"\\n"` contains a backslash followed by `n`; it does not contain a newline. Other escapes, including `\t`, are syntax errors. Map keys such as `label` in `{label: "hello"}` are identifiers; string decoding applies to the quoted value.
+Escapes are decoded once. For example, `"\\n"` contains a backslash followed by `n`; it does not contain a newline. Other escapes, including `\t`, are syntax errors. Map keys can be identifiers such as `label` in `{label: "hello"}` or quoted strings such as `"display name"`; quoted keys and values use the same decoding rules.
 
 ## Log Output
 
@@ -151,10 +151,16 @@ This contract covers evaluation errors, including the arithmetic failures descri
 
 ## Collection Access
 
-Dot paths start with a variable and visit collection values left to right: `m.a`, `items.0`, and `m.items.0.name`. The base variable uses ordinary lexical lookup. Map segments are exact, case-sensitive string keys; array segments are zero-based ASCII decimal indexes. Leading zeroes are accepted for arrays (`items.01` selects index 1), while map keys retain their spelling (`m.01` means key `"01"`). Numeric map keys can come from host-provided values even though map-literal key syntax is currently limited to identifiers.
+Collection reads visit values left to right: `m.a`, `items.0`, `items[index]`, and `m.items[index]["display name"]`. The base can be a variable, literal, or parenthesized expression: `[7, 8][1]`, `{items: [7]}.items[0]`, and `([7] + [8])[1]` work. Access binds before powers and unary operators; `-items[0] ^ 2` negates the square of the selected value. Variables and computed keys use ordinary lexical lookup.
 
-Segments are literal names/digits, not variable references: `items.index` does not evaluate a variable named `index`. Whitespace and comments between path tokens do not become part of keys. Computed indexes and quoted/arbitrary string-key syntax remain planned work. Negative indexes and indexed assignment such as `|items.0| = |7|` are syntax errors.
+Dot segments are literal names/digits: `items.index` does not evaluate `index`. Map keys preserve exact, case-sensitive spelling; array indexes require ASCII decimal digits. Leading zeroes are accepted for arrays (`items.01` selects index 1), while map keys retain their spelling (`m.01` selects `"01"`). Whitespace and comments between path tokens do not become part of names. Negative dot indexes such as `items.-1` are syntax errors.
 
-A missing base yields `VariableNotDefined`. Missing keys, invalid array-index tokens, out-of-bounds indexes (including excessively large numbers), and traversal through scalars or None yield `CollectionAccessError` with the canonical path, failing segment, and reason. The first failing segment stops lookup; a key bound to None is a successful lookup, distinct from a missing key. These errors are catchable, preserve a failed assignment's destination, and are skipped in unselected branches/boolean operands.
+Bracket expressions produce **nonnegative integers for arrays** or **strings for maps**, without coercion. `items[1.0]`, `items["1"]`, `items[-1]`, and `m[1]` fail; `items[0]` and `m["1"]` use different key types. Indexes are zero-based and checked against length. Nested reads such as `items[positions[0]]` work. Integer conversion and arithmetic inside a key retain their ordinary runtime failures.
 
-Reads return values without changing their source container. Access works in expressions, conditions, arguments, return values, and loop iterables. See [the collection-access example](../examples/11-collection-access.botwork).
+Map literals accept identifier or quoted string keys: `{"Content-Type": "application/json", "": 7, café: 8}`. Quoted keys use the existing string escapes, including escaped quotes, backslashes, and newlines. Punctuation, Unicode, delimiters, numeric text, and reserved words can appear in quoted keys. Keys are decoded once; map values still evaluate in source order. Computed map-literal keys such as `{[key]: value}` are unsupported.
+
+Evaluate the base once, then each bracket expression once immediately before its lookup. Check the receiver and key types after evaluating that key. Thus `7[missing]` reports the undefined key variable; `missing[1 / 0]` reports the undefined base. Stop at the first failed evaluation or lookup, skipping all later segments. Short-circuiting can skip an entire access, but malformed skipped syntax still prevents execution.
+
+A missing variable yields `VariableNotDefined`. Missing map keys, invalid indexes, bounds failures, and traversal through scalars or None yield catchable `CollectionAccessError`. It identifies the path, failing segment (brackets included for computed keys), and reason. Dot names are canonicalized; bracket contents retain their source spelling. A present None-valued entry succeeds. Errors preserve a failed assignment's destination.
+
+Reads return independent values without changing their source container. Both dot and bracket indexed assignment are syntax errors. Updates are reserved for the planned collection library: operations will return replacement collections for ordinary variable assignment; no dedicated indexed-update syntax is introduced. These update statements are not implemented yet. Access works in expressions, conditions, arguments, returns, and loop iterables. See examples [11](../examples/11-collection-access.botwork) and [12](../examples/12-computed-access.botwork).

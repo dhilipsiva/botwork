@@ -142,6 +142,25 @@ fn signed_integer_example_handles_boundaries_and_catchable_failures() {
 }
 
 #[test]
+fn computed_access_example_handles_arbitrary_keys_and_checked_indexes() {
+    assert_example(
+        "12-computed-access.botwork",
+        &[
+            "second",
+            "application/json",
+            "empty key",
+            "9",
+            "5",
+            "12",
+            "caught negative index",
+            "caught index type",
+            "caught missing key",
+            "false",
+        ],
+    );
+}
+
+#[test]
 fn collection_access_example_reads_nested_values_and_handles_errors() {
     assert_example(
         "11-collection-access.botwork",

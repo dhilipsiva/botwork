@@ -91,7 +91,7 @@ The following defects were reproduced during the DSL review. Relevant implementa
 Complete these foundations before building a large statement library or external adapters.
 
 - [x] Implement literal map and array paths, including nested access, zero-based integer indexes, and catchable missing-key, invalid-index, bounds, and incompatible-value errors. [The access contract](docs/language.md#collection-access) specifies literal segments and rejects indexed assignment; AST/evaluator/CLI cases and example `11` cover spans, scope, composition, error propagation, and preserved values.
-- [ ] Add computed collection access for variable indexes and arbitrary string map keys. Define syntax, evaluation order, bounds/type errors, and composition with literal paths; document whether indexed updates remain library operations or receive dedicated syntax.
+- [x] Add computed collection access for variable indexes and arbitrary string map keys. [Bracket reads](docs/language.md#collection-access) compose with dot paths and temporary bases, evaluate each required key once in order, enforce strict key types/bounds, and support quoted map-literal keys. AST, evaluator, compatibility, CLI, and example `12` checks cover the contract. Indexed assignment remains invalid; updates are reserved for library operations returning replacement collections.
 - [x] Support the full signed literal range. Unary minus directly wrapping an integer atom converts its sign and digits together, allowing `-2147483648` without a positive out-of-range intermediate. [Signed literal rules](docs/language.md#signed-integer-literals), the active regression, evaluator/compatibility checks, CLI failure case, and example `10` verify both boundaries, grouping, deferred conversion, and catchable range/overflow errors.
 - [ ] Define numeric precision and conversion rules for the current `i32`/`f32` values; decide how collection equality and mixed numeric comparisons behave.
 - [x] Validate control-flow placement. [Whole-program validation](docs/language.md#control-placement-validation) rejects `Return` outside custom bodies and `Break`/`Continue` without a loop in the same invocation, including unused or unreachable code. Errors identify the original file, line, and column before any execution. AST, library, parser-pair, and CLI tests verify lexical boundaries, preserved state, no output/debug traces, and Unicode/CRLF/tab locations.
@@ -125,7 +125,7 @@ Define this model before standard assertions and reports so they share case iden
 Build these groups on the stable registration and async contracts. Give each statement documentation, examples, parameter checks, and success/failure tests.
 
 - [ ] **Built-ins:** assertions, explicit failure, logging, variable inspection, and reusable control helpers needed for acceptance testing.
-- [ ] **Collections:** array/map creation, lookup, updates, membership, length, iteration helpers, and comparisons.
+- [ ] **Collections:** array/map creation, lookup, updates returning replacement collections for ordinary assignment, membership, length, iteration helpers, and comparisons. Keep dot/bracket reads immutable and indexed assignment invalid.
 - [ ] **Strings:** formatting, joining, splitting, replacement, matching, and documented Unicode behavior.
 - [ ] **Date/time:** parsing, formatting, durations, comparisons, and explicit timezone handling.
 - [ ] **Operating system:** files, directories, paths, environment access, and cleanup, with platform-specific behavior documented.

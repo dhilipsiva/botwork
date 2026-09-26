@@ -284,6 +284,12 @@ pub struct Expr {
 }
 
 #[derive(Clone, Debug)]
+pub enum AccessSegment {
+    Literal(Name),
+    Computed { span: Span, index: Expr },
+}
+
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     Integer(String),
     Float(String),
@@ -291,8 +297,8 @@ pub enum ExprKind {
     String(String),
     Variable(String),
     Access {
-        root: Name,
-        segments: Vec<Name>,
+        base: Box<Expr>,
+        segments: Vec<AccessSegment>,
     },
     Array(Vec<Expr>),
     Map(Vec<(Name, Expr)>),
@@ -592,11 +598,34 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
         Rule::boolean_false => ExprKind::Bool(false),
         Rule::string => ExprKind::String(decode_string(pair)?),
         Rule::ident => ExprKind::Variable(pair.as_str().to_owned()),
-        Rule::dot_path => {
+        Rule::primary => {
             let mut inner = pair.into_inner();
-            let root = lower_name(required(&mut inner)?, source);
-            let segments = inner.map(|part| lower_name(part, source)).collect();
-            ExprKind::Access { root, segments }
+            let mut base = expression(required(&mut inner)?, source)?;
+            let segments = inner
+                .map(|segment| {
+                    let span = Span::of(&segment, source);
+                    let rule = segment.as_rule();
+                    let mut children = segment.into_inner();
+                    let child = required(&mut children)?;
+                    finish(children)?;
+                    match rule {
+                        Rule::named_access => Ok(AccessSegment::Literal(lower_name(child, source))),
+                        Rule::computed_access => Ok(AccessSegment::Computed {
+                            span,
+                            index: expression(child, source)?,
+                        }),
+                        _ => Err(invalid("access segment")),
+                    }
+                })
+                .collect::<Result<Vec<_>, BWErr>>()?;
+            if segments.is_empty() {
+                base.span = span;
+                return Ok(base);
+            }
+            ExprKind::Access {
+                base: Box::new(base),
+                segments,
+            }
         }
         Rule::keyword => ExprKind::String(pair.as_str().to_owned()),
         Rule::array => ExprKind::Array(
@@ -608,7 +637,11 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
             let mut entries = Vec::new();
             for entry in pair.into_inner() {
                 let mut children = entry.into_inner();
-                let key = lower_name(required(&mut children)?, source);
+                let key_pair = required(&mut children)?;
+                let mut key = lower_name(key_pair.clone(), source);
+                if key_pair.as_rule() == Rule::string {
+                    key.text = decode_string(key_pair)?;
+                }
                 let value = expression(required(&mut children)?, source)?;
                 finish(children)?;
                 entries.push((key, value));
@@ -628,10 +661,14 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
                 operand,
             }
         }
-        Rule::param_invoke => {
+        Rule::param_invoke | Rule::braced_expression => {
+            let grouped = pair.as_rule() == Rule::braced_expression;
             let mut inner = pair.into_inner();
-            let value = expression(required(&mut inner)?, source)?;
+            let mut value = expression(required(&mut inner)?, source)?;
             finish(inner)?;
+            if grouped {
+                value.span = span;
+            }
             return Ok(value);
         }
         Rule::expression | Rule::power => {
