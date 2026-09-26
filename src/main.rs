@@ -4,9 +4,14 @@ use botwork::core::{
 };
 use clap::Parser as Clap;
 use pest::Parser;
-use std::{fs::read_to_string, path::PathBuf};
+use std::{
+    error::Error,
+    fs::read_to_string,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
-/// Simple program to greet a person
+/// Run a Botwork automation script.
 #[derive(Clap, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -15,28 +20,24 @@ struct Args {
     file: PathBuf,
 }
 
-fn main() -> Result<(), std::io::Error> {
-    let args = Args::parse();
-    let source = read_to_string(args.file)?;
-    match BWParser::parse(Rule::botwork, &source) {
-        Ok(tree) => {
-            let mut context = Context::default();
-            context.init_statements();
-            let mut results = Vec::new();
-            for pair in tree {
-                match botwork(pair, &mut context) {
-                    Ok(ok) => results.push(ok),
-                    Err(err) => {
-                        dbg!(err);
-                        break;
-                    }
-                };
-            }
-            // dbg!(results);
-        }
-        Err(err) => {
-            println!("Failed parsing input: {:}", err);
-        }
-    };
+fn run(file: &Path) -> Result<(), Box<dyn Error>> {
+    let source = read_to_string(file)?;
+    let tree = BWParser::parse(Rule::botwork, &source)?;
+    let mut context = Context::default();
+    context.init_statements();
+    for pair in tree {
+        botwork(pair, &mut context)?;
+    }
     Ok(())
+}
+
+fn main() -> ExitCode {
+    let args = Args::parse();
+    match run(&args.file) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{}: {error}", args.file.display());
+            ExitCode::FAILURE
+        }
+    }
 }

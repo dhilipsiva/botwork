@@ -186,13 +186,11 @@ fn assert_cli_failure(fixture: &str) {
 }
 
 #[test]
-#[ignore = "known defect: syntax errors exit successfully and print to stdout"]
 fn syntax_errors_fail_the_cli() {
     assert_cli_failure("syntax-error.botwork");
 }
 
 #[test]
-#[ignore = "known defect: uncaught runtime errors exit successfully"]
 fn runtime_errors_fail_the_cli() {
     assert_cli_failure("runtime-error.botwork");
 }

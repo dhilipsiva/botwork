@@ -46,10 +46,7 @@ impl Context {
     fn get_variable(&self, name: &String) -> LiteralResult {
         match self.variables.get(name) {
             Some(value) => Ok(value.to_owned()),
-            None => Err(BWErr::VariableNotDefined(format!(
-                "Varaible not defined: {}",
-                name
-            ))),
+            None => Err(BWErr::VariableNotDefined(name.clone())),
         }
     }
 

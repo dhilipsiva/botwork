@@ -33,17 +33,17 @@ lazy_static::lazy_static! {
 /// botwork Err
 #[derive(Error, Debug)]
 pub enum BWErr {
-    #[error("Variable not defined")]
+    #[error("Variable not defined: {0}")]
     VariableNotDefined(String),
-    #[error("Statement not defined")]
+    #[error("Statement not defined: {0}")]
     StatementNotDefined(String),
-    #[error("Parameter missing error")]
+    #[error("Parameter missing: {0}")]
     ParameterMissingError(String),
-    #[error("Parsing integer error")]
+    #[error("Parsing error: {0}")]
     ParsingError(String),
-    #[error("Parsing integer error")]
+    #[error("Parsing number failed: {0}")]
     ParsingIntegerError(String),
-    #[error("Operation performed on incompatible types")]
+    #[error("Operation performed on incompatible types: {0}")]
     OperationIncompatibleError(String),
 }
 
