@@ -465,6 +465,55 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::AccessDiagnosticBoundary | Input::AccessDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let bytes = "expression".len()
+                    + "data.missing".len()
+                    + "missing".len()
+                    + "map key does not exist".len();
+                let error = Engine::default()
+                    .run_source(
+                        case.id,
+                        "|data| = |{}|\n|out| = |data.missing|",
+                        RunOptions {
+                            limits: RunLimits {
+                                diagnostics: DiagnosticLimits {
+                                    text_bytes: bytes - usize::from(case.error.is_some()),
+                                    ..DiagnosticLimits::default()
+                                },
+                                ..RunLimits::default()
+                            },
+                            ..RunOptions::default()
+                        },
+                    )
+                    .result
+                    .unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW3004");
+                    assert!(error.causes[0].omissions.is_some());
+                } else {
+                    assert_eq!(error.code().as_str(), "BW3004");
+                    let BWErr::CollectionAccessError {
+                        path,
+                        segment,
+                        reason,
+                    } = error.error.as_ref()
+                    else {
+                        panic!("category")
+                    };
+                    assert_eq!(
+                        (path.as_str(), segment.as_str(), reason.as_str()),
+                        ("data.missing", "missing", "map key does not exist")
+                    );
+                    assert!(error.omissions.is_none());
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

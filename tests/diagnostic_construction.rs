@@ -284,3 +284,156 @@ fn rejected_argument_message_keeps_required_effects_and_skips_later_arguments_an
     assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
     assert_eq!(effects.load(Ordering::SeqCst), 1);
 }
+
+#[test]
+fn access_failures_admit_all_fields_at_exact_limits_with_unchanged_paths_and_locations() {
+    use botwork::core::grammar::BWErr;
+    for (value, suffix, reason) in [
+        ("{}", ".é", "map key does not exist"),
+        ("{}", "[1]", "map key must be a string"),
+        (
+            "[]",
+            ".bad",
+            "array index must contain ASCII decimal digits",
+        ),
+        ("[]", "[true]", "array index must be a nonnegative integer"),
+        ("[7]", "[12]", "array index is out of bounds for length 1"),
+        (
+            "[]",
+            ".999999999999999999999999999999999",
+            "array index is out of bounds for length 0",
+        ),
+        ("true", ".key", "value is neither a map nor an array"),
+    ] {
+        let source = format!("|data| = |{value}|\nOuter {{ |out| = |data{suffix}| }}\nOuter");
+        let engine = Engine::default();
+        let baseline = engine
+            .run_source("access", &source, RunOptions::default())
+            .result
+            .unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::CollectionAccess);
+        let BWErr::CollectionAccessError {
+            path,
+            segment,
+            reason: actual,
+        } = baseline.error.as_ref()
+        else {
+            panic!("category")
+        };
+        assert_eq!(path, &format!("data{suffix}"));
+        assert_eq!(segment, suffix.strip_prefix('.').unwrap_or(suffix));
+        assert_eq!(actual, reason);
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        for fits in [false, true] {
+            let error = engine
+                .run_source(
+                    "access",
+                    &source,
+                    options(DiagnosticLimits {
+                        text_bytes: size.text_bytes - usize::from(!fits),
+                        source_bytes: size.source_bytes,
+                        call_frames: size.call_frames,
+                        ..DiagnosticLimits::default()
+                    }),
+                )
+                .result
+                .unwrap_err();
+            if fits {
+                assert_eq!(
+                    error.to_value().to_string(),
+                    baseline.to_value().to_string()
+                );
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::CollectionAccess);
+                assert_eq!(error.causes[0].omissions.as_ref().unwrap().call_frames, 1);
+                assert_eq!(
+                    error.causes[0]
+                        .omissions
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .as_ref()
+                        .unwrap()
+                        .start_byte,
+                    baseline.span.as_ref().unwrap().start()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn access_construction_failure_preserves_computed_key_effects_and_skips_later_keys() {
+    use botwork::core::grammar::Literal;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let effects = Arc::new(AtomicUsize::new(0));
+    let calls = effects.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Key", move |_, _| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::String("missing".into()))
+        })
+        .unwrap();
+    engine
+        .register_native("Later", |_, _| panic!("later key entered"))
+        .unwrap();
+    let source = "|before| = |1|\n|data| = |{}|\nTry { |out| = |data[@{ Key }][@{ Later }]| } Catch { |caught| = |true| }\n|after| = |2|";
+    let run = engine.run_source(
+        "effects",
+        source,
+        options(DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        }),
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert_eq!(run.variables["before"].to_string(), "1");
+    assert!(
+        !run.variables.contains_key("caught")
+            && !run.variables.contains_key("out")
+            && !run.variables.contains_key("after")
+    );
+    assert_eq!(effects.load(Ordering::SeqCst), 1);
+    let error = run.result.unwrap_err();
+    assert_eq!(error.causes[0].code(), DiagnosticCode::CollectionAccess);
+    assert_eq!(
+        error.causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .source
+            .as_ref()
+            .unwrap()
+            .start_byte,
+        source.find("[@{ Key }]").unwrap()
+    );
+}
+
+#[test]
+fn admitted_access_details_remain_available_to_catch_and_restore_the_previous_binding() {
+    let source = "|error| = |7|\n|data| = |{}|\nTry { |out| = |data.é| } Catch |error| { |path| = |error.details.path|\n|segment| = |error.details.segment|\n|reason| = |error.details.reason| }";
+    let run = Engine::default().run_source(
+        "caught",
+        source,
+        options(DiagnosticLimits {
+            text_bytes: "expression".len()
+                + "data.é".len()
+                + "é".len()
+                + "map key does not exist".len(),
+            ..DiagnosticLimits::default()
+        }),
+    );
+    assert_eq!(run.outcome(), RunOutcome::Succeeded);
+    assert_eq!(run.variables["error"].to_string(), "7");
+    assert_eq!(run.variables["path"].to_string(), "data.é");
+    assert_eq!(run.variables["segment"].to_string(), "é");
+    assert_eq!(
+        run.variables["reason"].to_string(),
+        "map key does not exist"
+    );
+}

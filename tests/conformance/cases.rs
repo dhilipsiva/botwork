@@ -57,6 +57,8 @@ pub enum Input {
     OperationPanicLimit,
     SignatureDiagnosticBoundary,
     SignatureDiagnosticLimit,
+    AccessDiagnosticBoundary,
+    AccessDiagnosticLimit,
 }
 
 #[derive(Clone)]
@@ -273,5 +275,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::SignatureDiagnosticBoundary, stdout: "", code: None, error: None },
         Case { id: "signature-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::SignatureDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
+        Case { id: "access-diagnostic-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::AccessDiagnosticBoundary, stdout: "", code: None, error: None },
+        Case { id: "access-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::AccessDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
     ]
 }

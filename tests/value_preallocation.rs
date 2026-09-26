@@ -58,6 +58,46 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn access_error_admission_rejects_the_complete_group_before_copying_large_path_or_segment() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    let name = "x".repeat(length);
+    for computed in [false, true] {
+        let suffix = if computed {
+            format!("[\"{name}\"]")
+        } else {
+            format!(".{name}")
+        };
+        let program = Program::parse(
+            "access",
+            &format!("|data| = |{{}}|\n|out| = |data{suffix}|"),
+        )
+        .unwrap();
+        for text_bytes in [32, length + 64] {
+            let mut context = Context::with_limits(RunLimits {
+                diagnostics: DiagnosticLimits {
+                    text_bytes,
+                    ..DiagnosticLimits::default()
+                },
+                ..RunLimits::default()
+            })
+            .unwrap();
+            let (result, large) =
+                observe(length, || evaluate_program_detailed(&program, &mut context));
+            let error = result.unwrap_err();
+            assert_eq!(error.causes[0].code(), DiagnosticCode::CollectionAccess);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 2);
+            // Computed keys retain their required string-value construction; diagnostics add no large copies.
+            assert_eq!(large, usize::from(computed));
+        }
+    }
+}
+
+#[test]
 fn synchronous_signature_failures_reject_large_parameter_and_return_messages_before_allocation() {
     use botwork::core::{
         ast::Program,

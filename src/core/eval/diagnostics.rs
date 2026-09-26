@@ -4,7 +4,54 @@ use super::*;
 mod tests;
 use crate::core::diagnostic::DiagnosticCode;
 
+struct AccessPath<'a> {
+    base: &'a Expr,
+    segments: &'a [AccessSegment],
+}
+impl std::fmt::Display for AccessPath<'_> {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        output.write_str(self.base.span.text().trim())?;
+        for part in self.segments {
+            match part {
+                AccessSegment::Literal(name) => {
+                    output.write_str(".")?;
+                    output.write_str(&name.text)?;
+                }
+                AccessSegment::Computed { span, .. } => output.write_str(span.text().trim())?,
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Context {
+    pub(super) fn access_error(
+        &self,
+        base: &Expr,
+        segments: &[AccessSegment],
+        segment: &AccessSegment,
+        reason: std::fmt::Arguments<'_>,
+    ) -> Diagnostic {
+        let path = AccessPath { base, segments };
+        let (span, text) = match segment {
+            AccessSegment::Literal(name) => (&name.span, name.text.as_str()),
+            AccessSegment::Computed { span, .. } => (span, span.text().trim()),
+        };
+        let stopped = self.checkpoint().err();
+        let error = self.limits().diagnostics.formatted_fields(
+            |[path, segment, reason]| BWErr::CollectionAccessError {
+                path,
+                segment,
+                reason,
+            },
+            [format_args!("{path}"), format_args!("{text}"), reason],
+            Some(span),
+            true,
+            self.calls.iter().map(|record| &record.frame),
+        );
+        self.finish_constructed_error(error, stopped, Some(span), true)
+    }
+
     pub(super) fn formatted_error(
         &self,
         category: fn(String) -> BWErr,

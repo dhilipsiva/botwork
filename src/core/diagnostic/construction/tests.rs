@@ -292,3 +292,120 @@ fn formatted_construction_rejects_context_before_full_message_formatting() {
     );
     assert_eq!(accepted.code(), DiagnosticCode::IncompatibleType);
 }
+
+#[test]
+fn grouped_details_match_complete_metrics_before_any_field_is_owned() {
+    let program = Program::parse("source", "|x| = |1|").unwrap();
+    let span = &program.statements[0].span;
+    let category = |[path, segment, reason]: [String; 3]| BWErr::CollectionAccessError {
+        path,
+        segment,
+        reason,
+    };
+    let baseline = Diagnostic::new(category(["data.é".into(), "é".into(), "length 12".into()]))
+        .at_expression(span);
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    for fits in [false, true] {
+        let limits = DiagnosticLimits {
+            text_bytes: size.text_bytes - usize::from(!fits),
+            source_bytes: size.source_bytes,
+            ..DiagnosticLimits::default()
+        };
+        let error = limits.formatted_fields(
+            category,
+            [
+                format_args!("data.{}", "é"),
+                format_args!("é"),
+                format_args!("length {}", 12),
+            ],
+            Some(span),
+            true,
+            std::iter::empty(),
+        );
+        if fits {
+            assert_eq!(
+                error.to_value().to_string(),
+                baseline.to_value().to_string()
+            );
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::CollectionAccess);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 0);
+        }
+    }
+}
+
+#[test]
+fn rejection_in_a_later_field_never_runs_owned_formatting_of_an_earlier_field() {
+    use std::cell::Cell;
+    struct First<'a>(&'a Cell<usize>);
+    impl fmt::Display for First<'_> {
+        fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.set(self.0.get() + 1);
+            output.write_str("first")
+        }
+    }
+    let visits = Cell::new(0);
+    let error = DiagnosticLimits {
+        text_bytes: 17,
+        ..DiagnosticLimits::default()
+    }
+    .formatted_fields(
+        |[path, segment, reason]| BWErr::CollectionAccessError {
+            path,
+            segment,
+            reason,
+        },
+        [
+            format_args!("{}", First(&visits)),
+            format_args!("second"),
+            format_args!("reason"),
+        ],
+        None,
+        false,
+        std::iter::empty(),
+    );
+    assert!(error.is_emergency());
+    assert_eq!(visits.get(), 2); // measure plus emergency prefix; no admitted message construction
+}
+
+#[test]
+fn grouped_rejection_records_each_shortened_unicode_field_once_and_releases_sources() {
+    let program = Program::parse("source", "|x| = |1|").unwrap();
+    let source = Arc::downgrade(&program.source);
+    let long = "🦀".repeat(1024);
+    let error = DiagnosticLimits {
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    }
+    .formatted_fields(
+        |[path, segment, reason]| BWErr::CollectionAccessError {
+            path,
+            segment,
+            reason,
+        },
+        [
+            format_args!("{long}"),
+            format_args!("{long}"),
+            format_args!("{long}"),
+        ],
+        Some(&program.statements[0].span),
+        true,
+        std::iter::empty(),
+    );
+    drop(program);
+    assert!(source.upgrade().is_none());
+    let summary = &error.causes[0];
+    assert_eq!(summary.omissions.as_ref().unwrap().detail_fields, 3);
+    let BWErr::CollectionAccessError {
+        path,
+        segment,
+        reason,
+    } = summary.error.as_ref()
+    else {
+        panic!("category")
+    };
+    for detail in [path, segment, reason] {
+        assert!(detail.len() <= SUMMARY_DETAIL_BYTES && detail.ends_with("…[truncated]"));
+    }
+}

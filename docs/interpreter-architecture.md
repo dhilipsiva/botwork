@@ -622,3 +622,20 @@ assert_eq!(error.causes[0].code(), DiagnosticCode::IncompatibleType);
 assert!(error.causes[0].omissions.is_some());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Collection Access Diagnostic Construction
+
+Path, failing segment, and reason are admitted as a group before copying any field. A rejected group retains bounded collection-error evidence and the original byte location.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, run::{Engine, RunLimits, RunOptions}};
+let run = Engine::default().run_source("access", "|data| = |{}|\n|out| = |data.missing|", RunOptions {
+    limits: RunLimits { diagnostics: DiagnosticLimits { text_bytes: 0, ..DiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+let error = run.result.unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::CollectionAccess);
+assert!(error.causes[0].omissions.as_ref().unwrap().source.is_some());
+assert!(!run.variables.contains_key("out"));
+```

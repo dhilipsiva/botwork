@@ -1149,30 +1149,8 @@ fn evaluate_access(
         temporary = evaluate_expression(base, context)?;
         &temporary
     };
-    let error = |segment: &AccessSegment, reason: String| {
-        let mut path = base.span.text().trim().to_owned();
-        for part in segments {
-            match part {
-                AccessSegment::Literal(name) => {
-                    path.push('.');
-                    path.push_str(&name.text);
-                }
-                AccessSegment::Computed { span, .. } => path.push_str(span.text().trim()),
-            }
-        }
-        let span = match segment {
-            AccessSegment::Literal(name) => &name.span,
-            AccessSegment::Computed { span, .. } => span,
-        };
-        Diagnostic::new(BWErr::CollectionAccessError {
-            path,
-            segment: match segment {
-                AccessSegment::Literal(name) => name.text.clone(),
-                AccessSegment::Computed { span, .. } => span.text().trim().to_owned(),
-            },
-            reason,
-        })
-        .at_expression(span)
+    let error = |context: &Context, segment: &AccessSegment, reason: std::fmt::Arguments<'_>| {
+        context.access_error(base, segments, segment, reason)
     };
     for segment in segments {
         // Evaluate this key before checking its receiver/type; do not evaluate
@@ -1186,11 +1164,17 @@ fn evaluate_access(
                 let name = match (segment, key.as_deref()) {
                     (AccessSegment::Literal(name), _) => &name.text,
                     (_, Some(Literal::String(name))) => name,
-                    _ => return Err(error(segment, "map key must be a string".into())),
+                    _ => {
+                        return Err(error(
+                            context,
+                            segment,
+                            format_args!("map key must be a string"),
+                        ))
+                    }
                 };
-                values
-                    .get(name)
-                    .ok_or_else(|| error(segment, "map key does not exist".into()))?
+                values.get(name).ok_or_else(|| {
+                    error(context, segment, format_args!("map key does not exist"))
+                })?
             }
             Literal::Array(values) => {
                 let index = match (segment, key.as_deref()) {
@@ -1199,8 +1183,9 @@ fn evaluate_access(
                             || !name.text.bytes().all(|byte| byte.is_ascii_digit())
                         {
                             return Err(error(
+                                context,
                                 segment,
-                                "array index must contain ASCII decimal digits".into(),
+                                format_args!("array index must contain ASCII decimal digits"),
                             ));
                         }
                         name.text.parse::<usize>().ok()
@@ -1208,19 +1193,27 @@ fn evaluate_access(
                     (_, Some(Literal::Int(index))) if *index >= 0 => usize::try_from(*index).ok(),
                     _ => {
                         return Err(error(
+                            context,
                             segment,
-                            "array index must be a nonnegative integer".into(),
+                            format_args!("array index must be a nonnegative integer"),
                         ))
                     }
                 };
                 index.and_then(|index| values.get(index)).ok_or_else(|| {
                     error(
+                        context,
                         segment,
-                        format!("array index is out of bounds for length {}", values.len()),
+                        format_args!("array index is out of bounds for length {}", values.len()),
                     )
                 })?
             }
-            _ => return Err(error(segment, "value is neither a map nor an array".into())),
+            _ => {
+                return Err(error(
+                    context,
+                    segment,
+                    format_args!("value is neither a map nor an array"),
+                ))
+            }
         };
     }
     context.copy_temporary(value)

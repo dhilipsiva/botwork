@@ -129,37 +129,77 @@ impl DiagnosticLimits {
         expression: bool,
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
-        let mut skeleton = skeleton(category, span, expression);
+        self.formatted_fields(
+            |[detail]| category(detail),
+            [message],
+            span,
+            expression,
+            frames,
+        )
+    }
+
+    /// Internal constructors map each measured message to exactly one BWErr detail field.
+    /// Current categories have one or three fields; admit the complete group before allocation.
+    pub(crate) fn formatted_fields<'a, const N: usize>(
+        &self,
+        category: impl Fn([String; N]) -> BWErr,
+        messages: [fmt::Arguments<'_>; N],
+        span: Option<&Span>,
+        expression: bool,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Diagnostic {
+        let mut skeleton = Diagnostic::new(category(std::array::from_fn(|_| String::new())));
+        if let Some(span) = span {
+            skeleton = if expression {
+                skeleton.at_expression(span)
+            } else {
+                skeleton.at(span)
+            };
+        }
         let admission = self
             .check_with_stack(&skeleton, frames.clone())
             .and_then(|size| {
-                let mut count = Counter {
-                    bytes: 0,
-                    maximum: self.text_bytes - size.text_bytes,
-                };
-                count
-                    .write_fmt(message)
-                    .map_err(|_| text_limit(self.text_bytes))?;
-                let mut output = BoundedText {
-                    text: String::with_capacity(count.bytes),
-                    maximum: count.bytes,
-                };
-                output
-                    .write_fmt(message)
-                    .map_err(|_| text_limit(self.text_bytes))?;
-                Ok(output.text)
+                let mut remaining = self.text_bytes - size.text_bytes;
+                let mut sizes = [0; N];
+                for (message, size) in messages.iter().zip(&mut sizes) {
+                    let mut count = Counter {
+                        bytes: 0,
+                        maximum: remaining,
+                    };
+                    count
+                        .write_fmt(*message)
+                        .map_err(|_| text_limit(self.text_bytes))?;
+                    *size = count.bytes;
+                    remaining -= count.bytes;
+                }
+                let mut details = std::array::from_fn(|_| String::new());
+                for ((message, size), detail) in messages.iter().zip(sizes).zip(&mut details) {
+                    let mut output = BoundedText {
+                        text: String::with_capacity(size),
+                        maximum: size,
+                    };
+                    output
+                        .write_fmt(*message)
+                        .map_err(|_| text_limit(self.text_bytes))?;
+                    *detail = output.text;
+                }
+                Ok(details)
             });
         match admission {
-            Ok(detail) => {
-                skeleton.error = Arc::new(category(detail));
+            Ok(details) => {
+                skeleton.error = Arc::new(category(details));
                 skeleton.capture_stack(frames)
             }
             Err(violation) => {
-                let (detail, shortened) = formatted_prefix(message);
-                super::rejection::reject_constructed_detail(
+                let mut shortened = 0;
+                let details = std::array::from_fn(|index| {
+                    let (detail, truncated) = formatted_prefix(messages[index]);
+                    shortened += usize::from(truncated);
+                    detail
+                });
+                skeleton.error = Arc::new(category(details));
+                super::rejection::reject_constructed_error(
                     skeleton,
-                    category,
-                    detail,
                     shortened,
                     violation,
                     frames.len(),

@@ -213,11 +213,20 @@ pub(super) fn reject_constructed_detail(
     pending_frames: usize,
 ) -> Diagnostic {
     skeleton.error = std::sync::Arc::new(category(detail));
+    reject_constructed_error(skeleton, usize::from(shortened), violation, pending_frames)
+}
+
+pub(super) fn reject_constructed_error(
+    skeleton: Diagnostic,
+    shortened: usize,
+    violation: BWErr,
+    pending_frames: usize,
+) -> Diagnostic {
     let mut error = rejected(skeleton, violation, pending_frames);
     error.causes[0]
         .omissions
         .as_mut()
         .expect("bounded original")
-        .detail_fields += usize::from(shortened);
+        .detail_fields += shortened;
     error
 }

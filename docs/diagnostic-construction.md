@@ -1,6 +1,6 @@
 # Diagnostic Detail Construction
 
-Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Signature argument/return failures measure their formatted details first. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
+Undefined-variable, undefined-statement, and native-panic errors borrow their detail text before making the initial owned copy. Signature argument/return and collection-access failures measure their formatted details first. Synchronous paths use `RunLimits::diagnostics`; standalone operations use their diagnostic settings. Variable access includes direct expressions and missing bases of collection access.
 
 ## Admission Before Copying
 
@@ -26,10 +26,20 @@ These internal formatters stream deterministic strings and scalar values; they d
 
 Validate argument kinds after each required argument evaluates and before visiting later arguments or entering the callee. Validate return kinds after callback effects and the post-callback stop/value checks; preserve completed effects. Context construction failures latch and bypass Catch; standalone operations preserve their local failure and control rules. Both native and DSL metadata checks use this path, while unannotated DSL signatures continue to accept Any.
 
+## Collection Access Failures
+
+Admit path, failing segment, and reason as a complete group before allocating any of the three strings. Add their combined raw UTF-8 bytes to the prospective source/label/call metrics. Measure every field first; a later field exceeding the remaining allowance prevents initial copies of earlier fields too. Each rejected field gets an independent 256-byte emergency prefix, and each shortened field contributes exactly one omission count.
+
+Stream path text from the original base span and each literal/computed segment, preserving the existing full-path spelling. Static reasons and the array-length reason use borrowed formatting arguments. Keep the failing segment's span and expression label. Accepted Catch metadata exposes unchanged path, segment, and reason values.
+
+Evaluate the current computed key before testing its receiver/key type or reporting a missing element. A failed lookup stops before later keys; including their source spelling in the error path does not execute them. Quota rejection latches the Context and bypasses Catch while preserving completed key effects and normal binding/frame cleanup.
+
 ## Scope and Evidence
 
-This contract covers the named borrowed details and formatted signature failures. Other formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
+This contract covers the named borrowed details, formatted signature failures, and grouped collection-access fields. Other formatted or multi-field errors, parser/validation/import diagnostics, and source-position formatting still need construction admission. Host-created BWErr strings already exist before runtime admission. Rendering, aggregate temporary diagnostic ownership, and output limits remain separate tasks. Active synchronous native call signatures have already passed their own retained-record admission and still own one copy.
 
 Unit checks compare constructed and ordinary diagnostics at exact quotas and exercise prospective dimensions, invalid/zero limits, Unicode caps, source release, and omitted-frame counts. Integration checks cover normal catchability, exact contexts, handler restoration, prior effects, Pair entry, independent clone latches, all operation panic stages, repeated worker use, and cancellation with panic. Allocation observations verify zero large copies for rejected missing names and operation factory/poll signatures, plus no extra synchronous panic-detail copy beyond the admitted active-call signature. R21 host corpus cases and an executed Rust example pin byte boundaries.
 
 Formatted-message checks cover exact raw bytes and context, counter overflow, Unicode chunk boundaries, early formatter stopping, empty messages, synchronous/async/blocking argument and return errors, required effects, skipped later arguments/callbacks, and stop priority. Four large-parameter/return allocation observations, two additional R21 cases, and a Rust example pin admission before initial message allocation.
+
+Grouped-field checks cover exact metrics, late-field rejection without earlier copies, three-field Unicode truncation, source release, every collection failure reason, full call/location preservation, computed-key order, and accepted Catch metadata/restoration. Four large literal/computed-key allocation observations, two R21 cases, and a Rust example pin the path/segment boundary.
