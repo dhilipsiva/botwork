@@ -92,8 +92,8 @@ impl Context {
         let (right, _right_reservation) = right.into_parts();
         let result = operator
             .to_rule()
-            .operate_binary_with_error(left, right, &limits, |message| {
-                self.formatted_error(BWErr::OperationIncompatibleError, message, Some(span), true)
+            .operate_binary_with_error(left, right, &limits, |category, message| {
+                self.formatted_error(category, message, Some(span), true)
             })
             .map_err(|error| self.retain_limit(error))?;
         match reserved {
@@ -111,8 +111,8 @@ impl Context {
         let (value, _reservation) = operand.into_parts();
         let result = operator
             .to_rule()
-            .operate_unary_with_error(value, &self.limits().values, |message| {
-                self.formatted_error(BWErr::OperationIncompatibleError, message, Some(span), true)
+            .operate_unary_with_error(value, &self.limits().values, |category, message| {
+                self.formatted_error(category, message, Some(span), true)
             })
             .map_err(|error| self.retain_limit(error))?;
         self.temporary(result)

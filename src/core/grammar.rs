@@ -267,27 +267,50 @@ impl fmt::Display for Literal {
 type ORResult<O, E = BWErr> = Result<O, E>;
 pub type LiteralResult = ORResult<Literal>;
 
-fn checked_integer(value: Option<i32>, operation: &str) -> LiteralResult {
-    value
-        .map(Literal::Int)
-        .ok_or_else(|| BWErr::ArithmeticError(format!("{operation} exceeds the i32 range")))
+#[derive(Clone, Copy, Debug)]
+pub(super) enum ArithmeticFailure {
+    Overflow(&'static str),
+    NonFiniteResult(&'static str),
+    NonFiniteOperand,
+    ZeroNegativePower,
 }
 
-pub(super) fn finite_float(value: f32, operation: &str) -> LiteralResult {
-    if value.is_finite() {
-        Ok(Literal::Float(value))
-    } else {
-        Err(BWErr::ArithmeticError(format!(
-            "{operation} produced a non-finite result"
-        )))
+impl fmt::Display for ArithmeticFailure {
+    fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Overflow(operation) => write!(output, "{operation} exceeds the i32 range"),
+            Self::NonFiniteResult(operation) => {
+                write!(output, "{operation} produced a non-finite result")
+            }
+            Self::NonFiniteOperand => output.write_str("Non-finite floating-point operand"),
+            Self::ZeroNegativePower => output.write_str("Zero cannot have a negative exponent"),
+        }
     }
 }
 
-fn validate_numeric_operand(value: &Literal) -> Result<(), BWErr> {
+fn checked_integer(
+    value: Option<i32>,
+    operation: &'static str,
+) -> Result<Literal, ArithmeticFailure> {
+    value
+        .map(Literal::Int)
+        .ok_or(ArithmeticFailure::Overflow(operation))
+}
+
+pub(super) fn finite_float(
+    value: f32,
+    operation: &'static str,
+) -> Result<Literal, ArithmeticFailure> {
+    if value.is_finite() {
+        Ok(Literal::Float(value))
+    } else {
+        Err(ArithmeticFailure::NonFiniteResult(operation))
+    }
+}
+
+fn validate_numeric_operand(value: &Literal) -> Result<(), ArithmeticFailure> {
     if matches!(value, Literal::Float(number) if !number.is_finite()) {
-        return Err(BWErr::ArithmeticError(
-            "Non-finite floating-point operand".into(),
-        ));
+        return Err(ArithmeticFailure::NonFiniteOperand);
     }
     Ok(())
 }
@@ -306,6 +329,12 @@ fn numeric_pair(left: &Literal, right: &Literal) -> Option<(f64, f64)> {
 }
 
 pub(crate) fn validate_value(value: &Literal) -> Result<(), BWErr> {
+    validate_numeric_values(value).map_err(|error| {
+        operator_detail(BWErr::ArithmeticError, format_args!("{error}")).into_error()
+    })
+}
+
+fn validate_numeric_values(value: &Literal) -> Result<(), ArithmeticFailure> {
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         validate_numeric_operand(value)?;
@@ -318,10 +347,10 @@ pub(crate) fn validate_value(value: &Literal) -> Result<(), BWErr> {
     Ok(())
 }
 
-fn values_equal(left: &Literal, right: &Literal) -> Result<bool, BWErr> {
+fn values_equal(left: &Literal, right: &Literal) -> Result<bool, ArithmeticFailure> {
     // Validate complete operands before any shape/value mismatch can return false.
-    validate_value(left)?;
-    validate_value(right)?;
+    validate_numeric_values(left)?;
+    validate_numeric_values(right)?;
 
     // Use a work list rather than adding recursive comparison stack frames.
     let mut pairs = vec![(left, right)];
@@ -353,11 +382,9 @@ fn values_equal(left: &Literal, right: &Literal) -> Result<bool, BWErr> {
     Ok(true)
 }
 
-fn float_power(base: f64, exponent: i32) -> LiteralResult {
+fn float_power(base: f64, exponent: i32) -> Result<Literal, ArithmeticFailure> {
     if base == 0.0 && exponent < 0 {
-        return Err(BWErr::ArithmeticError(
-            "Zero cannot have a negative exponent".into(),
-        ));
+        return Err(ArithmeticFailure::ZeroNegativePower);
     }
     // Keep exponent parity exact, and invert first to preserve tiny reciprocals.
     // Wider intermediates are rounded to f32 once. At most 32 iterations run.
@@ -401,7 +428,7 @@ impl Rule {
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
     ) -> LiteralResult {
-        self.operate_binary_with_error(lhs, rhs, limits, incompatible_detail)
+        self.operate_binary_with_error(lhs, rhs, limits, operator_detail)
             .map_err(Diagnostic::into_error)
     }
 
@@ -410,7 +437,7 @@ impl Rule {
         lhs: Literal,
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
-        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
     ) -> DiagnosticResult<Literal> {
         let lhs = super::value_limits::Owned::new(lhs);
         let rhs = super::value_limits::Owned::new(rhs);
@@ -422,7 +449,7 @@ impl Rule {
         let result = super::value_limits::Owned::new(self.operate_binary_unchecked(
             lhs.into_inner(),
             rhs.into_inner(),
-            incompatible,
+            report,
         )?);
         limits.check(&result)?;
         Ok(result.into_inner())
@@ -433,7 +460,7 @@ impl Rule {
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
     ) -> LiteralResult {
-        self.operate_unary_with_error(rhs, limits, incompatible_detail)
+        self.operate_unary_with_error(rhs, limits, operator_detail)
             .map_err(Diagnostic::into_error)
     }
 
@@ -441,12 +468,12 @@ impl Rule {
         &self,
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
-        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
     ) -> DiagnosticResult<Literal> {
         let rhs = super::value_limits::Owned::new(rhs);
         limits.check(&rhs)?;
         let result = super::value_limits::Owned::new(
-            self.operate_unary_unchecked(rhs.into_inner(), incompatible)?,
+            self.operate_unary_unchecked(rhs.into_inner(), report)?,
         );
         limits.check(&result)?;
         Ok(result.into_inner())
@@ -456,15 +483,18 @@ impl Rule {
         &self,
         lhs: Literal,
         rhs: Literal,
-        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
     ) -> DiagnosticResult<Literal> {
         if matches!(self, Rule::equal | Rule::not_equal) {
-            let are_equal = values_equal(&lhs, &rhs)?;
-            return Ok(Literal::Bool(if *self == Rule::equal {
-                are_equal
-            } else {
-                !are_equal
-            }));
+            return values_equal(&lhs, &rhs)
+                .map(|are_equal| {
+                    Literal::Bool(if *self == Rule::equal {
+                        are_equal
+                    } else {
+                        !are_equal
+                    })
+                })
+                .map_err(|error| report(BWErr::ArithmeticError, format_args!("{error}")));
         }
         use Literal::*;
         use Rule::*;
@@ -489,11 +519,17 @@ impl Rule {
             || (matches!(self, logical_and | logical_or)
                 && matches!((&lhs, &rhs), (Bool(_), Bool(_))));
         if !compatible {
-            return Err(incompatible(format_args!("{lhs:?} {self:?} {rhs:?}")));
+            return Err(report(
+                BWErr::OperationIncompatibleError,
+                format_args!("{lhs:?} {self:?} {rhs:?}"),
+            ));
         }
         if numeric_operands {
-            validate_numeric_operand(&lhs)?;
-            validate_numeric_operand(&rhs)?;
+            if let Err(error) =
+                validate_numeric_operand(&lhs).and_then(|()| validate_numeric_operand(&rhs))
+            {
+                return Err(report(BWErr::ArithmeticError, format_args!("{error}")));
+            }
         }
         if matches!(self, divide | modulus)
             && matches!(lhs, Int(_) | Float(_))
@@ -503,7 +539,10 @@ impl Rule {
                 _ => false,
             }
         {
-            return Err(BWErr::ArithmeticError(format!("{self:?} by zero")).into());
+            return Err(report(
+                BWErr::ArithmeticError,
+                format_args!("{self:?} by zero"),
+            ));
         }
         let result = match self {
             // Arithmetic operations; incompatible combinations returned above.
@@ -583,16 +622,18 @@ impl Rule {
             },
             _ => unreachable!("operands passed compatibility checks"),
         };
-        result.map_err(Diagnostic::from)
+        result.map_err(|error| report(BWErr::ArithmeticError, format_args!("{error}")))
     }
 
     fn operate_unary_unchecked(
         &self,
         rhs: Literal,
-        incompatible: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
     ) -> DiagnosticResult<Literal> {
         if matches!(self, Rule::minus) && matches!(rhs, Literal::Int(_) | Literal::Float(_)) {
-            validate_numeric_operand(&rhs)?;
+            if let Err(error) = validate_numeric_operand(&rhs) {
+                return Err(report(BWErr::ArithmeticError, format_args!("{error}")));
+            }
         }
         let compatible = matches!(
             (self, &rhs),
@@ -600,7 +641,10 @@ impl Rule {
                 | (Rule::logical_not, Literal::Bool(_))
         );
         if !compatible {
-            return Err(incompatible(format_args!("{self:?} {rhs:?}")));
+            return Err(report(
+                BWErr::OperationIncompatibleError,
+                format_args!("{self:?} {rhs:?}"),
+            ));
         }
         let result = match self {
             Rule::minus => match rhs {
@@ -614,16 +658,10 @@ impl Rule {
             },
             _ => unreachable!("operand passed compatibility checks"),
         };
-        result.map_err(Diagnostic::from)
+        result.map_err(|error| report(BWErr::ArithmeticError, format_args!("{error}")))
     }
 }
 
-fn incompatible_detail(message: fmt::Arguments<'_>) -> Diagnostic {
-    DiagnosticLimits::default().formatted_detail(
-        BWErr::OperationIncompatibleError,
-        message,
-        None,
-        false,
-        std::iter::empty(),
-    )
+fn operator_detail(category: fn(String) -> BWErr, message: fmt::Arguments<'_>) -> Diagnostic {
+    DiagnosticLimits::default().formatted_detail(category, message, None, false, std::iter::empty())
 }

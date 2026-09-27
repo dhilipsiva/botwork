@@ -67,16 +67,16 @@ fn identifier_recognition_matches_pest_for_reserved_names_ascii_and_unicode_boun
 }
 
 #[test]
-fn operator_error_formatting_occurs_only_after_value_checks_and_incompatibility() {
+fn operator_error_reporting_occurs_only_after_value_checks_and_a_numeric_or_type_failure() {
     use crate::core::{
         diagnostic::{Diagnostic, DiagnosticCode},
         value_limits::ValueLimits,
     };
     use std::cell::Cell;
     let calls = Cell::new(0);
-    let fail = |message: std::fmt::Arguments<'_>| {
+    let fail = |category: fn(String) -> BWErr, message: std::fmt::Arguments<'_>| {
         calls.set(calls.get() + 1);
-        Diagnostic::new(BWErr::OperationIncompatibleError(message.to_string()))
+        Diagnostic::new(category(message.to_string()))
     };
     assert_eq!(
         Rule::plus
@@ -136,7 +136,7 @@ fn operator_error_formatting_occurs_only_after_value_checks_and_incompatibility(
             .code(),
         DiagnosticCode::ResourceLimit
     );
-    assert_eq!(calls.get(), 0);
+    assert_eq!(calls.get(), 1);
     assert_eq!(
         Rule::minus
             .operate_binary_with_error(
@@ -156,7 +156,7 @@ fn operator_error_formatting_occurs_only_after_value_checks_and_incompatibility(
             .code(),
         DiagnosticCode::IncompatibleType
     );
-    assert_eq!(calls.get(), 2);
+    assert_eq!(calls.get(), 3);
 }
 
 #[test]

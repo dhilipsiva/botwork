@@ -976,13 +976,33 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
         ExprKind::Integer(text) => text
             .parse::<i32>()
             .map(Literal::Int)
-            .map_err(|error| Diagnostic::new(BWErr::ParsingIntegerError(error.to_string())))
+            .map_err(|error| {
+                context.formatted_error(
+                    BWErr::ParsingIntegerError,
+                    format_args!("{error}"),
+                    Some(&expression.span),
+                    true,
+                )
+            })
             .and_then(|value| context.temporary(value)),
         ExprKind::Float(text) => {
-            let value = text
-                .parse::<f32>()
-                .map_err(|error| BWErr::ParsingIntegerError(error.to_string()))?;
-            context.temporary(finite_float(value, "Float literal")?)
+            let value = text.parse::<f32>().map_err(|error| {
+                context.formatted_error(
+                    BWErr::ParsingIntegerError,
+                    format_args!("{error}"),
+                    Some(&expression.span),
+                    true,
+                )
+            })?;
+            let value = finite_float(value, "Float literal").map_err(|error| {
+                context.formatted_error(
+                    BWErr::ArithmeticError,
+                    format_args!("{error}"),
+                    Some(&expression.span),
+                    true,
+                )
+            })?;
+            context.temporary(value)
         }
         ExprKind::Bool(value) => context.temporary(Literal::Bool(*value)),
         ExprKind::String(value) => context.temporary_string(value),
@@ -1111,7 +1131,14 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                 format!("-{text}")
                     .parse::<i32>()
                     .map(Literal::Int)
-                    .map_err(|error| Diagnostic::new(BWErr::ParsingIntegerError(error.to_string())))
+                    .map_err(|error| {
+                        context.formatted_error(
+                            BWErr::ParsingIntegerError,
+                            format_args!("{error}"),
+                            Some(&expression.span),
+                            true,
+                        )
+                    })
                     .and_then(|value| context.temporary(value))
             }
             _ => {

@@ -2066,3 +2066,70 @@ fn internal_oversized_bindings_are_checked_before_variable_or_access_copying() {
         assert!(context.checkpoint().is_err());
     }
 }
+
+#[test]
+fn defensive_invalid_numeric_atoms_use_local_admission_and_release_rejected_sources() {
+    use crate::core::{
+        ast::{AssignmentValue, ExprKind, StatementKind},
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        run::{Engine, RunLimits, RunOptions},
+    };
+    use std::sync::Arc;
+    let options = |diagnostics| RunOptions {
+        limits: RunLimits {
+            diagnostics,
+            ..RunLimits::default()
+        },
+        ..RunOptions::default()
+    };
+    for float in [false, true] {
+        for reject in [false, true] {
+            let mut program = Program::parse("owned-é", "|value| = |1|").unwrap();
+            let StatementKind::Assign {
+                value: AssignmentValue::Expression(value),
+                ..
+            } = &mut program.statements[0].kind
+            else {
+                panic!("assignment")
+            };
+            value.kind = if float {
+                ExprKind::Float("bad".into())
+            } else {
+                ExprKind::Integer("bad".into())
+            };
+            let source = Arc::downgrade(&program.source);
+            let run = Engine::default().run_program(
+                &program,
+                options(DiagnosticLimits {
+                    text_bytes: if reject {
+                        0
+                    } else {
+                        DiagnosticLimits::default().text_bytes
+                    },
+                    ..DiagnosticLimits::default()
+                }),
+            );
+            assert!(!run.variables.contains_key("value"));
+            let error = run.result.unwrap_err();
+            drop(program);
+            if reject {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::InvalidNumber);
+                assert!(source.upgrade().is_none());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::InvalidNumber);
+                let BWErr::ParsingIntegerError(reason) = error.error.as_ref() else {
+                    panic!("numeric literal")
+                };
+                let expected = if float {
+                    "bad".parse::<f32>().unwrap_err().to_string()
+                } else {
+                    "bad".parse::<i32>().unwrap_err().to_string()
+                };
+                assert_eq!(reason, &expected);
+                assert_eq!(error.span.as_ref().unwrap().text(), "1");
+                assert!(source.upgrade().is_some());
+            }
+        }
+    }
+}

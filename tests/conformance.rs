@@ -388,6 +388,49 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::NumericDiagnosticBoundary | Input::NumericDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::{DiagnosticCode, DiagnosticLimits},
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let error = Engine::default()
+                    .run_source(
+                        "numeric",
+                        "Compute { Return |1 / 0| }\nCompute",
+                        RunOptions {
+                            limits: RunLimits {
+                                diagnostics: DiagnosticLimits {
+                                    // expression label + divide detail + compute frame
+                                    text_bytes: 31 - usize::from(case.error.is_some()),
+                                    ..DiagnosticLimits::default()
+                                },
+                                ..RunLimits::default()
+                            },
+                            ..RunOptions::default()
+                        },
+                    )
+                    .result
+                    .unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code(), DiagnosticCode::Arithmetic);
+                    let omitted = error.causes[0].omissions.as_ref().unwrap();
+                    assert_eq!(omitted.call_frames, 1);
+                    assert_eq!(omitted.detail_fields, 0);
+                    assert!(!omitted.prior_summary);
+                    assert!(error.causes[0].span.is_none());
+                } else {
+                    assert_eq!(error.code(), DiagnosticCode::Arithmetic);
+                    assert!(
+                        matches!(error.error.as_ref(), BWErr::ArithmeticError(reason) if reason == "divide by zero")
+                    );
+                    assert_eq!(error.span.as_ref().unwrap().text(), "1 / 0");
+                    assert_eq!(error.call_stack[0].signature, "compute");
+                    assert!(error.omissions.is_none());
+                }
+                continue;
+            }
             Input::WorkerJoinBoundary | Input::WorkerJoinLimit => {
                 use botwork::core::{
                     diagnostic::{DiagnosticCode, DiagnosticLimits},
