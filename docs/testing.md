@@ -129,3 +129,5 @@ Call composition is covered in `tests/call_composition.rs`: nested effects, argu
 `tests/syntax_limits.rs` exercises source/parser guard boundaries, high-depth and long-chain inputs, quotes/comments/Else-If context, direct Pest and Program APIs, local configuration isolation, imported source and reused programs, and CLI rejection before output/debug traces. CLI cases run with five-second process deadlines and check normal error exit rather than abort/panic.
 
 `tests/output_limits.rs`, the output writer/budget unit tests, allocation observations, and R24 corpus cases check byte admission, complete flush semantics, partial writes, cancellation, and CLI/module accounting; see [output limits](output-limits.md).
+
+`tests/isolated_workers.rs` exercises real Linux process supervision, pipe backpressure, forced stop, reaping, cancellation/abandonment, bounded history, and pool shutdown. Other platforms reject this worker API before process entry; see [isolated workers](isolated-workers.md).

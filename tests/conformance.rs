@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::WorkerBoundary | Input::WorkerLimit => {
+                check_worker_case(&case);
+                continue;
+            }
             Input::OutputBoundary | Input::OutputLimit => {
                 arguments.extend([
                     "--max-output-bytes",
@@ -1926,5 +1930,66 @@ fn check_embedded_case(case: &Case) {
                 .variables
                 .is_empty());
         }
+    }
+}
+
+fn check_worker_case(case: &Case) {
+    use botwork::core::{
+        operation::OperationControl,
+        worker::{WorkerCommand, WorkerLimits, WorkerPool},
+    };
+    let pool = WorkerPool::new(WorkerLimits {
+        request_bytes: 2,
+        stdout_bytes: if case.error.is_some() { 1 } else { 2 },
+        stderr_bytes: 0,
+        timeout: Duration::from_secs(2),
+        ..Default::default()
+    })
+    .unwrap();
+    let start = pool.start(
+        WorkerCommand {
+            executable: "/bin/cat".into(),
+            arguments: vec![],
+            directory: std::env::temp_dir(),
+            environment: Default::default(),
+        },
+        "é".as_bytes().to_vec(),
+        OperationControl::default(),
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use botwork::core::worker::{WorkerCleanup, WorkerOutcome};
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let report = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), start.unwrap().wait())
+                .await
+                .unwrap()
+        });
+        assert_eq!(report.cleanup, WorkerCleanup::Reaped);
+        if let Some(expected) = case.error {
+            assert_eq!(report.outcome, WorkerOutcome::Failed);
+            let error = report.diagnostic.unwrap();
+            assert_eq!(error.code().as_str(), case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+            assert!(!report.io_complete);
+        } else {
+            assert_eq!(report.outcome, WorkerOutcome::Succeeded);
+            assert_eq!(report.stdout, "é".as_bytes());
+            assert!(report.io_complete);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let error = start
+            .err()
+            .expect("unsupported worker platform must reject before effects");
+        assert_eq!(
+            error.code(),
+            botwork::core::diagnostic::DiagnosticCode::RunConfiguration
+        );
+        assert!(pool.snapshot().active.is_empty());
     }
 }
