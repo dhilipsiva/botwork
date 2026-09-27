@@ -176,7 +176,7 @@ impl Program {
         })
     }
 
-    pub(crate) fn parse_with_reporter<E: From<Diagnostic>>(
+    pub(crate) fn parse_with_reporter<E>(
         name: &str,
         source: &str,
         source_bytes: usize,
@@ -184,7 +184,7 @@ impl Program {
         ast_limits: &AstLimits,
         report: impl Fn(AstFailure<'_>) -> E,
     ) -> Result<Self, E> {
-        ast_limits.validate()?;
+        ast_limits.validate_failure().map_err(&report)?;
         check_source_with_reporter(name, source, source_bytes, limits, &report)?;
         let source = Arc::new(SourceFile {
             name: name.to_owned(),
@@ -195,7 +195,7 @@ impl Program {
             .filter(|pair| pair.as_rule() != Rule::EOI)
             .map(|pair| {
                 let span = Span::of(&pair, &source);
-                statement(pair, &source).map_err(|error| Diagnostic::new(error).at(&span))
+                statement(pair, &source).map_err(|error| report(error.at(Some(&span))))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let program = Self { source, statements };
@@ -222,13 +222,13 @@ impl Program {
         self.validate_with_reporter(limits, source_bytes, |failure| failure.default_diagnostic())
     }
 
-    pub(crate) fn validate_with_reporter<E: From<Diagnostic>>(
+    pub(crate) fn validate_with_reporter<E>(
         &self,
         limits: &AstLimits,
         source_bytes: usize,
         report: impl Fn(AstFailure<'_>) -> E,
     ) -> Result<(), E> {
-        ast_limits::check_program(self, limits, source_bytes)?;
+        ast_limits::check_program(self, limits, source_bytes).map_err(&report)?;
         validate_control_script(&self.statements).map_err(report)
     }
 }
@@ -430,7 +430,18 @@ fn control_placement_error<'a>(statement: &'a Statement, message: &'static str) 
 }
 
 /// Borrow parsing/validation evidence until the caller can admit its diagnostic context.
+#[derive(Debug)]
 pub(crate) enum AstFailure<'a> {
+    Limit {
+        resource: &'static str,
+        maximum: usize,
+        span: Option<&'a Span>,
+    },
+    InvalidAstDepth,
+    Lowering {
+        part: &'static str,
+        span: Option<&'a Span>,
+    },
     SourceGuard {
         error: &'a BWErr,
         name: &'a str,
@@ -453,7 +464,7 @@ pub(crate) enum AstFailure<'a> {
 }
 
 impl AstFailure<'_> {
-    fn default_diagnostic(self) -> Diagnostic {
+    pub(crate) fn default_diagnostic(self) -> Diagnostic {
         self.diagnostic(&DiagnosticLimits::default(), std::iter::empty())
     }
 
@@ -463,6 +474,34 @@ impl AstFailure<'_> {
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
         match self {
+            Self::Limit {
+                resource,
+                maximum,
+                span,
+            } => limits.formatted_evidence(
+                |[]| BWErr::ResourceLimit {
+                    resource,
+                    limit: *maximum as u64,
+                },
+                [],
+                *span,
+                false,
+                frames,
+            ),
+            Self::InvalidAstDepth => limits.formatted_detail(
+                BWErr::RunConfiguration,
+                format_args!("AST depth cannot exceed {}", ast_limits::MAX_AST_DEPTH),
+                None,
+                false,
+                frames,
+            ),
+            Self::Lowering { part, span } => limits.formatted_detail(
+                BWErr::ParsingError,
+                format_args!("Invalid {part} in syntax tree"),
+                *span,
+                false,
+                frames,
+            ),
             Self::SourceGuard {
                 error,
                 name,
@@ -628,7 +667,7 @@ impl UnaryOp {
         }
     }
 
-    fn from_rule(rule: Rule) -> Result<Self, BWErr> {
+    fn from_rule(rule: Rule) -> Result<Self, LoweringFailure> {
         match rule {
             Rule::minus => Ok(Self::Negate),
             Rule::logical_not => Ok(Self::Not),
@@ -675,7 +714,7 @@ impl BinaryOp {
         }
     }
 
-    fn from_rule(rule: Rule) -> Result<Self, BWErr> {
+    fn from_rule(rule: Rule) -> Result<Self, LoweringFailure> {
         match rule {
             Rule::plus => Ok(Self::Add),
             Rule::minus => Ok(Self::Subtract),
@@ -711,7 +750,7 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
     from_pair_with_reporter(pair, |failure| failure.default_diagnostic())
 }
 
-pub(crate) fn from_pair_with_reporter<E: From<Diagnostic>>(
+pub(crate) fn from_pair_with_reporter<E>(
     pair: Pair<Rule>,
     report: impl Fn(AstFailure<'_>) -> E,
 ) -> Result<Node, E> {
@@ -750,22 +789,35 @@ pub(crate) fn from_pair_with_reporter<E: From<Diagnostic>>(
         Rule::stmt_rethrow => statement(pair, &source).map(Node::Statement),
         _ => expression(pair, &source).map(Node::Expression),
     }
-    .map_err(|error| E::from(Diagnostic::new(error).at(&span)))
+    .map_err(|error| report(error.at(Some(&span))))
 }
 
-fn invalid(part: &'static str) -> BWErr {
-    Diagnostic::formatted(
-        BWErr::ParsingError,
-        format_args!("Invalid {part} in syntax tree"),
-    )
-    .into_error()
+#[derive(Debug)]
+struct LoweringFailure(&'static str);
+
+impl LoweringFailure {
+    fn at(self, span: Option<&Span>) -> AstFailure<'_> {
+        AstFailure::Lowering { part: self.0, span }
+    }
 }
 
-fn required<'i>(inner: &mut impl Iterator<Item = Pair<'i, Rule>>) -> Result<Pair<'i, Rule>, BWErr> {
+impl From<LoweringFailure> for Diagnostic {
+    fn from(error: LoweringFailure) -> Self {
+        error.at(None).default_diagnostic()
+    }
+}
+
+fn invalid(part: &'static str) -> LoweringFailure {
+    LoweringFailure(part)
+}
+
+fn required<'i>(
+    inner: &mut impl Iterator<Item = Pair<'i, Rule>>,
+) -> Result<Pair<'i, Rule>, LoweringFailure> {
     inner.next().ok_or_else(|| invalid("missing child"))
 }
 
-fn finish<'i>(mut inner: impl Iterator<Item = Pair<'i, Rule>>) -> Result<(), BWErr> {
+fn finish<'i>(mut inner: impl Iterator<Item = Pair<'i, Rule>>) -> Result<(), LoweringFailure> {
     if inner.next().is_some() {
         Err(invalid("unexpected child"))
     } else {
@@ -780,7 +832,7 @@ fn lower_name(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Name {
     }
 }
 
-fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BWErr> {
+fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, LoweringFailure> {
     let span = Span::of(&pair, source);
     let rule = pair.as_rule();
     if rule == Rule::stmt_invoke {
@@ -896,7 +948,7 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, BW
     Ok(Statement { span, kind })
 }
 
-fn block(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Block, BWErr> {
+fn block(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Block, LoweringFailure> {
     let span = Span::of(&pair, source);
     // Else and unbound Catch wrappers are accepted by the compatibility entry point.
     let mut statements = Vec::new();
@@ -910,7 +962,7 @@ fn block(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Block, BWErr> {
     Ok(Block { span, statements })
 }
 
-fn signature(pair: &Pair<Rule>) -> Result<String, BWErr> {
+fn signature(pair: &Pair<Rule>) -> Result<String, LoweringFailure> {
     let mut signature = String::new();
     for part in pair.clone().into_inner() {
         match part.as_rule() {
@@ -991,7 +1043,9 @@ pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<Nativ
     let span = Span::of(&header, &source);
     let signature = signature(&header)?;
     if signature.is_empty() {
-        return Err(Diagnostic::new(invalid("nonempty native signature")).at(&span));
+        return Err(invalid("nonempty native signature")
+            .at(Some(&span))
+            .default_diagnostic());
     }
     let parameters = header
         .into_inner()
@@ -1006,7 +1060,7 @@ pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<Nativ
     })
 }
 
-fn call(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Call, BWErr> {
+fn call(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Call, LoweringFailure> {
     let span = Span::of(&pair, source);
     let signature = signature(&pair)?;
     let arguments = pair
@@ -1021,7 +1075,7 @@ fn call(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Call, BWErr> {
     })
 }
 
-fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr> {
+fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, LoweringFailure> {
     let span = Span::of(&pair, source);
     let kind = match pair.as_rule() {
         Rule::integer => ExprKind::Integer(pair.as_str().to_owned()),
@@ -1049,7 +1103,7 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
                         _ => Err(invalid("access segment")),
                     }
                 })
-                .collect::<Result<Vec<_>, BWErr>>()?;
+                .collect::<Result<Vec<_>, LoweringFailure>>()?;
             if segments.is_empty() {
                 base.span = span;
                 return Ok(base);
@@ -1138,7 +1192,7 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, BWErr>
     Ok(Expr { span, kind })
 }
 
-fn decode_string(pair: Pair<Rule>) -> Result<String, BWErr> {
+fn decode_string(pair: Pair<Rule>) -> Result<String, LoweringFailure> {
     let content = pair
         .into_inner()
         .next()

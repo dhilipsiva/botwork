@@ -356,25 +356,37 @@ impl RuntimeDiagnostic {
     }
 
     pub(crate) fn with_related(
-        mut self,
+        self,
         message: &str,
         span: &Span,
         budget: Option<&RunBudget>,
     ) -> Self {
-        if !self.is_emergency() {
-            if let Err(violation) = self.admit_mutation(
-                budget,
-                None,
-                std::iter::empty(),
-                Some((message, span)),
-                None,
-            ) {
-                return self
-                    .reject_mutation(violation, budget, None, 0)
-                    .map(|error| error.with_related(message, span));
-            }
+        self.with_related_in(message, span, budget, None, std::iter::empty())
+    }
+
+    pub(crate) fn with_related_in<'a>(
+        mut self,
+        message: &str,
+        span: &Span,
+        budget: Option<&RunBudget>,
+        context: Option<(&Span, bool)>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Self {
+        if self.is_emergency() {
+            return self.map(|value| value.with_related(message, span));
         }
-        self.map(|value| value.with_related(message, span))
+        if let Err(violation) =
+            self.admit_mutation(budget, context, frames.clone(), Some((message, span)), None)
+        {
+            return self
+                .reject_mutation(violation, budget, context, frames.len())
+                .map(|error| error.with_related(message, span));
+        }
+        self.map(|value| {
+            value
+                .capture_context(context, frames)
+                .with_related(message, span)
+        })
     }
 
     pub(crate) fn while_handling(self, original: Self, budget: Option<&RunBudget>) -> Self {

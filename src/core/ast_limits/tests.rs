@@ -45,7 +45,7 @@ fn node_count_includes_names_operator_spans_containers_and_call_wrappers() {
             ..AstLimits::default()
         };
         check_program(&program, &exact, DEFAULT_SOURCE_BYTES)
-            .unwrap_or_else(|e| panic!("{source}: {e}"));
+            .unwrap_or_else(|e| panic!("{source}: {e:?}"));
         let error = check_program(
             &program,
             &AstLimits {
@@ -54,7 +54,8 @@ fn node_count_includes_names_operator_spans_containers_and_call_wrappers() {
             },
             DEFAULT_SOURCE_BYTES,
         )
-        .unwrap_err();
+        .unwrap_err()
+        .default_diagnostic();
         assert!(error.to_string().contains("AST nodes"), "{source}: {error}");
         let error = check_program(
             &program,
@@ -64,7 +65,8 @@ fn node_count_includes_names_operator_spans_containers_and_call_wrappers() {
             },
             DEFAULT_SOURCE_BYTES,
         )
-        .unwrap_err();
+        .unwrap_err()
+        .default_diagnostic();
         assert!(error.to_string().contains("AST depth"), "{source}: {error}");
     }
 }
@@ -87,7 +89,9 @@ fn deeply_assembled_expression_is_rejected_iteratively() {
         };
     }
     let node = Node::Expression(expression);
-    let error = check_node(&node, &AstLimits::default(), DEFAULT_SOURCE_BYTES).unwrap_err();
+    let error = check_node(&node, &AstLimits::default(), DEFAULT_SOURCE_BYTES)
+        .unwrap_err()
+        .default_diagnostic();
     assert!(error.to_string().contains("AST depth"));
     // The host owns rejected input, including its destruction strategy.
     let Node::Expression(mut expression) = node else {
@@ -162,7 +166,9 @@ fn every_hidden_span_source_is_included_in_admission() {
                 kind: StatementKind::Define(Arc::new(definition)),
             }],
         };
-        let error = check_program(&program, &AstLimits::default(), 100).unwrap_err();
+        let error = check_program(&program, &AstLimits::default(), 100)
+            .unwrap_err()
+            .default_diagnostic();
         assert_eq!(error.span.as_ref().unwrap().source().name(), "big");
     }
 }
@@ -180,7 +186,10 @@ fn empty_node_and_zero_budgets_are_valid_but_invalid_configuration_is_not() {
         ..zero
     };
     assert_eq!(
-        check_node(&Node::None, &invalid, 0).unwrap_err().code(),
+        check_node(&Node::None, &invalid, 0)
+            .unwrap_err()
+            .default_diagnostic()
+            .code(),
         DiagnosticCode::RunConfiguration
     );
 }
@@ -246,5 +255,48 @@ fn admitted_control_depth_reaches_lexical_validation_at_the_boundary() {
                 DiagnosticCode::ResourceLimit
             }
         );
+    }
+}
+
+#[test]
+fn failed_walks_borrow_source_evidence_until_the_reporter_admits_ownership() {
+    let mut program = Program::parse("root", "Read |value| { Return |value| }").unwrap();
+    let hidden = Program::parse("hidden", "Other {}").unwrap();
+    let StatementKind::Define(definition) = &mut program.statements[0].kind else {
+        panic!("definition")
+    };
+    Arc::make_mut(definition).parameters[0].span = hidden.statements[0].span.clone();
+    let root_owners = Arc::strong_count(&program.source);
+    let hidden_owners = Arc::strong_count(&hidden.source);
+    for limits in [
+        AstLimits {
+            nodes: 0,
+            ..Default::default()
+        },
+        AstLimits {
+            depth: 0,
+            ..Default::default()
+        },
+        AstLimits {
+            source_bytes: program.source.text().len(),
+            ..Default::default()
+        },
+    ] {
+        let failure = check_program(&program, &limits, usize::MAX).unwrap_err();
+        assert_eq!(Arc::strong_count(&program.source), root_owners);
+        assert_eq!(Arc::strong_count(&hidden.source), hidden_owners);
+        let AstFailure::Limit {
+            span: Some(span), ..
+        } = &failure
+        else {
+            panic!("located limit")
+        };
+        let retained = Arc::downgrade(span.source());
+        let diagnostic = failure.default_diagnostic();
+        assert!(diagnostic.span.is_some());
+        assert!(retained.upgrade().is_some());
+        drop(diagnostic);
+        assert_eq!(Arc::strong_count(&program.source), root_owners);
+        assert_eq!(Arc::strong_count(&hidden.source), hidden_owners);
     }
 }

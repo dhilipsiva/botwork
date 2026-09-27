@@ -2,11 +2,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use super::{
-    ast::*,
-    diagnostic::{Diagnostic, DiagnosticResult},
-    grammar::BWErr,
-};
+use super::{ast::*, diagnostic::DiagnosticResult};
 
 pub const DEFAULT_AST_NODES: usize = 65_536;
 pub const MAX_AST_DEPTH: usize = 128;
@@ -35,13 +31,16 @@ impl Default for AstLimits {
 
 impl AstLimits {
     pub(crate) fn validate(&self) -> DiagnosticResult<()> {
+        self.validate_failure()
+            .map_err(AstFailure::default_diagnostic)
+    }
+
+    pub(crate) fn validate_failure(&self) -> Result<(), AstFailure<'static>> {
         if self.depth > MAX_AST_DEPTH {
-            return Err(Diagnostic::formatted(
-                BWErr::RunConfiguration,
-                format_args!("AST depth cannot exceed {MAX_AST_DEPTH}"),
-            ));
+            Err(AstFailure::InvalidAstDepth)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 }
 
@@ -60,19 +59,16 @@ enum Item<'a> {
     Segments(&'a [AccessSegment]),
 }
 
-fn limit(resource: &'static str, maximum: usize, span: Option<&Span>) -> Diagnostic {
-    let error = Diagnostic::new(BWErr::ResourceLimit {
+fn limit<'a>(resource: &'static str, maximum: usize, span: Option<&'a Span>) -> AstFailure<'a> {
+    AstFailure::Limit {
         resource,
-        limit: maximum as u64,
-    });
-    match span {
-        Some(span) => error.at(span),
-        None => error,
+        maximum,
+        span,
     }
 }
 
-struct Walk<'a> {
-    limits: &'a AstLimits,
+struct Walk<'a, 'limits> {
+    limits: &'limits AstLimits,
     per_source_bytes: usize,
     sources: HashSet<*const SourceFile>,
     retained_sources: Option<Vec<Arc<SourceFile>>>,
@@ -81,9 +77,9 @@ struct Walk<'a> {
     stack: Vec<(Item<'a>, usize)>,
 }
 
-impl<'a> Walk<'a> {
-    fn new(limits: &'a AstLimits, per_source_bytes: usize) -> DiagnosticResult<Self> {
-        limits.validate()?;
+impl<'a, 'limits> Walk<'a, 'limits> {
+    fn new(limits: &'limits AstLimits, per_source_bytes: usize) -> Result<Self, AstFailure<'a>> {
+        limits.validate_failure()?;
         Ok(Self {
             limits,
             per_source_bytes,
@@ -95,7 +91,11 @@ impl<'a> Walk<'a> {
         })
     }
 
-    fn source(&mut self, source: &Arc<SourceFile>, span: Option<&Span>) -> DiagnosticResult<()> {
+    fn source(
+        &mut self,
+        source: &Arc<SourceFile>,
+        span: Option<&'a Span>,
+    ) -> Result<(), AstFailure<'a>> {
         if self.sources.contains(&Arc::as_ptr(source)) {
             return Ok(());
         }
@@ -114,7 +114,7 @@ impl<'a> Walk<'a> {
         Ok(())
     }
 
-    fn node(&mut self, span: &Span, depth: usize) -> DiagnosticResult<()> {
+    fn node(&mut self, span: &'a Span, depth: usize) -> Result<(), AstFailure<'a>> {
         if self.nodes >= self.limits.nodes {
             return Err(limit("AST nodes", self.limits.nodes, Some(span)));
         }
@@ -129,7 +129,7 @@ impl<'a> Walk<'a> {
         self.stack.push((item, depth));
     }
 
-    fn run(mut self) -> DiagnosticResult<Self> {
+    fn run(mut self) -> Result<Self, AstFailure<'a>> {
         while let Some((item, depth)) = self.stack.pop() {
             // Slice cursors admit one child at a time: wide rejected inputs never
             // allocate a work queue proportional to their host-owned width.
@@ -305,32 +305,32 @@ impl<'a> Walk<'a> {
     }
 }
 
-pub(crate) fn check_program(
-    program: &Program,
+pub(crate) fn check_program<'a>(
+    program: &'a Program,
     limits: &AstLimits,
     per_source_bytes: usize,
-) -> DiagnosticResult<()> {
+) -> Result<(), AstFailure<'a>> {
     let mut walk = Walk::new(limits, per_source_bytes)?;
     walk.source(&program.source, None)?;
     walk.push(Item::Statements(&program.statements), 1);
     walk.run().map(|_| ())
 }
 
-pub(crate) fn check_statements(
-    statements: &[Statement],
+pub(crate) fn check_statements<'a>(
+    statements: &'a [Statement],
     limits: &AstLimits,
     per_source_bytes: usize,
-) -> DiagnosticResult<()> {
+) -> Result<(), AstFailure<'a>> {
     let mut walk = Walk::new(limits, per_source_bytes)?;
     walk.push(Item::Statements(statements), 1);
     walk.run().map(|_| ())
 }
 
-pub(crate) fn check_node(
-    node: &Node,
+pub(crate) fn check_node<'a>(
+    node: &'a Node,
     limits: &AstLimits,
     per_source_bytes: usize,
-) -> DiagnosticResult<()> {
+) -> Result<(), AstFailure<'a>> {
     let mut walk = Walk::new(limits, per_source_bytes)?;
     match node {
         Node::Statement(statement) => walk.push(Item::Statement(statement), 1),
@@ -346,11 +346,11 @@ pub(crate) struct DefinitionSize {
     pub(crate) sources: Vec<Arc<SourceFile>>,
 }
 
-pub(crate) fn measure_definition(
-    definition: &Definition,
+pub(crate) fn measure_definition<'a>(
+    definition: &'a Definition,
     limits: &AstLimits,
     per_source_bytes: usize,
-) -> DiagnosticResult<DefinitionSize> {
+) -> Result<DefinitionSize, AstFailure<'a>> {
     let mut walk = Walk::new(limits, per_source_bytes)?;
     walk.retained_sources = Some(Vec::new());
     walk.push(Item::Definition(definition), 1);

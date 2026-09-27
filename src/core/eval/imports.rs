@@ -133,10 +133,10 @@ fn publish_namespace(
     context: &mut Context,
 ) -> EvaluationResult<Literal> {
     admit_namespace(module, namespace, normalized, context)
-        .map_err(|error| error.at(import_site))?;
+        .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
     let namespace_registry = context
         .reserve_registry(RegistryPlan::namespace(normalized, import_site))
-        .map_err(|error| error.at(import_site))?;
+        .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
     let namespace_key = namespace_registry.as_ref().map_or_else(
         || Arc::from(normalized),
         |reservation| Arc::clone(&reservation.key),
@@ -156,7 +156,7 @@ fn publish_namespace(
                 normalized,
                 import_site,
             ))
-            .map_err(|error| error.at(import_site))?;
+            .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
         exports.push((Arc::clone(exported), statement, registry));
     }
     let frame = &mut context.frames[context.current];
@@ -275,10 +275,12 @@ fn load_module(
     // Constructed import errors already include this site in admission. Other
     // failures acquire the site exactly once as they cross this import boundary.
     let related = |context: &Context, error: Diagnostic| {
-        RuntimeDiagnostic::from(error).with_related(
+        RuntimeDiagnostic::from(error).with_related_in(
             "imported here",
             import_site,
             context.budget.as_ref(),
+            Some((span, false)),
+            context.calls.iter().map(|record| &record.frame),
         )
     };
     if path.contains("://")
@@ -333,17 +335,14 @@ fn load_module(
                 .len()
                 .checked_add(canonical.as_os_str().len())
                 .ok_or_else(|| {
-                    related(
-                        context,
-                        budget.import_limit(ImportResource::MetadataBytes).at(span),
-                    )
+                    related(context, budget.import_limit(ImportResource::MetadataBytes))
                 })?;
             budget
                 .charge_imports(&[
                     (ImportResource::Paths, 1),
                     (ImportResource::MetadataBytes, bytes),
                 ])
-                .map_err(|error| related(context, error.at(span)))?;
+                .map_err(|error| related(context, error))?;
         }
         context
             .modules
@@ -355,13 +354,13 @@ fn load_module(
     }
     context
         .check_import_depth()
-        .map_err(|error| related(context, error.at(span)))?;
-    check_dependency_depth(context, 0).map_err(|error| related(context, error.at(span)))?;
+        .map_err(|error| related(context, error))?;
+    check_dependency_depth(context, 0).map_err(|error| related(context, error))?;
     let source = read_module_source(&canonical, context).map_err(|error| match error {
         SourceFailure::Io(error) => {
             failure(context, format_args!("{}: {error}", canonical.display()))
         }
-        SourceFailure::Diagnostic(error) => related(context, error.at(span)),
+        SourceFailure::Diagnostic(error) => related(context, error),
     })?;
     let source_name = canonical
         .to_str()
@@ -371,8 +370,8 @@ fn load_module(
         .map_err(|error| {
             error.with_related("imported here", import_site, context.budget.as_ref())
         })?;
-    let mut module_context = prepare_module_context(context, &canonical)
-        .map_err(|error| related(context, error.at(span)))?;
+    let mut module_context =
+        prepare_module_context(context, &canonical).map_err(|error| related(context, error))?;
     let result = evaluate_program_runtime(&program, &mut module_context);
     merge_cache(context, &mut module_context);
     result.map_err(|error| {
@@ -453,10 +452,12 @@ pub(super) fn invoke_imported(
     let mut size = context.isolated_snapshot_size();
     module.frame.snapshot_size(&mut size);
     context.charge_snapshot(size).map_err(|error| {
-        RuntimeDiagnostic::from(error.at(&call.span)).with_related(
+        RuntimeDiagnostic::from(error).with_related_in(
             "imported here",
             import_site,
             context.budget.as_ref(),
+            Some((&call.span, false)),
+            context.calls.iter().map(|record| &record.frame),
         )
     })?;
     let mut module_context = isolated(module.frame.clone(), context);

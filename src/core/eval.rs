@@ -298,7 +298,7 @@ impl Context {
     }
 
     /// Native templates are host-owned; each Engine run admits them locally.
-    pub(crate) fn admit_native_registry(&mut self) -> DiagnosticResult<()> {
+    pub(crate) fn admit_native_registry(&mut self) -> EvaluationResult<()> {
         let mut admitted = Vec::new();
         let mut entries: Vec<_> = self.frames[0].statements.iter().collect();
         entries.sort_unstable_by_key(|(left, _)| *left);
@@ -311,7 +311,9 @@ impl Context {
             {
                 let reservation = self
                     .reserve_registry(RegistryPlan::signature(metadata).with_key(Arc::clone(name)))
-                    .map_err(|error| error.at(metadata.header()))?;
+                    .map_err(|error| {
+                        self.runtime_diagnostic(error.into(), Some(metadata.header()), false)
+                    })?;
                 admitted.push((Arc::clone(name), reservation));
             }
         }
@@ -676,7 +678,10 @@ impl Context {
             .map_err(RuntimeDiagnostic::into_diagnostic)?;
         let registry = self
             .reserve_registry(RegistryPlan::signature(&signature))
-            .map_err(|error| error.at(signature.header()))?;
+            .map_err(|error| {
+                self.runtime_diagnostic(error.into(), Some(signature.header()), false)
+                    .into_diagnostic()
+            })?;
         let metadata = Arc::new(signature);
         self.insert_statement(
             metadata.normalized(),
@@ -1414,7 +1419,10 @@ fn evaluate_handler(
         match installed {
             Ok(previous) => previous,
             Err(error) => {
-                return Err(context.finish_handler_error(error.at(&name.span).into(), original))
+                return Err(context.finish_handler_error(
+                    context.runtime_diagnostic(error.into(), Some(&name.span), false),
+                    original,
+                ))
             }
         }
     } else {
@@ -1464,9 +1472,9 @@ fn evaluate_definition(definition: &Arc<Definition>, context: &mut Context) -> C
     let reservation = context
         .budget
         .as_ref()
-        .map(|budget| budget.reserve_definition(definition))
+        .map(|budget| budget.reserve_definition(definition, |failure| context.ast_error(failure)))
         .transpose()
-        .map_err(|error| context.retain_limit(error))?;
+        .inspect_err(|error| context.latch_limit(error))?;
     let registry = context.reserve_registry(RegistryPlan::definition(definition))?;
     context.insert_statement(
         &definition.signature,
@@ -1618,7 +1626,7 @@ fn execute_statement_runtime(
         let statements = std::slice::from_ref(statement);
         let limits = context.limits();
         super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
-            .map_err(|error| context.retain_limit(error))?;
+            .map_err(|failure| context.ast_error(failure))?;
         ast::validate_control_script(statements).map_err(|failure| context.ast_error(failure))?;
         finish_script(
             evaluate_statement(statement, context)?,
@@ -1684,7 +1692,7 @@ pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResul
         let node = ast::from_pair_with_reporter(pair, |failure| context.ast_error(failure))?;
         let limits = context.limits();
         super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)
-            .map_err(|error| context.retain_limit(error))?;
+            .map_err(|failure| context.ast_error(failure))?;
         match node {
             Node::Statement(statement) => execute_statement_runtime(&statement, context),
             Node::Expression(expression) => {

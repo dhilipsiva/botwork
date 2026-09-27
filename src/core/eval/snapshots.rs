@@ -73,7 +73,7 @@ impl Context {
     }
 
     /// Engine templates contain only a root native registry. Admit before copying.
-    pub(crate) fn copy_native_template(&mut self, template: &Context) -> DiagnosticResult<()> {
+    pub(crate) fn copy_native_template(&mut self, template: &Context) -> EvaluationResult<()> {
         let mut size = SnapshotSize::default();
         template.frames[0].snapshot_size(&mut size);
         self.charge_snapshot(size)?;

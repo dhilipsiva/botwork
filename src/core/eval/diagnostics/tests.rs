@@ -566,3 +566,77 @@ fn stopped_source_construction_admits_both_snapshots_and_preserves_control_on_re
         );
     }
 }
+
+#[test]
+fn raw_ast_limit_and_lowering_reporters_keep_all_context_reserved_through_transfer() {
+    for lowered in [false, true] {
+        let caller = Program::parse("caller", "Read").unwrap();
+        let input = Program::parse("input-é", "|value| = |1|").unwrap();
+        let span = &input.statements[0].span;
+        let failure = || {
+            if lowered {
+                ast::AstFailure::Lowering {
+                    part: "expression",
+                    span: Some(span),
+                }
+            } else {
+                ast::AstFailure::Limit {
+                    resource: "AST nodes",
+                    maximum: 0,
+                    span: Some(span),
+                }
+            }
+        };
+        let frame = CallFrame {
+            signature: "read".into(),
+            call_site: caller.statements[0].span.clone(),
+            definition_site: None,
+        };
+        let expected = failure().diagnostic(&DiagnosticLimits::default(), std::iter::once(&frame));
+        let size = DiagnosticLimits::default().check(&expected).unwrap();
+        for deficit in [0, 1, 2, 3, 4, 5] {
+            let mut limits = RetainedDiagnosticLimits {
+                records: 2,
+                diagnostics: 1,
+                call_frames: 2,
+                related_locations: 0,
+                text_bytes: size.text_bytes + "read".len(),
+                source_bytes: size.source_bytes,
+            };
+            match deficit {
+                1 => limits.records -= 1,
+                2 => limits.diagnostics -= 1,
+                3 => limits.call_frames -= 1,
+                4 => limits.text_bytes -= 1,
+                5 => limits.source_bytes -= 1,
+                _ => (),
+            }
+            let mut context = Context::with_limits(RunLimits {
+                retained_diagnostics: limits,
+                ..Default::default()
+            })
+            .unwrap();
+            context
+                .calls
+                .push(context.retain_call("read", &frame.call_site, None).unwrap());
+            let sibling = context.clone();
+            let error = context.ast_error(failure());
+            if deficit == 0 {
+                assert_eq!(error.to_string(), expected.to_string());
+                assert!(sibling.clone().ast_error(failure()).is_emergency());
+                let public = error.into_diagnostic();
+                assert!(!sibling.ast_error(failure()).is_emergency());
+                assert_eq!(public.to_string(), expected.to_string());
+            } else {
+                assert!(error.is_emergency());
+                let original = &error.causes[0];
+                assert_eq!(original.code(), expected.code());
+                let omitted = original.omissions.as_ref().unwrap();
+                assert_eq!(omitted.call_frames, 1);
+                assert_eq!(omitted.source.as_ref().unwrap().file, "input-é");
+                assert!(original.span.is_none());
+                assert!(context.checkpoint().is_err());
+            }
+        }
+    }
+}

@@ -113,6 +113,34 @@ impl Context {
 
     pub(super) fn ast_error(&self, failure: ast::AstFailure<'_>) -> RuntimeDiagnostic {
         match failure {
+            ast::AstFailure::Limit {
+                resource,
+                maximum,
+                span,
+            } => self.constructed_fields(
+                |[]| BWErr::ResourceLimit {
+                    resource,
+                    limit: maximum as u64,
+                },
+                [],
+                span.map(|span| (span, false)),
+                None,
+            ),
+            ast::AstFailure::InvalidAstDepth => self.formatted_error(
+                BWErr::RunConfiguration,
+                format_args!(
+                    "AST depth cannot exceed {}",
+                    super::super::ast_limits::MAX_AST_DEPTH
+                ),
+                None,
+                false,
+            ),
+            ast::AstFailure::Lowering { part, span } => self.formatted_error(
+                BWErr::ParsingError,
+                format_args!("Invalid {part} in syntax tree"),
+                span,
+                false,
+            ),
             ast::AstFailure::SourceGuard {
                 error,
                 name,

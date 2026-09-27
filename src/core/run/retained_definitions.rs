@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::{
-    ast::{Definition, SourceFile},
+    ast::{AstFailure, Definition, SourceFile},
     ast_limits::{measure_definition, DefinitionSize},
 };
 use std::collections::HashMap;
@@ -162,15 +162,17 @@ impl Drop for DefinitionReservation {
 }
 
 impl RunBudget {
-    pub(crate) fn reserve_definition(
+    pub(crate) fn reserve_definition<E: From<Diagnostic>>(
         &self,
         definition: &Arc<Definition>,
-    ) -> DiagnosticResult<Arc<DefinitionReservation>> {
+        report: impl Fn(AstFailure<'_>) -> E,
+    ) -> Result<Arc<DefinitionReservation>, E> {
         self.checkpoint()?;
-        let size = measure_definition(definition, &self.0.limits.ast, self.0.limits.source_bytes)?;
+        let size = measure_definition(definition, &self.0.limits.ast, self.0.limits.source_bytes)
+            .map_err(report)?;
         self.0
             .retained_definitions
             .reserve(definition, size)
-            .map_err(|error| self.stop(error))
+            .map_err(|error| E::from(self.stop(error)))
     }
 }

@@ -904,3 +904,128 @@ fn imported_parser_failures_include_live_caller_and_import_sites_in_shared_const
         }
     }
 }
+
+#[test]
+fn raw_ast_limits_and_defensive_pair_lowering_share_admission_at_every_public_entry() {
+    use botwork::core::{
+        ast_limits::AstLimits,
+        eval::{botwork_detailed, execute_statement_detailed},
+        grammar::{BWParser, Rule},
+    };
+    use pest::Parser;
+    let source = "|value| = |1|";
+    let program = Program::parse("ast-é", source).unwrap();
+    for reject in [false, true] {
+        let limits = RunLimits {
+            ast: AstLimits {
+                nodes: 0,
+                ..Default::default()
+            },
+            retained_diagnostics: RetainedDiagnosticLimits {
+                source_bytes: if reject { 0 } else { usize::MAX },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let options = || RunOptions {
+            limits: limits.clone(),
+            ..Default::default()
+        };
+        let engine = Engine::default();
+        let mut errors = vec![
+            engine
+                .run_source("ast-é", source, options())
+                .result
+                .unwrap_err(),
+            engine.run_program(&program, options()).result.unwrap_err(),
+        ];
+        let mut context = Context::with_limits(limits.clone()).unwrap();
+        errors.push(evaluate_program_detailed(&program, &mut context).unwrap_err());
+        let mut context = Context::with_limits(limits.clone()).unwrap();
+        errors.push(execute_statement_detailed(&program.statements[0], &mut context).unwrap_err());
+        let mut context = Context::with_limits(limits.clone()).unwrap();
+        let pair = BWParser::parse(Rule::stmt_assign, source)
+            .unwrap()
+            .next()
+            .unwrap();
+        errors.push(botwork_detailed(pair, &mut context).unwrap_err());
+        // Arbitrary Pest rules can reach defensive lowering through Pair entry.
+        let mut context = Context::with_limits(limits).unwrap();
+        let pair = BWParser::parse(Rule::plus, "+").unwrap().next().unwrap();
+        errors.push(botwork_detailed(pair, &mut context).unwrap_err());
+        for (index, error) in errors.into_iter().enumerate() {
+            let expected = if index == 5 {
+                DiagnosticCode::Syntax
+            } else {
+                DiagnosticCode::ResourceLimit
+            };
+            let origin = if index >= 4 { "<input>" } else { "ast-é" };
+            if reject {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), expected);
+                assert!(error.causes[0].span.is_none());
+                assert_eq!(
+                    error.causes[0]
+                        .omissions
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .as_ref()
+                        .unwrap()
+                        .file,
+                    origin
+                );
+            } else {
+                assert_eq!(error.code(), expected);
+                assert_eq!(error.span.as_ref().unwrap().source().name(), origin);
+                assert!(error.causes.is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn native_registry_failure_admits_the_header_before_publishing_a_public_error() {
+    use botwork::core::run::RetainedRegistryLimits;
+    use botwork::core::signature::StatementSignature;
+    for reject in [false, true] {
+        let mut context = Context::with_limits(RunLimits {
+            retained_registry: RetainedRegistryLimits {
+                entries: 0,
+                ..Default::default()
+            },
+            retained_diagnostics: RetainedDiagnosticLimits {
+                source_bytes: if reject { 0 } else { usize::MAX },
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        let signature = StatementSignature::native("Read").unwrap();
+        let owner = Arc::downgrade(signature.header().source());
+        let name = signature.header().source().name().to_owned();
+        let error = context
+            .register_native_with_signature(signature, |_| Ok(Literal::None))
+            .unwrap_err();
+        if reject {
+            assert!(error.span.is_none());
+            assert!(owner.upgrade().is_none());
+            assert_eq!(
+                error.causes[0]
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .source
+                    .as_ref()
+                    .unwrap()
+                    .file,
+                name
+            );
+        } else {
+            assert!(error.span.is_some());
+            assert!(owner.upgrade().is_some());
+        }
+        drop(error);
+        assert!(owner.upgrade().is_none());
+    }
+}
