@@ -126,7 +126,7 @@ pub struct Context {
     handlers: Vec<HandledError>,
     modules: ModuleCache,
     loading: Vec<PathBuf>,
-    pub(crate) working_directory: Result<PathBuf, String>,
+    pub(crate) working_directory: Result<PathBuf, Arc<io::Error>>,
     pub(crate) environment: Option<Arc<RunEnvironment>>,
     pub(crate) budget: Option<RunBudget>,
     #[cfg(test)]
@@ -142,7 +142,7 @@ impl Default for Context {
             handlers: vec![],
             modules: ModuleCache::default(),
             loading: vec![],
-            working_directory: std::env::current_dir().map_err(|error| error.to_string()),
+            working_directory: std::env::current_dir().map_err(Arc::new),
             environment: None,
             budget: Some(RunBudget::new(
                 RunLimits::default(),

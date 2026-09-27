@@ -4,9 +4,9 @@
 
 ## What Counts
 
-An entry is one copied variable, statement, namespace, loaded-module cache record, requested-to-canonical path record, active-call handle, or handler-error handle. Count each occurrence on every copy, even when its immutable payload is shared. Include fixed built-in entries. Ordinary assignment, declaration, parameter installation, and first cache insertion use their existing retention/import budgets rather than snapshot counters.
+An entry is one copied variable, statement, namespace, loaded-module cache record, requested-to-canonical path record, active-call handle, handler-error handle, or captured working-directory error handle. Count each occurrence on every copy, even when its immutable payload is shared. Include fixed built-in entries. Ordinary assignment, declaration, parameter installation, and first cache insertion use their existing retention/import budgets rather than snapshot counters.
 
-Path bytes include copied loaded-module keys, requested/canonical resolution keys and values, active loading paths, and the isolated Context's working directory. Module initialization also counts the new loading-path copy. Use `OsStr::len()` for native path representation; no lossy display conversion. A retained working-directory error string counts its bytes instead.
+Path bytes include copied loaded-module keys, requested/canonical resolution keys and values, active loading paths, and the isolated Context's working directory. Module initialization also counts the new loading-path copy. Use `OsStr::len()` for native path representation; no lossy display conversion. When directory capture failed, share the original unformatted I/O error and count its copied handle as one entry with zero path bytes. Format its detail only if a later relative import needs it, under [import diagnostic construction limits](diagnostic-construction.md#import-read-and-cycle-errors).
 
 Admission covers:
 
@@ -34,3 +34,5 @@ These logical counts exclude allocator overhead, environment snapshots, and seri
 ## Evidence
 
 Budget unit tests cover atomicity, overflow, and shared/concurrent counters. Frame/cache tests verify exact path metrics, compact copies, and iterator restoration after an imported-copy failure. Integration tests cover boundary/default/zero limits, templates, cancellation, native inheritance, cached aliases, failure cleanup, concurrent checked copies, host ownership, and CLI recovery. Allocation observations verify rejection before copying wide variable, template, or module tables. R13 corpus cases and a Rust doctest pin Engine/template and host-copy behavior.
+
+Captured-directory checks verify shared error identity across host/checked/module copies, exact handle admission with zero path allowance, independent checked-copy stops, no formatting during copies or unrelated execution, and final-owner release. Import checks distinguish full accepted formatting from bounded rejected prefixes.

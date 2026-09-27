@@ -130,7 +130,7 @@ The library's program evaluator returns the final top-level statement's normal r
 
 ## Frame and Cache Snapshot Bounds
 
-**R13 — Snapshot work admission.** Bound cumulative copied table entries and path bytes before Engine template, module initialization, and imported invocation copies. Atomically check combined charges with overflow protection; include fixed built-ins and each copied occurrence. Preserve earlier effects and existing state on rejection, skip Catch on the latched stop, and restore invocation/loop/handler state. Rebuild tables from live entries and transfer isolated caches back on all outcomes. Keep infallible host Clone ownership explicit and offer budgeted `Context::try_clone()`. [Snapshot rules](snapshot-limits.md) define exact counts, failure order, zero/raised budgets, counter sharing, and excluded result/diagnostic/host allocations.
+**R13 — Snapshot work admission.** Bound cumulative copied table entries and path bytes before Engine template, module initialization, and imported invocation copies. Atomically check combined charges with overflow protection; include fixed built-ins and each copied occurrence. Captured working-directory errors share their unformatted owner; count a copied error handle as one entry and zero path bytes. Preserve earlier effects and existing state on rejection, skip Catch on the latched stop, and restore invocation/loop/handler state. Rebuild tables from live entries and transfer isolated caches back on all outcomes. Keep infallible host Clone ownership explicit and offer budgeted `Context::try_clone()`. [Snapshot rules](snapshot-limits.md) define exact counts, failure order, zero/raised budgets, counter sharing, and excluded result/diagnostic/host allocations.
 
 ## Owned Result Export Bounds
 

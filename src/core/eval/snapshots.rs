@@ -53,7 +53,7 @@ impl Context {
         }
         match &self.working_directory {
             Ok(path) => size.path(path),
-            Err(message) => size.path_bytes(message.len()),
+            Err(_) => size.entries(1), // Share the unformatted I/O error owner.
         }
         size
     }
