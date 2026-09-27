@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::ShutdownBoundary | Input::ShutdownInvalid => {
+                check_shutdown_case(&case);
+                continue;
+            }
             Input::ProtocolBoundary | Input::ProtocolLimit => {
                 check_protocol_case(&case);
                 continue;
@@ -2024,4 +2028,49 @@ fn check_protocol_case(case: &Case) {
         };
         assert_eq!(value.to_bits(), (-0.0f32).to_bits());
     }
+}
+
+fn check_shutdown_case(case: &Case) {
+    use botwork::core::worker::{WorkerLimits, WorkerPool};
+    let pool = WorkerPool::new(WorkerLimits::default()).unwrap();
+    if let Some(expected) = case.error {
+        let error = pool.shutdown_wait(Duration::MAX).unwrap_err();
+        assert_eq!(error.code().as_str(), case.code.unwrap());
+        assert!(error.to_string().contains(expected));
+        assert!(!pool.snapshot().closed);
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    let handle = {
+        use botwork::core::{operation::OperationControl, worker::WorkerCommand};
+        pool.start(
+            WorkerCommand {
+                executable: "/bin/sh".into(),
+                arguments: vec!["-c".into(), "while :; do :; done".into()],
+                directory: std::env::temp_dir(),
+                environment: Default::default(),
+            },
+            vec![],
+            OperationControl::default(),
+        )
+        .unwrap()
+    };
+    let snapshot = pool.shutdown_wait(Duration::from_secs(2)).unwrap();
+    assert!(snapshot.closed);
+    assert!(snapshot.active.is_empty());
+    #[cfg(target_os = "linux")]
+    {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime.block_on(handle.wait()).outcome,
+            botwork::core::worker::WorkerOutcome::Cancelled
+        );
+    }
+    assert!(pool
+        .shutdown_wait(Duration::ZERO)
+        .unwrap()
+        .active
+        .is_empty());
 }

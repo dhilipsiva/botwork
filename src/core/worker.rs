@@ -10,7 +10,7 @@ use std::{
     process::ExitStatus,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -109,6 +109,7 @@ pub struct WorkerRecord {
 #[derive(Clone, Debug)]
 pub struct ActiveWorker {
     pub id: u64,
+    /// None until child transfer; this does not prove that no process exists.
     pub pid: Option<u32>,
     pub stopping: bool,
     /// Pending or unverified cleanup survives completed-history eviction.
@@ -145,6 +146,9 @@ struct State {
 }
 
 struct Shared {
+    changed: Condvar,
+    #[cfg(all(test, target_os = "linux"))]
+    launcher: Mutex<Option<linux::LaunchHook>>,
     limits: WorkerLimits,
     state: Mutex<State>,
 }
@@ -173,6 +177,9 @@ impl WorkerPool {
             ));
         }
         Ok(Self(Arc::new(Owner(Arc::new(Shared {
+            changed: Condvar::new(),
+            #[cfg(all(test, target_os = "linux"))]
+            launcher: Mutex::new(None),
             limits,
             state: Mutex::new(State {
                 closed: false,
@@ -292,6 +299,7 @@ impl WorkerPool {
                 .unwrap_or_else(|e| e.into_inner())
                 .active
                 .remove(&id);
+            shared.changed.notify_all();
             return Err(runtime(format_args!(
                 "Starting worker supervisor failed: {error}"
             )));
@@ -310,11 +318,48 @@ impl WorkerPool {
         self.snapshot()
     }
 
+    /// Close admission and block for at most the given monotonic allowance.
+    /// A nonempty active list explicitly means cleanup is still unresolved.
+    /// This observes supervisors without consuming their per-worker reports.
+    pub fn shutdown_wait(&self, timeout: Duration) -> DiagnosticResult<WorkerSnapshot> {
+        let deadline = Instant::now().checked_add(timeout).ok_or_else(|| {
+            configuration("Worker shutdown timeout exceeds the monotonic clock range")
+        })?;
+        let shared = &self.0 .0;
+        shared.close();
+        let mut state = shared
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        while !state.active.is_empty() {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            let waited = shared
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(|error| error.into_inner());
+            state = waited.0;
+        }
+        Ok(state.snapshot())
+    }
+
     pub fn snapshot(&self) -> WorkerSnapshot {
-        let state = self.0 .0.state.lock().unwrap_or_else(|e| e.into_inner());
+        self.0
+             .0
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .snapshot()
+    }
+}
+
+impl State {
+    fn snapshot(&self) -> WorkerSnapshot {
         WorkerSnapshot {
-            closed: state.closed,
-            active: state
+            closed: self.closed,
+            active: self
                 .active
                 .iter()
                 .map(|(&id, active)| ActiveWorker {
@@ -324,8 +369,8 @@ impl WorkerPool {
                     cleanup: active.cleanup,
                 })
                 .collect(),
-            completed: state.completed.iter().cloned().collect(),
-            omitted_records: state.omitted_records,
+            completed: self.completed.iter().cloned().collect(),
+            omitted_records: self.omitted_records,
         }
     }
 }
@@ -404,6 +449,7 @@ impl Shared {
             active.stopping = true;
             active.request.control.cancel();
         }
+        self.changed.notify_all();
     }
     #[cfg(target_os = "linux")]
     fn update(&self, id: u64, pid: Option<u32>, stopping: bool, cleanup: Option<WorkerCleanup>) {
@@ -428,6 +474,7 @@ impl Shared {
             active.stopping = true;
             active.cleanup = Some(WorkerCleanup::Unverified);
         }
+        self.changed.notify_all();
         if self.limits.history_records == 0 {
             state.omitted_records = state.omitted_records.saturating_add(1);
             return;

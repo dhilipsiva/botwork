@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 135 cases against the 56 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 137 cases against the 57 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -64,6 +64,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R24 | output-boundary | output-limit | output-boundary |
 | R25 | worker-boundary | worker-limit | worker-boundary |
 | R26 | protocol-boundary | protocol-limit | protocol-boundary |
+| R27 | shutdown-boundary | shutdown-invalid | shutdown-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -142,3 +143,5 @@ Two output CLI cases admit a Unicode Log and its newline at exactly three cumula
 Two Linux worker host cases transfer a two-byte Unicode request at exact byte limits or reject one stdout byte before complete output, checking failure category and direct-child reaping. Other platforms check explicit pre-entry rejection instead of claiming Linux lifecycle evidence.
 
 Two portable typed-protocol host cases preserve negative-zero float bits through the SDK at an exact 28-byte request limit, or reject a 27-byte allowance before encoding.
+
+Two shutdown host cases close and drain an owned Linux worker while preserving its cancellation report (empty-pool shutdown on other platforms), or reject an unrepresentable allowance before closing admission.

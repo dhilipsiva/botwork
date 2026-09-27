@@ -5,6 +5,10 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+mod launch;
+#[cfg(test)]
+pub(super) type LaunchHook = Box<dyn FnOnce(WorkerCommand) -> io::Result<ChildOwner> + Send>;
+
 const QUANTUM: Duration = Duration::from_millis(5);
 #[cfg(test)]
 mod tests;
@@ -22,7 +26,7 @@ fn nonblocking(pipe: &impl AsRawFd) -> io::Result<()> {
     Ok(())
 }
 
-struct ChildOwner {
+pub(super) struct ChildOwner {
     child: Child,
     owned: bool,
 }
@@ -82,7 +86,7 @@ impl Drop for ChildOwner {
     fn drop(&mut self) {
         if self.owned {
             let _ = self.terminate();
-            // Only the dedicated supervisor thread can reach this fallback.
+            // Only owned supervisor/launcher threads reach this fallback.
             // Its capacity stays retained if the kernel cannot finish reaping.
             let _ = self.child.wait();
         }
@@ -185,59 +189,49 @@ pub(super) fn supervise(
         );
         return;
     }
-    let spawn = Command::new(&specification.executable)
-        .args(&specification.arguments)
-        .current_dir(&specification.directory)
-        .env_clear()
-        .envs(&specification.environment)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0)
-        .spawn();
-    drop(specification);
-    let child = match spawn {
-        Ok(child) => child,
-        Err(error) => {
-            let mut report = WorkerReport::failure(
-                id,
-                WorkerOutcome::Failed,
-                WorkerCleanup::NotStarted,
-                runtime(format_args!("Starting isolated worker failed: {error}")),
-            );
-            if let Some((outcome, error)) = stop(&request, deadline) {
-                set_failure(&mut report, outcome, error);
-            }
-            deliver(report, &shared, &mut send);
-            return;
-        }
+    #[cfg(test)]
+    let launcher = shared
+        .launcher
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .take()
+        .unwrap_or_else(|| Box::new(launch::spawn));
+    #[cfg(not(test))]
+    let launcher = launch::spawn;
+    let Some(launch::Started {
+        mut child,
+        mut report,
+        mut cleanup_started,
+        mut observed_stop,
+    }) = launch::wait(
+        id,
+        specification,
+        &request,
+        deadline,
+        &shared,
+        &mut send,
+        launcher,
+    )
+    else {
+        return;
     };
-    let mut child = ChildOwner { child, owned: true };
     let pid = child.child.id();
-    shared.update(id, Some(pid), false, None);
+    shared.update(
+        id,
+        Some(pid),
+        observed_stop,
+        send.send.is_none().then_some(WorkerCleanup::Pending),
+    );
     let mut stdin = child.child.stdin.take();
     let mut stdout = child.child.stdout.take();
     let mut stderr = child.child.stderr.take();
     let setup = nonblocking(stdin.as_ref().expect("piped stdin"))
         .and_then(|()| nonblocking(stdout.as_ref().expect("piped stdout")))
         .and_then(|()| nonblocking(stderr.as_ref().expect("piped stderr")));
-    let mut report = WorkerReport {
-        id,
-        outcome: WorkerOutcome::Succeeded,
-        cleanup: WorkerCleanup::Pending,
-        exit_status: None,
-        stdin_written: 0,
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-        io_complete: false,
-        diagnostic: None,
-    };
-    let mut cleanup_started = None;
     let mut signalled = false;
-    let mut observed_stop = false;
     let mut output_failed = false;
     if let Err(error) = setup {
-        set_failure(&mut report, WorkerOutcome::Failed, io_failure(error));
+        append_cleanup(&mut report, error);
         stdout.take();
         stderr.take();
         stdin.take();
@@ -250,12 +244,17 @@ pub(super) fn supervise(
                 observed_stop = true;
             }
         }
-        if report.diagnostic.is_some() {
+        if report.outcome != WorkerOutcome::Succeeded {
             stdin.take();
             cleanup_started.get_or_insert_with(Instant::now);
         }
-        if !signalled && report.diagnostic.is_some() {
-            shared.update(id, Some(pid), true, None);
+        if !signalled && report.outcome != WorkerOutcome::Succeeded {
+            shared.update(
+                id,
+                Some(pid),
+                true,
+                send.send.is_none().then_some(WorkerCleanup::Pending),
+            );
             if let Err(error) = child.terminate() {
                 append_cleanup(&mut report, error);
             }
@@ -300,9 +299,9 @@ pub(super) fn supervise(
             ),
         ] {
             if let Err(error) = result {
-                if report.diagnostic.is_none() {
-                    set_failure(&mut report, WorkerOutcome::Failed, error);
-                }
+                // A late startup may have already published its stop and moved
+                // the original diagnostic. Output failure cannot replace it.
+                append_cause(&mut report, error);
                 output_failed = true;
                 stdout.take();
                 stderr.take();
@@ -420,7 +419,10 @@ pub(super) fn supervise(
 }
 
 fn append_cleanup(report: &mut WorkerReport, error: io::Error) {
-    let cause = io_failure(error);
+    append_cause(report, io_failure(error));
+}
+
+fn append_cause(report: &mut WorkerReport, cause: Diagnostic) {
     if let Some(primary) = report.diagnostic.take() {
         report.diagnostic = Some(primary.while_handling(cause));
     } else {

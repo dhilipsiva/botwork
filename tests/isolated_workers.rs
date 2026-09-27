@@ -529,6 +529,101 @@ fn last_pool_owner_requests_shutdown_while_other_clones_keep_workers_alive() {
 }
 
 #[test]
+fn bounded_shutdown_wait_reaps_workers_without_consuming_their_reports() {
+    let pool = WorkerPool::new(limits()).unwrap();
+    let parent = OperationControl::default();
+    let mut handles = Vec::new();
+    for _ in 0..3 {
+        handles.push(
+            pool.start(command("while :; do :; done"), vec![], parent.clone())
+                .unwrap(),
+        );
+    }
+    until(|| {
+        pool.snapshot()
+            .active
+            .iter()
+            .all(|worker| worker.pid.is_some())
+    });
+    let pids: Vec<_> = pool
+        .snapshot()
+        .active
+        .iter()
+        .map(|worker| worker.pid.unwrap())
+        .collect();
+    let start = Instant::now();
+    let snapshot = pool.shutdown_wait(Duration::from_secs(2)).unwrap();
+    assert!(start.elapsed() < Duration::from_secs(2));
+    assert!(snapshot.closed);
+    assert!(snapshot.active.is_empty());
+    assert_eq!(snapshot.completed.len(), 3);
+    assert!(!parent.is_cancelled());
+    for handle in handles {
+        let report = wait(handle);
+        assert_eq!(report.outcome, WorkerOutcome::Cancelled);
+        assert_eq!(report.cleanup, WorkerCleanup::Reaped);
+    }
+    for pid in pids {
+        assert!(!PathBuf::from(format!("/proc/{pid}")).exists());
+    }
+    assert!(pool.start(command(":"), vec![], parent).is_err());
+}
+
+#[test]
+fn shutdown_wait_validates_duration_before_closing_and_accepts_zero() {
+    let pool = WorkerPool::new(limits()).unwrap();
+    let error = pool.shutdown_wait(Duration::MAX).unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::RunConfiguration);
+    assert!(!pool.snapshot().closed);
+    assert_eq!(
+        wait(
+            pool.start(command(":"), vec![], OperationControl::default())
+                .unwrap()
+        )
+        .outcome,
+        WorkerOutcome::Succeeded
+    );
+    let snapshot = pool.shutdown_wait(Duration::ZERO).unwrap();
+    assert!(snapshot.closed);
+    assert!(snapshot.active.is_empty());
+    assert_eq!(
+        pool.shutdown_wait(Duration::ZERO).unwrap().completed.len(),
+        1
+    );
+}
+
+#[test]
+fn all_shutdown_waiters_wake_when_zero_history_pool_finishes_cleanup() {
+    let pool = WorkerPool::new(WorkerLimits {
+        history_records: 0,
+        ..limits()
+    })
+    .unwrap();
+    let handle = pool
+        .start(
+            command("while :; do :; done"),
+            vec![],
+            OperationControl::default(),
+        )
+        .unwrap();
+    until(|| pool.snapshot().active[0].pid.is_some());
+    let waiters: Vec<_> = (0..3)
+        .map(|_| {
+            let pool = pool.clone();
+            std::thread::spawn(move || pool.shutdown_wait(Duration::from_secs(2)).unwrap())
+        })
+        .collect();
+    for waiter in waiters {
+        let snapshot = waiter.join().unwrap();
+        assert!(snapshot.closed);
+        assert!(snapshot.active.is_empty());
+        assert!(snapshot.completed.is_empty());
+        assert_eq!(snapshot.omitted_records, 1);
+    }
+    assert_eq!(wait(handle).outcome, WorkerOutcome::Cancelled);
+}
+
+#[test]
 fn zero_cleanup_allowance_keeps_terminal_identity_until_eventual_reaping() {
     let pool = WorkerPool::new(WorkerLimits {
         cleanup_timeout: Duration::ZERO,
