@@ -24,6 +24,9 @@ pub struct SourceFile {
 }
 
 impl SourceFile {
+    pub(crate) fn from_owned_parts(name: String, text: String) -> Self {
+        Self { name, text }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -56,6 +59,17 @@ impl std::fmt::Display for LocationDisplay<'_> {
 }
 
 impl Span {
+    pub(crate) fn from_source_range(
+        source: Arc<SourceFile>,
+        start: usize,
+        end: usize,
+    ) -> Option<Self> {
+        (start <= end
+            && end <= source.text.len()
+            && source.text.is_char_boundary(start)
+            && source.text.is_char_boundary(end))
+        .then_some(Self { source, start, end })
+    }
     /// An input origin without retaining its payload; location refers to input start.
     pub(crate) fn input_origin(name: impl Into<String>) -> Self {
         Self {

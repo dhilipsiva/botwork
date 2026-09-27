@@ -24,6 +24,7 @@ use super::{
 
 #[cfg(target_os = "linux")]
 mod linux;
+pub mod protocol;
 #[cfg(all(test, target_os = "linux"))]
 mod tests;
 
@@ -128,6 +129,7 @@ struct Request {
 }
 
 struct Active {
+    _retention: Option<Arc<dyn Send + Sync>>,
     request: Arc<Request>,
     pid: Option<u32>,
     stopping: bool,
@@ -182,6 +184,10 @@ impl WorkerPool {
         })))))
     }
 
+    pub fn limits(&self) -> &WorkerLimits {
+        &self.0 .0.limits
+    }
+
     /// Admit immediately or fail; no unbounded queue of pending requests exists.
     /// Starts supervision even if the returned handle is never awaited.
     pub fn start(
@@ -190,6 +196,20 @@ impl WorkerPool {
         input: Vec<u8>,
         control: OperationControl,
     ) -> DiagnosticResult<WorkerHandle> {
+        self.start_retained(command, input, control, None)
+    }
+
+    pub(crate) fn start_retained(
+        &self,
+        command: WorkerCommand,
+        input: Vec<u8>,
+        control: OperationControl,
+        retention: Option<Arc<dyn Send + Sync>>,
+    ) -> DiagnosticResult<WorkerHandle> {
+        let input = RetainedInput {
+            bytes: input,
+            _retention: retention.clone(),
+        };
         control.checkpoint()?;
         if !cfg!(target_os = "linux") {
             return Err(configuration("Isolated workers currently require Linux"));
@@ -225,6 +245,7 @@ impl WorkerPool {
             state.active.insert(
                 id,
                 Active {
+                    _retention: retention.clone(),
                     request: request.clone(),
                     pid: None,
                     stopping: false,
@@ -234,6 +255,10 @@ impl WorkerPool {
             id
         };
         let (send, receive) = oneshot::channel();
+        let send = WorkerDelivery {
+            send: Some(send),
+            retention,
+        };
         let thread_shared = Arc::clone(shared);
         let thread_request = Arc::clone(&request);
         let spawn = std::thread::Builder::new()
@@ -305,10 +330,31 @@ impl WorkerPool {
     }
 }
 
+// Payload fields drop before reservations. Supervisors and quarantined active
+// slots hold independent clones until process ownership is settled.
+pub(crate) struct RetainedReport {
+    pub report: WorkerReport,
+    pub _retention: Option<Arc<dyn Send + Sync>>,
+}
+struct RetainedInput {
+    bytes: Vec<u8>,
+    _retention: Option<Arc<dyn Send + Sync>>,
+}
+impl std::ops::Deref for RetainedInput {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+struct WorkerDelivery {
+    send: Option<oneshot::Sender<RetainedReport>>,
+    retention: Option<Arc<dyn Send + Sync>>,
+}
+
 pub struct WorkerHandle {
     id: u64,
     request: Arc<Request>,
-    receive: Option<oneshot::Receiver<WorkerReport>>,
+    receive: Option<oneshot::Receiver<RetainedReport>>,
 }
 
 impl WorkerHandle {
@@ -321,18 +367,24 @@ impl WorkerHandle {
 
     /// Await exactly one terminal report. Dropping this future interrupts the worker.
     /// No Tokio runtime is needed by the supervisor or the receiver itself.
-    pub async fn wait(mut self) -> WorkerReport {
+    pub async fn wait(self) -> WorkerReport {
+        self.wait_retained().await.report
+    }
+    pub(crate) async fn wait_retained(mut self) -> RetainedReport {
         let result = self.receive.take().expect("one receiver").await;
         match result {
             Ok(report) => report,
-            Err(_) => WorkerReport::failure(
-                self.id,
-                WorkerOutcome::Interrupted,
-                WorkerCleanup::Unverified,
-                runtime(format_args!(
-                    "Worker supervisor ended without a terminal report"
-                )),
-            ),
+            Err(_) => RetainedReport {
+                report: WorkerReport::failure(
+                    self.id,
+                    WorkerOutcome::Interrupted,
+                    WorkerCleanup::Unverified,
+                    runtime(format_args!(
+                        "Worker supervisor ended without a terminal report"
+                    )),
+                ),
+                _retention: None,
+            },
         }
     }
 }

@@ -374,14 +374,22 @@ impl StatementSignature {
         value: &Literal,
         error: impl FnOnce(fmt::Arguments<'_>) -> E,
     ) -> Result<(), E> {
-        if self.returns.contains(value.kind()) {
+        self.validate_return_kind(value.kind(), error)
+    }
+
+    pub(crate) fn validate_return_kind<E>(
+        &self,
+        kind: ValueKind,
+        error: impl FnOnce(fmt::Arguments<'_>) -> E,
+    ) -> Result<(), E> {
+        if self.returns.contains(kind) {
             return Ok(());
         }
         Err(error(format_args!(
             "Return value of `{}` requires {}; got {}",
             self.normalized,
             self.returns,
-            value.kind().as_str(),
+            kind.as_str(),
         )))
     }
 }

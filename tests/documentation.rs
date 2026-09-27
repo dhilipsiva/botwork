@@ -143,6 +143,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
     assert!(include_str!("../src/lib.rs").contains(inclusion));
     assert!(include_str!("../src/core/worker.rs")
         .contains("#![doc = include_str!(\"../../docs/isolated-workers.md\")]"));
+    assert!(include_str!("../src/core/worker/protocol.rs")
+        .contains("#![doc = include_str!(\"../../../docs/worker-protocol.md\")]"));
     let rust_documents: BTreeSet<_> = documents()
         .into_iter()
         .filter(|(_, blocks)| blocks.iter().any(|block| block.language == "rust"))
@@ -152,7 +154,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
         rust_documents,
         BTreeSet::from([
             "docs/interpreter-architecture.md".to_owned(),
-            "docs/isolated-workers.md".to_owned()
+            "docs/isolated-workers.md".to_owned(),
+            "docs/worker-protocol.md".to_owned()
         ]),
         "include new Rust documentation examples in rustdoc before registering their files"
     );

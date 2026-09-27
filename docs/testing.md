@@ -1,7 +1,8 @@
 # Testing Botwork
 
-Run `cargo test` from the repository root. Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
+Run `cargo test` from the repository root. Linux typed-worker interoperability tests also require `python3` on PATH (the same interpreter used by the coverage-helper checks). Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
 
+- `src/core/worker/protocol/tests.rs` checks the typed wire codec and worker SDK; `tests/typed_workers.rs` exercises an independent Python subprocess, signatures, budgets, cleanup ownership, and stop priority.
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
 - `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, original byte/line/column spans, and control-placement validation.
 - `src/core/eval/tests.rs` checks evaluation, state, conditions, collections, and error handling.

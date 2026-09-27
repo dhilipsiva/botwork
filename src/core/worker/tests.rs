@@ -21,11 +21,14 @@ fn unverified_cleanup_stays_visible_and_keeps_capacity_even_without_history() {
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
     });
+    let retained = Arc::new(());
+    let weak = Arc::downgrade(&retained);
     // Inject a lost-ownership terminal transition without stealing a real child
     // from another test or changing the host's process-wide SIGCHLD disposition.
     pool.0 .0.state.lock().unwrap().active.insert(
         7,
         Active {
+            _retention: Some(retained),
             request,
             pid: None,
             stopping: false,
@@ -57,6 +60,9 @@ fn unverified_cleanup_stays_visible_and_keeps_capacity_even_without_history() {
         }
     ));
     assert_eq!(pool.shutdown().active.len(), 1);
+    assert!(weak.upgrade().is_some());
+    drop(pool);
+    assert!(weak.upgrade().is_none());
 }
 
 #[test]

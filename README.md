@@ -38,6 +38,7 @@ configure `--max-output-record-bytes` and `--max-output-bytes` for logs, traces,
 Use `cargo run -- --list-statements` to list built-ins, or
 `cargo run -- --statement-help 'Log |value|'` for parameter/return kinds and errors.
 Rust hosts can [register statements with checked signatures](docs/interpreter-architecture.md#shared-signature-metadata).
+[Typed isolated operations](docs/worker-protocol.md) run external workers on Linux with bounded requests, results, diagnostics, and supervised cancellation.
 Use the [embedded Engine](docs/embedded-runs.md) for fresh runs with local variables,
 directory/environment configuration, cooperative cancellation, budgets, and structured results.
 Use [call expressions](docs/language.md#calls-inside-expressions), such as `@{Double |3|}`,

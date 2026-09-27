@@ -171,13 +171,12 @@ fn read_pipe(
 pub(super) fn supervise(
     id: u64,
     specification: WorkerCommand,
-    input: Vec<u8>,
+    input: RetainedInput,
     request: Arc<Request>,
     deadline: Instant,
     shared: Arc<Shared>,
-    send: oneshot::Sender<WorkerReport>,
+    mut send: WorkerDelivery,
 ) {
-    let mut send = Some(send);
     if let Some((outcome, error)) = stop(&request, deadline) {
         deliver(
             WorkerReport::failure(id, outcome, WorkerCleanup::NotStarted, error),
@@ -323,7 +322,10 @@ pub(super) fn supervise(
                         Ok(Some(status)) => {
                             report.exit_status = Some(status);
                             cleanup_started.get_or_insert_with(Instant::now);
-                            if !status.success() && report.diagnostic.is_none() && send.is_some() {
+                            if !status.success()
+                                && report.diagnostic.is_none()
+                                && send.send.is_some()
+                            {
                                 set_failure(
                                     &mut report,
                                     WorkerOutcome::Failed,
@@ -335,7 +337,7 @@ pub(super) fn supervise(
                             }
                             if report.stdin_written != input.len()
                                 && report.diagnostic.is_none()
-                                && send.is_some()
+                                && send.send.is_some()
                             {
                                 set_failure(
                                     &mut report,
@@ -377,7 +379,7 @@ pub(super) fn supervise(
             stderr.take();
             stdin.take();
             output_failed = true;
-            if report.diagnostic.is_none() && send.is_some() {
+            if report.diagnostic.is_none() && send.send.is_some() {
                 set_failure(
                     &mut report,
                     WorkerOutcome::Failed,
@@ -390,7 +392,7 @@ pub(super) fn supervise(
                 report.cleanup = WorkerCleanup::Reaped;
                 break;
             }
-            if let Some(send) = send.take() {
+            if let Some(sender) = send.send.take() {
                 shared.update(id, Some(pid), true, Some(WorkerCleanup::Pending));
                 // Publish the interrupted outcome, retaining child ownership and capacity.
                 let early = WorkerReport {
@@ -404,7 +406,10 @@ pub(super) fn supervise(
                     io_complete: false,
                     diagnostic: report.diagnostic.take(),
                 };
-                let _ = send.send(early);
+                let _ = sender.send(RetainedReport {
+                    report: early,
+                    _retention: send.retention.clone(),
+                });
                 // Do not revisit stop priority or change the already published outcome.
                 observed_stop = true;
             }
@@ -439,13 +444,12 @@ fn lost_ownership(child: &mut ChildOwner, report: &mut WorkerReport, error: io::
     append_cleanup(report, error);
 }
 
-fn deliver(
-    report: WorkerReport,
-    shared: &Shared,
-    send: &mut Option<oneshot::Sender<WorkerReport>>,
-) {
+fn deliver(report: WorkerReport, shared: &Shared, send: &mut WorkerDelivery) {
     shared.finish(&report);
-    if let Some(send) = send.take() {
-        let _ = send.send(report);
+    if let Some(sender) = send.send.take() {
+        let _ = sender.send(RetainedReport {
+            report,
+            _retention: send.retention.clone(),
+        });
     }
 }

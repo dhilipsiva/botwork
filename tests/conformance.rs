@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::ProtocolBoundary | Input::ProtocolLimit => {
+                check_protocol_case(&case);
+                continue;
+            }
             Input::WorkerBoundary | Input::WorkerLimit => {
                 check_worker_case(&case);
                 continue;
@@ -1991,5 +1995,33 @@ fn check_worker_case(case: &Case) {
             botwork::core::diagnostic::DiagnosticCode::RunConfiguration
         );
         assert!(pool.snapshot().active.is_empty());
+    }
+}
+
+fn check_protocol_case(case: &Case) {
+    use botwork::core::{signature::StatementSignature, worker::protocol::WorkerProtocol};
+    let mut protocol = WorkerProtocol::default();
+    protocol.limits.frame_bytes = if case.error.is_some() { 27 } else { 28 };
+    let request = protocol.encode_request(&[Literal::Float(-0.0)]);
+    if let Some(expected) = case.error {
+        let error = request.unwrap_err();
+        assert_eq!(error.code().as_str(), case.code.unwrap());
+        assert!(error.to_string().contains(expected));
+    } else {
+        let request = request.unwrap();
+        assert_eq!(request.len(), 28);
+        let mut output = Vec::new();
+        protocol
+            .serve_once(
+                &StatementSignature::native("Echo |x|").unwrap(),
+                &mut request.as_slice(),
+                &mut output,
+                |mut values| Ok(values.remove(0)),
+            )
+            .unwrap();
+        let Literal::Float(value) = protocol.decode_response(&output).unwrap().unwrap() else {
+            panic!()
+        };
+        assert_eq!(value.to_bits(), (-0.0f32).to_bits());
     }
 }

@@ -1,6 +1,7 @@
 //! Async adapter boundary. Hosts supply a Tokio runtime with time enabled.
 
 mod diagnostics;
+mod isolated;
 mod ownership;
 use diagnostics::PendingDiagnostic;
 #[cfg(test)]
@@ -116,6 +117,7 @@ type BlockingCallback =
 
 #[derive(Clone)]
 enum Implementation {
+    Isolated(Arc<isolated::Isolated>),
     Async(AsyncCallback),
     Blocking {
         callback: BlockingCallback,
@@ -220,7 +222,8 @@ impl NativeOperation {
 
     /// Validate values before entry, run once, and validate the result before publication.
     /// Dropping an async invocation drops its future; dropping a blocking invocation
-    /// requests cancellation but cannot synchronously join its worker.
+    /// requests cancellation but cannot synchronously join its worker. Isolated
+    /// invocations keep supervisor and byte/value reservations through cleanup.
     pub fn invoke(
         &self,
         values: Vec<Literal>,
@@ -330,6 +333,9 @@ impl NativeOperation {
         })?;
         let child = control;
         let value = match &self.implementation {
+            Implementation::Isolated(worker) => {
+                return worker.invoke(self, admission, child, cleanup_stop).await
+            }
             Implementation::Async(callback) => {
                 let future = catch_unwind(AssertUnwindSafe(|| {
                     callback(admission.values.into_inner(), child.clone())

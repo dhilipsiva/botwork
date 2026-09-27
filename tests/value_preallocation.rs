@@ -60,6 +60,165 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn worker_frames_and_decoded_values_are_admitted_before_payload_allocation() {
+    use botwork::core::worker::protocol::WorkerProtocol;
+    let value = Literal::String("x".repeat(100_000));
+    let protocol = WorkerProtocol::default();
+    for allowed in [false, true] {
+        let mut configured = protocol.clone();
+        if !allowed {
+            configured.limits.frame_bytes = 0;
+        }
+        let (result, copies) = observe(100_000, || {
+            configured.encode_request(std::slice::from_ref(&value))
+        });
+        assert_eq!(result.is_ok(), allowed);
+        assert_eq!(copies, usize::from(allowed));
+    }
+    let frame = protocol.encode_response(Ok(&value)).unwrap();
+    for allowed in [false, true] {
+        let mut configured = protocol.clone();
+        if !allowed {
+            configured.limits.values.string_bytes = 0;
+        }
+        let (result, copies) = observe(100_000, || configured.decode_response(&frame));
+        assert_eq!(result.is_ok(), allowed);
+        assert_eq!(copies, usize::from(allowed));
+    }
+}
+
+#[test]
+fn worker_diagnostics_reject_source_bytes_before_copying_source_tables() {
+    use botwork::core::{
+        ast::Program, diagnostic::Diagnostic, grammar::BWErr, worker::protocol::WorkerProtocol,
+    };
+    let parsed = Program::parse(&"n".repeat(100_000), "|x| = |1|").unwrap();
+    let error = Diagnostic::new(BWErr::NativeError("detail".into())).at(&parsed.statements[0].span);
+    let protocol = WorkerProtocol::default();
+    let frame = protocol.encode_response(Err(&error)).unwrap();
+    for allowed in [false, true] {
+        let mut configured = protocol.clone();
+        if !allowed {
+            configured.limits.diagnostics.source_bytes = 0;
+        }
+        let (result, copies) = observe(100_000, || configured.decode_response(&frame));
+        assert_eq!(result.is_ok(), allowed);
+        assert_eq!(copies, usize::from(allowed));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn isolated_operations_reserve_owned_value_and_source_payloads_before_decoding() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{Diagnostic, DiagnosticLimits},
+        grammar::BWErr,
+        operation::{NativeOperation, OperationBudget, OperationControl, OperationOwnershipLimits},
+        signature::StatementSignature,
+        worker::{protocol::WorkerProtocol, WorkerCommand, WorkerLimits, WorkerPool},
+    };
+    fn command(mode: &str) -> WorkerCommand {
+        let executable = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|path| path.join("python3"))
+            .find(|path| path.is_absolute() && path.is_file())
+            .unwrap();
+        WorkerCommand {
+            executable,
+            arguments: vec![
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/support/typed_worker.py")
+                    .into_os_string(),
+                mode.into(),
+            ],
+            directory: std::env::temp_dir(),
+            environment: Default::default(),
+        }
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    let pool = WorkerPool::new(WorkerLimits::default()).unwrap();
+    for mode in 0..3 {
+        let mut operation = NativeOperation::isolated(
+            StatementSignature::native("Echo |x|").unwrap(),
+            pool.clone(),
+            command("large"),
+            WorkerProtocol::default(),
+        )
+        .unwrap();
+        if mode == 1 {
+            operation = operation
+                .with_value_limits(ValueLimits {
+                    string_bytes: 0,
+                    ..Default::default()
+                })
+                .unwrap();
+        }
+        if mode == 2 {
+            operation =
+                operation.with_ownership_budget(OperationBudget::new(OperationOwnershipLimits {
+                    payload_bytes: 0,
+                    ..Default::default()
+                }));
+        }
+        let (result, copies) = observe(65536, || {
+            runtime.block_on(operation.invoke(vec![Literal::None], OperationControl::default()))
+        });
+        assert_eq!(result.is_ok(), mode == 0);
+        assert_eq!(copies, usize::from(mode == 0));
+    }
+    let parsed = Program::parse(&"n".repeat(20_000), "|x| = |1|").unwrap();
+    let error = Diagnostic::new(BWErr::NativeError("detail".into())).at(&parsed.statements[0].span);
+    let frame = WorkerProtocol::default()
+        .encode_response(Err(&error))
+        .unwrap();
+    let mut command = command("echo");
+    command.environment.insert(
+        "FRAME".into(),
+        frame
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+            .into(),
+    );
+    for mode in 0..3 {
+        let mut operation = NativeOperation::isolated(
+            StatementSignature::native("Echo |x|").unwrap(),
+            pool.clone(),
+            command.clone(),
+            WorkerProtocol::default(),
+        )
+        .unwrap();
+        if mode == 1 {
+            operation = operation
+                .with_diagnostic_limits(DiagnosticLimits {
+                    source_bytes: 0,
+                    ..Default::default()
+                })
+                .unwrap();
+        }
+        if mode == 2 {
+            operation =
+                operation.with_ownership_budget(OperationBudget::new(OperationOwnershipLimits {
+                    source_bytes: 0,
+                    ..Default::default()
+                }));
+        }
+        let (result, copies) = observe(20_000, || {
+            runtime.block_on(operation.invoke(vec![Literal::None], OperationControl::default()))
+        });
+        assert_eq!(
+            result.unwrap_err().code().as_str(),
+            if mode == 0 { "BW4002" } else { "BW8001" }
+        );
+        // One trusted command/environment copy; source ownership is additional only after admission.
+        assert_eq!(copies, 1 + usize::from(mode == 0));
+    }
+}
+
+#[test]
 fn output_rejection_precedes_map_sorting_and_complete_string_buffering() {
     use botwork::core::{eval::Context, run::OutputLimits};
     let value = Literal::Map(
