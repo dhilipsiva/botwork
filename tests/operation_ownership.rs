@@ -698,3 +698,70 @@ async fn completed_unobserved_workers_hold_result_reservations_until_delivery_or
         until(|| budget.usage() == OperationUsage::default()).await;
     }
 }
+
+#[tokio::test]
+async fn generated_operation_errors_share_exact_construction_quotas_and_release_at_public_return() {
+    use botwork::core::signature::ValueKind;
+    for family in 0..7 {
+        let signature = if family < 3 { "Read |value|" } else { "Read" };
+        let mut signature = StatementSignature::native(signature).unwrap();
+        if family == 2 {
+            signature = signature.parameter("value", ValueKind::Int).unwrap();
+        }
+        if family == 3 {
+            signature = signature.returns(ValueKind::String);
+        }
+        let operation = if family == 6 {
+            NativeOperation::blocking(signature, NonZeroUsize::new(1).unwrap(), |_, _| {
+                panic!("worker panic")
+            })
+            .unwrap()
+        } else {
+            NativeOperation::asynchronous(signature, move |_, _| {
+                assert_ne!(family, 4, "factory panic");
+                async move {
+                    assert_ne!(family, 5, "poll panic");
+                    Ok(Literal::Bool(true))
+                }
+            })
+            .unwrap()
+        };
+        let values = || match family {
+            1 => vec![Literal::Float(f32::NAN)],
+            2 => vec![Literal::Bool(true)],
+            _ => vec![],
+        };
+        let baseline = operation
+            .invoke(values(), OperationControl::default())
+            .await
+            .unwrap_err();
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        for fits in [false, true] {
+            let budget = OperationBudget::new(OperationOwnershipLimits {
+                diagnostics: size.diagnostics,
+                text_bytes: size.text_bytes - usize::from(!fits),
+                source_bytes: size.source_bytes,
+                ..Default::default()
+            });
+            let limited = operation.clone().with_ownership_budget(budget.clone());
+            let error = limited
+                .invoke(values(), OperationControl::default())
+                .await
+                .unwrap_err();
+            if fits {
+                assert_eq!(error.to_string(), baseline.to_string(), "family {family}");
+            } else {
+                assert_eq!(resource(&error), "operation diagnostic text bytes");
+                assert_eq!(error.causes[0].code(), baseline.code());
+                assert!(error.causes[0].omissions.is_some());
+            }
+            assert_eq!(budget.usage(), OperationUsage::default());
+            let repeated = limited
+                .invoke(values(), OperationControl::default())
+                .await
+                .unwrap_err();
+            assert_eq!(repeated.code(), error.code());
+            assert_eq!(budget.usage(), OperationUsage::default());
+        }
+    }
+}

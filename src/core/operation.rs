@@ -1,6 +1,8 @@
 //! Async adapter boundary. Hosts supply a Tokio runtime with time enabled.
 
+mod diagnostics;
 mod ownership;
+use diagnostics::PendingDiagnostic;
 #[cfg(test)]
 mod tests;
 use ownership::{Admission, AdmissionFailure, OperationResult, Reservation, Tracked};
@@ -268,7 +270,7 @@ impl NativeOperation {
                             BWErr::ParameterMissingError,
                             "The operation does not match the signature's parameter count",
                         ),
-                        AdmissionFailure::Other(error) => Diagnostic::new(error),
+                        AdmissionFailure::Other(error) => Diagnostic::new(error).into(),
                         AdmissionFailure::Numeric(error) => self.numeric_error(error),
                         AdmissionFailure::Argument { index, kind } => self
                             .signature
@@ -277,7 +279,7 @@ impl NativeOperation {
                             })
                             .unwrap_err(),
                     };
-                    Err(self.track_error(error, false, true, &scope, None))
+                    Err(self.track_error(error, false, true, &scope))
                 }
             };
             // Cleanup cancellation must not replace the stop observed before draining.
@@ -299,7 +301,7 @@ impl NativeOperation {
                 (Ok(value), None) => return Ok(value.into_inner().into_inner()),
                 (Ok(value), Some(error)) => {
                     drop(value);
-                    self.track_error(error, preserve_stop, true, &scope, None)
+                    self.track_error(error, preserve_stop, true, &scope)
                 }
                 (Err(error), Some(stopped)) if error.value.as_ref().code() != stopped.code() => {
                     self.attach_stop(stopped, error, preserve_stop, &scope)
@@ -318,8 +320,8 @@ impl NativeOperation {
         cleanup_stop: &mut Option<DiagnosticCode>,
     ) -> OperationResult {
         let scope = Some(Arc::clone(&admission.scope));
-        let fail = |error| self.track_error(error, false, true, &scope, None);
-        control.checkpoint().map_err(&fail)?;
+        let fail = |error: PendingDiagnostic| self.track_error(error, false, true, &scope);
+        control.checkpoint().map_err(|error| fail(error.into()))?;
         tokio::runtime::Handle::try_current().map_err(|_| {
             fail(self.detail_error(
                 BWErr::AsyncRuntime,
@@ -332,7 +334,7 @@ impl NativeOperation {
                 let future = catch_unwind(AssertUnwindSafe(|| {
                     callback(admission.values.into_inner(), child.clone())
                 }))
-                .map_err(|_| fail(panic_error(&self.diagnostic_limits, &self.signature)))?;
+                .map_err(|_| fail(self.panic_error()))?;
                 let future = GuardedFuture {
                     future,
                     operation: self.clone(),
@@ -340,17 +342,17 @@ impl NativeOperation {
                 };
                 tokio::select! {
                     biased;
-                    error = child.stopped() => return Err(fail(error)),
+                    error = child.stopped() => return Err(fail(error.into())),
                     value = future => value?,
                 }
             }
             Implementation::Blocking { callback, capacity } => {
                 let permit = tokio::select! {
                     biased;
-                    error = child.stopped() => return Err(fail(error)),
+                    error = child.stopped() => return Err(fail(error.into())),
                     permit = Arc::clone(capacity).acquire_owned() => permit.map_err(|_| fail(self.detail_error(BWErr::AsyncRuntime, "Blocking operation capacity is closed")))?,
                 };
-                child.checkpoint().map_err(&fail)?;
+                child.checkpoint().map_err(|error| fail(error.into()))?;
                 let callback = Arc::clone(callback);
                 let worker_control = child.clone();
                 let operation = self.clone();
@@ -365,14 +367,14 @@ impl NativeOperation {
                         // is requested solely to drain the worker.
                         *cleanup_stop = Some(error.code());
                         let preserve = matches!(error.code(), DiagnosticCode::Cancelled | DiagnosticCode::Timeout);
-                        let error = self.track_error(error, preserve, true, &scope, None);
+                        let error = self.track_error(error, preserve, true, &scope);
                         child.cancel();
                         worker.abort(); // Cancels queued work; started callbacks must cooperate.
                         return Err(match worker.await {
                             Ok(Err(cause)) => self.combine_errors(error, cause, preserve, &scope),
                             Err(cause) if !cause.is_cancelled() => {
                                 let Tracked { value, reservation, .. } = *error;
-                                self.track_error(self.worker_cleanup_error(value.into_inner(), &cause), preserve, true, &scope, reservation)
+                                self.track_error(self.worker_cleanup_error(PendingDiagnostic { value, reservation }, &cause), preserve, true, &scope)
                             },
                             _ => error,
                         });
@@ -381,7 +383,7 @@ impl NativeOperation {
                 }
             }
         };
-        child.checkpoint().map_err(&fail)?;
+        child.checkpoint().map_err(|error| fail(error.into()))?;
         Ok(value)
     }
 
@@ -394,18 +396,12 @@ impl NativeOperation {
         let scope = Some(Arc::clone(&admission.scope));
         control
             .checkpoint()
-            .map_err(|error| self.track_error(error, false, true, &scope, None))?;
+            .map_err(|error| self.track_error(error, false, true, &scope))?;
         match catch_unwind(AssertUnwindSafe(|| {
             callback(admission.values.into_inner(), control)
         })) {
             Ok(result) => self.track_result(result, &scope),
-            Err(_) => Err(self.track_error(
-                panic_error(&self.diagnostic_limits, &self.signature),
-                false,
-                true,
-                &scope,
-                None,
-            )),
+            Err(_) => Err(self.track_error(self.panic_error(), false, true, &scope)),
         }
     }
 
@@ -414,15 +410,15 @@ impl NativeOperation {
         result: DiagnosticResult<Literal>,
         scope: &Option<Arc<Reservation>>,
     ) -> OperationResult {
-        let fail = |error| self.track_error(error, false, true, scope, None);
+        let fail = |error: PendingDiagnostic| self.track_error(error, false, true, scope);
         match result {
-            Err(error) => Err(self.track_error(error, false, false, scope, None)),
+            Err(error) => Err(self.track_error(error, false, false, scope)),
             Ok(value) => {
                 let value = Owned::new(value);
                 let size = self
                     .value_limits
                     .check(&value)
-                    .map_err(|error| fail(Diagnostic::new(error)))?;
+                    .map_err(|error| fail(Diagnostic::new(error).into()))?;
                 validate_numeric_values(&value).map_err(|error| fail(self.numeric_error(error)))?;
                 self.signature
                     .validate_return(&value, |message| self.signature_error(message))
@@ -430,7 +426,7 @@ impl NativeOperation {
                 let reservation = self
                     .ownership
                     .value(size)
-                    .map_err(|error| fail(Diagnostic::new(error)))?;
+                    .map_err(|error| fail(Diagnostic::new(error).into()))?;
                 Ok(Tracked {
                     value,
                     reservation: Some(reservation),
@@ -438,168 +434,6 @@ impl NativeOperation {
                 })
             }
         }
-    }
-
-    fn track_error(
-        &self,
-        error: Diagnostic,
-        preserve_stop: bool,
-        admitted: bool,
-        scope: &Option<Arc<Reservation>>,
-        previous: Option<Reservation>,
-    ) -> Box<Tracked<OwnedDiagnostic>> {
-        let trusted_emergency = admitted && error.is_emergency();
-        let original = Arc::clone(&error.error);
-        let mut error = admit_error(
-            &self.diagnostic_limits,
-            &self.signature,
-            error,
-            preserve_stop,
-            admitted,
-        );
-        let emergency =
-            error.is_emergency() && (trusted_emergency || !Arc::ptr_eq(&original, &error.error));
-        drop(original);
-        let mut reservation = None;
-        if !emergency {
-            // Individual admission has already bounded this tree and its traversal work.
-            let size = self
-                .diagnostic_limits
-                .check(&error)
-                .expect("admitted diagnostic");
-            match self.ownership.diagnostic(size, previous) {
-                Ok(lease) => reservation = Some(lease),
-                Err(rejection) => {
-                    let (violation, previous) = *rejection;
-                    // Free rejected owners before returning their previous allowance.
-                    error = error.rejected(violation);
-                    if preserve_stop {
-                        error = preserve_primary(error);
-                    }
-                    drop(previous);
-                }
-            }
-        } else {
-            drop(previous);
-        }
-        Box::new(Tracked {
-            value: OwnedDiagnostic::new(error),
-            reservation,
-            _scope: scope.clone(),
-        })
-    }
-
-    fn attach_stop(
-        &self,
-        stopped: Diagnostic,
-        error: Box<Tracked<OwnedDiagnostic>>,
-        preserve_stop: bool,
-        scope: &Option<Arc<Reservation>>,
-    ) -> Box<Tracked<OwnedDiagnostic>> {
-        let Tracked {
-            value, reservation, ..
-        } = *error;
-        self.track_error(
-            stopped.while_handling(value.into_inner()),
-            preserve_stop,
-            true,
-            scope,
-            reservation,
-        )
-    }
-
-    fn combine_errors(
-        &self,
-        primary: Box<Tracked<OwnedDiagnostic>>,
-        cause: Box<Tracked<OwnedDiagnostic>>,
-        preserve_stop: bool,
-        scope: &Option<Arc<Reservation>>,
-    ) -> Box<Tracked<OwnedDiagnostic>> {
-        let Tracked {
-            value: primary,
-            reservation: primary_lease,
-            ..
-        } = *primary;
-        let Tracked {
-            value: cause,
-            reservation: cause_lease,
-            ..
-        } = *cause;
-        let reservation = Reservation::merge(primary_lease, cause_lease);
-        self.track_error(
-            primary.into_inner().while_handling(cause.into_inner()),
-            preserve_stop,
-            true,
-            scope,
-            reservation,
-        )
-    }
-
-    fn detail_error(&self, category: fn(String) -> BWErr, message: &str) -> Diagnostic {
-        self.diagnostic_limits.borrowed_detail(
-            category,
-            message,
-            Some(self.signature.header()),
-            false,
-            std::iter::empty(),
-        )
-    }
-
-    fn numeric_error(&self, error: ArithmeticFailure) -> Diagnostic {
-        self.diagnostic_limits.formatted_detail(
-            BWErr::ArithmeticError,
-            format_args!("{error}"),
-            Some(self.signature.header()),
-            false,
-            std::iter::empty(),
-        )
-    }
-
-    fn worker_error(&self, error: &tokio::task::JoinError) -> Diagnostic {
-        self.diagnostic_limits.formatted_detail(
-            BWErr::AsyncRuntime,
-            format_args!("Blocking worker ended unexpectedly: {error}"),
-            Some(self.signature.header()),
-            false,
-            std::iter::empty(),
-        )
-    }
-
-    fn worker_cleanup_error(
-        &self,
-        primary: Diagnostic,
-        cause: &tokio::task::JoinError,
-    ) -> Diagnostic {
-        // This stop was observed before requesting cancellation to drain the
-        // worker. Its known context is part of initial cause admission.
-        let preserve_stop = matches!(
-            primary.code(),
-            DiagnosticCode::Cancelled | DiagnosticCode::Timeout
-        );
-        self.diagnostic_limits
-            .formatted_cause(
-                primary,
-                BWErr::AsyncRuntime,
-                format_args!("Blocking worker ended during cleanup: {cause}"),
-                self.signature.header(),
-            )
-            .unwrap_or_else(|rejection| {
-                if preserve_stop {
-                    preserve_primary(rejection)
-                } else {
-                    rejection
-                }
-            })
-    }
-
-    fn signature_error(&self, message: std::fmt::Arguments<'_>) -> Diagnostic {
-        self.diagnostic_limits.formatted_detail(
-            BWErr::OperationIncompatibleError,
-            message,
-            Some(self.signature.header()),
-            false,
-            std::iter::empty(),
-        )
     }
 }
 
@@ -615,47 +449,11 @@ impl Future for GuardedFuture {
         match catch_unwind(AssertUnwindSafe(|| self.future.as_mut().poll(context))) {
             Ok(result) => result.map(|result| self.operation.track_result(result, &self.scope)),
             Err(_) => Poll::Ready(Err(self.operation.track_error(
-                panic_error(&self.operation.diagnostic_limits, &self.operation.signature),
+                self.operation.panic_error(),
                 false,
                 true,
                 &self.scope,
-                None,
             ))),
         }
     }
-}
-
-fn panic_error(limits: &DiagnosticLimits, signature: &StatementSignature) -> Diagnostic {
-    limits.borrowed_detail(
-        BWErr::NativePanic,
-        signature.normalized(),
-        Some(signature.header()),
-        false,
-        std::iter::empty(),
-    )
-}
-
-// Only internal, previously admitted emergency records can skip another admission.
-// Host callback records always pass measurement, even if their public fields imitate one.
-fn admit_error(
-    limits: &DiagnosticLimits,
-    signature: &StatementSignature,
-    error: Diagnostic,
-    preserve_stop: bool,
-    admitted: bool,
-) -> Diagnostic {
-    if admitted && error.is_emergency() {
-        return error;
-    }
-    match limits.admit(error.at(signature.header())) {
-        Ok(error) => error,
-        Err(error) if preserve_stop => preserve_primary(error),
-        Err(error) => error,
-    }
-}
-
-fn preserve_primary(mut rejection: Diagnostic) -> Diagnostic {
-    let mut original = rejection.causes.pop().expect("bounded original");
-    original.causes.push(rejection);
-    original
 }

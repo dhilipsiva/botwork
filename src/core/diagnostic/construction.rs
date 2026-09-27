@@ -1,6 +1,6 @@
 //! Admission for borrowed/formatted diagnostic details before their first owned copies.
 
-use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult, DiagnosticSize};
+use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticSize};
 use crate::core::{
     ast::{SourceFile, Span},
     grammar::BWErr,
@@ -100,15 +100,6 @@ fn formatted_prefix_with_limit(message: fmt::Arguments<'_>, maximum: usize) -> (
     (output.text, shortened)
 }
 
-fn skeleton(category: fn(String) -> BWErr, span: Option<&Span>, expression: bool) -> Diagnostic {
-    let diagnostic = Diagnostic::new(category(String::new()));
-    match span {
-        Some(span) if expression => diagnostic.at_expression(span),
-        Some(span) => diagnostic.at(span),
-        None => diagnostic,
-    }
-}
-
 fn text_limit(maximum: usize) -> BWErr {
     BWErr::ResourceLimit {
         resource: "diagnostic text bytes",
@@ -163,6 +154,7 @@ impl DiagnosticLimits {
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
         mut admit: impl FnMut(DiagnosticSize, Vec<Arc<SourceFile>>, Option<R>) -> Result<R, BWErr>,
     ) -> (Diagnostic, Option<R>) {
+        let mut reservation = None;
         let mut skeleton = Diagnostic::new(category(std::array::from_fn(|_| String::new())));
         let admission = self
             .retained_construction_size(
@@ -173,17 +165,16 @@ impl DiagnosticLimits {
                 frames.clone(),
             )
             .and_then(|(mut size, sources)| {
-                let initial = admit(size, sources.clone(), None)?;
+                reservation = Some(admit(size, sources.clone(), None)?);
                 let sizes = self.measure_strings(&messages, size.text_bytes)?;
                 for bytes in sizes {
                     size.text_bytes += bytes;
                 } // Checked by the grouped counter.
-                let reservation = admit(size, sources, Some(initial))?;
-                let details = self.write_strings(&messages, sizes)?;
-                Ok((details, reservation))
+                reservation = Some(admit(size, sources, reservation.take())?);
+                self.write_strings(&messages, sizes)
             });
         match admission {
-            Ok((details, reservation)) => {
+            Ok(details) => {
                 skeleton.error = Arc::new(category(details));
                 let mut error = skeleton.capture_context(context.location, frames.clone());
                 if let Some((message, span)) = context.related {
@@ -194,7 +185,7 @@ impl DiagnosticLimits {
                         .capture_context(context.location, frames)
                         .while_handling(error);
                 }
-                (error, Some(reservation))
+                (error, reservation)
             }
             Err(violation) => {
                 let error = if let Some(stopped) = context.stopped {
@@ -228,6 +219,7 @@ impl DiagnosticLimits {
                     }
                     rejected
                 };
+                drop(reservation);
                 (error, None)
             }
         }
@@ -353,6 +345,7 @@ impl DiagnosticLimits {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn borrowed_detail<'a>(
         &self,
         category: fn(String) -> BWErr,
@@ -361,35 +354,19 @@ impl DiagnosticLimits {
         expression: bool,
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
-        // Empty detail has no payload allocation. Measure all prospective source
-        // owners, labels and frames before admitting the requested string bytes.
-        let mut skeleton = skeleton(category, span, expression);
-        let admission = self
-            .check_with_stack(&skeleton, frames.clone())
-            .and_then(|size| {
-                size.text_bytes
-                    .checked_add(detail.len())
-                    .filter(|bytes| *bytes <= self.text_bytes)
-                    .map(|_| ())
-                    .ok_or_else(|| text_limit(self.text_bytes))
-            });
-        match admission {
-            Ok(()) => {
-                skeleton.error = Arc::new(category(detail.to_owned()));
-                skeleton.capture_stack(frames)
-            }
-            Err(violation) => super::rejection::reject_borrowed_detail(
-                skeleton,
-                category,
-                detail,
-                violation,
-                frames.len(),
-            ),
-        }
+        self.formatted_admitted(
+            |[detail]| category(detail),
+            [FormattedDetail::exact(format_args!("{detail}"))],
+            DiagnosticConstruction {
+                location: span.map(|span| (span, expression)),
+                ..Default::default()
+            },
+            frames,
+            |_, _, _| Ok(()),
+        )
+        .0
     }
 
-    /// Internal formatters must stream deterministic scalar/text fragments without
-    /// constructing intermediate owned strings. This is not an arbitrary host Display API.
     pub(crate) fn formatted_detail<'a>(
         &self,
         category: fn(String) -> BWErr,
@@ -477,31 +454,6 @@ impl DiagnosticLimits {
             .at(span)
             .with_related(related.0, related.1);
         self.formatted_in(skeleton, category, details, frames)
-    }
-
-    /// The caller already owns the primary error. Admit a newly constructed cause
-    /// with that entire tree before formatting its detail; rejection summarizes
-    /// the primary and explicitly counts the omitted cause.
-    pub(crate) fn formatted_cause(
-        &self,
-        primary: Diagnostic,
-        category: fn(String) -> BWErr,
-        message: fmt::Arguments<'_>,
-        span: &Span,
-    ) -> DiagnosticResult<Diagnostic> {
-        let mut primary = primary.at(span);
-        primary.causes.push(skeleton(category, Some(span), false));
-        match self.formatted_strings(
-            &primary,
-            &[FormattedDetail::exact(message)],
-            std::iter::empty(),
-        ) {
-            Ok([detail]) => {
-                primary.causes.last_mut().expect("new cause").error = Arc::new(category(detail));
-                Ok(primary)
-            }
-            Err(violation) => Err(primary.rejected(violation)),
-        }
     }
 
     fn formatted_strings<'a, const N: usize>(

@@ -2616,3 +2616,46 @@ fn shared_ast_construction_quotas_reject_before_large_message_and_prefix_copies(
         }
     }
 }
+
+#[test]
+fn aggregate_operation_panic_limits_reject_before_large_signature_detail_allocation() {
+    use botwork::core::{
+        diagnostic::DiagnosticCode,
+        operation::{NativeOperation, OperationBudget, OperationControl, OperationOwnershipLimits},
+        signature::StatementSignature,
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let header = "x".repeat(128 * 1024);
+    for factory in [false, true] {
+        for reject in [false, true] {
+            let operation = NativeOperation::asynchronous(
+                StatementSignature::native(&header).unwrap(),
+                move |_, _| {
+                    assert!(!factory, "factory panic");
+                    async { panic!("poll panic") }
+                },
+            )
+            .unwrap()
+            .with_ownership_budget(OperationBudget::new(OperationOwnershipLimits {
+                text_bytes: if reject { 0 } else { usize::MAX },
+                ..Default::default()
+            }));
+            let (result, copies) = observe(64 * 1024, || {
+                runtime.block_on(operation.invoke(vec![], OperationControl::default()))
+            });
+            let error = result.unwrap_err();
+            if reject {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::NativePanic);
+                assert_eq!(copies, 0);
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::NativePanic);
+                assert_eq!(copies, 1);
+            }
+            assert_eq!(operation.ownership_budget().usage(), Default::default());
+        }
+    }
+}

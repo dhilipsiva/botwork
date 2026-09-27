@@ -32,18 +32,21 @@ fn cause_construction_rejects_complete_primary_context_before_visiting_the_cause
             ..DiagnosticLimits::default()
         },
     ] {
-        let error = limits
-            .formatted_cause(
-                Diagnostic::new(BWErr::Cancelled("stopped".into())),
-                BWErr::AsyncRuntime,
-                format_args!("{}", Forbidden),
-                &program.statements[0].span,
-            )
-            .unwrap_err();
-        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
-        assert_eq!(error.causes[0].code(), DiagnosticCode::Cancelled);
-        assert_eq!(error.causes[0].omissions.as_ref().unwrap().direct_causes, 1);
-        assert!(error.causes[0].span.is_none());
+        let (error, _) = limits.formatted_admitted(
+            |[detail]| BWErr::AsyncRuntime(detail),
+            [FormattedDetail::exact(format_args!("{}", Forbidden))],
+            DiagnosticConstruction {
+                stopped: Some(Diagnostic::new(BWErr::Cancelled("stopped".into()))),
+                location: Some((&program.statements[0].span, false)),
+                related: None,
+            },
+            std::iter::empty(),
+            |_, _, _| Ok(()),
+        );
+        assert_eq!(error.code(), DiagnosticCode::Cancelled);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.omissions.as_ref().unwrap().direct_causes, 1);
+        assert!(error.span.is_none());
     }
     drop(program);
     assert!(weak.upgrade().is_none());
@@ -1015,5 +1018,58 @@ fn rejected_stop_construction_skips_deferred_detail_formatting_and_preserves_pri
         assert_eq!(omitted.direct_causes, 1);
         assert_eq!(omitted.source.as_ref().unwrap().file, "é");
         assert_eq!(error.label, "expression");
+    }
+}
+
+#[test]
+fn failed_counting_or_writing_disposes_primary_sources_before_refunding_construction() {
+    struct Lease(std::sync::Weak<crate::core::ast::SourceFile>);
+    impl Drop for Lease {
+        fn drop(&mut self) {
+            assert!(
+                self.0.upgrade().is_none(),
+                "source outlived its construction reservation"
+            );
+        }
+    }
+    struct FailOn {
+        pass: std::cell::Cell<usize>,
+        failure: usize,
+    }
+    impl std::fmt::Display for FailOn {
+        fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let pass = self.pass.get() + 1;
+            self.pass.set(pass);
+            if pass == self.failure {
+                Err(std::fmt::Error)
+            } else {
+                output.write_str("detail")
+            }
+        }
+    }
+    for failure in [1, 2] {
+        let program = Program::parse("primary-source", "Read").unwrap();
+        let source = Arc::downgrade(&program.source);
+        let primary =
+            Diagnostic::new(BWErr::Cancelled("stopped".into())).at(&program.statements[0].span);
+        drop(program);
+        let detail = FailOn {
+            pass: std::cell::Cell::new(0),
+            failure,
+        };
+        let (error, reservation) = DiagnosticLimits::default().formatted_admitted(
+            |[detail]| BWErr::AsyncRuntime(detail),
+            [FormattedDetail::exact(format_args!("{detail}"))],
+            DiagnosticConstruction {
+                stopped: Some(primary),
+                ..Default::default()
+            },
+            std::iter::empty(),
+            |_, _, previous| Ok(previous.unwrap_or_else(|| Lease(source.clone()))),
+        );
+        assert_eq!(error.code(), DiagnosticCode::Cancelled);
+        assert!(reservation.is_none());
+        assert!(source.upgrade().is_none());
+        assert_eq!(detail.pass.get(), failure);
     }
 }

@@ -354,7 +354,7 @@ async fn cleanup_join_construction_admits_primary_and_new_cause_together_and_pre
                     baseline.to_value().to_string()
                 );
             } else {
-                let (summary, limit) = if stop == 2 {
+                let (summary, limit): (&Diagnostic, &Diagnostic) = if stop == 2 {
                     (&error.causes[0], &error)
                 } else {
                     (&error, &error.causes[0])
@@ -383,7 +383,7 @@ fn callback_rejection_preserves_category_and_internal_readmission_preserves_iden
     let error = admit_error(
         &limits,
         &signature,
-        BWErr::NativeError("reason".into()).into(),
+        Diagnostic::new(BWErr::NativeError("reason".into())),
         false,
         false,
     );
@@ -410,7 +410,13 @@ fn observed_stops_keep_priority_but_callback_reported_stop_codes_do_not_bypass_q
                 BWErr::Cancelled("reason".into())
             };
             let code = original.code();
-            let error = admit_error(&limits, &signature, original.into(), observed, false);
+            let error = admit_error(
+                &limits,
+                &signature,
+                Diagnostic::new(original),
+                observed,
+                false,
+            );
             assert_eq!(
                 error.code(),
                 if observed {
@@ -471,4 +477,33 @@ fn panic_construction_keeps_full_admitted_details_or_bounded_original_evidence()
             assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
         }
     }
+}
+
+// Exercise production admission while transferring constructed test values through
+// the same public ownership boundary before installing a different test pool.
+fn admit_error(
+    limits: &DiagnosticLimits,
+    signature: &StatementSignature,
+    error: impl Into<PendingDiagnostic>,
+    preserve_stop: bool,
+    admitted: bool,
+) -> Diagnostic {
+    let error = error.into().value.into_inner();
+    let operation =
+        NativeOperation::asynchronous(signature.clone(), |_, _| async { Ok(Literal::None) })
+            .unwrap()
+            .with_diagnostic_limits(limits.clone())
+            .unwrap();
+    operation
+        .track_error(error, preserve_stop, admitted, &None)
+        .into_inner()
+        .into_inner()
+}
+
+fn panic_error(limits: &DiagnosticLimits, signature: &StatementSignature) -> PendingDiagnostic {
+    NativeOperation::asynchronous(signature.clone(), |_, _| async { Ok(Literal::None) })
+        .unwrap()
+        .with_diagnostic_limits(limits.clone())
+        .unwrap()
+        .panic_error()
 }

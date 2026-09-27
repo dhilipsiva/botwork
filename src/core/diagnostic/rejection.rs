@@ -148,11 +148,6 @@ impl DiagnosticLimits {
 }
 
 impl Diagnostic {
-    /// Fixed emergency evidence for a runtime budget/control failure retaining this error.
-    pub(crate) fn rejected(self, violation: BWErr) -> Self {
-        rejected(self, violation, 0)
-    }
-
     pub(crate) fn rejected_context(
         self,
         violation: BWErr,
@@ -260,36 +255,6 @@ pub(super) fn reject_source_prefix(
         end_byte,
     });
     error
-}
-
-pub(super) fn reject_borrowed_detail(
-    skeleton: Diagnostic,
-    category: fn(String) -> BWErr,
-    detail: &str,
-    violation: BWErr,
-    pending_frames: usize,
-) -> Diagnostic {
-    let (detail, shortened) = prefix(detail, SUMMARY_DETAIL_BYTES);
-    reject_constructed_detail(
-        skeleton,
-        category,
-        detail,
-        shortened,
-        violation,
-        pending_frames,
-    )
-}
-
-pub(super) fn reject_constructed_detail(
-    mut skeleton: Diagnostic,
-    category: fn(String) -> BWErr,
-    detail: String,
-    shortened: bool,
-    violation: BWErr,
-    pending_frames: usize,
-) -> Diagnostic {
-    skeleton.error = std::sync::Arc::new(category(detail));
-    reject_constructed_error(skeleton, usize::from(shortened), violation, pending_frames)
 }
 
 pub(super) fn reject_constructed_error(
