@@ -234,15 +234,17 @@ impl DiagnosticLimits {
         diagnostic: &Diagnostic,
         frames: impl ExactSizeIterator<Item = &'a CallFrame>,
     ) -> Result<DiagnosticSize, BWErr> {
-        self.inspect(diagnostic, frames, None)
+        self.inspect(diagnostic, frames, None, None)
     }
 
-    pub(crate) fn retained_size(
+    /// Inspect a copied tree and its new related site before copying either payload.
+    pub(crate) fn retained_copy_size(
         &self,
         diagnostic: &Diagnostic,
+        related: Option<(&str, &Span)>,
     ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
         let mut sources = Vec::new();
-        let size = self.inspect(diagnostic, std::iter::empty(), Some(&mut sources))?;
+        let size = self.inspect(diagnostic, std::iter::empty(), Some(&mut sources), related)?;
         Ok((size, sources))
     }
 
@@ -251,6 +253,7 @@ impl DiagnosticLimits {
         diagnostic: &Diagnostic,
         frames: impl ExactSizeIterator<Item = &'a CallFrame>,
         owners: Option<&mut Vec<Arc<SourceFile>>>,
+        related: Option<(&str, &Span)>,
     ) -> Result<DiagnosticSize, BWErr> {
         self.validate()?;
         let mut measurement = Measurement {
@@ -285,6 +288,16 @@ impl DiagnosticLimits {
                     measurement.source(span)?;
                 }
             }
+        }
+        if let Some((message, span)) = related {
+            add(
+                &mut measurement.size.related_locations,
+                1,
+                self.related_locations,
+                "diagnostic related locations",
+            )?;
+            measurement.text(message)?;
+            measurement.source(span)?;
         }
         Ok(measurement.size)
     }

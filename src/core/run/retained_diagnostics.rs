@@ -169,11 +169,38 @@ pub(crate) struct StoredDiagnostic {
     pub(crate) _reservation: Option<DiagnosticReservation>,
 }
 impl StoredDiagnostic {
-    pub(crate) fn into_diagnostic(value: Arc<Self>) -> Diagnostic {
-        match Arc::try_unwrap(value) {
-            Ok(value) => value.value,
-            Err(value) => value.value.clone(),
+    /// Keep the copied tree's reservation alive until its explicit handoff.
+    pub(crate) fn copy(
+        &self,
+        budget: Option<&RunBudget>,
+        related: Option<(&str, &Span)>,
+    ) -> DiagnosticResult<Self> {
+        let reservation = match budget {
+            Some(budget) => Some(budget.reserve_diagnostic_copy(&self.value, related)?),
+            None => {
+                DiagnosticLimits::default().retained_copy_size(&self.value, related)?;
+                None
+            }
+        };
+        let mut value = self.value.clone();
+        if let Some((message, span)) = related {
+            value = value.with_related(message, span);
         }
+        Ok(Self {
+            value,
+            _reservation: reservation,
+        })
+    }
+
+    pub(crate) fn take(value: Arc<Self>, budget: Option<&RunBudget>) -> DiagnosticResult<Self> {
+        match Arc::try_unwrap(value) {
+            Ok(value) => Ok(value),
+            Err(value) => value.copy(budget, None),
+        }
+    }
+
+    pub(crate) fn into_diagnostic(self) -> Diagnostic {
+        self.value
     }
 }
 
@@ -183,9 +210,10 @@ pub(crate) struct StoredCallFrame {
 }
 
 impl RunBudget {
-    pub(crate) fn reserve_diagnostic(
+    fn reserve_diagnostic_copy(
         &self,
         diagnostic: &Diagnostic,
+        related: Option<(&str, &Span)>,
     ) -> DiagnosticResult<DiagnosticReservation> {
         self.checkpoint()?;
         self.0
@@ -196,12 +224,19 @@ impl RunBudget {
             .0
             .limits
             .diagnostics
-            .retained_size(diagnostic)
+            .retained_copy_size(diagnostic, related)
             .map_err(|error| self.stop(error))?;
         self.0
             .retained_diagnostics
             .reserve(size, sources)
             .map_err(|error| self.stop(error))
+    }
+
+    pub(crate) fn reserve_diagnostic(
+        &self,
+        diagnostic: &Diagnostic,
+    ) -> DiagnosticResult<DiagnosticReservation> {
+        self.reserve_diagnostic_copy(diagnostic, None)
     }
 
     pub(crate) fn reserve_call_frame(

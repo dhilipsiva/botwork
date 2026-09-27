@@ -749,3 +749,25 @@ assert!(rendered.text.contains("diagnostic rendering truncated"));
 assert!(rendered.text.len() <= RENDER_SUMMARY_BYTES);
 assert_eq!(error.code(), DiagnosticCode::Native);
 ```
+
+Rethrow copies need [retained diagnostic headroom](retained-diagnostics.md) while the original handler record is still live. A quota failure bypasses outer Catch; successful copying retains the original catchable error.
+
+```rust
+use botwork::core::{diagnostic::DiagnosticCode, run::{Engine, RunLimits, RunOptions, RunOutcome, RetainedDiagnosticLimits}};
+let source = "Try { Try { Missing } Catch { Rethrow } } Catch {}";
+for records in [1, 2] {
+    let run = Engine::default().run_source("copy", source, RunOptions {
+        limits: RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits { records, ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    if records == 1 {
+        assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+        assert_eq!(run.result.unwrap_err().causes[0].code(), DiagnosticCode::UndefinedStatement);
+    } else {
+        assert_eq!(run.outcome(), RunOutcome::Succeeded);
+    }
+}
+```

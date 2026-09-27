@@ -3,6 +3,125 @@ use crate::core::diagnostic::DiagnosticLimits;
 use crate::core::run::{RetainedDiagnosticLimits, SnapshotLimits};
 
 #[test]
+fn shared_handler_unwind_admits_copy_overlap_and_preserves_primary_failure_and_bindings() {
+    for records in [2, 3] {
+        let captured = Arc::new(std::sync::Mutex::new(None));
+        let save = captured.clone();
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context
+            .register_callback(
+                "snapshot",
+                "Snapshot",
+                Arc::new(move |_, context| {
+                    *save.lock().unwrap() = Some(context.clone());
+                    Ok(Literal::None)
+                }),
+            )
+            .unwrap();
+        let program = Program::parse(
+            "handlers",
+            "|error| = |7|\nTry { Missing } Catch |error| { Snapshot\n|progress| = |1|\nOther }",
+        )
+        .unwrap();
+        let error = evaluate_program_detailed(&program, &mut context).unwrap_err();
+        let held = captured.lock().unwrap().take().unwrap();
+        assert_eq!(context.frames[0].variables["error"].value.to_string(), "7");
+        assert_eq!(
+            context.frames[0].variables["progress"].value.to_string(),
+            "1"
+        );
+        assert_eq!(
+            held.handlers[0].diagnostic.value.code(),
+            DiagnosticCode::UndefinedStatement
+        );
+        held.checkpoint().unwrap();
+        if records == 2 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::UndefinedStatement);
+            assert!(
+                matches!(error.causes[0].error.as_ref(), BWErr::StatementNotDefined(name) if name.trim() == "Other")
+            );
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().direct_causes, 1);
+            assert!(context.checkpoint().is_err());
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::UndefinedStatement);
+            assert!(
+                matches!(error.error.as_ref(), BWErr::StatementNotDefined(name) if name.trim() == "Other")
+            );
+            assert!(
+                matches!(error.causes[0].error.as_ref(), BWErr::StatementNotDefined(name) if name.trim() == "Missing")
+            );
+            context.checkpoint().unwrap();
+        }
+        assert!(context.calls.is_empty() && context.handlers.is_empty());
+        drop(held);
+    }
+}
+
+#[test]
+fn unique_handler_handoff_and_duplicate_error_identity_need_no_additional_record() {
+    for shared_identity in [false, true] {
+        let context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        let original = context
+            .retain_handler(Diagnostic::new(BWErr::NativeError("first".into())))
+            .unwrap();
+        let (error, extra_owner) = if shared_identity {
+            (original.value.clone(), Some(original.clone()))
+        } else {
+            (
+                Diagnostic::new(BWErr::ArithmeticError("second".into())),
+                None,
+            )
+        };
+        let error = context.finish_handler_error(error, original);
+        assert_eq!(error.causes.len(), usize::from(!shared_identity));
+        assert_ne!(error.code(), DiagnosticCode::ResourceLimit);
+        context.checkpoint().unwrap();
+        drop(extra_owner);
+        drop(
+            context
+                .retain_handler(Diagnostic::new(BWErr::NativeError("next".into())))
+                .unwrap(),
+        );
+    }
+}
+
+#[test]
+fn cancelled_rethrow_copy_keeps_control_priority_and_bounded_original_site_evidence() {
+    let control = OperationControl::default();
+    let context = Context::with_control(RunLimits::default(), control.clone()).unwrap();
+    let program = Program::parse("original-é", "|x| = |1|").unwrap();
+    let original = context
+        .retain_handler(
+            Diagnostic::new(BWErr::ArithmeticError("divide by zero".into()))
+                .at(&program.statements[0].span),
+        )
+        .unwrap();
+    control.cancel();
+    let error = context.rethrow_handler(&original, &program.statements[0].span);
+    assert_eq!(error.code(), DiagnosticCode::Cancelled);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Arithmetic);
+    let omissions = error.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omissions.related_locations, 1);
+    assert_eq!(omissions.source.as_ref().unwrap().file, "original-é");
+    assert!(error.is_emergency());
+}
+
+#[test]
 fn context_source_guard_admission_preserves_unicode_offsets_and_latches_only_the_requester() {
     let context = Context::with_limits(RunLimits {
         source_bytes: 2,

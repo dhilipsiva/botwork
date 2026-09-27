@@ -25,6 +25,86 @@ fn options(retained_diagnostics: RetainedDiagnosticLimits) -> RunOptions {
 }
 
 #[test]
+fn rethrow_requires_copy_headroom_before_new_metadata_and_preserves_prior_effects() {
+    let source = "|error| = |7|\nTry { Try { Missing } Catch |error| { |progress| = |1|\nRethrow } } Catch |error| { |handled| = |true| }";
+    for records in [1, 2] {
+        let run = Engine::default().run_source(
+            "copy",
+            source,
+            options(RetainedDiagnosticLimits {
+                records,
+                diagnostics: 2,
+                call_frames: 0,
+                related_locations: 1,
+                text_bytes: 35, // Two labels/names plus the new "rethrow" message.
+                source_bytes: "copy".len() + source.len(),
+            }),
+        );
+        assert_eq!(run.variables["error"].to_string(), "7");
+        assert_eq!(run.variables["progress"].to_string(), "1");
+        assert_eq!(run.variables.contains_key("handled"), records == 2);
+        if records == 1 {
+            assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+            let error = run.result.unwrap_err();
+            assert_eq!(error.causes[0].code(), DiagnosticCode::UndefinedStatement);
+            assert_eq!(
+                error.causes[0]
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .related_locations,
+                1
+            );
+            assert!(error.causes[0].span.is_none());
+        } else {
+            assert_eq!(run.outcome(), RunOutcome::Succeeded);
+        }
+    }
+}
+
+#[test]
+fn rethrow_copy_reservations_release_between_caught_failures_and_latch_only_the_requester() {
+    let mut context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 2,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let recovered = Program::parse(
+        "recover",
+        "Try { Try { Missing } Catch { Rethrow } } Catch {}",
+    )
+    .unwrap();
+    for _ in 0..100 {
+        evaluate_program_detailed(&recovered, &mut context).unwrap();
+    }
+    let mut context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let mut sibling = context.clone();
+    assert_eq!(
+        evaluate_program_detailed(&recovered, &mut context)
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::ResourceLimit
+    );
+    let next = Program::parse(
+        "next",
+        "Try { Missing } Catch { |ok| = |true| }\nIf |ok == false| { Unexpected }",
+    )
+    .unwrap();
+    assert!(evaluate_program_detailed(&next, &mut context).is_err());
+    evaluate_program_detailed(&next, &mut sibling).unwrap();
+}
+
+#[test]
 fn exact_handler_metrics_and_each_reduced_quota_preserve_bounded_original_evidence() {
     let source = "Try { Missing } Catch { |handled| = |true| }";
     let exact = RetainedDiagnosticLimits {
@@ -164,7 +244,7 @@ fn outer_handlers_admit_related_locations_and_complete_cause_trees() {
     ] {
         for fits in [false, true] {
             let mut limits = RetainedDiagnosticLimits {
-                records: 1,
+                records: if related { 2 } else { 1 },
                 ..RetainedDiagnosticLimits::default()
             };
             if related {

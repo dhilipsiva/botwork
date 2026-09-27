@@ -307,6 +307,12 @@ impl Diagnostic {
         self
     }
 
+    pub(crate) fn omit_handled_cause(mut self) -> Self {
+        let omitted = self.emergency_omissions_mut();
+        omitted.direct_causes = omitted.direct_causes.saturating_add(1);
+        self
+    }
+
     pub(crate) fn with_related(mut self, message: &str, span: &Span) -> Self {
         if self.is_emergency() {
             let omitted = self.emergency_omissions_mut();

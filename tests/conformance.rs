@@ -1278,19 +1278,26 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             Input::RuntimeDiagnosticBoundary
             | Input::RuntimeDiagnosticLimit
             | Input::RetainedDiagnosticBoundary
-            | Input::RetainedDiagnosticLimit => {
+            | Input::RetainedDiagnosticLimit
+            | Input::HandlerCopyBoundary
+            | Input::HandlerCopyLimit => {
                 use botwork::core::{
                     diagnostic::DiagnosticLimits,
                     run::{Engine, RetainedDiagnosticLimits, RunLimits, RunOptions, RunOutcome},
                 };
                 let mut limits = RunLimits::default();
                 let capacity = usize::from(case.error.is_none());
+                let copying = matches!(
+                    case.input,
+                    Input::HandlerCopyBoundary | Input::HandlerCopyLimit
+                );
                 if matches!(
                     case.input,
                     Input::RetainedDiagnosticBoundary | Input::RetainedDiagnosticLimit
-                ) {
+                ) || copying
+                {
                     limits.retained_diagnostics = RetainedDiagnosticLimits {
-                        records: capacity,
+                        records: capacity + usize::from(copying),
                         ..RetainedDiagnosticLimits::default()
                     };
                 } else {
@@ -1301,7 +1308,11 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 let run = Engine::default().run_source(
                     case.id,
-                    "Try { Missing } Catch { |handled| = |true| }",
+                    if copying {
+                        "Try { Try { Missing } Catch { Rethrow } } Catch { |handled| = |true| }"
+                    } else {
+                        "Try { Missing } Catch { |handled| = |true| }"
+                    },
                     RunOptions {
                         limits,
                         ..RunOptions::default()

@@ -60,6 +60,47 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn rejected_rethrow_copy_never_allocates_large_call_metadata() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticCode,
+        eval::{evaluate_program_detailed, Context},
+        grammar::BWErr,
+        run::{RetainedDiagnosticLimits, RunLimits},
+    };
+    let signature = "A".repeat(64 * 1024);
+    let mut counts = Vec::new();
+    for (records, body) in [(1, ""), (1, "Rethrow"), (2, "Rethrow")] {
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context
+            .register_native(&signature, |_| Err(BWErr::NativeError("failed".into())))
+            .unwrap();
+        let program =
+            Program::parse("copy", &format!("Try {{ {signature} }} Catch {{ {body} }}")).unwrap();
+        let (result, allocations) = observe(signature.len(), || {
+            evaluate_program_detailed(&program, &mut context)
+        });
+        match (records, body) {
+            (_, "") => {
+                result.unwrap();
+            }
+            (1, _) => assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit),
+            _ => assert_eq!(result.unwrap_err().code(), DiagnosticCode::Native),
+        }
+        counts.push(allocations);
+    }
+    assert_eq!(counts[1], counts[0]); // Rejection adds no large metadata copy.
+    assert_eq!(counts[2], counts[0] + 1); // One admitted rethrow copy, no self-cause copy.
+}
+
+#[test]
 fn diagnostic_rendering_allocates_one_admitted_output_without_an_intermediate_help_string() {
     use botwork::core::{
         diagnostic::{Diagnostic, DiagnosticRenderLimits},

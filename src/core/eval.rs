@@ -1402,11 +1402,7 @@ fn evaluate_handler(
         })();
         match installed {
             Ok(previous) => previous,
-            Err(error) => {
-                return Err(error
-                    .at(&name.span)
-                    .while_handling(StoredDiagnostic::into_diagnostic(original)))
-            }
+            Err(error) => return Err(context.finish_handler_error(error.at(&name.span), original)),
         }
     } else {
         None
@@ -1425,8 +1421,7 @@ fn evaluate_handler(
     });
     let result = evaluate_block(handler, context);
     context.handlers.pop();
-    let result =
-        result.map_err(|error| error.while_handling(StoredDiagnostic::into_diagnostic(original)));
+    let result = result.map_err(|error| context.finish_handler_error(error, original));
     if let Some(name) = binding {
         // Reservation counters never participate in key equality or hashing.
         #[allow(clippy::mutable_key_type)]
@@ -1565,11 +1560,7 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
                 .last()
                 .filter(|handler| handler.invocation == context.current)
             {
-                Some(handler) => Err(handler
-                    .diagnostic
-                    .value
-                    .clone()
-                    .with_related("rethrow", &statement.span)),
+                Some(handler) => Err(context.rethrow_handler(&handler.diagnostic, &statement.span)),
                 None => Err(context.detail_error(
                     BWErr::ControlFlowError,
                     "Rethrow requires an enclosing Catch in the same invocation",

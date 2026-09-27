@@ -151,9 +151,17 @@ impl Diagnostic {
     pub(crate) fn rejected(self, violation: BWErr) -> Self {
         rejected(self, violation, 0)
     }
+
+    /// Preserve bounded evidence without first copying a retained original tree.
+    pub(crate) fn rejected_copy(&self, violation: BWErr, pending_related: usize) -> Self {
+        let mut summary = borrowed_summary(self, 0);
+        let omissions = summary.omissions.as_mut().expect("bounded original");
+        omissions.related_locations = omissions.related_locations.saturating_add(pending_related);
+        Diagnostic::new(violation).while_handling(summary)
+    }
 }
 
-fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> Diagnostic {
+fn borrowed_summary(diagnostic: &Diagnostic, pending_frames: usize) -> Diagnostic {
     let mut shortened = 0;
     let mut summary = Diagnostic::new(error_summary(&diagnostic.error, &mut shortened));
     let source = diagnostic.span.as_ref().map(|span| {
@@ -182,6 +190,11 @@ fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> 
         prior_summary: diagnostic.omissions.is_some(),
         source,
     }));
+    summary
+}
+
+fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> Diagnostic {
+    let summary = borrowed_summary(&diagnostic, pending_frames);
     diagnostic.discard();
     Diagnostic::new(violation).while_handling(summary)
 }

@@ -40,6 +40,32 @@ impl std::fmt::Display for AccessPath<'_> {
 }
 
 impl Context {
+    pub(super) fn rethrow_handler(&self, original: &StoredDiagnostic, span: &Span) -> Diagnostic {
+        match original.copy(self.budget.as_ref(), Some(("rethrow", span))) {
+            Ok(copy) => copy.into_diagnostic(),
+            Err(violation) => original.value.rejected_copy(violation.into_error(), 1),
+        }
+    }
+
+    pub(super) fn finish_handler_error(
+        &self,
+        error: Diagnostic,
+        original: Arc<StoredDiagnostic>,
+    ) -> Diagnostic {
+        // Rethrow already owns this category and its original cause tree. Do not
+        // copy the handler merely to discard the duplicate identity afterward.
+        if Arc::ptr_eq(&error.error, &original.value.error) {
+            return error;
+        }
+        if error.is_emergency() {
+            return error.omit_handled_cause();
+        }
+        match StoredDiagnostic::take(original, self.budget.as_ref()) {
+            Ok(original) => error.while_handling(original.into_diagnostic()),
+            Err(violation) => error.rejected(violation.into_error()).omit_handled_cause(),
+        }
+    }
+
     pub(super) fn ast_error(&self, failure: ast::AstFailure<'_>) -> Diagnostic {
         let stopped = self.checkpoint().err();
         let error = failure.diagnostic(
