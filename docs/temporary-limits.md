@@ -24,7 +24,7 @@ BW8001 latches the requesting Context and bypasses Catch. Modules share the call
 
 Temporary and retained-variable budgets are independent. Assignment reserves stored copies while the evaluated result is still charged. Parameter/iterator/handler transfers can briefly charge both allowances conservatively. Owned Engine exports use the separate [result budget](result-limits.md); public Context/Pair return values transfer to host ownership and release temporary allowance. Keeping or cloning many host-returned values is the host's responsibility.
 
-These are logical payload/node counts, including conservative construction placeholders and operation headroom. Allocator capacity/overhead, AST data, diagnostics, formatted output, and arbitrary host callback allocations are excluded. Standalone NativeOperation host APIs retain their per-value/host contract; asynchronous DSL integration remains pending. Temporary limits do not provide a process-memory ceiling or hard native deadline.
+These are logical payload/node counts, including conservative construction placeholders and operation headroom. Allocator capacity/overhead, AST data, diagnostics, formatted output, and arbitrary host callback allocations are excluded. Standalone NativeOperation APIs have separate [aggregate ownership budgets](operation-ownership.md); asynchronous DSL integration remains pending. Temporary limits do not provide a process-memory ceiling or hard native deadline.
 
 ## Evidence
 

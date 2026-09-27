@@ -345,6 +345,9 @@ pub(super) fn discard_causes(causes: Vec<Diagnostic>) {
 /// Results abandoned inside runtime-owned worker handles must not recursively drop host trees.
 pub(crate) struct OwnedDiagnostic(Option<Diagnostic>);
 impl OwnedDiagnostic {
+    pub(crate) fn as_ref(&self) -> &Diagnostic {
+        self.0.as_ref().expect("owned diagnostic")
+    }
     pub(crate) fn new(value: Diagnostic) -> Self {
         Self(Some(value))
     }

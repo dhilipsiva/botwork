@@ -192,6 +192,27 @@ CLI `--list-statements` and `--statement-help 'Log |value|'` use the initialized
 
 `core::operation::NativeOperation` establishes the host interface for future I/O statements and adapters. It uses the shared native signature schema and owned finite values. `asynchronous(signature, callback)` accepts a future-producing callback; `blocking(signature, max_in_flight, callback)` dispatches synchronous work to a bounded Tokio worker pool. Clones share the callback and its blocking capacity. Hosts supply a live Tokio runtime with time enabled. The synchronous DSL evaluator does not dispatch these operations yet; asynchronous program/CLI integration remains a separate runtime task.
 
+Clones also share an [operation ownership budget](operation-ownership.md). Arguments reserve capacity when the invocation future is constructed; results require overlap headroom and remain charged through worker handoff. Budgets can be shared across distinct operations, and reservations follow abandoned workers until completion or disposal. Public results transfer to host ownership.
+
+```rust
+use botwork::core::{grammar::Literal, operation::{NativeOperation, OperationBudget, OperationControl, OperationOwnershipLimits, OperationUsage}, signature::StatementSignature};
+let budget = OperationBudget::new(OperationOwnershipLimits {
+    invocations: 1, values: 2, nodes: 2, payload_bytes: 8,
+    ..OperationOwnershipLimits::default()
+});
+let operation = NativeOperation::asynchronous(StatementSignature::native("Echo |value|")?,
+    |mut values, _| async move { Ok(values.pop().unwrap()) })?
+    .with_ownership_budget(budget.clone());
+let invocation = operation.invoke(vec![Literal::Int(7)], OperationControl::default());
+assert_eq!(budget.usage().invocations, 1);
+assert_eq!(budget.usage().payload_bytes, 4);
+let runtime = tokio::runtime::Builder::new_current_thread().enable_time().build()?;
+let value = runtime.block_on(invocation)?;
+assert_eq!(value.to_string(), "7");
+assert_eq!(budget.usage(), OperationUsage::default());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ```rust
 use botwork::core::{
     operation::{NativeOperation, OperationControl},

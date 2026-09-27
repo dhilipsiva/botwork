@@ -347,14 +347,23 @@ impl StatementSignature {
         lines.join("\n")
     }
 
-    pub(crate) fn validate_argument(
+    pub(crate) fn validate_argument<E>(
         &self,
         index: usize,
         value: &Literal,
-        error: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<()> {
+        error: impl FnOnce(fmt::Arguments<'_>) -> E,
+    ) -> Result<(), E> {
+        self.validate_argument_kind(index, value.kind(), error)
+    }
+
+    pub(crate) fn validate_argument_kind<E>(
+        &self,
+        index: usize,
+        kind: ValueKind,
+        error: impl FnOnce(fmt::Arguments<'_>) -> E,
+    ) -> Result<(), E> {
         let parameter = &self.parameters[index];
-        if parameter.accepted.contains(value.kind()) {
+        if parameter.accepted.contains(kind) {
             return Ok(());
         }
         Err(error(format_args!(
@@ -363,7 +372,7 @@ impl StatementSignature {
             index + 1,
             self.normalized,
             parameter.accepted,
-            value.kind().as_str(),
+            kind.as_str(),
         )))
     }
 

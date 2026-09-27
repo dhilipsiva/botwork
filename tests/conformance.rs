@@ -341,6 +341,46 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_async_case(&case);
                 continue;
             }
+            Input::OperationOwnershipBoundary | Input::OperationOwnershipLimit => {
+                use botwork::core::{
+                    operation::{
+                        NativeOperation, OperationBudget, OperationControl,
+                        OperationOwnershipLimits, OperationUsage,
+                    },
+                    signature::StatementSignature,
+                };
+                let budget = OperationBudget::new(OperationOwnershipLimits {
+                    invocations: 1,
+                    values: 2,
+                    nodes: 2,
+                    payload_bytes: 8 - usize::from(case.error.is_some()),
+                    ..OperationOwnershipLimits::default()
+                });
+                let operation = NativeOperation::asynchronous(
+                    StatementSignature::native("Echo |value|").unwrap(),
+                    |mut values, _| async move { Ok(values.pop().unwrap()) },
+                )
+                .unwrap()
+                .with_ownership_budget(budget.clone());
+                let invocation =
+                    operation.invoke(vec![Literal::Int(7)], OperationControl::default());
+                assert_eq!(budget.usage().invocations, 1);
+                assert_eq!(budget.usage().payload_bytes, 4);
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .unwrap();
+                let result = runtime.block_on(invocation);
+                if let Some(expected) = case.error {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                } else {
+                    assert_eq!(result.unwrap().to_string(), "7");
+                }
+                assert_eq!(budget.usage(), OperationUsage::default());
+                continue;
+            }
             Input::OperationDiagnosticBoundary
             | Input::OperationDiagnosticLimit
             | Input::OperationPanicBoundary

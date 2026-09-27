@@ -60,6 +60,66 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn operation_ownership_admission_moves_values_and_rejects_errors_without_large_copies() {
+    use botwork::core::{
+        diagnostic::{Diagnostic, DiagnosticCode},
+        grammar::BWErr,
+        operation::{
+            NativeOperation, OperationBudget, OperationControl, OperationOwnershipLimits,
+            OperationUsage,
+        },
+        signature::StatementSignature,
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    let budget = OperationBudget::default();
+    let operation = NativeOperation::asynchronous(
+        StatementSignature::native("Echo |value|").unwrap(),
+        |mut values, _| async move { Ok(values.pop().unwrap()) },
+    )
+    .unwrap()
+    .with_ownership_budget(budget.clone());
+    let text = "é".repeat(64 * 1024);
+    let pointer = text.as_ptr();
+    let (value, copies) = observe(64 * 1024, || {
+        runtime
+            .block_on(operation.invoke(vec![Literal::String(text)], OperationControl::default()))
+            .unwrap()
+    });
+    assert_eq!(copies, 0);
+    let Literal::String(text) = value else {
+        panic!("string")
+    };
+    assert_eq!(text.as_ptr(), pointer);
+    assert_eq!(budget.usage(), OperationUsage::default());
+    let error = Mutex::new(Some(Diagnostic::new(BWErr::NativeError(
+        "é".repeat(64 * 1024),
+    ))));
+    let budget = OperationBudget::new(OperationOwnershipLimits {
+        text_bytes: 0,
+        ..OperationOwnershipLimits::default()
+    });
+    let operation =
+        NativeOperation::asynchronous(StatementSignature::native("Fail").unwrap(), move |_, _| {
+            let error = error.lock().unwrap().take().unwrap();
+            async move { Err(error) }
+        })
+        .unwrap()
+        .with_ownership_budget(budget.clone());
+    let (error, copies) = observe(64 * 1024, || {
+        runtime
+            .block_on(operation.invoke(vec![], OperationControl::default()))
+            .unwrap_err()
+    });
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+    assert_eq!(copies, 0);
+    assert_eq!(budget.usage(), OperationUsage::default());
+}
+
+#[test]
 fn file_input_errors_stream_large_origins_without_extra_path_sized_buffers() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},
