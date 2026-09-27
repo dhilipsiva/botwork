@@ -65,11 +65,15 @@ pub(super) fn run(
         .launcher
         .lock()
         .unwrap_or_else(|error| error.into_inner())
-        .take()
-        .unwrap_or_else(|| Box::new(launch::spawn));
+        .take();
+    #[cfg(test)]
+    let launched = match launcher {
+        Some(launcher) => launcher(specification),
+        None => launch_worker(specification, observation),
+    };
     #[cfg(not(test))]
-    let launcher = launch::spawn;
-    let mut child = match launcher(specification) {
+    let launched = launch_worker(specification, observation);
+    let mut child = match launched {
         Ok(child) => child,
         Err(error) => {
             observation.error(runtime(format_args!(
@@ -98,6 +102,7 @@ pub(super) fn run(
     let mut written: usize = 0;
     let mut signalled = false;
     let mut unverified = false;
+    let mut cleanup = WorkerCleanup::Reaped;
     if let Err(error) = setup {
         observation.error(io_failure(error));
         output_failed = true;
@@ -179,13 +184,19 @@ pub(super) fn run(
                     #[cfg(test)]
                     observation.hook(Point::Reap, pid);
                     match child.reap() {
-                        Ok(Some(status)) => {
-                            observation.reaped(status);
-                            if !status.success() && !observation.status().stopped {
-                                observation.error(Diagnostic::formatted(
-                                    BWErr::NativeError,
-                                    format_args!("Isolated worker exited with {status}"),
-                                ));
+                        Ok(Some(completion)) => {
+                            cleanup = completion.cleanup;
+                            if let Some(status) = completion.status {
+                                observation.reaped(status);
+                                if !status.success() && !observation.status().stopped {
+                                    observation.error(Diagnostic::formatted(
+                                        BWErr::NativeError,
+                                        format_args!("Isolated worker exited with {status}"),
+                                    ));
+                                }
+                            }
+                            if let Some(error) = completion.error {
+                                observation.error(error);
                             }
                             if written != input.len() && !observation.status().stopped {
                                 observation.error(runtime(format_args!(
@@ -221,12 +232,29 @@ pub(super) fn run(
     close_pipe(&mut stdin, observation, pid);
     close_pipe(&mut stdout, observation, pid);
     close_pipe(&mut stderr, observation, pid);
-    let io_complete = !output_failed && written == input.len();
+    #[cfg(test)]
+    if child.guardian.is_some() {
+        observation.hook(Point::ControlClose, pid);
+    }
+    close_pipe(&mut child.guardian, observation, pid);
+    drop(child);
+    let io_complete =
+        cleanup != WorkerCleanup::NotStarted && !output_failed && written == input.len();
     // Final publication must not race the request payload's reservation refund.
     drop(input);
     if unverified {
         observation.finish(WorkerCleanup::Unverified, false);
     } else {
-        observation.finish(WorkerCleanup::Reaped, io_complete);
+        observation.finish(cleanup, io_complete);
+    }
+}
+
+fn launch_worker(
+    specification: WorkerCommand,
+    observation: &Observation,
+) -> io::Result<ChildOwner> {
+    match &observation.shared.guardian {
+        Some(executable) => guardian::spawn(executable, specification),
+        None => launch::spawn(specification),
     }
 }

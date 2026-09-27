@@ -15,6 +15,7 @@ pub(super) fn spawn(specification: WorkerCommand) -> io::Result<ChildOwner> {
         .map(|child| ChildOwner {
             child,
             owned: true,
+            guardian: None,
             #[cfg(test)]
             observer: None,
         })

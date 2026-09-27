@@ -138,6 +138,9 @@ fn run(
 }
 
 fn main() -> ExitCode {
+    if let Some(status) = botwork::core::worker::guardian_main() {
+        return ExitCode::from(status);
+    }
     let args = Args::parse();
     let output_limits = OutputLimits {
         record_bytes: args.max_output_record_bytes,

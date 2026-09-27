@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::TreeBoundary | Input::TreeUnverified => {
+                check_tree_case(&case);
+                continue;
+            }
             Input::ProgressBoundary | Input::ProgressIncomplete => {
                 check_progress_case(&case);
                 continue;
@@ -2136,4 +2140,60 @@ fn check_progress_case(case: &Case) {
     }
     #[cfg(not(target_os = "linux"))]
     assert!(start.is_err());
+}
+
+fn check_tree_case(case: &Case) {
+    use botwork::core::worker::{WorkerLimits, WorkerPool};
+    let pool = WorkerPool::with_process_tree(
+        WorkerLimits::default(),
+        if case.error.is_some() {
+            "/bin/true".into()
+        } else {
+            env!("CARGO_BIN_EXE_botwork").into()
+        },
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use botwork::core::{
+            operation::OperationControl,
+            worker::{WorkerCleanup, WorkerCommand, WorkerOutcome},
+        };
+        let pool = pool.unwrap();
+        let handle = pool
+            .start(
+                WorkerCommand {
+                    executable: "/bin/true".into(),
+                    arguments: vec![],
+                    directory: std::env::temp_dir(),
+                    environment: Default::default(),
+                },
+                vec![],
+                OperationControl::default(),
+            )
+            .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let report = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), handle.wait())
+                .await
+                .unwrap()
+        });
+        if let Some(expected) = case.error {
+            assert_eq!(report.cleanup, WorkerCleanup::Unverified);
+            assert_ne!(report.outcome, WorkerOutcome::Succeeded);
+            let error = report.diagnostic.unwrap();
+            assert_eq!(error.code().as_str(), case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+            assert_eq!(pool.snapshot().active.len(), 1);
+        } else {
+            assert_eq!(report.cleanup, WorkerCleanup::TreeReaped);
+            assert_eq!(report.outcome, WorkerOutcome::Succeeded);
+            assert!(report.io_complete && report.progress_complete);
+            assert!(pool.snapshot().active.is_empty());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    assert!(pool.is_err());
 }

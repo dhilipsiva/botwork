@@ -1,6 +1,6 @@
 # Isolated Worker Supervision
 
-`core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
+`core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux. The default pool supervises the direct child and its inherited process group; `with_process_tree` adds a dedicated Linux guardian for detached descendants and host death. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
 
 This is the byte-oriented execution boundary beneath the [typed worker protocol](worker-protocol.md). `NativeOperation::isolated` supplies bounded typed arguments, results, diagnostics, signatures, and shared ownership across this boundary. Async DSL dispatch, persistent run/report recovery after a host crash, and the complete milestone 6 shutdown coordinator remain separate TODO items. This implementation does not claim those integrations are complete.
 
@@ -88,15 +88,51 @@ On a stop, the supervisor sends SIGKILL to the child's original process group an
 Cleanup status is explicit:
 
 - `NotStarted`: launch was skipped or failed before a worker handle was returned.
+- `TreeReaped`: the guardian verified and reaped the complete adopted worker tree, then exited (see below).
 - `Reaped`: the direct child was reaped and inherited-group termination was requested. This does not assert ownership/reaping of grandchildren.
 - `Pending`: startup or cleanup exceeded its allowance. A terminal unsuccessful report returns while the supervisor retains the unresolved launch or child and its capacity slot. Once its stalled OS call returns, the owner closes pipes and continues termination/reaping. Later snapshots preserve the same worker ID and outcome with `Reaped`, or `NotStarted` after a late launch error.
 - `Unverified`: host interference or a supervisor failure prevented verification. Lost-ownership slots are quarantined rather than reused silently. In particular, a host reaping this child or changing SIGCHLD policy violates the exclusive ownership contract; the supervisor must not risk signalling a recycled PID.
 
 `shutdown()` closes admission and requests cancellation of all owned workers immediately. It returns a snapshot rather than blocking on kernel cleanup. `snapshot()` exposes active IDs/PIDs/stopping state, active cleanup status even after history eviction, completed outcome/cleanup metadata, and a count of omitted history records. History eviction never implies success; a caller needing durable evidence must retain reports or persist its own records. Exactly one metadata record is retained per completed worker until bounded eviction. An early `Pending` report is reconciled when its supervisor finishes, including a late startup result. Dropping the last pool owner requests shutdown; supervisor ownership outlives the pool and runtime until cleanup completes.
 
-This is not a security sandbox or an absolute real-time kernel guarantee. A worker can consume child memory or create descendants outside its initial process group. Deliberately detached descendants, host crashes, suspended hosts, uninterruptible kernel operations, and blocked OS process creation/signalling remain outside the termination guarantee. Stalled process creation and post-launch OS calls have independently observable pending results, but that result does not assert termination. The supervisor reaps only its direct child; orphaned descendants are reaped by their eventual parent. Callers requiring containment of arbitrary descendants or recovery after host death need the further worker/shutdown work tracked in TODO. Never install a competing child reaper or ignore SIGCHLD while this pool owns children.
+This is not a security sandbox or an absolute real-time kernel guarantee. A worker can consume child memory or create descendants outside its initial process group. For the default pool, deliberately detached descendants, host crashes, suspended hosts, uninterruptible kernel operations, and blocked OS process creation/signalling remain outside the termination guarantee. Stalled process creation and post-launch OS calls have independently observable pending results, but that result does not assert termination. The supervisor reaps only its direct child; orphaned descendants are reaped by their eventual parent. Use the guardian mode below for trusted detached descendants and cleanup after host death. Recovery records and stronger containment when the guardian itself fails remain tracked in TODO. Never install a competing child reaper or ignore SIGCHLD while this pool owns children.
 
 Other platforms reject worker entry before effects. Only Linux is currently advertised for this boundary; the language's existing synchronous/async host APIs retain their prior platform scope.
+
+## Process-tree Guardians
+
+Use `WorkerPool::with_process_tree(limits, absolute_botwork_path)` when an operation can fork detached descendants or must clean up after its host exits. The path names the matching installed Botwork CLI executable, which enters a private guardian mode before normal CLI parsing. The existing `WorkerCommand` still selects the actual worker with literal arguments and its explicit environment/cwd. No shell wrapper, additional package, or elevated privilege is required. Pool clones and `NativeOperation::isolated` share the same guardian mode and quotas.
+
+This configuration example checks the constructor without launching a worker; replace the installation path before calling `start`:
+
+```rust
+# #[cfg(target_os = "linux")]
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+use botwork::core::worker::{WorkerLimits, WorkerPool};
+use std::{path::PathBuf, time::Duration};
+assert!(WorkerPool::with_process_tree(WorkerLimits::default(), PathBuf::from("relative")).is_err());
+let pool = WorkerPool::with_process_tree(
+    WorkerLimits::default(), PathBuf::from("/opt/botwork/bin/botwork"),
+)?;
+assert!(pool.snapshot().active.is_empty());
+assert!(pool.shutdown_wait(Duration::ZERO)?.closed);
+# Ok(())
+# }
+# #[cfg(not(target_os = "linux"))]
+# fn main() {}
+```
+
+Each invocation gets a separate guardian process. Only that process becomes a [child subreaper](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html), so double-forked descendants are adopted there without changing the host's child-reaping policy or claiming unrelated host children. Session changes and process-group detachment do not escape this ancestry. The host snapshot PID identifies the guardian; a completed report's exit status belongs to the actual worker, including its original exit code or terminating signal.
+
+The host opens a [PID descriptor](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) for its own process before launching the guardian. The guardian polls that stable identity as well as a private Unix control socket. Cancellation closes the socket's write side. Host termination also starts cleanup, even if an unrelated forked host child retains a copy of the socket. Both guardian descriptors are close-on-exec before the actual worker starts, and descriptor placement handles hosts whose standard descriptors are closed. The guardian has its own process group, separate from the host.
+
+After the worker exits, or a stop is observed, the guardian repeatedly signals its current direct children and reaps exited children, including newly adopted orphans. Child enumeration uses fixed 4 KiB scratch space; each reap batch is capped at 64 before checking control again. The [proc children list can omit changing children](https://man7.org/linux/man-pages/man5/proc_tid_children.5.html), so an empty list is never proof of cleanup. Before signalling each listed PID, a non-reaping wait validates current ownership. Only [waitpid with no remaining children](https://man7.org/linux/man-pages/man2/waitpid.2.html), using the Linux all-child option, establishes completion. PID values are never retained for later signalling after reaping.
+
+A fixed 13-byte private acknowledgment reports complete-tree cleanup, a pre-worker startup failure, or cleanup errors. The host requires the complete frame, EOF, and successful guardian exit. `TreeReaped` means the actual worker and its adopted descendants were reaped and the guardian also exited. It does not itself mean the operation succeeded. Missing, malformed, or unsuccessful guardian completion becomes `Unverified`, quarantining the slot. Startup failures with a valid acknowledgment become `NotStarted`. The typed bridge accepts successful values only after `TreeReaped` (or the default mode's `Reaped`), full I/O, final progress, successful worker status, and no stop.
+
+The overall execution timeout includes tree cleanup; the cleanup observation allowance starts when the host observes a stop or its direct guardian exits. All host handles, including the control socket, close before final publication. The guardian remains alive while cleanup is pending. The host never kills its guardian to meet the cleanup observation allowance, since doing so would discard descendant ownership. A stalled or stopped guardian therefore produces `Pending` while the slot and typed reservations remain held. Resuming it reconciles the original outcome with `TreeReaped`. Host death leaves the guardian running until its descendants settle; the host's eventual reaper owns the orphaned guardian itself. This cleanup does not create a durable run result or undo completed effects.
+
+This mode requires Linux 5.3 or later with PID descriptors, subreaper support, proc child enumeration, and permission for Unix-socket IPC and signalling the worker's descendants. Missing facilities or a mismatched helper fail without silently falling back to direct-child guarantees. Workers and the configured helper are trusted host executables. Privilege changes that remove signal permission, interference with the guardian, a killed/crashed guardian, host suspension, and uninterruptible kernel calls still need stronger containment/recovery. This is not a security sandbox, a kernel real-time guarantee, or durable host-crash reconciliation.
 
 ## Bounded Shutdown Wait
 
@@ -138,3 +174,5 @@ Real Linux subprocess tests cover binary I/O, simultaneous pipe backpressure, ex
 Nine launcher tests use owned gates to delay the return of process creation or startup failure, verifying pending results, retained charges, late reaping, stop priority, handle/pool drop, guarded child disposal, launcher panic, and output overflow after an early stop. These simulate the spawn API not returning; they do not claim to reproduce an uninterruptible kernel fault. Three additional public subprocess tests verify shutdown drains, zero/overflow allowances, report preservation, parent isolation, and notification of multiple waiters without history. R27 corpus cases and the executed shutdown example cover the public API.
 
 Eight post-launch unit tests include a nine-boundary stalled-call matrix, cleanup expiry after successful exit, a stalled panic guard, lost child ownership before stalled closure, pool/runtime loss, typed value rejection during a pending read, captured foreign diagnostic preservation during a stalled close, and final reservation release before a blocked receiver wake. They verify confirmed-prefix reporting, capacity/argument/wire retention, late reaping, frozen outcomes, and quarantine. Gates simulate API stalls and do not establish kernel-level termination. R28 corpus cases and the public I/O tests distinguish final progress from complete streams.
+
+Guardian evidence includes three unit checks for status frames, bounded child-list scanning, and a stalled final control-socket close, eight subprocess checks plus a dedicated host fixture, two R29 corpus cases, and the executed configuration example. Tests verify double forks and new sessions, normal/error/signal exits, large I/O and environment preservation, cancellation/deadlines/abandonment, paused-guardian reconciliation, typed ownership across runtime loss, missing/mismatched executables, unaffected unrelated children, host SIGTERM/SIGKILL, closed host standard descriptors, and host death while another fork retains the control channel. Subprocess tests require the advertised IPC permissions; a command sandbox denying Unix socket operations is not a supported guardian environment.

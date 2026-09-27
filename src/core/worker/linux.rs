@@ -5,6 +5,7 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+pub(super) mod guardian;
 mod launch;
 mod observation;
 mod owner;
@@ -31,8 +32,14 @@ fn nonblocking(pipe: &impl AsRawFd) -> io::Result<()> {
 pub(super) struct ChildOwner {
     child: Child,
     owned: bool,
+    guardian: Option<std::os::unix::net::UnixStream>,
     #[cfg(test)]
     observer: Option<Arc<observation::Observation>>,
+}
+struct Completion {
+    status: Option<ExitStatus>,
+    cleanup: WorkerCleanup,
+    error: Option<Diagnostic>,
 }
 impl ChildOwner {
     fn exited(&self) -> io::Result<bool> {
@@ -57,6 +64,18 @@ impl ChildOwner {
         if !self.owned {
             return Ok(());
         }
+        if let Some(control) = &self.guardian {
+            // Keep the guardian alive to reap its descendants, including detached ones.
+            return control
+                .shutdown(std::net::Shutdown::Write)
+                .or_else(|error| {
+                    if error.kind() == io::ErrorKind::NotConnected {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
+                });
+        }
         // SAFETY: this is our unreaped child and initial process-group leader.
         // Never signal by this numeric PID after releasing child ownership.
         let result = unsafe { libc::kill(-(self.child.id() as libc::pid_t), libc::SIGKILL) };
@@ -77,12 +96,19 @@ impl ChildOwner {
         }
     }
 
-    fn reap(&mut self) -> io::Result<Option<ExitStatus>> {
-        let result = self.child.try_wait()?;
-        if result.is_some() {
-            self.owned = false;
+    fn reap(&mut self) -> io::Result<Option<Completion>> {
+        let Some(status) = self.child.try_wait()? else {
+            return Ok(None);
+        };
+        self.owned = false;
+        match self.guardian.as_mut() {
+            Some(control) => guardian::completion(control, status).map(Some),
+            None => Ok(Some(Completion {
+                status: Some(status),
+                cleanup: WorkerCleanup::Reaped,
+                error: None,
+            })),
         }
-        Ok(result)
     }
 }
 
@@ -94,7 +120,7 @@ impl Drop for ChildOwner {
                 observer.hook(Point::Drop, self.child.id());
             }
             let _ = self.terminate();
-            // Only the owned OS thread reach this fallback.
+            // Only the owned OS thread reaches this fallback.
             // Its capacity stays retained if the kernel cannot finish reaping.
             let _ = self.child.wait();
         }
@@ -166,6 +192,7 @@ pub(super) enum Point {
     Terminate,
     Reap,
     Close,
+    ControlClose,
     Drop,
 }
 #[cfg(test)]

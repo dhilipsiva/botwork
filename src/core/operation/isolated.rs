@@ -141,7 +141,10 @@ impl Isolated {
         *cleanup_stop = stop;
         let preserve = stop.is_some();
         let successful = report.outcome == WorkerOutcome::Succeeded
-            && report.cleanup == WorkerCleanup::Reaped
+            && matches!(
+                report.cleanup,
+                WorkerCleanup::Reaped | WorkerCleanup::TreeReaped
+            )
             && report.io_complete
             && report.progress_complete
             && report.exit_status.is_some_and(|status| status.success())

@@ -1,6 +1,6 @@
 # Typed Worker Protocol
 
-`NativeOperation::isolated(signature, pool, command, protocol)` connects native signature metadata to the Linux worker supervisor. Each invocation starts one process, sends one request on stdin, closes stdin, and expects one response followed by EOF on stdout. It never retries an operation. A valid response still requires successful exit, final confirmed progress, complete I/O, reaped direct-child cleanup, and no observed stop. External effects can survive cancellation or failure.
+`NativeOperation::isolated(signature, pool, command, protocol)` connects native signature metadata to the Linux worker supervisor. Each invocation starts one process, sends one request on stdin, closes stdin, and expects one response followed by EOF on stdout. It never retries an operation. A valid response still requires successful exit, final confirmed progress, complete I/O, verified cleanup for the selected pool mode, and no observed stop. External effects can survive cancellation or failure.
 
 Use `WorkerProtocol::serve_once` inside a Rust worker. It reads a bounded request, validates native argument kinds and count, invokes the callback once, validates the return kind, and writes and flushes one complete response. A returned callback diagnostic is a typed response: successful delivery should exit zero. An I/O, framing, nonfinite-value, or encoding-limit failure returns an error to the worker launcher, which should exit unsuccessfully. Callback panics become BW4003 when encoding succeeds. Arbitrary callback allocations and effects inside the child remain its responsibility.
 
@@ -114,6 +114,8 @@ Counters measure logical payload bytes/nodes rather than allocator capacity, con
 ## Stops and evidence
 
 Cancellation and deadlines are enforced by the supervisor independently of async polling; the operation also checks its inherited control before entry and before publishing a result. A timeout observed before cleanup remains a timeout. A valid success frame cannot override cancellation, nonzero exit, incomplete progress, incomplete I/O, or pending/unverified cleanup. A complete valid diagnostic received before a transport failure remains bounded cause evidence when the operation budgets permit it. Malformed or partial output cannot become a success.
+
+A pool created with `WorkerPool::with_process_tree` uses the same typed bridge and wire format. Successful transport then requires `TreeReaped`, including detached descendants; pending guardian cleanup retains the same argument/wire reservations. See [guardian configuration and limits](isolated-workers.md#process-tree-guardians).
 
 Codec and SDK checks run on every platform. Execution through `NativeOperation::isolated` currently requires Linux and follows all [worker lifecycle limits](isolated-workers.md), including the remaining stuck-kernel, detached-descendant, host-crash, and durable-recovery work. Async DSL dispatch and whole-run shutdown remain separate roadmap items.
 

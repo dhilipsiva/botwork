@@ -129,7 +129,7 @@ impl Observation {
     pub fn finish(&self, cleanup: WorkerCleanup, io_complete: bool) {
         let mut flight = self.lock();
         self.observe(&mut flight);
-        if cleanup == WorkerCleanup::Reaped
+        if matches!(cleanup, WorkerCleanup::Reaped | WorkerCleanup::TreeReaped)
             && !io_complete
             && flight.report.outcome == WorkerOutcome::Succeeded
         {

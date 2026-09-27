@@ -78,6 +78,8 @@ pub enum WorkerCleanup {
     NotStarted,
     /// The direct child was reaped. Inherited-group termination was attempted.
     Reaped,
+    /// The guardian reaped the worker and every adopted descendant, then exited.
+    TreeReaped,
     /// Cleanup exceeded its allowance; the supervisor still owns capacity.
     Pending,
     /// Child ownership was lost. Its slot is quarantined, never silently reused.
@@ -154,6 +156,8 @@ struct Shared {
     #[cfg(all(test, target_os = "linux"))]
     io_hooks: Mutex<VecDeque<linux::IoHook>>,
     limits: WorkerLimits,
+    #[cfg(target_os = "linux")]
+    guardian: Option<PathBuf>,
     state: Mutex<State>,
 }
 
@@ -170,6 +174,21 @@ pub struct WorkerPool(Arc<Owner>);
 
 impl WorkerPool {
     pub fn new(limits: WorkerLimits) -> DiagnosticResult<Self> {
+        Self::configured(limits, None)
+    }
+
+    /// Supervise detached descendants with a dedicated Botwork guardian executable.
+    /// The absolute path must name a matching Botwork CLI build. Linux only.
+    pub fn with_process_tree(limits: WorkerLimits, guardian: PathBuf) -> DiagnosticResult<Self> {
+        if !cfg!(target_os = "linux") || !guardian.is_absolute() {
+            return Err(configuration(
+                "Worker guardians require Linux and an absolute executable path",
+            ));
+        }
+        Self::configured(limits, Some(guardian))
+    }
+
+    fn configured(limits: WorkerLimits, _guardian: Option<PathBuf>) -> DiagnosticResult<Self> {
         let now = Instant::now();
         if now
             .checked_add(limits.timeout)
@@ -187,6 +206,8 @@ impl WorkerPool {
             #[cfg(all(test, target_os = "linux"))]
             io_hooks: Mutex::new(VecDeque::new()),
             limits,
+            #[cfg(target_os = "linux")]
+            guardian: _guardian,
             state: Mutex::new(State {
                 closed: false,
                 next_id: 1,
@@ -531,4 +552,17 @@ fn limit(resource: &'static str, limit: usize) -> Diagnostic {
         resource,
         limit: limit as u64,
     })
+}
+
+/// Internal CLI dispatch for the process-tree guardian protocol.
+#[doc(hidden)]
+pub fn guardian_main() -> Option<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::guardian::entry()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
 }
