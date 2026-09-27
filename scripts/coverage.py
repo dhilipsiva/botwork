@@ -22,7 +22,7 @@ EXCLUSIONS = (r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
 # Review these lists whenever adding executable source files. Module declarations
 # have no executable lines; the generated Pest parser is excluded deliberately.
 LIBRARY_FILES = {
-    "src/core/ast.rs", "src/core/ast_limits.rs", "src/core/diagnostic.rs", "src/core/diagnostic/value.rs", "src/core/diagnostic/ownership.rs", "src/core/diagnostic/rejection.rs", "src/core/diagnostic/construction.rs", "src/core/eval.rs", "src/core/eval/diagnostics.rs",
+    "src/core/ast.rs", "src/core/ast/parse_diagnostic.rs", "src/core/ast_limits.rs", "src/core/diagnostic.rs", "src/core/diagnostic/value.rs", "src/core/diagnostic/ownership.rs", "src/core/diagnostic/rejection.rs", "src/core/diagnostic/construction.rs", "src/core/eval.rs", "src/core/eval/diagnostics.rs",
     "src/core/eval/imports.rs", "src/core/eval/snapshots.rs", "src/core/eval/results.rs", "src/core/eval/temporaries.rs", "src/core/grammar.rs", "src/core/input.rs", "src/core/input/limits.rs", "src/core/input/raw.rs",
     "src/core/operation.rs", "src/core/run.rs", "src/core/run/import_limits.rs", "src/core/run/retained_values.rs", "src/core/run/retained_definitions.rs", "src/core/run/retained_diagnostics.rs", "src/core/run/retained_names.rs", "src/core/run/retained_registry.rs", "src/core/run/snapshot_limits.rs", "src/core/run/result_limits.rs", "src/core/run/temporary_values.rs", "src/core/signature.rs", "src/core/syntax_limits.rs", "src/core/value_limits.rs",
 }

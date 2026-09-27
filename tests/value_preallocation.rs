@@ -58,6 +58,48 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn syntax_construction_allocates_only_the_admitted_final_message_beyond_parser_owned_buffers() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        grammar::BWParser,
+    };
+    use pest::Parser;
+    let source = format!("{}|x| = |1 +|", " \t".repeat(128 * 1024));
+    let (parser, parsing_copies) = observe(64 * 1024, || BWParser::parse(Rule::botwork, &source));
+    let parser = parser.unwrap_err();
+    let bytes = "source".len() + parser.to_string().len();
+    let engine = Engine::default();
+    for reject in [false, true] {
+        let (run, copies) = observe(64 * 1024, || {
+            engine.run_source(
+                "syntax",
+                &source,
+                RunOptions {
+                    limits: RunLimits {
+                        diagnostics: DiagnosticLimits {
+                            text_bytes: bytes - usize::from(reject),
+                            ..DiagnosticLimits::default()
+                        },
+                        ..RunLimits::default()
+                    },
+                    ..RunOptions::default()
+                },
+            )
+        });
+        let error = run.result.unwrap_err();
+        if reject {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::Syntax);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::Syntax);
+        }
+        // One interpreter source owner plus one final message only when admitted.
+        assert_eq!(copies, parsing_copies + 1 + usize::from(!reject));
+    }
+}
+
+#[test]
 fn validation_limits_skip_large_location_copies_while_preserving_required_source_ownership() {
     use botwork::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
     let filename = "é".repeat(128 * 1024);

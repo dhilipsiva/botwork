@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 113 cases against the 51 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 115 cases against the 51 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -58,7 +58,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R18 | runtime-diagnostic-boundary | runtime-diagnostic-limit | runtime-diagnostic-boundary |
 | R19 | retained-diagnostic-boundary | retained-diagnostic-limit | retained-diagnostic-boundary |
 | R20 | operation-diagnostic-boundary | operation-diagnostic-limit | operation-diagnostic-boundary |
-| R21 | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary | borrowed-diagnostic-limit, operation-panic-limit, signature-diagnostic-limit, access-diagnostic-limit, operator-diagnostic-limit, input-diagnostic-limit, input-origin-limit, signature-builder-limit, entry-file-diagnostic-limit, import-diagnostic-limit, setup-diagnostic-limit, collision-diagnostic-limit, validation-diagnostic-limit | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary |
+| R21 | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary, syntax-diagnostic-boundary | borrowed-diagnostic-limit, operation-panic-limit, signature-diagnostic-limit, access-diagnostic-limit, operator-diagnostic-limit, input-diagnostic-limit, input-origin-limit, signature-builder-limit, entry-file-diagnostic-limit, import-diagnostic-limit, setup-diagnostic-limit, collision-diagnostic-limit, validation-diagnostic-limit, syntax-diagnostic-limit | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary, syntax-diagnostic-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -123,3 +123,5 @@ Two setup-construction host cases preserve default diagnostic quotas before loca
 Two runtime-collision host cases admit the name and both declaration locations at their exact text boundary or reject one fewer byte with explicit byte-location summaries and two omitted coordinate fields.
 
 Two validation-construction host cases preserve exact control-placement and duplicate-parameter details at their text boundary or reject one fewer byte before any script steps, retaining coordinate omission counts and original byte offsets.
+
+Two syntax-construction host cases preserve the complete parser message at its text boundary or reject one fewer byte with an explicit omitted-excerpt summary before any script steps.

@@ -17,12 +17,12 @@ fn rejected_validation_evidence_never_scans_source_coordinates_and_releases_owne
         source_bytes: 0,
         ..DiagnosticLimits::default()
     };
-    let control = ValidationFailure::Control {
+    let control = AstFailure::Control {
         span: &span,
         message: "invalid placement",
     }
     .diagnostic(&limits, std::iter::empty());
-    let duplicate = ValidationFailure::DuplicateParameter {
+    let duplicate = AstFailure::DuplicateParameter {
         name: "é",
         original: &span,
         duplicate: &span,

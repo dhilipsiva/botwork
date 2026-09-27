@@ -693,3 +693,20 @@ assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
 assert_eq!(error.causes[0].code(), DiagnosticCode::InvalidControl);
 assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
 ```
+
+## Syntax Diagnostic Construction
+
+Syntax details are measured before message construction, including the parser excerpt and underline. A rejected message retains the syntax category and bounded byte evidence without running any statements from the malformed file.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, run::{Engine, RunLimits, RunOptions}};
+let run = Engine::default().run_source("syntax", "Log |1|\n|x| = |1 +|", RunOptions {
+    limits: RunLimits { diagnostics: DiagnosticLimits { text_bytes: 0, ..DiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+assert_eq!(run.steps, 0);
+let error = run.result.unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::Syntax);
+assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+```

@@ -11,6 +11,8 @@ use super::diagnostic::{
 use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
 use super::syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES};
 
+mod parse_diagnostic;
+
 #[cfg(test)]
 mod tests;
 
@@ -168,7 +170,7 @@ impl Program {
         source_bytes: usize,
         limits: &SyntaxLimits,
         ast_limits: &AstLimits,
-        report: impl Fn(ValidationFailure<'_>) -> Diagnostic,
+        report: impl Fn(AstFailure<'_>) -> Diagnostic,
     ) -> DiagnosticResult<Self> {
         ast_limits.validate()?;
         check_source(name, source, source_bytes, limits)?;
@@ -177,7 +179,7 @@ impl Program {
             text: source.to_owned(),
         });
         let statements = super::parser::BWParser::parse(Rule::botwork, &source.text)
-            .map_err(|error| parse_error(error, &source))?
+            .map_err(|error| parse_error(error, &source, &report))?
             .filter(|pair| pair.as_rule() != Rule::EOI)
             .map(|pair| {
                 let span = Span::of(&pair, &source);
@@ -212,7 +214,7 @@ impl Program {
         &self,
         limits: &AstLimits,
         source_bytes: usize,
-        report: impl Fn(ValidationFailure<'_>) -> Diagnostic,
+        report: impl Fn(AstFailure<'_>) -> Diagnostic,
     ) -> DiagnosticResult<()> {
         ast_limits::check_program(self, limits, source_bytes)?;
         validate_control_script(&self.statements).map_err(report)
@@ -319,26 +321,21 @@ struct ControlScope {
     in_catch: bool,
 }
 
-pub(crate) fn validate_control_script(
-    statements: &[Statement],
-) -> Result<(), ValidationFailure<'_>> {
+pub(crate) fn validate_control_script(statements: &[Statement]) -> Result<(), AstFailure<'_>> {
     validate_statements(statements, ControlScope::default())
 }
 
 fn validate_statements(
     statements: &[Statement],
     scope: ControlScope,
-) -> Result<(), ValidationFailure<'_>> {
+) -> Result<(), AstFailure<'_>> {
     for statement in statements {
         validate_statement(statement, scope)?;
     }
     Ok(())
 }
 
-fn validate_statement(
-    statement: &Statement,
-    scope: ControlScope,
-) -> Result<(), ValidationFailure<'_>> {
+fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), AstFailure<'_>> {
     match &statement.kind {
         StatementKind::Return(_) if !scope.in_definition => Err(control_placement_error(
             statement,
@@ -406,18 +403,19 @@ fn validate_statement(
     }
 }
 
-fn control_placement_error<'a>(
-    statement: &'a Statement,
-    message: &'static str,
-) -> ValidationFailure<'a> {
-    ValidationFailure::Control {
+fn control_placement_error<'a>(statement: &'a Statement, message: &'static str) -> AstFailure<'a> {
+    AstFailure::Control {
         span: &statement.span,
         message,
     }
 }
 
-/// Borrow validation evidence until the caller can admit its full diagnostic context.
-pub(crate) enum ValidationFailure<'a> {
+/// Borrow parsing/validation evidence until the caller can admit its diagnostic context.
+pub(crate) enum AstFailure<'a> {
+    Syntax {
+        error: &'a pest::error::Error<Rule>,
+        span: &'a Span,
+    },
     Control {
         span: &'a Span,
         message: &'static str,
@@ -429,10 +427,10 @@ pub(crate) enum ValidationFailure<'a> {
     },
 }
 
-impl ValidationFailure<'_> {
+impl AstFailure<'_> {
     pub(crate) fn span(&self) -> &Span {
         match self {
-            Self::Control { span, .. } => span,
+            Self::Control { span, .. } | Self::Syntax { span, .. } => span,
             Self::DuplicateParameter { duplicate, .. } => duplicate,
         }
     }
@@ -447,6 +445,19 @@ impl ValidationFailure<'_> {
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
         match self {
+            Self::Syntax { error, span } => {
+                let detail = parse_diagnostic::ParseDisplay { error, span };
+                limits.formatted_evidence(
+                    |[detail]| BWErr::ParsingError(detail),
+                    [FormattedDetail {
+                        full: format_args!("{detail}"),
+                        summary: Some(format_args!("{detail:#}")),
+                    }],
+                    Some(span),
+                    false,
+                    frames,
+                )
+            }
             Self::Control { span, message } => {
                 let location = span.location_display();
                 limits.formatted_evidence(
@@ -674,7 +685,7 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
 
 pub(crate) fn from_pair_with_reporter(
     pair: Pair<Rule>,
-    report: impl Fn(ValidationFailure<'_>) -> Diagnostic,
+    report: impl Fn(AstFailure<'_>) -> Diagnostic,
 ) -> DiagnosticResult<Node> {
     let source = Arc::new(SourceFile {
         name: "<input>".to_owned(),
@@ -689,7 +700,7 @@ pub(crate) fn from_pair_with_reporter(
                 .into_inner()
                 .any(|child| child.as_rule() == Rule::ident) =>
         {
-            return Err(report(ValidationFailure::Control {
+            return Err(report(AstFailure::Control {
                 span: &span,
                 message: "Catch binding requires an enclosing Try",
             }));
@@ -889,7 +900,11 @@ pub(crate) fn normalize_sentence(text: &str) -> String {
         .collect()
 }
 
-fn parse_error(error: pest::error::Error<Rule>, source: &Arc<SourceFile>) -> Diagnostic {
+fn parse_error(
+    error: pest::error::Error<Rule>,
+    source: &Arc<SourceFile>,
+    report: impl Fn(AstFailure<'_>) -> Diagnostic,
+) -> Diagnostic {
     let (start, end) = match error.location {
         pest::error::InputLocation::Pos(start) => {
             let length = source.text[start..]
@@ -900,18 +915,22 @@ fn parse_error(error: pest::error::Error<Rule>, source: &Arc<SourceFile>) -> Dia
         }
         pest::error::InputLocation::Span((start, end)) => (start, end),
     };
-    Diagnostic::new(BWErr::ParsingError(error.to_string())).at(&Span {
+    let span = Span {
         source: Arc::clone(source),
         start,
         end,
+    };
+    report(AstFailure::Syntax {
+        error: &error,
+        span: &span,
     })
 }
 
-fn validate_parameters(parameters: &[Name]) -> Result<(), ValidationFailure<'_>> {
+fn validate_parameters(parameters: &[Name]) -> Result<(), AstFailure<'_>> {
     let mut seen = HashMap::new();
     for parameter in parameters {
         if let Some(original) = seen.insert(&parameter.text, &parameter.span) {
-            return Err(ValidationFailure::DuplicateParameter {
+            return Err(AstFailure::DuplicateParameter {
                 name: &parameter.text,
                 original,
                 duplicate: &parameter.span,
@@ -935,7 +954,7 @@ pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<Nativ
         text: text.into(),
     });
     let mut pairs = BWParser::parse(Rule::native_signature, &source.text)
-        .map_err(|error| parse_error(error, &source))?;
+        .map_err(|error| parse_error(error, &source, |failure| failure.default_diagnostic()))?;
     let header = required(&mut pairs)?;
     let span = Span::of(&header, &source);
     let signature = signature(&header)?;
@@ -947,7 +966,7 @@ pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<Nativ
         .filter(|pair| pair.as_rule() == Rule::ident)
         .map(|pair| lower_name(pair, &source))
         .collect::<Vec<_>>();
-    validate_parameters(&parameters).map_err(ValidationFailure::default_diagnostic)?;
+    validate_parameters(&parameters).map_err(AstFailure::default_diagnostic)?;
     Ok(NativeSignature {
         span,
         signature,

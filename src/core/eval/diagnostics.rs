@@ -40,7 +40,7 @@ impl std::fmt::Display for AccessPath<'_> {
 }
 
 impl Context {
-    pub(super) fn validation_error(&self, failure: ast::ValidationFailure<'_>) -> Diagnostic {
+    pub(super) fn ast_error(&self, failure: ast::AstFailure<'_>) -> Diagnostic {
         let stopped = self.checkpoint().err();
         let error = failure.diagnostic(
             &self.limits().diagnostics,

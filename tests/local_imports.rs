@@ -21,6 +21,126 @@ use std::{
 struct Project(Harness);
 
 #[test]
+fn entry_file_syntax_errors_use_installed_diagnostic_quotas_and_keep_input_snapshots() {
+    use botwork::core::{
+        diagnostic::DiagnosticLimits,
+        run::{Engine, RunLimits, RunOptions, RunOutcome},
+    };
+    let project = Project::new();
+    let path = project.write("syntax.botwork", "|x| = |1 +|");
+    let settings = || RunOptions {
+        variables: std::collections::BTreeMap::from([("seed".into(), Literal::Int(7))]),
+        limits: RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        },
+        ..RunOptions::default()
+    };
+    let engine = Engine::default();
+    let run = engine.run_file(&path, settings());
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert_eq!(run.steps, 0);
+    assert_eq!(run.variables["seed"].to_string(), "7");
+    let error = run.result.unwrap_err();
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Syntax);
+    assert_eq!(
+        error.causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .source
+            .as_ref()
+            .unwrap()
+            .file,
+        path.to_str().unwrap()
+    );
+    let valid = project.write("valid.botwork", "|answer| = |7|");
+    assert_eq!(
+        engine.run_file(valid, settings()).outcome(),
+        RunOutcome::Succeeded
+    );
+}
+
+#[test]
+fn imported_syntax_construction_admits_calls_then_unwinds_sites_without_running_module_effects() {
+    use botwork::core::{diagnostic::DiagnosticLimits, run::RunLimits};
+    let project = Project::new();
+    project.write("parent.botwork", "Import |\"invalid.botwork\"| As |bad|");
+    project.write("invalid.botwork", "Effect\n|x| = |1 +|");
+    project.write("good.botwork", "Value { Return |7| }");
+    for reject in [false, true] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: if reject {
+                DiagnosticLimits {
+                    call_frames: 0,
+                    ..DiagnosticLimits::default()
+                }
+            } else {
+                DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let seen = calls.clone();
+        context
+            .register_native("Effect", move |_| {
+                seen.fetch_add(1, Ordering::SeqCst);
+                Ok(Literal::None)
+            })
+            .unwrap();
+        let mut sibling = context.clone();
+        let source = if reject {
+            "Effect\nRead { Import |\"parent.botwork\"| As |lib| }\nTry { Read } Catch { Effect }\nEffect"
+        } else {
+            "Effect\nRead { Import |\"parent.botwork\"| As |lib| }\nRead\nEffect"
+        };
+        let error = project.run(source, &mut context).unwrap_err();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        if reject {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::Syntax);
+            let omissions = error.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(omissions.call_frames, 1);
+            assert_eq!(omissions.related_locations, 2);
+            assert_eq!(omissions.detail_fields, 1);
+            assert!(context.checkpoint().is_err());
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::Syntax);
+            assert_eq!(error.call_stack.len(), 1);
+            assert_eq!(error.related.len(), 2);
+            assert!(context.checkpoint().is_ok());
+        }
+        assert_eq!(
+            project
+                .run(
+                    "Import |\"good.botwork\"| As |lib|\nlib::Value",
+                    &mut sibling
+                )
+                .unwrap()
+                .to_string(),
+            "7"
+        );
+        // A successful later import can use the same alias after failed publication.
+        if !reject {
+            assert_eq!(
+                project
+                    .run(
+                        "Import |\"good.botwork\"| As |lib|\nlib::Value",
+                        &mut context
+                    )
+                    .unwrap()
+                    .to_string(),
+                "7"
+            );
+        }
+    }
+}
+
+#[test]
 fn module_validation_admits_entered_calls_before_details_and_preserves_pre_import_effects() {
     use botwork::core::{diagnostic::DiagnosticLimits, run::RunLimits};
     let project = Project::new();
