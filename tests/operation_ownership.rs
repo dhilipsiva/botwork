@@ -116,12 +116,25 @@ async fn completed_error_trees_share_all_diagnostic_quotas_and_release_rejected_
             _ => "",
         };
         let budget = OperationBudget::new(limits);
-        let first = failing_worker(&budget, original);
+        let (release, receiver) = std::sync::mpsc::channel();
+        let state = Mutex::new(Some((original, receiver)));
+        let first = NativeOperation::blocking(
+            StatementSignature::native("Fail").unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+            move |_, _| {
+                let (error, receiver) = state.lock().unwrap().take().unwrap();
+                receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+                Err(error)
+            },
+        )
+        .unwrap()
+        .with_ownership_budget(budget.clone());
         let mut pending = Box::pin(first.invoke(vec![], OperationControl::default()));
         assert!(pending
             .as_mut()
             .poll(&mut Context::from_waker(Waker::noop()))
             .is_pending());
+        release.send(()).unwrap();
         until(|| budget.usage().diagnostics == size.diagnostics).await;
         let before = budget.usage();
         assert_eq!(before.text_bytes, size.text_bytes);
@@ -649,10 +662,19 @@ async fn queued_and_abandoned_blocking_invocations_keep_their_own_argument_allow
 async fn completed_unobserved_workers_hold_result_reservations_until_delivery_or_disposal() {
     for abandon in [false, true] {
         let budget = OperationBudget::default();
+        let (release, receiver) = std::sync::mpsc::channel();
+        let receiver = Mutex::new(receiver);
         let operation = NativeOperation::blocking(
             StatementSignature::native("Read |value|").unwrap(),
             NonZeroUsize::new(1).unwrap(),
-            |_, _| Ok(Literal::String("é".repeat(1024))),
+            move |_, _| {
+                receiver
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap();
+                Ok(Literal::String("é".repeat(1024)))
+            },
         )
         .unwrap()
         .with_ownership_budget(budget.clone());
@@ -662,6 +684,7 @@ async fn completed_unobserved_workers_hold_result_reservations_until_delivery_or
             .as_mut()
             .poll(&mut Context::from_waker(Waker::noop()))
             .is_pending());
+        release.send(()).unwrap();
         until(|| budget.usage().values == 2).await;
         assert_eq!(budget.usage().nodes, 2);
         assert_eq!(budget.usage().payload_bytes, 2052);
