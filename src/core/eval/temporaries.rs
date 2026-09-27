@@ -15,7 +15,7 @@ impl Context {
             .transpose()
     }
 
-    pub(super) fn temporary(&self, value: Literal) -> DiagnosticResult<TemporaryValue> {
+    pub(super) fn temporary(&self, value: Literal) -> TemporaryResult {
         let value = Owned::new(value);
         self.checkpoint()?;
         let size = self
@@ -27,7 +27,7 @@ impl Context {
         Ok(TemporaryValue::new(value.into_inner(), reservation))
     }
 
-    pub(super) fn copy_temporary(&self, value: &Literal) -> DiagnosticResult<TemporaryValue> {
+    pub(super) fn copy_temporary(&self, value: &Literal) -> TemporaryResult {
         self.checkpoint()?;
         let size = self
             .limits()
@@ -38,7 +38,7 @@ impl Context {
         Ok(TemporaryValue::new(value.clone(), reservation))
     }
 
-    pub(super) fn temporary_string(&self, value: &str) -> DiagnosticResult<TemporaryValue> {
+    pub(super) fn temporary_string(&self, value: &str) -> TemporaryResult {
         let size = self
             .limits()
             .values
@@ -57,7 +57,7 @@ impl Context {
         left: TemporaryValue,
         right: TemporaryValue,
         span: &Span,
-    ) -> DiagnosticResult<TemporaryValue> {
+    ) -> TemporaryResult {
         let limits = self.limits().values;
         let left_size = limits
             .check(&left)
@@ -107,7 +107,7 @@ impl Context {
         operator: UnaryOp,
         operand: TemporaryValue,
         span: &Span,
-    ) -> DiagnosticResult<TemporaryValue> {
+    ) -> TemporaryResult {
         let (value, _reservation) = operand.into_parts();
         let result = operator
             .to_rule()

@@ -1,6 +1,47 @@
 use super::*;
 
 #[test]
+fn terminal_error_ownership_releases_at_publication_even_when_root_export_fails() {
+    use crate::core::{diagnostic::DiagnosticCode, run::RetainedDiagnosticLimits};
+    for reject_export in [false, true] {
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context.set_variable("x", Literal::Int(7)).unwrap();
+        let original = context
+            .retain_handler(Diagnostic::new(BWErr::NativeError("primary".into())))
+            .unwrap();
+        let error = RuntimeDiagnostic::from(
+            StoredDiagnostic::take(original, context.budget.as_ref()).unwrap(),
+        );
+        let reusable = context.clone();
+        let probe = context.clone();
+        assert!(probe
+            .retain_handler(Diagnostic::new(BWErr::NativeError("blocked".into())))
+            .is_err());
+        let limits = ResultLimits {
+            values: if reject_export { 0 } else { 1 },
+            ..Default::default()
+        };
+        let (result, variables, snapshot_error) = context.finish_result(Err(error), &limits);
+        assert_eq!(result.unwrap_err().code(), DiagnosticCode::Native);
+        assert_eq!(snapshot_error.is_some(), reject_export);
+        assert_eq!(variables.is_empty(), reject_export);
+        drop(
+            reusable
+                .retain_handler(Diagnostic::new(BWErr::NativeError("available".into())))
+                .unwrap(),
+        );
+        reusable.checkpoint().unwrap();
+    }
+}
+
+#[test]
 fn unique_export_moves_payload_and_name_allocations() {
     let mut context = Context::default();
     context

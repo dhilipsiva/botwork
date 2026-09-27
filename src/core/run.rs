@@ -19,7 +19,7 @@ use super::{
     diagnostic::{
         Diagnostic, DiagnosticCode, DiagnosticLimits, DiagnosticResult, DiagnosticValueLimits,
     },
-    eval::{evaluate_program_detailed, Context},
+    eval::{evaluate_program_runtime, Context, EvaluationResult},
     grammar::{BWErr, Literal, LiteralResult},
     operation::OperationControl,
     signature::StatementSignature,
@@ -52,7 +52,7 @@ mod result_limits;
 pub use result_limits::ResultLimits;
 mod retained_diagnostics;
 pub use retained_diagnostics::RetainedDiagnosticLimits;
-pub(crate) use retained_diagnostics::{StoredCallFrame, StoredDiagnostic};
+pub(crate) use retained_diagnostics::{RuntimeDiagnostic, StoredCallFrame, StoredDiagnostic};
 mod temporary_values;
 pub use temporary_values::TemporaryLimits;
 pub(crate) use temporary_values::{TemporaryReservation, TemporaryValue};
@@ -346,7 +346,7 @@ impl Engine {
         self.run(options, |context| {
             context.check_source_size(source.len())?;
             let program = context.parse_source(name, source)?;
-            evaluate_program_detailed(&program, context)
+            evaluate_program_runtime(&program, context)
         })
     }
 
@@ -354,7 +354,7 @@ impl Engine {
         self.run(options, |context| {
             context.check_source_size(program.source.text().len())?;
             context.check_syntax(program.source.name(), program.source.text())?;
-            evaluate_program_detailed(program, context)
+            evaluate_program_runtime(program, context)
         })
     }
 
@@ -384,14 +384,14 @@ impl Engine {
                 SourceFailure::Diagnostic(error) => error,
             })?;
             let program = context.parse_source(name, &source)?;
-            evaluate_program_detailed(&program, context)
+            evaluate_program_runtime(&program, context)
         })
     }
 
     fn run(
         &self,
         mut options: RunOptions,
-        execute: impl FnOnce(&mut Context) -> DiagnosticResult<Literal>,
+        execute: impl FnOnce(&mut Context) -> EvaluationResult<Literal>,
     ) -> RunResult {
         let start = Instant::now();
         let control_start = tokio::time::Instant::now();
@@ -409,9 +409,9 @@ impl Engine {
             context.set_input_variables(variables.into_inner())?;
             context.checkpoint()?;
             let result = execute(&mut context);
-            context.after_operation(result)
+            context.after_evaluation(result)
         })()
-        .map_err(|error| context.diagnostic(error, None, false));
+        .map_err(|error| context.runtime_diagnostic(error, None, false));
         let steps = context.budget.as_ref().map_or(0, |budget| budget.used());
         let (result, variables, snapshot_error) = context.finish_result(result, &result_limits);
         RunResult {

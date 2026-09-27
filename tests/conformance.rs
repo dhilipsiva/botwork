@@ -1280,7 +1280,9 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             | Input::RetainedDiagnosticBoundary
             | Input::RetainedDiagnosticLimit
             | Input::HandlerCopyBoundary
-            | Input::HandlerCopyLimit => {
+            | Input::HandlerCopyLimit
+            | Input::HandlerHandoffBoundary
+            | Input::HandlerHandoffLimit => {
                 use botwork::core::{
                     diagnostic::DiagnosticLimits,
                     run::{Engine, RetainedDiagnosticLimits, RunLimits, RunOptions, RunOutcome},
@@ -1291,7 +1293,17 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                     case.input,
                     Input::HandlerCopyBoundary | Input::HandlerCopyLimit
                 );
-                if matches!(
+                let handoff = matches!(
+                    case.input,
+                    Input::HandlerHandoffBoundary | Input::HandlerHandoffLimit
+                );
+                if handoff {
+                    limits.retained_diagnostics = RetainedDiagnosticLimits {
+                        records: 1,
+                        diagnostics: 1 + capacity,
+                        ..RetainedDiagnosticLimits::default()
+                    };
+                } else if matches!(
                     case.input,
                     Input::RetainedDiagnosticBoundary | Input::RetainedDiagnosticLimit
                 ) || copying
@@ -1308,7 +1320,9 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 let run = Engine::default().run_source(
                     case.id,
-                    if copying {
+                    if handoff {
+                        "Try { Try { Missing } Catch { Other } } Catch { |handled| = |true| }"
+                    } else if copying {
                         "Try { Try { Missing } Catch { Rethrow } } Catch { |handled| = |true| }"
                     } else {
                         "Try { Missing } Catch { |handled| = |true| }"

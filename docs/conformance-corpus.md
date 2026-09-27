@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 127 cases against the 53 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 129 cases against the 53 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -56,7 +56,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R16 | diagnostic-value-boundary | diagnostic-value-limit | diagnostic-value-boundary |
 | R17 | diagnostic-ownership-boundary, diagnostic-admission-boundary | diagnostic-ownership-limit, diagnostic-admission-limit | diagnostic-ownership-boundary, diagnostic-admission-boundary |
 | R18 | runtime-diagnostic-boundary | runtime-diagnostic-limit | runtime-diagnostic-boundary |
-| R19 | retained-diagnostic-boundary, handler-copy-boundary | retained-diagnostic-limit, handler-copy-limit | retained-diagnostic-boundary, handler-copy-boundary |
+| R19 | retained-diagnostic-boundary, handler-copy-boundary, handler-handoff-boundary | retained-diagnostic-limit, handler-copy-limit, handler-handoff-limit | retained-diagnostic-boundary, handler-copy-boundary, handler-handoff-boundary |
 | R20 | operation-diagnostic-boundary | operation-diagnostic-limit | operation-diagnostic-boundary |
 | R21 | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary, syntax-diagnostic-boundary, guard-diagnostic-boundary, worker-join-boundary, numeric-diagnostic-boundary | borrowed-diagnostic-limit, operation-panic-limit, signature-diagnostic-limit, access-diagnostic-limit, operator-diagnostic-limit, input-diagnostic-limit, input-origin-limit, signature-builder-limit, entry-file-diagnostic-limit, import-diagnostic-limit, setup-diagnostic-limit, collision-diagnostic-limit, validation-diagnostic-limit, syntax-diagnostic-limit, guard-diagnostic-limit, worker-join-limit, numeric-diagnostic-limit | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary, syntax-diagnostic-boundary, guard-diagnostic-boundary, worker-join-boundary, numeric-diagnostic-boundary |
 | R22 | operation-ownership-boundary | operation-ownership-limit | operation-ownership-boundary |

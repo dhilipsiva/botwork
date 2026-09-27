@@ -40,29 +40,58 @@ impl std::fmt::Display for AccessPath<'_> {
 }
 
 impl Context {
-    pub(super) fn rethrow_handler(&self, original: &StoredDiagnostic, span: &Span) -> Diagnostic {
+    pub(crate) fn runtime_diagnostic(
+        &self,
+        error: RuntimeDiagnostic,
+        span: Option<&Span>,
+        expression: bool,
+    ) -> RuntimeDiagnostic {
+        error.map(|error| self.diagnostic(error, span, expression))
+    }
+
+    pub(crate) fn after_evaluation<T>(&self, result: EvaluationResult<T>) -> EvaluationResult<T> {
+        match self.checkpoint() {
+            Ok(()) => result,
+            Err(stopped) => match result {
+                Err(original) if original.code() == stopped.code() => Err(original),
+                Err(original) => Err(RuntimeDiagnostic::from(stopped).while_handling(original)),
+                Ok(_) => Err(stopped.into()),
+            },
+        }
+    }
+
+    pub(super) fn rethrow_handler(
+        &self,
+        original: &StoredDiagnostic,
+        span: &Span,
+    ) -> RuntimeDiagnostic {
         match original.copy(self.budget.as_ref(), Some(("rethrow", span))) {
-            Ok(copy) => copy.into_diagnostic(),
-            Err(violation) => original.value.rejected_copy(violation.into_error(), 1),
+            Ok(copy) => copy.into(),
+            Err(violation) => original
+                .value
+                .rejected_copy(violation.into_error(), 1)
+                .into(),
         }
     }
 
     pub(super) fn finish_handler_error(
         &self,
-        error: Diagnostic,
+        error: RuntimeDiagnostic,
         original: Arc<StoredDiagnostic>,
-    ) -> Diagnostic {
+    ) -> RuntimeDiagnostic {
         // Rethrow already owns this category and its original cause tree. Do not
         // copy the handler merely to discard the duplicate identity afterward.
         if Arc::ptr_eq(&error.error, &original.value.error) {
             return error;
         }
         if error.is_emergency() {
-            return error.omit_handled_cause();
+            return error.map(Diagnostic::omit_handled_cause);
         }
         match StoredDiagnostic::take(original, self.budget.as_ref()) {
-            Ok(original) => error.while_handling(original.into_diagnostic()),
-            Err(violation) => error.rejected(violation.into_error()).omit_handled_cause(),
+            Ok(original) => error.while_handling(original.into()),
+            Err(violation) => error
+                .reject(violation.into_error())
+                .map(Diagnostic::omit_handled_cause),
         }
     }
 
@@ -251,20 +280,9 @@ impl Context {
 
     pub(super) fn retain_handler(
         &self,
-        original: Diagnostic,
+        original: impl Into<RuntimeDiagnostic>,
     ) -> DiagnosticResult<Arc<StoredDiagnostic>> {
-        let reservation = self
-            .budget
-            .as_ref()
-            .map(|budget| budget.reserve_diagnostic(&original))
-            .transpose();
-        match reservation {
-            Ok(reservation) => Ok(Arc::new(StoredDiagnostic {
-                value: original,
-                _reservation: reservation,
-            })),
-            Err(error) => Err(original.rejected(error.into_error())),
-        }
+        original.into().store(self.budget.as_ref())
     }
 
     pub(super) fn retain_call(

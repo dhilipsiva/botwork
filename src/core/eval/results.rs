@@ -30,7 +30,7 @@ impl Context {
 
     pub(crate) fn finish_result(
         mut self,
-        result: RuntimeResult,
+        result: EvaluationResult<Literal>,
         limits: &ResultLimits,
     ) -> (RuntimeResult, BTreeMap<String, Literal>, Option<Diagnostic>) {
         let result = result.map(Owned::new);
@@ -39,7 +39,7 @@ impl Context {
         {
             let primary = match result {
                 Ok(_) => export_error.clone(),
-                Err(original) => original,
+                Err(original) => original.into_diagnostic(),
             };
             return (Err(primary), BTreeMap::new(), Some(export_error));
         }
@@ -47,6 +47,12 @@ impl Context {
             .into_iter()
             .map(|(name, value)| (name.into_string(), StoredValue::into_value(value)))
             .collect();
-        (result.map(Owned::into_inner), variables, None)
+        (
+            result
+                .map(Owned::into_inner)
+                .map_err(RuntimeDiagnostic::into_diagnostic),
+            variables,
+            None,
+        )
     }
 }

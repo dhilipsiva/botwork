@@ -248,8 +248,8 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                     panic!("holder")
                 };
                 // Inspect restored bindings before an invocation frame could mask a leak.
-                let result =
-                    evaluate_block(&definition.body, &mut context).map_err(Diagnostic::into_error);
+                let result = evaluate_block(&definition.body, &mut context)
+                    .map_err(|error| error.into_diagnostic().into_error());
                 assert!(
                     match action {
                         "return" =>

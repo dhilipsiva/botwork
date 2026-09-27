@@ -94,16 +94,13 @@ pub(super) fn evaluate_import(
     namespace: &Name,
     import_site: &Span,
     context: &mut Context,
-) -> RuntimeResult {
+) -> EvaluationResult<Literal> {
     let normalized = ast::normalize_sentence(&namespace.text);
     let frame = &context.frames[context.current];
     if let Some(original) = frame.namespaces.get(normalized.as_str()) {
-        return Err(namespace_collision(
-            context,
-            &normalized,
-            &original.span,
-            &namespace.span,
-        ));
+        return Err(
+            namespace_collision(context, &normalized, &original.span, &namespace.span).into(),
+        );
     }
     let prefix = format!("{normalized}::");
     if let Some((_, statement)) = frame
@@ -117,7 +114,8 @@ pub(super) fn evaluate_import(
             &normalized,
             statement.metadata().header(),
             &namespace.span,
-        ));
+        )
+        .into());
     }
     let module = load_module(path, path_span, import_site, context)?;
     publish_namespace(&module, namespace, &normalized, import_site, context)
@@ -131,7 +129,7 @@ fn publish_namespace(
     normalized: &str,
     import_site: &Span,
     context: &mut Context,
-) -> RuntimeResult {
+) -> EvaluationResult<Literal> {
     admit_namespace(module, namespace, normalized, context)
         .map_err(|error| error.at(import_site))?;
     let namespace_registry = context
@@ -268,7 +266,7 @@ fn load_module(
     span: &Span,
     import_site: &Span,
     context: &mut Context,
-) -> DiagnosticResult<Arc<LoadedModule>> {
+) -> EvaluationResult<Arc<LoadedModule>> {
     let failure = |context: &Context, reason: std::fmt::Arguments<'_>| {
         context.import_error(BWErr::ImportRead, reason, span, import_site)
     };
@@ -281,7 +279,8 @@ fn load_module(
         return Err(failure(
             context,
             format_args!("`{path}` must name a local .botwork file"),
-        ));
+        )
+        .into());
     }
     let importer = Path::new(span.source().name());
     let base = if importer.is_absolute() {
@@ -313,12 +312,14 @@ fn load_module(
             loading: &context.loading[start..],
             repeated: &canonical,
         };
-        return Err(context.import_error(
-            BWErr::ImportCycle,
-            format_args!("{chain}"),
-            span,
-            import_site,
-        ));
+        return Err(context
+            .import_error(
+                BWErr::ImportCycle,
+                format_args!("{chain}"),
+                span,
+                import_site,
+            )
+            .into());
     }
     if !context.modules.resolved.contains_key(&requested) {
         if let Some(budget) = &context.budget {
@@ -362,9 +363,9 @@ fn load_module(
         .map_err(related)?;
     let mut module_context =
         prepare_module_context(context, &canonical).map_err(|error| related(error.at(span)))?;
-    let result = evaluate_program_detailed(&program, &mut module_context);
+    let result = evaluate_program_runtime(&program, &mut module_context);
     merge_cache(context, &mut module_context);
-    result.map_err(related)?;
+    result.map_err(|error| error.with_related("imported here", import_site))?;
     let module = Arc::new(LoadedModule {
         frame: module_context.frames.remove(0),
     });

@@ -87,11 +87,20 @@ fn unique_handler_handoff_and_duplicate_error_identity_need_no_additional_record
                 None,
             )
         };
-        let error = context.finish_handler_error(error, original);
+        let error = context.finish_handler_error(error.into(), original);
         assert_eq!(error.causes.len(), usize::from(!shared_identity));
         assert_ne!(error.code(), DiagnosticCode::ResourceLimit);
         context.checkpoint().unwrap();
         drop(extra_owner);
+        if !shared_identity {
+            let probe = context.clone();
+            assert!(probe
+                .retain_handler(Diagnostic::new(BWErr::NativeError(
+                    "blocked while outgoing".into()
+                )))
+                .is_err());
+        }
+        drop(error);
         drop(
             context
                 .retain_handler(Diagnostic::new(BWErr::NativeError("next".into())))
@@ -243,14 +252,14 @@ fn snapshots_share_call_and_handler_records_and_charge_their_copied_handles() {
     context.handlers.clear();
     let failed = probe.clone();
     assert!(failed
-        .retain_handler(BWErr::NativeError("new".into()).into())
+        .retain_handler(Diagnostic::new(BWErr::NativeError("new".into())))
         .is_err());
     assert!(failed.checkpoint().is_err());
     probe.checkpoint().unwrap();
     drop(held);
     drop(
         probe
-            .retain_handler(BWErr::NativeError("new".into()).into())
+            .retain_handler(Diagnostic::new(BWErr::NativeError("new".into())))
             .unwrap(),
     );
     probe.checkpoint().unwrap();
@@ -271,7 +280,7 @@ fn stopped_calls_release_their_record_and_cancelled_handler_admission_keeps_evid
     assert!(weak.upgrade().is_none());
     assert!(context.calls.is_empty());
     let error = context
-        .retain_handler(BWErr::NativeError("original".into()).into())
+        .retain_handler(Diagnostic::new(BWErr::NativeError("original".into())))
         .err()
         .unwrap();
     assert_eq!(error.code(), DiagnosticCode::Cancelled);

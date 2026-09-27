@@ -25,8 +25,8 @@ use super::{
     operation::OperationControl,
     run::{
         DefinitionReservation, EvaluationGuard, RegistryPlan, RegistryReservation, RetainedName,
-        RunBudget, RunEnvironment, RunLimits, SourceFailure, StoredCallFrame, StoredDiagnostic,
-        StoredValue, TemporaryValue, ValueReservation,
+        RunBudget, RunEnvironment, RunLimits, RuntimeDiagnostic, SourceFailure, StoredCallFrame,
+        StoredDiagnostic, StoredValue, TemporaryValue, ValueReservation,
     },
     signature::{StatementOrigin, StatementSignature},
     value_limits::Owned,
@@ -49,9 +49,10 @@ enum Completion {
     Continue,
 }
 
-type CompletionResult = DiagnosticResult<Completion>;
+pub(crate) type EvaluationResult<T> = Result<T, RuntimeDiagnostic>;
+type CompletionResult = EvaluationResult<Completion>;
 type RuntimeResult = DiagnosticResult<Literal>;
-type TemporaryResult = DiagnosticResult<TemporaryValue>;
+type TemporaryResult = EvaluationResult<TemporaryValue>;
 
 #[derive(Clone)]
 enum StmtType {
@@ -376,17 +377,6 @@ impl Context {
         String::from_utf8(bytes).map_err(|error| {
             SourceFailure::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, error))
         })
-    }
-
-    pub(crate) fn after_operation<T>(&self, result: DiagnosticResult<T>) -> DiagnosticResult<T> {
-        match self.checkpoint() {
-            Ok(()) => result,
-            Err(stopped) => match result {
-                Err(original) if original.code() == stopped.code() => Err(original),
-                Err(original) => Err(stopped.while_handling(original)),
-                Ok(_) => Err(stopped),
-            },
-        }
     }
 
     pub(crate) fn register_run_native(
@@ -769,10 +759,10 @@ impl Context {
         body: impl FnOnce(&mut Self) -> TemporaryResult,
     ) -> TemporaryResult {
         self.check_call_depth()
-            .map_err(|error| self.diagnostic(error, Some(call_site), false))?;
+            .map_err(|error| self.runtime_diagnostic(error.into(), Some(call_site), false))?;
         let frame = self.retain_call(signature, call_site, definition_site)?;
         self.calls.push(frame);
-        let result = body(self).map_err(|error| self.diagnostic(error, None, false));
+        let result = body(self).map_err(|error| self.runtime_diagnostic(error, None, false));
         self.calls.pop();
         result
     }
@@ -798,7 +788,8 @@ fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> Dia
 }
 
 fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {
-    invoke_inner(call, context).map_err(|error| context.diagnostic(error, Some(&call.span), false))
+    invoke_inner(call, context)
+        .map_err(|error| context.runtime_diagnostic(error, Some(&call.span), false))
 }
 
 fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
@@ -813,12 +804,14 @@ fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
     let metadata = definition.metadata();
     let parameter_count = metadata.parameters().len();
     if parameter_count != call.arguments.len() {
-        return Err(context.detail_error(
-            BWErr::ParameterMissingError,
-            "The call does not match the definition's parameter count",
-            Some(&call.span),
-            false,
-        ));
+        return Err(context
+            .detail_error(
+                BWErr::ParameterMissingError,
+                "The call does not match the definition's parameter count",
+                Some(&call.span),
+                false,
+            )
+            .into());
     }
     context.check_call_depth()?;
     let mut argument_slots = context
@@ -853,7 +846,7 @@ fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
             })?;
             Ok(value)
         })
-        .collect::<DiagnosticResult<Vec<_>>>()?;
+        .collect::<EvaluationResult<Vec<_>>>()?;
     invoke_resolved(call, definition, owner, arguments, context)
 }
 
@@ -866,7 +859,7 @@ fn invoke_resolved(
 ) -> TemporaryResult {
     let _depth = context
         .enter_evaluation()
-        .map_err(|error| context.diagnostic(error, Some(&call.span), false))?;
+        .map_err(|error| context.runtime_diagnostic(error.into(), Some(&call.span), false))?;
     match definition {
         StmtType::Imported {
             module,
@@ -893,17 +886,16 @@ fn invoke_resolved(
             };
             let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
                 .map_err(|_| {
-                    context.detail_error(
-                        BWErr::NativePanic,
-                        &call.signature,
-                        Some(&call.span),
-                        false,
-                    )
+                    context
+                        .detail_error(BWErr::NativePanic, &call.signature, Some(&call.span), false)
+                        .into()
                 })
                 .and_then(|result| {
-                    result.map_err(|error| context.diagnostic(error, Some(&call.span), false))
+                    result.map_err(|error| {
+                        context.runtime_diagnostic(error.into(), Some(&call.span), false)
+                    })
                 });
-            let result = context.after_operation(result.map(Owned::new))?;
+            let result = context.after_evaluation(result.map(Owned::new))?;
             context.check_value(&result)?;
             validate_numeric_values(&result).map_err(|error| {
                 context.formatted_error(
@@ -979,13 +971,13 @@ fn invoke_resolved(
 fn evaluate_expression(expression: &Expr, context: &mut Context) -> TemporaryResult {
     let _depth = context
         .enter_evaluation()
-        .map_err(|error| context.diagnostic(error, Some(&expression.span), true))?;
+        .map_err(|error| context.runtime_diagnostic(error.into(), Some(&expression.span), true))?;
     evaluate_expression_inner(expression, context)
         .and_then(|value| {
             context.check_value(&value)?;
             Ok(value)
         })
-        .map_err(|error| context.diagnostic(error, Some(&expression.span), true))
+        .map_err(|error| context.runtime_diagnostic(error, Some(&expression.span), true))
 }
 
 fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> TemporaryResult {
@@ -1008,6 +1000,7 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                     true,
                 )
             })
+            .map_err(RuntimeDiagnostic::from)
             .and_then(|value| context.temporary(value)),
         ExprKind::Float(text) => {
             let value = text.parse::<f32>().map_err(|error| {
@@ -1163,6 +1156,7 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                             true,
                         )
                     })
+                    .map_err(RuntimeDiagnostic::from)
                     .and_then(|value| context.temporary(value))
             }
             _ => {
@@ -1184,12 +1178,14 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                     } else {
                         "or"
                     };
-                    return Err(context.formatted_error(
-                        BWErr::OperationIncompatibleError,
-                        format_args!("The left operand of `{name}` must be a boolean"),
-                        Some(&expression.span),
-                        true,
-                    ));
+                    return Err(context
+                        .formatted_error(
+                            BWErr::OperationIncompatibleError,
+                            format_args!("The left operand of `{name}` must be a boolean"),
+                            Some(&expression.span),
+                            true,
+                        )
+                        .into());
                 };
                 if (*operator == BinaryOp::And && !value) || (*operator == BinaryOp::Or && *value) {
                     return Ok(left);
@@ -1223,7 +1219,7 @@ fn evaluate_access(
         &temporary
     };
     let error = |context: &Context, segment: &AccessSegment, reason: std::fmt::Arguments<'_>| {
-        context.access_error(base, segments, segment, reason)
+        RuntimeDiagnostic::from(context.access_error(base, segments, segment, reason))
     };
     for segment in segments {
         // Evaluate this key before checking its receiver/type; do not evaluate
@@ -1310,12 +1306,14 @@ fn evaluate_for(
 ) -> CompletionResult {
     let iterable_value = evaluate_expression(iterable, context)?;
     if !matches!(&*iterable_value, Literal::Array(_)) {
-        return Err(context.detail_error(
-            BWErr::OperationIncompatibleError,
-            "For requires an array to iterate over",
-            Some(&iterable.span),
-            true,
-        ));
+        return Err(context
+            .detail_error(
+                BWErr::OperationIncompatibleError,
+                "For requires an array to iterate over",
+                Some(&iterable.span),
+                true,
+            )
+            .into());
     }
     let (iterable_value, _iterable_reservation) = iterable_value.into_parts();
     let Literal::Array(values) = iterable_value else {
@@ -1357,12 +1355,14 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Comp
     loop {
         let value = evaluate_expression(condition, context)?;
         let Literal::Bool(should_loop) = &*value else {
-            return Err(context.detail_error(
-                BWErr::OperationIncompatibleError,
-                "While requires a boolean condition",
-                Some(&condition.span),
-                true,
-            ));
+            return Err(context
+                .detail_error(
+                    BWErr::OperationIncompatibleError,
+                    "While requires a boolean condition",
+                    Some(&condition.span),
+                    true,
+                )
+                .into());
         };
         let should_loop = *should_loop;
         drop(value);
@@ -1381,7 +1381,7 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Comp
 fn evaluate_handler(
     binding: Option<&Name>,
     handler: &Block,
-    original: Diagnostic,
+    original: RuntimeDiagnostic,
     context: &mut Context,
 ) -> CompletionResult {
     let owner = context.current;
@@ -1402,7 +1402,9 @@ fn evaluate_handler(
         })();
         match installed {
             Ok(previous) => previous,
-            Err(error) => return Err(context.finish_handler_error(error.at(&name.span), original)),
+            Err(error) => {
+                return Err(context.finish_handler_error(error.at(&name.span).into(), original))
+            }
         }
     } else {
         None
@@ -1438,9 +1440,9 @@ fn evaluate_handler(
 fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
     let _depth = context
         .enter_evaluation()
-        .map_err(|error| context.diagnostic(error, Some(&statement.span), false))?;
+        .map_err(|error| context.runtime_diagnostic(error.into(), Some(&statement.span), false))?;
     evaluate_statement_inner(statement, context)
-        .map_err(|error| context.diagnostic(error, Some(&statement.span), false))
+        .map_err(|error| context.runtime_diagnostic(error, Some(&statement.span), false))
 }
 
 // Declaration admission runs only for definitions; its scratch state must not
@@ -1503,12 +1505,14 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
         } => {
             let value = evaluate_expression(condition, context)?;
             let Literal::Bool(condition) = &*value else {
-                return Err(context.detail_error(
-                    BWErr::OperationIncompatibleError,
-                    "If requires a boolean condition",
-                    Some(&condition.span),
-                    true,
-                ));
+                return Err(context
+                    .detail_error(
+                        BWErr::OperationIncompatibleError,
+                        "If requires a boolean condition",
+                        Some(&condition.span),
+                        true,
+                    )
+                    .into());
             };
             let condition = *condition;
             drop(value);
@@ -1536,7 +1540,7 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
             Ok(value) => Ok(value),
             Err(original) => {
                 let original = context
-                    .after_operation::<Literal>(Err(original))
+                    .after_evaluation::<Literal>(Err(original))
                     .unwrap_err();
                 if context.checkpoint().is_err() {
                     Err(original)
@@ -1561,12 +1565,14 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
                 .filter(|handler| handler.invocation == context.current)
             {
                 Some(handler) => Err(context.rethrow_handler(&handler.diagnostic, &statement.span)),
-                None => Err(context.detail_error(
-                    BWErr::ControlFlowError,
-                    "Rethrow requires an enclosing Catch in the same invocation",
-                    Some(&statement.span),
-                    false,
-                )),
+                None => Err(context
+                    .detail_error(
+                        BWErr::ControlFlowError,
+                        "Rethrow requires an enclosing Catch in the same invocation",
+                        Some(&statement.span),
+                        false,
+                    )
+                    .into()),
             }
         }
     }
@@ -1580,7 +1586,9 @@ fn finish_script(completion: Completion, context: &Context, span: &Span) -> Temp
         Completion::Break => "Break requires an enclosing loop in the same invocation",
         Completion::Continue => "Continue requires an enclosing loop in the same invocation",
     };
-    Err(context.detail_error(BWErr::ControlFlowError, reason, Some(span), false))
+    Err(context
+        .detail_error(BWErr::ControlFlowError, reason, Some(span), false)
+        .into())
 }
 
 /// Evaluate an already parsed, owned statement at script level in this context.
@@ -1593,6 +1601,13 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
 
 /// Execute one script-level statement with source locations and entered-call frames.
 pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) -> RuntimeResult {
+    execute_statement_runtime(statement, context).map_err(RuntimeDiagnostic::into_diagnostic)
+}
+
+fn execute_statement_runtime(
+    statement: &Statement,
+    context: &mut Context,
+) -> EvaluationResult<Literal> {
     let result = (|| {
         context.checkpoint()?;
         let statements = std::slice::from_ref(statement);
@@ -1607,7 +1622,7 @@ pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) 
         )
         .map(TemporaryValue::into_inner)
     })();
-    result.map_err(|error| context.diagnostic(error, None, false))
+    result.map_err(|error| context.runtime_diagnostic(error, None, false))
 }
 
 /// Validate the complete program, then execute without parsing or rebuilding it.
@@ -1617,6 +1632,13 @@ pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResu
 
 /// Validate and execute a program while preserving structured diagnostic causes.
 pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> RuntimeResult {
+    evaluate_program_runtime(program, context).map_err(RuntimeDiagnostic::into_diagnostic)
+}
+
+pub(crate) fn evaluate_program_runtime(
+    program: &Program,
+    context: &mut Context,
+) -> EvaluationResult<Literal> {
     let result = (|| {
         context.checkpoint()?;
         let limits = context.limits();
@@ -1639,7 +1661,7 @@ pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> Ru
             .map_or_else(|| context.temporary(Literal::None), Ok)
             .map(TemporaryValue::into_inner)
     })();
-    result.map_err(|error| context.diagnostic(error, None, false))
+    result.map_err(|error| context.runtime_diagnostic(error, None, false))
 }
 
 /// Compatibility entry point for callers that already hold a Pest pair.
@@ -1659,7 +1681,7 @@ pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResul
         super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)
             .map_err(|error| context.retain_limit(error))?;
         match node {
-            Node::Statement(statement) => execute_statement_detailed(&statement, context),
+            Node::Statement(statement) => execute_statement_runtime(&statement, context),
             Node::Expression(expression) => {
                 evaluate_expression(&expression, context).map(TemporaryValue::into_inner)
             }
@@ -1674,5 +1696,9 @@ pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResul
                 .map(TemporaryValue::into_inner),
         }
     })();
-    result.map_err(|error| context.diagnostic(error, None, false))
+    result.map_err(|error| {
+        context
+            .runtime_diagnostic(error, None, false)
+            .into_diagnostic()
+    })
 }

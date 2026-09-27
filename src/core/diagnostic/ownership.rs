@@ -367,6 +367,10 @@ impl OwnedDiagnostic {
     pub(crate) fn into_inner(mut self) -> Diagnostic {
         self.0.take().expect("owned diagnostic")
     }
+    pub(crate) fn map(&mut self, transform: impl FnOnce(Diagnostic) -> Diagnostic) {
+        let value = self.0.take().expect("owned diagnostic");
+        self.0 = Some(transform(value));
+    }
 }
 impl Drop for OwnedDiagnostic {
     fn drop(&mut self) {

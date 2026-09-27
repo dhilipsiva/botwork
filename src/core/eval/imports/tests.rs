@@ -2,6 +2,66 @@ use super::*;
 use crate::core::run::{RunLimits, SnapshotLimits};
 
 #[test]
+fn imported_rethrows_keep_record_ownership_after_module_context_unwinds() {
+    use crate::core::run::RetainedDiagnosticLimits;
+    let mut context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let definitions =
+        Program::parse("library", "Fail { Try { Missing } Catch { Rethrow } }").unwrap();
+    evaluate_program_runtime(&definitions, &mut context).unwrap();
+    let module = LoadedModule {
+        frame: context.frames[0].clone(),
+    };
+    let caller = Program::parse("caller", "Fail").unwrap();
+    let call = Call {
+        signature: "fail".into(),
+        span: caller.statements[0].span.clone(),
+        arguments: vec![],
+    };
+    let import = Program::parse("import", "Import |\"library.botwork\"| As |lib|").unwrap();
+    let error = invoke_imported(
+        &call,
+        &module,
+        "fail",
+        vec![],
+        &import.statements[0].span,
+        &mut context,
+    )
+    .unwrap_err();
+    assert_eq!(error.call_stack.len(), 1);
+    assert!(error
+        .related
+        .iter()
+        .any(|site| site.message == "imported here"));
+    let first = context
+        .retain_handler(Diagnostic::new(BWErr::NativeError("first".into())))
+        .unwrap();
+    let second = context
+        .retain_handler(Diagnostic::new(BWErr::NativeError("second".into())))
+        .unwrap();
+    let probe = context.clone();
+    assert!(probe
+        .retain_handler(Diagnostic::new(BWErr::NativeError("blocked".into())))
+        .is_err());
+    let public = error.into_diagnostic();
+    context.checkpoint().unwrap();
+    let third = context
+        .retain_handler(Diagnostic::new(BWErr::NativeError("third".into())))
+        .unwrap();
+    assert_eq!(
+        public.code(),
+        crate::core::diagnostic::DiagnosticCode::UndefinedStatement
+    );
+    drop((first, second, third, public));
+}
+
+#[test]
 fn missing_imported_exports_admit_name_and_complete_known_context() {
     use crate::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
 

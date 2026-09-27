@@ -28,7 +28,7 @@ fn evaluate_unvalidated_statement(source: &str, context: &mut Context) -> Litera
     evaluate_statement(&statement, context)
         .and_then(|completion| finish_script(completion, context, &statement.span))
         .map(super::TemporaryValue::into_inner)
-        .map_err(super::Diagnostic::into_error)
+        .map_err(|error| error.into_diagnostic().into_error())
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn for_restores_present_absent_and_none_bindings_on_every_completion() {
             };
             // Inspect loop cleanup before the enclosing invocation would be discarded.
             let result = evaluate_statement(&definition.body.statements[0], &mut context)
-                .map_err(super::Diagnostic::into_error);
+                .map_err(|error| error.into_diagnostic().into_error());
             assert!(
                 match expected {
                     "normal" =>

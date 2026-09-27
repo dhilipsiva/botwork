@@ -75,6 +75,15 @@ impl RetainedDiagnostics {
         size: DiagnosticSize,
         sources: Vec<Arc<SourceFile>>,
     ) -> Result<DiagnosticReservation, BWErr> {
+        self.replace(size, sources, &mut Vec::new())
+    }
+
+    fn replace(
+        self: &Arc<Self>,
+        size: DiagnosticSize,
+        sources: Vec<Arc<SourceFile>>,
+        previous: &mut Vec<DiagnosticReservation>,
+    ) -> Result<DiagnosticReservation, BWErr> {
         let charge = [
             1,
             size.diagnostics,
@@ -95,19 +104,43 @@ impl RetainedDiagnostics {
         ];
         let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
         let mut next = used.counts;
+        let mut changes: HashMap<usize, (&Arc<SourceFile>, usize, usize)> = HashMap::new();
+        for reservation in previous
+            .iter()
+            .filter(|value| Arc::ptr_eq(&value.owner, self))
+        {
+            for (value, old) in next.iter_mut().zip(reservation.charge) {
+                *value -= old;
+            }
+            for source in &reservation.sources {
+                changes.entry(source_id(source)).or_insert((source, 0, 0)).1 += 1;
+            }
+        }
         for (index, (resource, maximum)) in resources.into_iter().enumerate() {
             next[index] = next[index]
                 .checked_add(charge[index])
                 .filter(|value| *value <= maximum)
                 .ok_or_else(|| exceeded(resource, maximum))?;
         }
-        let mut source_bytes = used.source_bytes;
         for source in &sources {
-            if let Some(references) = used.sources.get(&source_id(source)) {
-                references
-                    .checked_add(1)
-                    .ok_or_else(|| exceeded("retained diagnostic records", limits.records))?;
-            } else {
+            changes.entry(source_id(source)).or_insert((source, 0, 0)).2 += 1;
+        }
+        let mut source_bytes = used.source_bytes;
+        let mut references = Vec::with_capacity(changes.len());
+        // Release identities no longer owned before admitting replacement owners.
+        for (&id, &(source, removed, added)) in &changes {
+            let before = used.sources.get(&id).copied().unwrap_or_default();
+            let after = (before - removed)
+                .checked_add(added)
+                .ok_or_else(|| exceeded("retained diagnostic records", limits.records))?;
+            if before != 0 && after == 0 {
+                source_bytes -= source.name().len() + source.text().len();
+            }
+            references.push((id, before, after));
+        }
+        for &(id, before, after) in &references {
+            if before == 0 && after != 0 {
+                let source = changes[&id].0;
                 source_bytes = source_bytes
                     .checked_add(source.name().len())
                     .and_then(|bytes| bytes.checked_add(source.text().len()))
@@ -117,16 +150,30 @@ impl RetainedDiagnostics {
                     })?;
             }
         }
+        drop(changes);
         let reservation = DiagnosticReservation {
             owner: Arc::clone(self),
             charge,
             sources,
         };
-        for source in &reservation.sources {
-            *used.sources.entry(source_id(source)).or_default() += 1;
+        for (id, _, after) in references {
+            if after == 0 {
+                used.sources.remove(&id);
+            } else {
+                used.sources.insert(id, after);
+            }
         }
         used.counts = next;
         used.source_bytes = source_bytes;
+        for old in previous
+            .iter_mut()
+            .filter(|value| Arc::ptr_eq(&value.owner, self))
+        {
+            old.charge = [0; 5];
+            old.sources.clear();
+        }
+        drop(used);
+        previous.clear();
         Ok(reservation)
     }
 }
@@ -168,6 +215,122 @@ pub(crate) struct StoredDiagnostic {
     // Release owned metadata before its accounting and source-identity references.
     pub(crate) _reservation: Option<DiagnosticReservation>,
 }
+
+/// Internal ownership carrier. Raw host diagnostics enter without runtime leases;
+/// retained and copied records keep their leases through evaluation and disposal.
+pub(crate) struct RuntimeDiagnostic {
+    value: Box<crate::core::diagnostic::OwnedDiagnostic>,
+    reservations: Vec<DiagnosticReservation>,
+}
+
+impl std::fmt::Debug for RuntimeDiagnostic {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.value.as_ref().as_ref(), output)
+    }
+}
+impl std::fmt::Display for RuntimeDiagnostic {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.value.as_ref().as_ref(), output)
+    }
+}
+impl std::ops::Deref for RuntimeDiagnostic {
+    type Target = Diagnostic;
+    fn deref(&self) -> &Diagnostic {
+        self.value.as_ref().as_ref()
+    }
+}
+impl From<Diagnostic> for RuntimeDiagnostic {
+    fn from(value: Diagnostic) -> Self {
+        Self {
+            value: Box::new(crate::core::diagnostic::OwnedDiagnostic::new(value)),
+            reservations: vec![],
+        }
+    }
+}
+impl From<StoredDiagnostic> for RuntimeDiagnostic {
+    fn from(value: StoredDiagnostic) -> Self {
+        Self {
+            value: Box::new(crate::core::diagnostic::OwnedDiagnostic::new(value.value)),
+            reservations: value._reservation.into_iter().collect(),
+        }
+    }
+}
+impl RuntimeDiagnostic {
+    pub(crate) fn into_diagnostic(self) -> Diagnostic {
+        (*self.value).into_inner()
+    }
+
+    pub(crate) fn map(mut self, transform: impl FnOnce(Diagnostic) -> Diagnostic) -> Self {
+        self.value.map(transform);
+        if self.is_emergency() {
+            // Full metadata has already been disposed; emergency evidence owns
+            // no source trees and uses the independent fixed summary allowance.
+            self.reservations.clear();
+        }
+        self
+    }
+
+    pub(crate) fn with_related(self, message: &str, span: &Span) -> Self {
+        self.map(|value| value.with_related(message, span))
+    }
+
+    pub(crate) fn while_handling(mut self, original: Self) -> Self {
+        if Arc::ptr_eq(&self.error, &original.error) {
+            return self;
+        }
+        if self.is_emergency() {
+            drop(original);
+            return self.map(Diagnostic::omit_handled_cause);
+        }
+        let Self {
+            value,
+            reservations,
+        } = original;
+        self.reservations.extend(reservations);
+        self.map(|error| error.while_handling((*value).into_inner()))
+    }
+
+    pub(crate) fn reject(self, violation: BWErr) -> Self {
+        // Dispose the old payload before refunding its retained ownership.
+        let Self {
+            value,
+            reservations,
+        } = self;
+        let error = (*value).into_inner().rejected(violation);
+        drop(reservations);
+        error.into()
+    }
+
+    pub(crate) fn store(
+        mut self,
+        budget: Option<&RunBudget>,
+    ) -> DiagnosticResult<Arc<StoredDiagnostic>> {
+        let reservation = if let Some(budget) = budget {
+            budget.checkpoint().and_then(|()| {
+                let (size, sources) = budget
+                    .limits()
+                    .diagnostics
+                    .retained_copy_size(&self, None)
+                    .map_err(|error| budget.stop(error))?;
+                budget
+                    .0
+                    .retained_diagnostics
+                    .replace(size, sources, &mut self.reservations)
+                    .map(Some)
+                    .map_err(|error| budget.stop(error))
+            })
+        } else {
+            Ok(None)
+        };
+        match reservation {
+            Ok(reservation) => Ok(Arc::new(StoredDiagnostic {
+                value: (*self.value).into_inner(),
+                _reservation: reservation,
+            })),
+            Err(error) => Err(self.reject(error.into_error()).into_diagnostic()),
+        }
+    }
+}
 impl StoredDiagnostic {
     /// Keep the copied tree's reservation alive until its explicit handoff.
     pub(crate) fn copy(
@@ -197,10 +360,6 @@ impl StoredDiagnostic {
             Ok(value) => Ok(value),
             Err(value) => value.copy(budget, None),
         }
-    }
-
-    pub(crate) fn into_diagnostic(self) -> Diagnostic {
-        self.value
     }
 }
 
@@ -232,6 +391,7 @@ impl RunBudget {
             .map_err(|error| self.stop(error))
     }
 
+    #[cfg(test)]
     pub(crate) fn reserve_diagnostic(
         &self,
         diagnostic: &Diagnostic,

@@ -67,7 +67,7 @@ fn invalid_nested_host_arguments_never_reach_native_or_custom_bodies() {
     for source in ["Record |invalid|", "Custom |invalid|"] {
         let error = invoke(&parsed_call(source), &mut context).unwrap_err();
         assert!(matches!(*error.error, BWErr::ArithmeticError(_)));
-        assert_eq!(error.span.unwrap().text(), "invalid");
+        assert_eq!(error.span.as_ref().unwrap().text(), "invalid");
         assert!(error.call_stack.is_empty());
         assert!(events(&context).is_empty());
     }

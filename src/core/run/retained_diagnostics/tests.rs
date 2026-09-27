@@ -15,6 +15,328 @@ fn size() -> DiagnosticSize {
 }
 
 #[test]
+fn replacement_merges_ownership_and_replaces_source_identities_without_peak_double_charging() {
+    let old = source();
+    let new = source();
+    let bytes = old.name().len() + old.text().len();
+    let tracker = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits {
+        records: 2,
+        diagnostics: 2,
+        call_frames: 2,
+        related_locations: 2,
+        text_bytes: 24,
+        source_bytes: bytes,
+    }));
+    let mut previous = vec![
+        tracker.reserve(size(), vec![old.clone()]).unwrap(),
+        tracker.reserve(size(), vec![old.clone()]).unwrap(),
+    ];
+    let merged = DiagnosticSize {
+        diagnostics: 2,
+        call_frames: 2,
+        related_locations: 2,
+        text_bytes: 24,
+        ..Default::default()
+    };
+    let reservation = tracker
+        .replace(merged, vec![old.clone()], &mut previous)
+        .unwrap();
+    assert!(previous.is_empty());
+    assert_eq!(tracker.used.lock().unwrap().counts, [1, 2, 2, 2, 24]);
+    assert_eq!(tracker.used.lock().unwrap().sources[&source_id(&old)], 1);
+    let mut previous = vec![reservation];
+    let reservation = tracker
+        .replace(merged, vec![new.clone()], &mut previous)
+        .unwrap();
+    let used = tracker.used.lock().unwrap();
+    assert_eq!(used.source_bytes, bytes);
+    assert!(!used.sources.contains_key(&source_id(&old)));
+    assert_eq!(used.sources[&source_id(&new)], 1);
+    drop(used);
+    drop(reservation);
+    assert_eq!(tracker.used.lock().unwrap().counts, [0; 5]);
+    assert_eq!(tracker.used.lock().unwrap().source_bytes, 0);
+}
+
+#[test]
+fn failed_replacement_preserves_old_reservations_for_every_dimension_and_overflow() {
+    for dimension in 0..6 {
+        let source = source();
+        let other_source = Program::parse("other", "|x| = |2|").unwrap().source;
+        let bytes = source.name().len() + source.text().len();
+        let tracker = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits {
+            records: 1,
+            diagnostics: 1,
+            call_frames: 1,
+            related_locations: 1,
+            text_bytes: 12,
+            source_bytes: bytes,
+        }));
+        let held = tracker.reserve(size(), vec![source.clone()]).unwrap();
+        let unrelated = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits::default()));
+        let mut previous = vec![if dimension == 0 {
+            unrelated.reserve(size(), vec![]).unwrap()
+        } else {
+            held
+        }];
+        // Keep the requester's occupied slot for a cross-pool failed transfer.
+        let mut replacement = size();
+        let mut sources = vec![source.clone()];
+        match dimension {
+            0 => (),
+            1 => replacement.diagnostics += 1,
+            2 => replacement.call_frames += 1,
+            3 => replacement.related_locations += 1,
+            4 => replacement.text_bytes += 1,
+            _ => sources.push(other_source),
+        }
+        let before = tracker.used.lock().unwrap().counts;
+        assert!(tracker
+            .replace(replacement, sources, &mut previous)
+            .is_err());
+        assert_eq!(previous.len(), 1);
+        assert_eq!(tracker.used.lock().unwrap().counts, before);
+        assert_eq!(tracker.used.lock().unwrap().source_bytes, bytes);
+        assert_eq!(previous[0].charge, [1, 1, 1, 1, 12]);
+    }
+    let tracker = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits {
+        records: usize::MAX,
+        diagnostics: usize::MAX,
+        ..Default::default()
+    }));
+    let mut previous = vec![tracker
+        .reserve(
+            DiagnosticSize {
+                diagnostics: 1,
+                ..Default::default()
+            },
+            vec![],
+        )
+        .unwrap()];
+    tracker.used.lock().unwrap().counts[1] = usize::MAX;
+    assert!(tracker
+        .replace(
+            DiagnosticSize {
+                diagnostics: 2,
+                ..Default::default()
+            },
+            vec![],
+            &mut previous
+        )
+        .is_err());
+    assert_eq!(tracker.used.lock().unwrap().counts[1], usize::MAX);
+    assert_eq!(previous[0].charge[1], 1);
+}
+
+fn runtime_error(budget: &RunBudget, name: &str) -> RuntimeDiagnostic {
+    let program = Program::parse(name, "|x| = |1|").unwrap();
+    let value = Diagnostic::new(BWErr::NativeError(name.into())).at(&program.statements[0].span);
+    StoredDiagnostic {
+        _reservation: Some(budget.reserve_diagnostic(&value).unwrap()),
+        value,
+    }
+    .into()
+}
+
+#[test]
+fn cancellation_carries_original_ownership_or_releases_it_after_bounded_rejection() {
+    use crate::core::eval::Context;
+    for diagnostics in [1, 2] {
+        let control = OperationControl::default();
+        let context = Context::with_control(
+            RunLimits {
+                diagnostics: DiagnosticLimits {
+                    diagnostics,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            control.clone(),
+        )
+        .unwrap();
+        let budget = context.budget.as_ref().unwrap();
+        let error = runtime_error(budget, "original");
+        let source = Arc::downgrade(error.span.as_ref().unwrap().source());
+        control.cancel();
+        let result = context.after_evaluation::<()>(Err(error)).unwrap_err();
+        let result = context.runtime_diagnostic(result, None, false);
+        assert_eq!(result.code(), DiagnosticCode::Cancelled);
+        assert_eq!(source.upgrade().is_some(), diagnostics == 2);
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
+            usize::from(diagnostics == 2)
+        );
+        if diagnostics == 2 {
+            assert_eq!(result.causes[0].code(), DiagnosticCode::Native);
+        } else {
+            assert!(result.is_emergency());
+        }
+        drop(result);
+        assert!(source.upgrade().is_none());
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts,
+            [0; 5]
+        );
+    }
+}
+
+#[test]
+fn runtime_carrier_keeps_merged_records_until_atomic_handler_reentry() {
+    let budget = RunBudget::new(
+        RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 2,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        OperationControl::default(),
+    );
+    let first = runtime_error(&budget, "first");
+    let identity = first.error.clone();
+    let second = runtime_error(&budget, "second");
+    let merged = first.while_handling(second);
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
+        2
+    );
+    let stored = merged.store(Some(&budget)).unwrap();
+    assert!(Arc::ptr_eq(&stored.value.error, &identity));
+    assert_eq!(stored.value.causes.len(), 1);
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
+        1
+    );
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts[1],
+        2
+    );
+    let outgoing = RuntimeDiagnostic::from(StoredDiagnostic::take(stored, Some(&budget)).unwrap());
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
+        1
+    );
+    let public = outgoing.into_diagnostic();
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts,
+        [0; 5]
+    );
+    assert_eq!(public.causes.len(), 1);
+}
+
+#[test]
+fn runtime_disposal_rejection_and_publication_release_source_owners_and_deep_raw_errors() {
+    for action in 0..3 {
+        let budget = RunBudget::new(RunLimits::default(), OperationControl::default());
+        let error = runtime_error(&budget, "original");
+        let source = Arc::downgrade(error.span.as_ref().unwrap().source());
+        match action {
+            0 => drop(error),
+            1 => {
+                let error = error.reject(BWErr::ResourceLimit {
+                    resource: "test",
+                    limit: 0,
+                });
+                assert!(error.is_emergency());
+                assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+                assert!(source.upgrade().is_none());
+            }
+            _ => {
+                let error = error.into_diagnostic();
+                assert!(source.upgrade().is_some());
+                assert_eq!(
+                    budget.0.retained_diagnostics.used.lock().unwrap().counts,
+                    [0; 5]
+                );
+                error.discard();
+            }
+        }
+        assert!(source.upgrade().is_none());
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts,
+            [0; 5]
+        );
+        assert!(budget
+            .0
+            .retained_diagnostics
+            .used
+            .lock()
+            .unwrap()
+            .sources
+            .is_empty());
+    }
+    std::thread::Builder::new()
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let mut error = Diagnostic::new(BWErr::NativeError("leaf".into()));
+            for _ in 0..100_000 {
+                let mut parent = Diagnostic::new(BWErr::NativeError("parent".into()));
+                parent.causes.push(error);
+                error = parent;
+            }
+            drop(RuntimeDiagnostic::from(error));
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn outgoing_rethrow_holds_shared_capacity_until_public_transfer_across_contexts() {
+    use crate::core::eval::{evaluate_program_detailed, evaluate_program_runtime, Context};
+    let context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 2,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let mut worker = context.clone();
+    let mut rejected = context.clone();
+    let mut reusable = context.clone();
+    let (ready, received) = std::sync::mpsc::channel();
+    let (release, gate) = std::sync::mpsc::channel();
+    let task = std::thread::spawn(move || {
+        let program = Program::parse("outgoing", "Try { Missing } Catch { Rethrow }").unwrap();
+        let error = evaluate_program_runtime(&program, &mut worker).unwrap_err();
+        ready.send(()).unwrap();
+        gate.recv_timeout(Duration::from_secs(5)).unwrap();
+        error.into_diagnostic()
+    });
+    received.recv_timeout(Duration::from_secs(5)).unwrap();
+    let recovered = Program::parse(
+        "recover",
+        "Try { Try { Missing } Catch { Rethrow } } Catch {}",
+    )
+    .unwrap();
+    assert_eq!(
+        evaluate_program_detailed(&recovered, &mut rejected)
+            .unwrap_err()
+            .code(),
+        DiagnosticCode::ResourceLimit
+    );
+    context.checkpoint().unwrap();
+    release.send(()).unwrap();
+    let public = task.join().unwrap();
+    assert_eq!(public.code(), DiagnosticCode::UndefinedStatement);
+    evaluate_program_detailed(&recovered, &mut reusable).unwrap();
+    assert_eq!(
+        context
+            .budget
+            .as_ref()
+            .unwrap()
+            .0
+            .retained_diagnostics
+            .used
+            .lock()
+            .unwrap()
+            .counts,
+        [0; 5]
+    );
+}
+
+#[test]
 fn records_share_source_charges_and_release_only_their_own_metrics() {
     let source = source();
     let bytes = source.name().len() + source.text().len();
@@ -156,7 +478,7 @@ fn stored_diagnostics_transfer_unique_metadata_and_keep_shared_owners_charged() 
             budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
             1 + usize::from(shared)
         );
-        let value = copied.into_diagnostic();
+        let value = RuntimeDiagnostic::from(copied).into_diagnostic();
         if !shared {
             assert_eq!(value.related[0].message.as_ptr(), pointer);
         }
