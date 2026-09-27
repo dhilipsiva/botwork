@@ -188,10 +188,21 @@ fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> 
 
 pub(super) fn reject_input_origin(
     skeleton: Diagnostic,
-    origin: &str,
+    origin: (String, bool),
     violation: BWErr,
 ) -> Diagnostic {
-    reject_source_prefix(skeleton, origin, 0, 0, violation, 0)
+    let mut error = rejected(skeleton, violation, 0);
+    error.causes[0]
+        .omissions
+        .as_mut()
+        .expect("bounded original")
+        .source = Some(OmittedSource {
+        file: origin.0,
+        file_truncated: origin.1,
+        start_byte: 0,
+        end_byte: 0,
+    });
+    error
 }
 
 pub(super) fn reject_source_prefix(

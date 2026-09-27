@@ -60,4 +60,6 @@ Resource failures return BW8001 before script effects. Their admitted span ident
 
 Use the same ValueLimits in InputLimits and RunLimits when raising decoded-value budgets for execution. Empty file/flag lists need no source allowance; an empty JSON object still consumes its source, bytes, and root token. Default standalone APIs intentionally reject decoded values above execution defaults.
 
+File and flag origins stream directly into diagnostic admission. File names keep the platform's lossy display spelling; count the displayed UTF-8 bytes, including replacement characters, before retaining an origin. An exhausted source-count budget rejects before opening the file. Oversized rejected names need no full filename buffer; platform file-open arguments retain their separate ownership.
+
 Tests cover exact/zero/cumulative/local budgets, Unicode/UTF-16 boundaries, malformed escapes, raw versus converted nesting, duplicate/override behavior, file cuts, origin retention, path abbreviation, and CLI rejection before output/traces. Allocator observations verify raw string/array rejection before payload-sized allocation. R8 corpus cases and an executed Rust example pin counts. Host allocations, aggregate runtime state, callback behavior, output/diagnostic serialization, and filesystem hard deadlines retain separate resource contracts.

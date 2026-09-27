@@ -85,7 +85,7 @@ impl<'de> DeserializeSeed<'de> for RawMap<'_> {
 }
 
 pub(super) fn array<'a>(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     path: &str,
     text: &'a str,
     limits: &InputLimits,
@@ -106,7 +106,7 @@ pub(super) fn array<'a>(
 }
 
 pub(super) fn map<'a>(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     path: &str,
     text: &'a str,
     limits: &InputLimits,

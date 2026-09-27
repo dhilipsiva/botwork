@@ -63,17 +63,18 @@ impl Write for BoundedText {
 }
 
 fn formatted_prefix(message: fmt::Arguments<'_>) -> (String, bool) {
+    formatted_prefix_with_limit(message, super::SUMMARY_DETAIL_BYTES)
+}
+
+fn formatted_prefix_with_limit(message: fmt::Arguments<'_>, maximum: usize) -> (String, bool) {
     let mut output = BoundedText {
-        text: String::with_capacity(super::SUMMARY_DETAIL_BYTES),
-        maximum: super::SUMMARY_DETAIL_BYTES,
+        text: String::with_capacity(maximum),
+        maximum,
     };
     let shortened = output.write_fmt(message).is_err();
     if shortened {
         let marker = super::rejection::TRUNCATED;
-        let mut end = output
-            .text
-            .len()
-            .min(super::SUMMARY_DETAIL_BYTES - marker.len());
+        let mut end = output.text.len().min(maximum - marker.len());
         while !output.text.is_char_boundary(end) {
             end -= 1;
         }
@@ -153,23 +154,40 @@ impl DiagnosticLimits {
         }
     }
 
-    /// Admit a payload-free input origin before copying its borrowed name into a
-    /// SourceFile. Input resource errors already contain only fixed-size details.
-    pub(crate) fn input_origin(&self, error: BWErr, origin: &str) -> Diagnostic {
+    /// Admit a payload-free input origin before formatting its borrowed name into
+    /// a SourceFile. Internal origins stream strings, paths, or scalar flag indexes.
+    pub(crate) fn input_origin(
+        &self,
+        error: BWErr,
+        origin: &(impl fmt::Display + ?Sized),
+    ) -> Diagnostic {
         let skeleton = Diagnostic::new(error);
-        let admission = self
-            .check(&skeleton)
-            .and(if origin.len() <= self.source_bytes {
-                Ok(())
-            } else {
-                Err(BWErr::ResourceLimit {
-                    resource: "diagnostic source bytes",
-                    limit: self.source_bytes as u64,
-                })
-            });
+        let violation = || BWErr::ResourceLimit {
+            resource: "diagnostic source bytes",
+            limit: self.source_bytes as u64,
+        };
+        let admission = self.check(&skeleton).and_then(|_| {
+            let mut count = Counter {
+                bytes: 0,
+                maximum: self.source_bytes,
+            };
+            write!(&mut count, "{origin}").map_err(|_| violation())?;
+            let mut output = BoundedText {
+                text: String::with_capacity(count.bytes),
+                maximum: count.bytes,
+            };
+            write!(&mut output, "{origin}").map_err(|_| violation())?;
+            Ok(output.text)
+        });
         match admission {
-            Ok(()) => skeleton.at(&Span::input_origin(origin)),
-            Err(violation) => super::rejection::reject_input_origin(skeleton, origin, violation),
+            Ok(origin) => skeleton.at(&Span::input_origin(origin)),
+            Err(violation) => {
+                let prefix = formatted_prefix_with_limit(
+                    format_args!("{origin}"),
+                    super::SUMMARY_SOURCE_NAME_BYTES,
+                );
+                super::rejection::reject_input_origin(skeleton, prefix, violation)
+            }
         }
     }
 

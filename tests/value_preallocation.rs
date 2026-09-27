@@ -60,6 +60,59 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn file_input_errors_stream_large_origins_without_extra_path_sized_buffers() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        input::{load_variables_with_limits, InputLimits},
+    };
+    use std::path::PathBuf;
+    let check_path = |path: PathBuf| {
+        for source_limit in [0, 1] {
+            // Platform open arguments have their own ownership. Removing the
+            // origin copy must not hide those required allocations in the comparison.
+            let platform_copies = if source_limit == 0 {
+                0
+            } else {
+                let (result, copies) = observe(64 * 1024, || std::fs::File::open(&path));
+                assert!(result.is_err());
+                copies
+            };
+            let (result, copies) = observe(64 * 1024, || {
+                load_variables_with_limits(
+                    std::slice::from_ref(&path),
+                    &[],
+                    &InputLimits {
+                        sources: source_limit,
+                        ..InputLimits::default()
+                    },
+                )
+            });
+            let error = result.unwrap_err();
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(
+                error.causes[0].code(),
+                if source_limit == 0 {
+                    DiagnosticCode::ResourceLimit
+                } else {
+                    DiagnosticCode::Input
+                }
+            );
+            assert_eq!(copies, platform_copies, "source limit {source_limit}");
+        }
+    };
+    check_path(PathBuf::from(
+        "é".repeat(DiagnosticLimits::default().source_bytes),
+    ));
+    #[cfg(unix)]
+    {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+        check_path(PathBuf::from(OsString::from_vec(
+            vec![0xff; DiagnosticLimits::default().source_bytes],
+        )));
+    }
+}
+
+#[test]
 fn worker_join_construction_allocates_only_admitted_full_messages_and_cleanup_causes() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},

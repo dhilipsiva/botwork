@@ -56,8 +56,15 @@ impl std::fmt::Display for LocationDisplay<'_> {
 
 impl Span {
     /// An input origin without retaining its payload; location refers to input start.
-    pub(crate) fn input_origin(name: &str) -> Self {
-        Self::source_prefix(name, "", 0)
+    pub(crate) fn input_origin(name: impl Into<String>) -> Self {
+        Self {
+            source: Arc::new(SourceFile {
+                name: name.into(),
+                text: String::new(),
+            }),
+            start: 0,
+            end: 0,
+        }
     }
 
     pub(crate) fn source_prefix(name: &str, prefix: &str, start: usize) -> Self {

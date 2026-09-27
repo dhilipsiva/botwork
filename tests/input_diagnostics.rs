@@ -25,6 +25,103 @@ fn limits(text_bytes: usize) -> RunLimits {
     }
 }
 
+#[test]
+fn input_file_source_limits_admit_exact_displayed_origin_bytes_before_opening() {
+    use botwork::core::input::{load_variables_with_limits, InputLimits};
+    use std::path::PathBuf;
+    let maximum = DiagnosticLimits::default().source_bytes;
+    let mut filename = "é".repeat(maximum / 2);
+    for rejected in [false, true] {
+        if rejected {
+            filename.push('x');
+        }
+        let file = PathBuf::from(&filename);
+        let error = load_variables_with_limits(
+            &[file],
+            &["invalid setting".into()],
+            &InputLimits {
+                sources: 0,
+                ..InputLimits::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        let original = if rejected {
+            assert!(matches!(
+                error.error.as_ref(),
+                BWErr::ResourceLimit {
+                    resource: "diagnostic source bytes",
+                    ..
+                }
+            ));
+            let original = &error.causes[0];
+            let evidence = original
+                .omissions
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap();
+            assert!(evidence.file_truncated && evidence.file.starts_with('é'));
+            assert_eq!((evidence.start_byte, evidence.end_byte), (0, 0));
+            assert!(original.span.is_none());
+            original
+        } else {
+            assert_eq!(error.span.as_ref().unwrap().source().name(), filename);
+            assert!(error.span.as_ref().unwrap().source().text().is_empty());
+            assert!(error.causes.is_empty());
+            &error
+        };
+        assert!(matches!(
+            original.error.as_ref(),
+            BWErr::ResourceLimit {
+                resource: "input sources",
+                limit: 0
+            }
+        ));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn file_failures_preserve_lossy_native_origins_and_precede_settings() {
+    use botwork::core::input::{load_variables_with_limits, InputLimits};
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf};
+    let path = PathBuf::from(OsString::from_vec(vec![b'x', 0xff, 0, b'.', b'j']));
+    let expected = format!(
+        "{}: $: {}",
+        path.display(),
+        std::fs::File::open(&path).unwrap_err()
+    );
+    let error = load_variables_with_limits(
+        std::slice::from_ref(&path),
+        &["invalid setting".into()],
+        &InputLimits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(error.error.as_ref(), BWErr::InputError(message) if message == &expected));
+    let error = load_variables_with_limits(
+        std::slice::from_ref(&path),
+        &[],
+        &InputLimits {
+            sources: 0,
+            ..InputLimits::default()
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error.error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "input sources",
+            limit: 0
+        }
+    ));
+    assert_eq!(
+        error.span.as_ref().unwrap().source().name(),
+        path.display().to_string()
+    );
+}
+
 fn invalid_input(invalid_name: bool) -> (String, Literal, String) {
     if invalid_name {
         let name = "é invalid\n";

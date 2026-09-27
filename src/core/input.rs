@@ -20,7 +20,11 @@ use limits::{resource, Budget};
 /// Maximum container nesting in one JSON document, including its root object.
 pub const MAX_JSON_DEPTH: usize = 128;
 
-fn invalid(origin: &str, path: &str, reason: impl std::fmt::Display) -> Diagnostic {
+fn invalid(
+    origin: &(impl std::fmt::Display + ?Sized),
+    path: &str,
+    reason: impl std::fmt::Display,
+) -> Diagnostic {
     input_error(format_args!("{origin}: {path}: {reason}"))
 }
 
@@ -34,12 +38,15 @@ fn input_error(message: std::fmt::Arguments<'_>) -> Diagnostic {
     )
 }
 
-pub(crate) fn validate_name(origin: &str, name: &str) -> DiagnosticResult<()> {
+pub(crate) fn validate_name(
+    origin: &(impl std::fmt::Display + ?Sized),
+    name: &str,
+) -> DiagnosticResult<()> {
     validate_name_with(origin, name, input_error)
 }
 
 pub(crate) fn validate_name_with(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     name: &str,
     error: impl FnOnce(std::fmt::Arguments<'_>) -> Diagnostic,
 ) -> DiagnosticResult<()> {
@@ -57,7 +64,7 @@ pub(crate) fn validate_name_with(
 }
 
 fn decode<'a, T: serde::Deserialize<'a>>(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     path: &str,
     text: &'a str,
 ) -> DiagnosticResult<T> {
@@ -83,7 +90,7 @@ fn path_key(path: &str, key: &str) -> String {
 }
 
 fn convert(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     path: &str,
     raw: &RawValue,
     limits: &InputLimits,
@@ -177,7 +184,7 @@ fn convert(
 }
 
 fn variables_from_text(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     text: &str,
     budget: &mut Budget<'_>,
 ) -> DiagnosticResult<BTreeMap<String, Literal>> {
@@ -202,7 +209,7 @@ fn variables_from_text(
 }
 
 fn variable_from_setting(
-    origin: &str,
+    origin: &(impl std::fmt::Display + ?Sized),
     setting: &str,
     budget: &mut Budget<'_>,
 ) -> DiagnosticResult<(String, Literal)> {
@@ -276,7 +283,7 @@ pub fn load_variables_with_limits(
     let mut budget = Budget::new(limits)?;
     let mut variables = BTreeMap::new();
     for file in files {
-        let origin = file.display().to_string();
+        let origin = file.display();
         budget.source(&origin)?;
         let file = fs::File::open(file).map_err(|error| invalid(&origin, "$", error))?;
         let mut bytes = Vec::new();
@@ -293,7 +300,8 @@ pub fn load_variables_with_limits(
         }
     }
     for (index, setting) in settings.iter().enumerate() {
-        let origin = format!("--var #{}", index + 1);
+        let number = index + 1;
+        let origin = format_args!("--var #{number}");
         budget.source(&origin)?;
         budget.bytes(&origin, setting.len())?;
         let (name, value) = variable_from_setting(&origin, setting, &mut budget)?;

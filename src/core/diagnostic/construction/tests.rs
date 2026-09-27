@@ -315,6 +315,94 @@ fn formatted_related_details_admit_complete_site_and_call_metrics_before_message
 }
 
 #[test]
+fn streamed_input_origins_stop_at_the_source_allowance_and_bound_rejection_evidence() {
+    use std::cell::Cell;
+    struct Origin<'a>(&'a Cell<usize>);
+    impl fmt::Display for Origin<'_> {
+        fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for _ in 0..1024 {
+                self.0.set(self.0.get() + 1);
+                output.write_str("é")?;
+            }
+            Ok(())
+        }
+    }
+    for (source_bytes, diagnostics, expected_visits) in
+        [(2048, 1, 2048), (0, 1, 130), (2048, 0, 129)]
+    {
+        let visits = Cell::new(0);
+        let error = DiagnosticLimits {
+            source_bytes,
+            diagnostics,
+            ..DiagnosticLimits::default()
+        }
+        .input_origin(
+            BWErr::ResourceLimit {
+                resource: "input sources",
+                limit: 0,
+            },
+            &Origin(&visits),
+        );
+        assert_eq!(visits.get(), expected_visits);
+        if source_bytes == 2048 && diagnostics == 1 {
+            assert_eq!(
+                error.span.as_ref().unwrap().source().name(),
+                "é".repeat(1024)
+            );
+            assert!(error.causes.is_empty());
+        } else {
+            let evidence = error.causes[0]
+                .omissions
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap();
+            assert!(evidence.file_truncated && evidence.file.len() <= SUMMARY_SOURCE_NAME_BYTES);
+            assert!(error.causes[0].span.is_none());
+            assert_eq!((evidence.start_byte, evidence.end_byte), (0, 0));
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn streamed_native_input_origins_count_lossy_display_bytes_at_the_exact_boundary() {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf};
+    let path = PathBuf::from(OsString::from_vec(vec![b'x', 0xff, 0xfe, b'.', b'j']));
+    let display = path.display().to_string();
+    assert_eq!(display, "x��.j");
+    for rejected in [false, true] {
+        let error = DiagnosticLimits {
+            source_bytes: display.len() - usize::from(rejected),
+            ..DiagnosticLimits::default()
+        }
+        .input_origin(
+            BWErr::ResourceLimit {
+                resource: "input sources",
+                limit: 0,
+            },
+            &path.display(),
+        );
+        if rejected {
+            let evidence = error.causes[0]
+                .omissions
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap();
+            assert_eq!(evidence.file, display);
+            assert!(!evidence.file_truncated);
+            assert!(error.causes[0].span.is_none());
+        } else {
+            assert_eq!(error.span.as_ref().unwrap().source().name(), display);
+            assert!(error.causes.is_empty());
+        }
+    }
+}
+
+#[test]
 fn input_origin_construction_measures_the_source_name_before_retaining_it() {
     let origin = "config-é.json";
     let resource = || BWErr::ResourceLimit {

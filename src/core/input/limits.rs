@@ -28,10 +28,14 @@ impl Default for InputLimits {
     }
 }
 
-pub(super) fn resource(origin: &str, error: BWErr) -> Diagnostic {
+pub(super) fn resource(origin: &(impl std::fmt::Display + ?Sized), error: BWErr) -> Diagnostic {
     DiagnosticLimits::default().input_origin(error, origin)
 }
-fn exceeded(origin: &str, name: &'static str, maximum: usize) -> Diagnostic {
+fn exceeded(
+    origin: &(impl std::fmt::Display + ?Sized),
+    name: &'static str,
+    maximum: usize,
+) -> Diagnostic {
     resource(
         origin,
         BWErr::ResourceLimit {
@@ -58,7 +62,7 @@ impl<'a> Budget<'a> {
             nodes: 0,
         })
     }
-    pub fn source(&mut self, origin: &str) -> DiagnosticResult<()> {
+    pub fn source(&mut self, origin: &(impl std::fmt::Display + ?Sized)) -> DiagnosticResult<()> {
         if self.sources >= self.limits.sources {
             return Err(exceeded(origin, "input sources", self.limits.sources));
         }
@@ -71,7 +75,11 @@ impl<'a> Budget<'a> {
             .saturating_sub(self.bytes)
             .min(self.limits.source_bytes)
     }
-    pub fn bytes(&mut self, origin: &str, count: usize) -> DiagnosticResult<()> {
+    pub fn bytes(
+        &mut self,
+        origin: &(impl std::fmt::Display + ?Sized),
+        count: usize,
+    ) -> DiagnosticResult<()> {
         if count > self.limits.source_bytes {
             return Err(exceeded(
                 origin,
@@ -86,21 +94,29 @@ impl<'a> Budget<'a> {
             .ok_or_else(|| exceeded(origin, "total input bytes", self.limits.total_bytes))?;
         Ok(())
     }
-    fn node(&mut self, origin: &str) -> DiagnosticResult<()> {
+    fn node(&mut self, origin: &(impl std::fmt::Display + ?Sized)) -> DiagnosticResult<()> {
         if self.nodes >= self.limits.raw_nodes {
             return Err(exceeded(origin, "input raw nodes", self.limits.raw_nodes));
         }
         self.nodes += 1;
         Ok(())
     }
-    pub fn variable_count(&self, origin: &str, count: usize) -> DiagnosticResult<()> {
+    pub fn variable_count(
+        &self,
+        origin: &(impl std::fmt::Display + ?Sized),
+        count: usize,
+    ) -> DiagnosticResult<()> {
         if count > self.limits.variables {
             return Err(exceeded(origin, "input variables", self.limits.variables));
         }
         Ok(())
     }
 
-    pub fn preflight(&mut self, origin: &str, text: &str) -> DiagnosticResult<()> {
+    pub fn preflight(
+        &mut self,
+        origin: &(impl std::fmt::Display + ?Sized),
+        text: &str,
+    ) -> DiagnosticResult<()> {
         let bytes = text.as_bytes();
         let mut frames: Vec<(u8, usize)> = vec![];
         let mut index = 0;
