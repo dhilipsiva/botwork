@@ -753,8 +753,12 @@ pub(crate) fn from_pair_with_reporter(
     .map_err(|error| Diagnostic::new(error).at(&span))
 }
 
-fn invalid(part: &str) -> BWErr {
-    BWErr::ParsingError(format!("Invalid {part} in syntax tree"))
+fn invalid(part: &'static str) -> BWErr {
+    Diagnostic::formatted(
+        BWErr::ParsingError,
+        format_args!("Invalid {part} in syntax tree"),
+    )
+    .into_error()
 }
 
 fn required<'i>(inner: &mut impl Iterator<Item = Pair<'i, Rule>>) -> Result<Pair<'i, Rule>, BWErr> {

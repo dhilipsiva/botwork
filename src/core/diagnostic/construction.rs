@@ -1,4 +1,4 @@
-//! Admission for a single borrowed error-detail field before its first owned copy.
+//! Admission for borrowed/formatted diagnostic details before their first owned copies.
 
 use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult};
 use crate::core::{ast::Span, grammar::BWErr};
@@ -96,6 +96,20 @@ fn text_limit(maximum: usize) -> BWErr {
     BWErr::ResourceLimit {
         resource: "diagnostic text bytes",
         limit: maximum as u64,
+    }
+}
+
+impl Diagnostic {
+    /// Setup and standalone helpers have no installed caller context. Use the
+    /// default diagnostic budget before their first owned message allocation.
+    pub(crate) fn formatted(category: fn(String) -> BWErr, message: fmt::Arguments<'_>) -> Self {
+        DiagnosticLimits::default().formatted_detail(
+            category,
+            message,
+            None,
+            false,
+            std::iter::empty(),
+        )
     }
 }
 

@@ -120,22 +120,22 @@ impl RunLimits {
         self.diagnostic_values.values.validate()?;
         self.diagnostics.validate()?;
         if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
-            return Err(BWErr::RunConfiguration(format!(
-                "Module dependency depth cannot exceed {MAX_MODULE_CHAIN_DEPTH}"
-            ))
-            .into());
+            return Err(Diagnostic::formatted(
+                BWErr::RunConfiguration,
+                format_args!("Module dependency depth cannot exceed {MAX_MODULE_CHAIN_DEPTH}"),
+            ));
         }
         if self.import_depth > MAX_IMPORT_DEPTH {
-            return Err(BWErr::RunConfiguration(format!(
-                "Import initialization depth cannot exceed {MAX_IMPORT_DEPTH}"
-            ))
-            .into());
+            return Err(Diagnostic::formatted(
+                BWErr::RunConfiguration,
+                format_args!("Import initialization depth cannot exceed {MAX_IMPORT_DEPTH}"),
+            ));
         }
         if self.evaluation_depth > MAX_EVALUATION_DEPTH {
-            return Err(BWErr::RunConfiguration(format!(
-                "Evaluation depth cannot exceed {MAX_EVALUATION_DEPTH}"
-            ))
-            .into());
+            return Err(Diagnostic::formatted(
+                BWErr::RunConfiguration,
+                format_args!("Evaluation depth cannot exceed {MAX_EVALUATION_DEPTH}"),
+            ));
         }
         super::syntax_limits::check("", self.source_bytes, &self.syntax, false)
             .map_err(|violation| Diagnostic::new(violation.error))
@@ -192,13 +192,7 @@ impl RunEnvironment {
     }
 
     fn configuration_error(reason: std::fmt::Arguments<'_>) -> Diagnostic {
-        DiagnosticLimits::default().formatted_detail(
-            BWErr::RunConfiguration,
-            reason,
-            None,
-            false,
-            std::iter::empty(),
-        )
+        Diagnostic::formatted(BWErr::RunConfiguration, reason)
     }
 
     fn prepare(options: &RunOptions, start: tokio::time::Instant) -> DiagnosticResult<Self> {

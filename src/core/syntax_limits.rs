@@ -1,6 +1,6 @@
 //! Local preflight guards before entering the recursive parser or AST lowering.
 
-use super::grammar::BWErr;
+use super::{diagnostic::Diagnostic, grammar::BWErr};
 
 pub const DEFAULT_SOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_SYNTAX_NESTING: usize = 32;
@@ -71,9 +71,9 @@ pub(crate) fn check(
     expression_root: bool,
 ) -> Result<(), Violation> {
     if limits.nesting > MAX_SYNTAX_NESTING || limits.operators > MAX_EXPRESSION_OPERATORS {
-        return Err(Violation { offset: 0, error: BWErr::RunConfiguration(format!(
+        return Err(Violation { offset: 0, error: Diagnostic::formatted(BWErr::RunConfiguration, format_args!(
             "Syntax limits cannot exceed nesting {MAX_SYNTAX_NESTING} or operators {MAX_EXPRESSION_OPERATORS}"
-        )) });
+        )).into_error() });
     }
     check_size(source, source_bytes)?;
     let bytes = source.as_bytes();

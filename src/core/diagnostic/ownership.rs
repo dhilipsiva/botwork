@@ -214,9 +214,11 @@ impl Measurement<'_> {
 impl DiagnosticLimits {
     pub(crate) fn validate(&self) -> Result<(), BWErr> {
         if self.depth > MAX_DIAGNOSTIC_DEPTH {
-            return Err(BWErr::RunConfiguration(format!(
-                "Diagnostic depth cannot exceed {MAX_DIAGNOSTIC_DEPTH}"
-            )));
+            return Err(Diagnostic::formatted(
+                BWErr::RunConfiguration,
+                format_args!("Diagnostic depth cannot exceed {MAX_DIAGNOSTIC_DEPTH}"),
+            )
+            .into_error());
         }
         Ok(())
     }

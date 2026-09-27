@@ -1,4 +1,4 @@
-use super::diagnostic::{Diagnostic, DiagnosticLimits, DiagnosticResult};
+use super::diagnostic::{Diagnostic, DiagnosticResult};
 use pest::pratt_parser::PrattParser;
 use std::collections::HashMap;
 use std::fmt;
@@ -663,5 +663,5 @@ impl Rule {
 }
 
 fn operator_detail(category: fn(String) -> BWErr, message: fmt::Arguments<'_>) -> Diagnostic {
-    DiagnosticLimits::default().formatted_detail(category, message, None, false, std::iter::empty())
+    Diagnostic::formatted(category, message)
 }

@@ -1,6 +1,9 @@
 //! Admission and nonrecursive cleanup for owned host values.
 
-use super::grammar::{BWErr, Literal};
+use super::{
+    diagnostic::Diagnostic,
+    grammar::{BWErr, Literal},
+};
 use std::{
     collections::{hash_map, BTreeMap},
     ops::{Deref, DerefMut},
@@ -168,9 +171,11 @@ impl ValueLimits {
     }
     pub(crate) fn validate(&self) -> Result<(), BWErr> {
         if self.depth > MAX_VALUE_DEPTH {
-            return Err(BWErr::RunConfiguration(format!(
-                "Value depth cannot exceed {MAX_VALUE_DEPTH}"
-            )));
+            return Err(Diagnostic::formatted(
+                BWErr::RunConfiguration,
+                format_args!("Value depth cannot exceed {MAX_VALUE_DEPTH}"),
+            )
+            .into_error());
         }
         Ok(())
     }

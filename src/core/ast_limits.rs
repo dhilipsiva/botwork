@@ -36,10 +36,10 @@ impl Default for AstLimits {
 impl AstLimits {
     pub(crate) fn validate(&self) -> DiagnosticResult<()> {
         if self.depth > MAX_AST_DEPTH {
-            return Err(BWErr::RunConfiguration(format!(
-                "AST depth cannot exceed {MAX_AST_DEPTH}"
-            ))
-            .into());
+            return Err(Diagnostic::formatted(
+                BWErr::RunConfiguration,
+                format_args!("AST depth cannot exceed {MAX_AST_DEPTH}"),
+            ));
         }
         Ok(())
     }
