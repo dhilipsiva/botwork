@@ -21,6 +21,282 @@ use std::{
 struct Project(Harness);
 
 #[test]
+fn import_read_construction_admits_message_call_and_originating_site_together() {
+    use botwork::core::{diagnostic::DiagnosticLimits, run::RunLimits};
+    let project = Project::new();
+    fs::write(project.write("invalid.botwork", ""), [0xff]).unwrap();
+    fs::create_dir(project.0.workspace.join("directory.botwork")).unwrap();
+    for path in [
+        "bad.txt",
+        "https://example.invalid/a.botwork",
+        "missing-é.botwork",
+        "invalid.botwork",
+        "directory.botwork",
+    ] {
+        let source = format!("Outer {{ Import |\"{path}\"| As |lib| }}\nOuter");
+        let baseline = project.run(&source, &mut Context::default()).unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::ImportRead);
+        assert_eq!(baseline.call_stack.len(), 1);
+        assert_eq!(baseline.related.len(), 1);
+        assert_eq!(baseline.related[0].message, "imported here");
+        assert_eq!(
+            baseline.span.as_ref().unwrap().text(),
+            format!("\"{path}\"")
+        );
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        let exact = DiagnosticLimits {
+            diagnostics: size.diagnostics,
+            depth: size.depth,
+            call_frames: size.call_frames,
+            related_locations: size.related_locations,
+            text_bytes: size.text_bytes,
+            source_bytes: size.source_bytes,
+        };
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: exact.clone(),
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let error = project.run(&source, &mut context).unwrap_err();
+        assert_eq!(
+            error.to_value().to_string(),
+            baseline.to_value().to_string()
+        );
+        assert!(context.checkpoint().is_ok());
+        for diagnostics in [
+            DiagnosticLimits {
+                text_bytes: size.text_bytes - 1,
+                ..exact.clone()
+            },
+            DiagnosticLimits {
+                related_locations: 0,
+                ..exact.clone()
+            },
+            DiagnosticLimits {
+                source_bytes: size.source_bytes - 1,
+                ..exact.clone()
+            },
+            DiagnosticLimits {
+                call_frames: 0,
+                ..exact.clone()
+            },
+        ] {
+            let mut context = Context::with_limits(RunLimits {
+                diagnostics,
+                ..RunLimits::default()
+            })
+            .unwrap();
+            let error = project.run(&source, &mut context).unwrap_err();
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+            let omitted = error.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(omitted.related_locations, 1);
+            assert_eq!(omitted.call_frames, 1);
+            assert!(context.checkpoint().is_err());
+            assert!(context.complete_statements("lib::").is_empty());
+        }
+    }
+}
+
+#[test]
+fn rejected_import_details_preserve_prior_effects_skip_catch_and_leave_fresh_runs_usable() {
+    use botwork::core::{
+        diagnostic::DiagnosticLimits,
+        run::{Engine, RunLimits, RunOptions, RunOutcome},
+    };
+    let project = Project::new();
+    project.write("good.botwork", "Value { Return |7| }");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Effect", move |_, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::None)
+        })
+        .unwrap();
+    let options = || RunOptions {
+        working_directory: Some(project.0.workspace.clone()),
+        limits: RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        },
+        ..RunOptions::default()
+    };
+    let source = "|error| = |7|\n|before| = |1|\nEffect\nTry { Import |\"bad.txt\"| As |lib| } Catch |error| { |caught| = |1|\nEffect }\n|after| = |2|";
+    let run = engine.run_source("entry", source, options());
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(run.variables["error"].to_string(), "7");
+    assert_eq!(run.variables["before"].to_string(), "1");
+    assert!(!run.variables.contains_key("caught") && !run.variables.contains_key("after"));
+    let error = run.result.unwrap_err();
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+    assert_eq!(
+        error.causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .related_locations,
+        1
+    );
+    let good = engine.run_source(
+        "fresh",
+        "Import |\"good.botwork\"| As |lib|\nlib::Value",
+        options(),
+    );
+    assert_eq!(good.outcome(), RunOutcome::Succeeded);
+    assert_eq!(good.result.unwrap().to_string(), "7");
+}
+
+#[test]
+fn cycle_construction_preserves_chain_and_all_parent_sites_through_unwinding() {
+    use botwork::core::{diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits};
+    let project = Project::new();
+    let first = project.write("a.botwork", "Import |\"b.botwork\"| As |b|");
+    let second = project.write("b.botwork", "Import |\"a.botwork\"| As |a|");
+    let source = "Import |\"a.botwork\"| As |lib|";
+    let baseline = project.run(source, &mut Context::default()).unwrap_err();
+    let BWErr::ImportCycle(chain) = baseline.error.as_ref() else {
+        panic!("cycle")
+    };
+    let a = fs::canonicalize(first).unwrap();
+    let b = fs::canonicalize(second).unwrap();
+    assert_eq!(
+        chain,
+        &format!("{} -> {} -> {}", a.display(), b.display(), a.display())
+    );
+    assert_eq!(baseline.related.len(), 3);
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    let exact = DiagnosticLimits {
+        diagnostics: size.diagnostics,
+        depth: size.depth,
+        call_frames: size.call_frames,
+        related_locations: size.related_locations,
+        text_bytes: size.text_bytes,
+        source_bytes: size.source_bytes,
+    };
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: exact.clone(),
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let error = project.run(source, &mut context).unwrap_err();
+    assert_eq!(
+        error.to_value().to_string(),
+        baseline.to_value().to_string()
+    );
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 0,
+            ..exact
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let error = project.run(source, &mut context).unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ImportCycle);
+    assert_eq!(
+        error.causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .related_locations,
+        3
+    );
+    assert!(context.complete_statements("lib::").is_empty());
+}
+
+#[test]
+fn imported_parse_execution_and_budget_failures_receive_the_import_site_once() {
+    use botwork::core::run::{ImportLimits, RunLimits};
+    let project = Project::new();
+    project.write("syntax.botwork", "|x| = |");
+    project.write("execution.botwork", "|x| = |unknown|");
+    project.write("empty.botwork", "");
+    for (file, limits) in [
+        ("syntax.botwork", RunLimits::default()),
+        ("execution.botwork", RunLimits::default()),
+        (
+            "empty.botwork",
+            RunLimits {
+                imports: ImportLimits {
+                    loads: 0,
+                    ..ImportLimits::default()
+                },
+                ..RunLimits::default()
+            },
+        ),
+        (
+            "empty.botwork",
+            RunLimits {
+                import_depth: 0,
+                ..RunLimits::default()
+            },
+        ),
+    ] {
+        let mut context = Context::with_limits(limits).unwrap();
+        let source = format!("Import |\"{file}\"| As |lib|");
+        let error = project.run(&source, &mut context).unwrap_err();
+        assert_eq!(error.related.len(), 1);
+        assert_eq!(error.related[0].message, "imported here");
+        assert_eq!(error.related[0].span.text(), source);
+        assert!(context.complete_statements("lib::").is_empty());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_canonical_import_paths_preserve_bounded_read_evidence_and_do_not_publish() {
+    use botwork::core::{diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits};
+    use std::os::unix::{ffi::OsStringExt, fs::symlink};
+    let project = Project::new();
+    let target = project
+        .0
+        .workspace
+        .join(std::ffi::OsString::from_vec(b"bad\xff.botwork".to_vec()));
+    fs::write(&target, "Value { Return |1| }").unwrap();
+    symlink(target, project.0.workspace.join("alias.botwork")).unwrap();
+    let source = "Import |\"alias.botwork\"| As |lib|";
+    for text_bytes in [0, DiagnosticLimits::default().text_bytes] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let error = project.run(source, &mut context).unwrap_err();
+        if text_bytes == 0 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+            assert_eq!(
+                error.causes[0]
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .related_locations,
+                1
+            );
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ImportRead);
+            let BWErr::ImportRead(message) = error.error.as_ref() else {
+                panic!("import read")
+            };
+            assert_eq!(message, "Module paths must be valid UTF-8");
+            assert_eq!(error.related.len(), 1);
+            assert_eq!(error.span.as_ref().unwrap().text(), "\"alias.botwork\"");
+        }
+        assert!(context.complete_statements("lib::").is_empty());
+    }
+}
+
+#[test]
 fn invalid_utf8_contents_and_directory_paths_are_loading_errors_without_namespace_publication() {
     let project = Project::new();
     let path = project.write("invalid.botwork", "");

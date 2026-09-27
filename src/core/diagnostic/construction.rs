@@ -176,6 +176,30 @@ impl DiagnosticLimits {
                 skeleton.at(span)
             };
         }
+        self.formatted_in(skeleton, category, messages, frames)
+    }
+
+    /// The related label is fixed interpreter text. Its small owned record is
+    /// measured with the complete prospective diagnostic before detail formatting.
+    pub(crate) fn formatted_related_detail<'a>(
+        &self,
+        category: fn(String) -> BWErr,
+        message: fmt::Arguments<'_>,
+        span: &Span,
+        related: (&'static str, &Span),
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Diagnostic {
+        let skeleton = skeleton(category, Some(span), false).with_related(related.0, related.1);
+        self.formatted_in(skeleton, |[detail]| category(detail), [message], frames)
+    }
+
+    fn formatted_in<'a, const N: usize>(
+        &self,
+        mut skeleton: Diagnostic,
+        category: impl Fn([String; N]) -> BWErr,
+        messages: [fmt::Arguments<'_>; N],
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Diagnostic {
         let admission = self
             .check_with_stack(&skeleton, frames.clone())
             .and_then(|size| {

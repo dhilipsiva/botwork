@@ -5,6 +5,72 @@ use crate::core::{
 };
 
 #[test]
+fn formatted_related_details_admit_complete_site_and_call_metrics_before_message_copying() {
+    let primary = Program::parse("primary", "|x| = |1|").unwrap();
+    let related = Program::parse("related-é", "|y| = |2|").unwrap();
+    let span = &primary.statements[0].span;
+    let site = &related.statements[0].span;
+    let frames = [CallFrame {
+        signature: "outer".into(),
+        call_site: span.clone(),
+        definition_site: None,
+    }];
+    let baseline = Diagnostic::new(BWErr::ImportRead("reason".into()))
+        .at(span)
+        .with_related("imported here", site)
+        .capture_stack(frames.iter());
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    let exact = DiagnosticLimits {
+        diagnostics: size.diagnostics,
+        depth: size.depth,
+        call_frames: size.call_frames,
+        related_locations: size.related_locations,
+        text_bytes: size.text_bytes,
+        source_bytes: size.source_bytes,
+    };
+    let construct = |limits: &DiagnosticLimits| {
+        limits.formatted_related_detail(
+            BWErr::ImportRead,
+            format_args!("reason"),
+            span,
+            ("imported here", site),
+            frames.iter(),
+        )
+    };
+    assert_eq!(
+        construct(&exact).to_value().to_string(),
+        baseline.to_value().to_string()
+    );
+    for limits in [
+        DiagnosticLimits {
+            related_locations: 0,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            text_bytes: size.text_bytes - 1,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            source_bytes: size.source_bytes - 1,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            call_frames: 0,
+            ..exact.clone()
+        },
+    ] {
+        let error = construct(&limits);
+        assert!(error.is_emergency());
+        assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+        let omitted = error.causes[0].omissions.as_ref().unwrap();
+        assert_eq!(omitted.related_locations, 1);
+        assert_eq!(omitted.call_frames, 1);
+        assert_eq!(omitted.source.as_ref().unwrap().file, "primary");
+        assert!(error.causes[0].span.is_none() && error.causes[0].related.is_empty());
+    }
+}
+
+#[test]
 fn input_origin_construction_measures_the_source_name_before_retaining_it() {
     let origin = "config-é.json";
     let resource = || BWErr::ResourceLimit {

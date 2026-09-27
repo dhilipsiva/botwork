@@ -58,6 +58,110 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn import_messages_reserve_originating_site_before_copying_a_large_invalid_path() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::{evaluate_program_detailed, Context},
+    };
+    let path = "x".repeat(128 * 1024);
+    let message_bytes = path.len() + "`` must name a local .botwork file".len();
+    let program = Program::parse("import", &format!("Import |\"{path}\"| As |lib|")).unwrap();
+    // The second quota would fit the full message and label if the originating
+    // import site were incorrectly appended only after message construction.
+    for text_bytes in [0, message_bytes + "source".len()] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let (result, large) = observe(64 * 1024, || {
+            evaluate_program_detailed(&program, &mut context)
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+        let omitted = error.causes[0].omissions.as_ref().unwrap();
+        assert_eq!(omitted.related_locations, 1);
+        assert_eq!(omitted.detail_fields, 1);
+        assert_eq!(large, 0);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn import_cycle_rejection_formats_no_large_joined_path_chain() {
+    use botwork::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let cleanup = Cleanup(std::env::temp_dir().join(format!(
+            "botwork-cycle-allocation-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )));
+    let mut directory = cleanup.0.clone();
+    // Keep each filesystem path below typical Unix path limits while the
+    // complete 13-member diagnostic chain still exceeds the observed threshold.
+    for _ in 0..5 {
+        directory.push("x".repeat(120));
+    }
+    std::fs::create_dir_all(&directory).unwrap();
+    for index in 0..12 {
+        std::fs::write(
+            directory.join(format!("module{index}.botwork")),
+            format!("Import |\"module{}.botwork\"| As |next|", (index + 1) % 12),
+        )
+        .unwrap();
+    }
+    let engine = Engine::default();
+    for text_bytes in [0, DiagnosticLimits::default().text_bytes] {
+        let options = RunOptions {
+            working_directory: Some(directory.clone()),
+            inherit_environment: false,
+            limits: RunLimits {
+                diagnostics: DiagnosticLimits {
+                    text_bytes,
+                    ..DiagnosticLimits::default()
+                },
+                ..RunLimits::default()
+            },
+            ..RunOptions::default()
+        };
+        let (run, large) = observe(8 * 1024, || {
+            engine.run_source("entry", "Import |\"module0.botwork\"| As |lib|", options)
+        });
+        let error = run.result.unwrap_err();
+        if text_bytes == 0 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::ImportCycle);
+            assert_eq!(
+                error.causes[0]
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .related_locations,
+                13
+            );
+            assert_eq!(large, 0);
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ImportCycle);
+            assert_eq!(error.related.len(), 13);
+            assert_eq!(large, 1); // The single admitted final chain; no intermediate join.
+        }
+    }
+}
+
+#[test]
 fn entry_file_read_errors_admit_detail_before_copying_the_large_requested_path() {
     use botwork::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
     let path = "x".repeat(64 * 1024);

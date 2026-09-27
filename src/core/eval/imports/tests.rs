@@ -2,6 +2,60 @@ use super::*;
 use crate::core::run::{RunLimits, SnapshotLimits};
 
 #[test]
+fn streamed_cycle_paths_preserve_original_display_and_order() {
+    for loading in [
+        vec![],
+        vec![PathBuf::from("first-é.botwork")],
+        vec![
+            PathBuf::from("first-é.botwork"),
+            PathBuf::from("second.botwork"),
+        ],
+    ] {
+        let repeated = Path::new("first-é.botwork");
+        let expected = loading
+            .iter()
+            .map(|path| path.display().to_string())
+            .chain(std::iter::once(repeated.display().to_string()))
+            .collect::<Vec<_>>()
+            .join(" -> ");
+        assert_eq!(
+            ImportChain {
+                loading: &loading,
+                repeated
+            }
+            .to_string(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn working_directory_import_errors_admit_borrowed_details_and_originating_site() {
+    use crate::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
+    let program = Program::parse("main", "Import |\"module.botwork\"| As |lib|").unwrap();
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context.working_directory = Err("é".repeat(64 * 1024));
+    let mut sibling = context.clone();
+    let error = evaluate_program_detailed(&program, &mut context).unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+    let omitted = error.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omitted.related_locations, 1);
+    assert_eq!(omitted.detail_fields, 1);
+    assert!(context.checkpoint().is_err());
+    assert!(sibling.checkpoint().is_ok());
+    let valid = Program::parse("valid", "|x| = |1|").unwrap();
+    evaluate_program_detailed(&valid, &mut sibling).unwrap();
+}
+
+#[test]
 fn cache_measurement_counts_native_path_bytes_and_clones_live_entries_only() {
     let mut cache = ModuleCache::default();
     let requested = PathBuf::from("é.botwork");

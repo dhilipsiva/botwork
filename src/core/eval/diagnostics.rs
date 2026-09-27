@@ -25,6 +25,24 @@ impl std::fmt::Display for AccessPath<'_> {
 }
 
 impl Context {
+    pub(super) fn import_error(
+        &self,
+        category: fn(String) -> BWErr,
+        message: std::fmt::Arguments<'_>,
+        span: &Span,
+        import_site: &Span,
+    ) -> Diagnostic {
+        let stopped = self.checkpoint().err();
+        let error = self.limits().diagnostics.formatted_related_detail(
+            category,
+            message,
+            span,
+            ("imported here", import_site),
+            self.calls.iter().map(|record| &record.frame),
+        );
+        self.finish_constructed_error(error, stopped, Some(span), false)
+    }
+
     pub(super) fn access_error(
         &self,
         base: &Expr,

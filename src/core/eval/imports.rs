@@ -2,6 +2,29 @@ use super::*;
 use crate::core::run::{ImportResource, SnapshotSize};
 use std::{fs, path::Path};
 
+struct ImportChain<'a> {
+    loading: &'a [PathBuf],
+    repeated: &'a Path,
+}
+
+impl std::fmt::Display for ImportChain<'_> {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, path) in self
+            .loading
+            .iter()
+            .map(PathBuf::as_path)
+            .chain(std::iter::once(self.repeated))
+            .enumerate()
+        {
+            if index != 0 {
+                output.write_str(" -> ")?;
+            }
+            write!(output, "{}", path.display())?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Default)]
 pub(super) struct ModuleCache {
     loaded: HashMap<PathBuf, Arc<LoadedModule>>,
@@ -89,8 +112,7 @@ pub(super) fn evaluate_import(
             &namespace.span,
         ));
     }
-    let module = load_module(path, path_span, context)
-        .map_err(|error| error.with_related("imported here", import_site))?;
+    let module = load_module(path, path_span, import_site, context)?;
     publish_namespace(&module, namespace, &normalized, import_site, context)
 }
 
@@ -237,13 +259,22 @@ fn read_module_source(path: &Path, context: &Context) -> Result<String, SourceFa
 fn load_module(
     path: &str,
     span: &Span,
+    import_site: &Span,
     context: &mut Context,
 ) -> DiagnosticResult<Arc<LoadedModule>> {
-    let failure = |reason: String| Diagnostic::new(BWErr::ImportRead(reason)).at(span);
+    let failure = |context: &Context, reason: std::fmt::Arguments<'_>| {
+        context.import_error(BWErr::ImportRead, reason, span, import_site)
+    };
+    // Constructed import errors already include this site in admission. Other
+    // failures acquire the site exactly once as they cross this import boundary.
+    let related = |error: Diagnostic| error.with_related("imported here", import_site);
     if path.contains("://")
         || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
     {
-        return Err(failure(format!("`{path}` must name a local .botwork file")));
+        return Err(failure(
+            context,
+            format_args!("`{path}` must name a local .botwork file"),
+        ));
     }
     let importer = Path::new(span.source().name());
     let base = if importer.is_absolute() {
@@ -252,7 +283,7 @@ fn load_module(
         context
             .working_directory
             .as_ref()
-            .map_err(|reason| failure(reason.clone()))?
+            .map_err(|reason| failure(context, format_args!("{reason}")))?
             .join(importer.parent().unwrap_or(Path::new("")))
     };
     let requested = base.join(path);
@@ -265,19 +296,22 @@ fn load_module(
         return Ok(Arc::clone(module));
     }
     let canonical = fs::canonicalize(&requested)
-        .map_err(|error| failure(format!("{}: {error}", requested.display())))?;
+        .map_err(|error| failure(context, format_args!("{}: {error}", requested.display())))?;
     if let Some(start) = context
         .loading
         .iter()
         .position(|loading| *loading == canonical)
     {
-        let chain = context.loading[start..]
-            .iter()
-            .chain(std::iter::once(&canonical))
-            .map(|path| path.display().to_string())
-            .collect::<Vec<_>>()
-            .join(" -> ");
-        return Err(Diagnostic::new(BWErr::ImportCycle(chain)).at(span));
+        let chain = ImportChain {
+            loading: &context.loading[start..],
+            repeated: &canonical,
+        };
+        return Err(context.import_error(
+            BWErr::ImportCycle,
+            format_args!("{chain}"),
+            span,
+            import_site,
+        ));
     }
     if !context.modules.resolved.contains_key(&requested) {
         if let Some(budget) = &context.budget {
@@ -285,13 +319,15 @@ fn load_module(
                 .as_os_str()
                 .len()
                 .checked_add(canonical.as_os_str().len())
-                .ok_or_else(|| budget.import_limit(ImportResource::MetadataBytes).at(span))?;
+                .ok_or_else(|| {
+                    related(budget.import_limit(ImportResource::MetadataBytes).at(span))
+                })?;
             budget
                 .charge_imports(&[
                     (ImportResource::Paths, 1),
                     (ImportResource::MetadataBytes, bytes),
                 ])
-                .map_err(|error| error.at(span))?;
+                .map_err(|error| related(error.at(span)))?;
         }
         context
             .modules
@@ -303,21 +339,25 @@ fn load_module(
     }
     context
         .check_import_depth()
-        .map_err(|error| error.at(span))?;
-    check_dependency_depth(context, 0).map_err(|error| error.at(span))?;
+        .map_err(|error| related(error.at(span)))?;
+    check_dependency_depth(context, 0).map_err(|error| related(error.at(span)))?;
     let source = read_module_source(&canonical, context).map_err(|error| match error {
-        SourceFailure::Io(error) => failure(format!("{}: {error}", canonical.display())),
-        SourceFailure::Diagnostic(error) => error.at(span),
+        SourceFailure::Io(error) => {
+            failure(context, format_args!("{}: {error}", canonical.display()))
+        }
+        SourceFailure::Diagnostic(error) => related(error.at(span)),
     })?;
     let source_name = canonical
         .to_str()
-        .ok_or_else(|| failure("Module paths must be valid UTF-8".into()))?;
-    let program = context.parse_source(source_name, &source)?;
+        .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
+    let program = context
+        .parse_source(source_name, &source)
+        .map_err(related)?;
     let mut module_context =
-        prepare_module_context(context, &canonical).map_err(|error| error.at(span))?;
+        prepare_module_context(context, &canonical).map_err(|error| related(error.at(span)))?;
     let result = evaluate_program_detailed(&program, &mut module_context);
     merge_cache(context, &mut module_context);
-    result?;
+    result.map_err(related)?;
     let module = Arc::new(LoadedModule {
         frame: module_context.frames.remove(0),
     });

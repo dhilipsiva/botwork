@@ -727,6 +727,56 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::ImportDiagnosticBoundary | Input::ImportDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let source = "Import |\"bad.txt\"| As |lib|";
+                let message = "`bad.txt` must name a local .botwork file";
+                let bytes = "source".len() + message.len() + "imported here".len();
+                let run = Engine::default().run_source(
+                    case.id,
+                    source,
+                    RunOptions {
+                        limits: RunLimits {
+                            diagnostics: DiagnosticLimits {
+                                text_bytes: bytes - usize::from(case.error.is_some()),
+                                ..DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                let error = run.result.unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW6001");
+                    assert_eq!(
+                        error.causes[0]
+                            .omissions
+                            .as_ref()
+                            .unwrap()
+                            .related_locations,
+                        1
+                    );
+                    assert!(error.causes[0].span.is_none());
+                } else {
+                    assert_eq!(error.code().as_str(), "BW6001");
+                    let BWErr::ImportRead(detail) = error.error.as_ref() else {
+                        panic!("category")
+                    };
+                    assert_eq!(detail, message);
+                    assert_eq!(error.span.as_ref().unwrap().text(), "\"bad.txt\"");
+                    assert_eq!(error.related.len(), 1);
+                    assert_eq!(error.related[0].message, "imported here");
+                    assert_eq!(error.related[0].span.text(), source);
+                    assert!(error.omissions.is_none());
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;
