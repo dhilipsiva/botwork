@@ -8,7 +8,7 @@ use crate::core::{
 };
 use std::collections::HashMap;
 
-/// Live immutable call-frame and handler-error records, shared across Context snapshots.
+/// Live call, handler, and admitted outgoing diagnostic records shared across Context snapshots.
 #[derive(Clone, Debug)]
 pub struct RetainedDiagnosticLimits {
     pub records: usize,
@@ -217,7 +217,7 @@ pub(crate) struct StoredDiagnostic {
 }
 
 /// Internal ownership carrier. Raw host diagnostics enter without runtime leases;
-/// retained and copied records keep their leases through evaluation and disposal.
+/// retained, copied, and mutation-admitted records keep leases through evaluation and disposal.
 pub(crate) struct RuntimeDiagnostic {
     value: Box<crate::core::diagnostic::OwnedDiagnostic>,
     reservations: Vec<DiagnosticReservation>,
@@ -270,11 +270,23 @@ impl RuntimeDiagnostic {
         self
     }
 
-    pub(crate) fn with_related(self, message: &str, span: &Span) -> Self {
+    pub(crate) fn with_related(
+        mut self,
+        message: &str,
+        span: &Span,
+        budget: Option<&RunBudget>,
+    ) -> Self {
+        if !self.is_emergency() {
+            if let Err(violation) = self.admit_mutation(budget, Some((message, span)), None) {
+                return self
+                    .reject_mutation(violation, budget)
+                    .map(|error| error.with_related(message, span));
+            }
+        }
         self.map(|value| value.with_related(message, span))
     }
 
-    pub(crate) fn while_handling(mut self, original: Self) -> Self {
+    pub(crate) fn while_handling(mut self, mut original: Self, budget: Option<&RunBudget>) -> Self {
         if Arc::ptr_eq(&self.error, &original.error) {
             return self;
         }
@@ -282,12 +294,62 @@ impl RuntimeDiagnostic {
             drop(original);
             return self.map(Diagnostic::omit_handled_cause);
         }
-        let Self {
-            value,
-            reservations,
-        } = original;
-        self.reservations.extend(reservations);
-        self.map(|error| error.while_handling((*value).into_inner()))
+        // Transfer leases before measuring the combined tree so replacing them
+        // credits both inputs atomically without double-reserving moved payloads.
+        self.reservations.append(&mut original.reservations);
+        if let Err(violation) = self.admit_mutation(budget, None, Some(&original)) {
+            drop(original);
+            return self
+                .reject_mutation(violation, budget)
+                .map(Diagnostic::omit_handled_cause);
+        }
+        self.map(|error| error.while_handling((*original.value).into_inner()))
+    }
+
+    fn admit_mutation(
+        &mut self,
+        budget: Option<&RunBudget>,
+        related: Option<(&str, &Span)>,
+        cause: Option<&Diagnostic>,
+    ) -> Result<(), BWErr> {
+        // Observe a stop before any new quota can latch, but still allow bounded
+        // diagnostic evidence to be attached during cancellation unwinding.
+        if let Some(budget) = budget {
+            let _ = budget.checkpoint();
+        }
+        let defaults = DiagnosticLimits::default();
+        let limits = budget.map_or(&defaults, |budget| &budget.limits().diagnostics);
+        let (size, sources) = limits.retained_mutation_size(self, related, cause)?;
+        if let Some(budget) = budget {
+            let reservation =
+                budget
+                    .0
+                    .retained_diagnostics
+                    .replace(size, sources, &mut self.reservations)?;
+            self.reservations.push(reservation);
+        }
+        Ok(())
+    }
+
+    fn reject_mutation(self, violation: BWErr, budget: Option<&RunBudget>) -> Self {
+        let stopped = budget.map(|budget| budget.stop(violation.clone()));
+        if matches!(
+            self.code(),
+            DiagnosticCode::Cancelled | DiagnosticCode::Timeout
+        ) && stopped
+            .as_ref()
+            .is_none_or(|stop| stop.code() == self.code())
+        {
+            // Keep an observed control failure primary even when its added
+            // evidence exceeds a quota. The original tree is disposed first.
+            self.reject(violation).map(|mut error| {
+                let mut original = error.causes.pop().expect("bounded original");
+                original.causes.push(error);
+                original
+            })
+        } else {
+            self.reject(stopped.map_or(violation, Diagnostic::into_error))
+        }
     }
 
     pub(crate) fn reject(self, violation: BWErr) -> Self {

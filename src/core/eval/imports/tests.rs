@@ -191,7 +191,17 @@ fn missing_imported_exports_bound_unicode_evidence_after_snapshot_admission() {
         .unwrap_err();
         assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
         if snapshot_entries == 0 {
-            assert!(error.causes.is_empty());
+            // Site attachment now applies individual/aggregate admission too;
+            // the earlier snapshot failure stays primary under zero text bytes.
+            assert!(error.is_emergency());
+            assert_eq!(
+                error.causes[0]
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .related_locations,
+                1
+            );
             assert!(matches!(
                 error.error.as_ref(),
                 BWErr::ResourceLimit {

@@ -272,7 +272,13 @@ fn load_module(
     };
     // Constructed import errors already include this site in admission. Other
     // failures acquire the site exactly once as they cross this import boundary.
-    let related = |error: Diagnostic| error.with_related("imported here", import_site);
+    let related = |context: &Context, error: Diagnostic| {
+        RuntimeDiagnostic::from(error).with_related(
+            "imported here",
+            import_site,
+            context.budget.as_ref(),
+        )
+    };
     if path.contains("://")
         || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
     {
@@ -328,14 +334,17 @@ fn load_module(
                 .len()
                 .checked_add(canonical.as_os_str().len())
                 .ok_or_else(|| {
-                    related(budget.import_limit(ImportResource::MetadataBytes).at(span))
+                    related(
+                        context,
+                        budget.import_limit(ImportResource::MetadataBytes).at(span),
+                    )
                 })?;
             budget
                 .charge_imports(&[
                     (ImportResource::Paths, 1),
                     (ImportResource::MetadataBytes, bytes),
                 ])
-                .map_err(|error| related(error.at(span)))?;
+                .map_err(|error| related(context, error.at(span)))?;
         }
         context
             .modules
@@ -347,25 +356,27 @@ fn load_module(
     }
     context
         .check_import_depth()
-        .map_err(|error| related(error.at(span)))?;
-    check_dependency_depth(context, 0).map_err(|error| related(error.at(span)))?;
+        .map_err(|error| related(context, error.at(span)))?;
+    check_dependency_depth(context, 0).map_err(|error| related(context, error.at(span)))?;
     let source = read_module_source(&canonical, context).map_err(|error| match error {
         SourceFailure::Io(error) => {
-            failure(context, format_args!("{}: {error}", canonical.display()))
+            failure(context, format_args!("{}: {error}", canonical.display())).into()
         }
-        SourceFailure::Diagnostic(error) => related(error.at(span)),
+        SourceFailure::Diagnostic(error) => related(context, error.at(span)),
     })?;
     let source_name = canonical
         .to_str()
         .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
     let program = context
         .parse_source(source_name, &source)
-        .map_err(related)?;
-    let mut module_context =
-        prepare_module_context(context, &canonical).map_err(|error| related(error.at(span)))?;
+        .map_err(|error| related(context, error))?;
+    let mut module_context = prepare_module_context(context, &canonical)
+        .map_err(|error| related(context, error.at(span)))?;
     let result = evaluate_program_runtime(&program, &mut module_context);
     merge_cache(context, &mut module_context);
-    result.map_err(|error| error.with_related("imported here", import_site))?;
+    result.map_err(|error| {
+        error.with_related("imported here", import_site, context.budget.as_ref())
+    })?;
     let module = Arc::new(LoadedModule {
         frame: module_context.frames.remove(0),
     });
@@ -441,9 +452,11 @@ pub(super) fn invoke_imported(
     let mut size = context.isolated_snapshot_size();
     module.frame.snapshot_size(&mut size);
     context.charge_snapshot(size).map_err(|error| {
-        error
-            .at(&call.span)
-            .with_related("imported here", import_site)
+        RuntimeDiagnostic::from(error.at(&call.span)).with_related(
+            "imported here",
+            import_site,
+            context.budget.as_ref(),
+        )
     })?;
     let mut module_context = isolated(module.frame.clone(), context);
     let (definition, owner) = module_context.get_statement(exported).ok_or_else(|| {
@@ -455,7 +468,7 @@ pub(super) fn invoke_imported(
         )
     })?;
     let result = invoke_resolved(call, definition, owner, arguments, &mut module_context)
-        .map_err(|error| error.with_related("imported here", import_site));
+        .map_err(|error| error.with_related("imported here", import_site, context.budget.as_ref()));
     merge_cache(context, &mut module_context);
     result
 }

@@ -207,3 +207,38 @@ fn prospective_stack_matches_owned_metrics_and_preserves_an_existing_snapshot() 
     assert_eq!(accepted.call_stack.len(), 1);
     assert_eq!(accepted.call_stack[0].signature, "read");
 }
+
+#[test]
+fn prospective_cause_measurement_matches_attached_tree_and_checks_shifted_depth() {
+    let primary = tree();
+    let cause = tree(); // Equal source text, distinct allocation.
+    let limits = DiagnosticLimits::default();
+    let (size, sources) = limits
+        .retained_mutation_size(&primary, None, Some(&cause))
+        .unwrap();
+    let attached = primary.clone().while_handling(cause.clone());
+    assert_eq!(size, limits.check(&attached).unwrap());
+    assert_eq!(size.depth, 3);
+    assert_eq!(sources.len(), 2);
+    let mut cause = cause;
+    cause.span = primary.span.clone();
+    cause.call_stack = primary.call_stack.clone();
+    cause.related = primary.related.clone();
+    cause.causes[0].span = primary.span.clone();
+    let (shared, sources) = limits
+        .retained_mutation_size(&primary, None, Some(&cause))
+        .unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(shared.source_bytes * 2, size.source_bytes);
+    assert!(matches!(
+        DiagnosticLimits { depth: 2, ..limits }.retained_mutation_size(
+            &primary,
+            None,
+            Some(&cause)
+        ),
+        Err(BWErr::ResourceLimit {
+            resource: "diagnostic depth",
+            limit: 2
+        })
+    ));
+}

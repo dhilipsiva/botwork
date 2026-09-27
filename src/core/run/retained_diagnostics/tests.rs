@@ -181,7 +181,7 @@ fn cancellation_carries_original_ownership_or_releases_it_after_bounded_rejectio
 }
 
 #[test]
-fn runtime_carrier_keeps_merged_records_until_atomic_handler_reentry() {
+fn runtime_carrier_admits_merged_records_before_cause_attachment() {
     let budget = RunBudget::new(
         RunLimits {
             retained_diagnostics: RetainedDiagnosticLimits {
@@ -195,10 +195,10 @@ fn runtime_carrier_keeps_merged_records_until_atomic_handler_reentry() {
     let first = runtime_error(&budget, "first");
     let identity = first.error.clone();
     let second = runtime_error(&budget, "second");
-    let merged = first.while_handling(second);
+    let merged = first.while_handling(second, Some(&budget));
     assert_eq!(
         budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
-        2
+        1
     );
     let stored = merged.store(Some(&budget)).unwrap();
     assert!(Arc::ptr_eq(&stored.value.error, &identity));
@@ -691,4 +691,259 @@ fn concurrent_copies_share_headroom_without_latching_the_original_context() {
         budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
         0
     );
+}
+
+#[test]
+fn outgoing_mutations_admit_every_aggregate_dimension_and_release_on_rejection_or_transfer() {
+    for cause in [false, true] {
+        for deficit in 0..=6 {
+            let program = Program::parse("primary-é", "Missing").unwrap();
+            let other = Program::parse("other-é", "Other").unwrap();
+            let span = &program.statements[0].span;
+            let site = &other.statements[0].span;
+            let mut primary = Diagnostic::new(BWErr::NativeError("primary".into())).at(span);
+            primary.call_stack.push(CallFrame {
+                signature: "frame".into(),
+                call_site: span.clone(),
+                definition_site: Some(site.clone()),
+            });
+            primary = primary.with_related("first", span);
+            let original = Diagnostic::new(BWErr::ArithmeticError("original".into())).at(site);
+            let expected = if cause {
+                primary.clone().while_handling(original.clone())
+            } else {
+                primary.clone().with_related("added-é", site)
+            };
+            let size = DiagnosticLimits::default().check(&expected).unwrap();
+            let mut retained = RetainedDiagnosticLimits {
+                records: 1,
+                diagnostics: size.diagnostics,
+                call_frames: size.call_frames,
+                related_locations: size.related_locations,
+                text_bytes: size.text_bytes,
+                source_bytes: size.source_bytes,
+            };
+            match deficit {
+                1 => retained.records -= 1,
+                2 => retained.diagnostics -= 1,
+                3 => retained.call_frames -= 1,
+                4 => retained.related_locations -= 1,
+                5 => retained.text_bytes -= 1,
+                6 => retained.source_bytes -= 1,
+                _ => (),
+            }
+            let budget = RunBudget::new(
+                RunLimits {
+                    retained_diagnostics: retained,
+                    ..Default::default()
+                },
+                OperationControl::default(),
+            );
+            let sibling = budget.clone();
+            let result = if cause {
+                RuntimeDiagnostic::from(primary).while_handling(original.into(), Some(&budget))
+            } else {
+                drop(original);
+                RuntimeDiagnostic::from(primary).with_related("added-é", site, Some(&budget))
+            };
+            let sources = [
+                Arc::downgrade(&program.source),
+                Arc::downgrade(&other.source),
+            ];
+            drop((program, other));
+            if deficit == 0 {
+                assert_eq!(result.to_string(), expected.to_string());
+                let used = budget.0.retained_diagnostics.used.lock().unwrap();
+                assert_eq!(
+                    used.counts,
+                    [
+                        1,
+                        size.diagnostics,
+                        size.call_frames,
+                        size.related_locations,
+                        size.text_bytes
+                    ]
+                );
+                assert_eq!(used.source_bytes, size.source_bytes);
+                drop(used);
+                budget.checkpoint().unwrap();
+            } else {
+                assert!(result.is_emergency());
+                assert_eq!(result.causes[0].code(), DiagnosticCode::Native);
+                let omitted = result.causes[0].omissions.as_ref().unwrap();
+                assert_eq!(omitted.direct_causes, usize::from(cause));
+                assert_eq!(omitted.related_locations, if cause { 1 } else { 2 });
+                assert_eq!(omitted.source.as_ref().unwrap().file, "primary-é");
+                assert!(budget.checkpoint().is_err());
+            }
+            sibling.checkpoint().unwrap();
+            drop(expected);
+            assert_eq!(
+                sources.iter().all(|source| source.upgrade().is_none()),
+                deficit != 0
+            );
+            let public = result.into_diagnostic();
+            assert_eq!(
+                budget.0.retained_diagnostics.used.lock().unwrap().counts,
+                [0; 5]
+            );
+            assert_eq!(
+                budget
+                    .0
+                    .retained_diagnostics
+                    .used
+                    .lock()
+                    .unwrap()
+                    .source_bytes,
+                0
+            );
+            drop(public);
+            assert!(sources.iter().all(|source| source.upgrade().is_none()));
+        }
+    }
+}
+
+#[test]
+fn mutation_replacement_retains_unrelated_records_and_refunds_failed_inputs() {
+    for fits in [false, true] {
+        let budget = RunBudget::new(
+            RunLimits {
+                retained_diagnostics: RetainedDiagnosticLimits {
+                    records: 3,
+                    diagnostics: 3,
+                    related_locations: usize::from(fits),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            OperationControl::default(),
+        );
+        let unrelated = runtime_error(&budget, "unrelated");
+        let first = runtime_error(&budget, "first");
+        let second = runtime_error(&budget, "second");
+        let merged = first.while_handling(second, Some(&budget));
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
+            2
+        );
+        let site = unrelated.span.as_ref().unwrap();
+        let result = merged.with_related("new", site, Some(&budget));
+        assert_eq!(result.is_emergency(), !fits);
+        let counts = budget.0.retained_diagnostics.used.lock().unwrap().counts;
+        assert_eq!(counts[0], 1 + usize::from(fits));
+        assert_eq!(counts[1], 1 + 2 * usize::from(fits));
+        drop(result);
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts[0],
+            1
+        );
+        drop(unrelated);
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts,
+            [0; 5]
+        );
+    }
+}
+
+#[test]
+fn concurrent_outgoing_mutations_compete_for_one_record_without_poisoning_siblings() {
+    let budget = RunBudget::new(
+        RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        OperationControl::default(),
+    );
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    let accepted = std::thread::scope(|scope| {
+        let tasks: Vec<_> = (0..2)
+            .map(|_| {
+                let budget = budget.clone();
+                let barrier = barrier.clone();
+                scope.spawn(move || {
+                    let primary = Diagnostic::new(BWErr::NativeError("primary".into())).into();
+                    let cause = Diagnostic::new(BWErr::NativeError("cause".into())).into();
+                    barrier.wait();
+                    let result = RuntimeDiagnostic::while_handling(primary, cause, Some(&budget));
+                    let accepted = result.code() == DiagnosticCode::Native;
+                    assert_eq!(budget.checkpoint().is_ok(), accepted);
+                    barrier.wait(); // Hold the winning reservation through both attempts.
+                    drop(result);
+                    accepted
+                })
+            })
+            .collect();
+        tasks
+            .into_iter()
+            .map(|task| task.join().unwrap())
+            .filter(|accepted| *accepted)
+            .count()
+    });
+    assert_eq!(accepted, 1);
+    budget.checkpoint().unwrap();
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts,
+        [0; 5]
+    );
+}
+
+#[test]
+fn mutation_rejection_preserves_observed_control_and_disposes_deep_causes_iteratively() {
+    for fits in [false, true] {
+        let control = OperationControl::default();
+        let budget = RunBudget::new(
+            RunLimits {
+                retained_diagnostics: RetainedDiagnosticLimits {
+                    diagnostics: 1 + usize::from(fits),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            control.clone(),
+        );
+        let original = runtime_error(&budget, "original");
+        let source = Arc::downgrade(original.span.as_ref().unwrap().source());
+        control.cancel();
+        let stopped = budget.checkpoint().unwrap_err();
+        let result = RuntimeDiagnostic::from(stopped).while_handling(original, Some(&budget));
+        assert_eq!(result.code(), DiagnosticCode::Cancelled);
+        assert_eq!(result.is_emergency(), !fits);
+        assert_eq!(source.upgrade().is_some(), fits);
+        if !fits {
+            assert_eq!(result.omissions.as_ref().unwrap().direct_causes, 1);
+            assert_eq!(result.causes[0].code(), DiagnosticCode::ResourceLimit);
+        }
+        drop(result);
+        assert!(source.upgrade().is_none());
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts,
+            [0; 5]
+        );
+    }
+    std::thread::Builder::new()
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            let mut cause = Diagnostic::new(BWErr::NativeError("leaf".into()));
+            let leaf = Arc::downgrade(&cause.error);
+            for _ in 0..100_000 {
+                let mut parent = Diagnostic::new(BWErr::NativeError("parent".into()));
+                parent.causes.push(cause);
+                cause = parent;
+            }
+            let primary = Diagnostic::new(BWErr::ArithmeticError("primary".into())).into();
+            let result = RuntimeDiagnostic::while_handling(primary, cause.into(), None);
+            assert!(result.is_emergency());
+            assert!(leaf.upgrade().is_none());
+            assert_eq!(result.causes[0].code(), DiagnosticCode::Arithmetic);
+            assert_eq!(
+                result.causes[0].omissions.as_ref().unwrap().direct_causes,
+                1
+            );
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

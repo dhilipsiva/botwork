@@ -428,3 +428,98 @@ fn default_and_raised_limits_allow_call_handler_overlap_with_native_errors() {
         assert_eq!(run.outcome(), RunOutcome::Succeeded);
     }
 }
+
+#[test]
+fn outgoing_handler_causes_require_capacity_without_an_outer_catch() {
+    let source = "|error| = |7|\nTry { Missing } Catch |error| { |progress| = |1|\nOther }";
+    for diagnostics in [1, 2] {
+        let run = Engine::default().run_source(
+            "outgoing",
+            source,
+            options(RetainedDiagnosticLimits {
+                records: 1,
+                diagnostics,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(run.variables["error"].to_string(), "7");
+        assert_eq!(run.variables["progress"].to_string(), "1");
+        let error = run.result.unwrap_err();
+        if diagnostics == 1 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert!(matches!(
+                error.error.as_ref(),
+                BWErr::ResourceLimit {
+                    resource: "retained diagnostic nodes",
+                    limit: 1
+                }
+            ));
+            assert!(
+                matches!(error.causes[0].error.as_ref(), BWErr::StatementNotDefined(name) if name.trim() == "Other")
+            );
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().direct_causes, 1);
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::UndefinedStatement);
+            assert!(
+                matches!(error.error.as_ref(), BWErr::StatementNotDefined(name) if name.trim() == "Other")
+            );
+            assert!(
+                matches!(error.causes[0].error.as_ref(), BWErr::StatementNotDefined(name) if name.trim() == "Missing")
+            );
+            assert!(error.causes[0].omissions.is_none());
+        }
+    }
+}
+
+#[test]
+fn import_unwinding_reserves_parent_sites_before_outgoing_publication() {
+    let harness = cli_harness::Harness::new();
+    std::fs::write(harness.workspace.join("leaf.botwork"), "Missing").unwrap();
+    std::fs::write(
+        harness.workspace.join("middle.botwork"),
+        "Import |\"leaf.botwork\"| As |leaf|",
+    )
+    .unwrap();
+    let source = "|progress| = |1|\nImport |\"middle.botwork\"| As |lib|\n|late| = |true|";
+    for related_locations in [0, 1, 2] {
+        let mut configuration = options(RetainedDiagnosticLimits {
+            records: 1,
+            related_locations,
+            ..Default::default()
+        });
+        configuration.working_directory = Some(harness.workspace.clone());
+        let run = Engine::default().run_source("entry", source, configuration);
+        assert_eq!(run.variables["progress"].to_string(), "1");
+        assert!(!run.variables.contains_key("late"));
+        let error = run.result.unwrap_err();
+        if related_locations == 2 {
+            assert_eq!(error.code(), DiagnosticCode::UndefinedStatement);
+            assert_eq!(error.related.len(), 2);
+            assert!(error.related[0]
+                .span
+                .source()
+                .name()
+                .ends_with("middle.botwork"));
+            assert_eq!(error.related[1].span.source().name(), "entry");
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert!(matches!(
+                error.error.as_ref(),
+                BWErr::ResourceLimit {
+                    resource: "retained diagnostic related locations",
+                    ..
+                }
+            ));
+            assert_eq!(error.causes[0].code(), DiagnosticCode::UndefinedStatement);
+            let omitted = error.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(omitted.related_locations, 2);
+            assert!(omitted
+                .source
+                .as_ref()
+                .unwrap()
+                .file
+                .ends_with("leaf.botwork"));
+            assert!(error.related.is_empty());
+        }
+    }
+}

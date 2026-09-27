@@ -234,7 +234,7 @@ impl DiagnosticLimits {
         diagnostic: &Diagnostic,
         frames: impl ExactSizeIterator<Item = &'a CallFrame>,
     ) -> Result<DiagnosticSize, BWErr> {
-        self.inspect(diagnostic, frames, None, None)
+        self.inspect(diagnostic, frames, None, None, None)
     }
 
     /// Inspect a copied tree and its new related site before copying either payload.
@@ -243,8 +243,24 @@ impl DiagnosticLimits {
         diagnostic: &Diagnostic,
         related: Option<(&str, &Span)>,
     ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
+        self.retained_mutation_size(diagnostic, related, None)
+    }
+
+    /// Inspect a prospective appended site/cause without modifying either owned tree.
+    pub(crate) fn retained_mutation_size(
+        &self,
+        diagnostic: &Diagnostic,
+        related: Option<(&str, &Span)>,
+        cause: Option<&Diagnostic>,
+    ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
         let mut sources = Vec::new();
-        let size = self.inspect(diagnostic, std::iter::empty(), Some(&mut sources), related)?;
+        let size = self.inspect(
+            diagnostic,
+            std::iter::empty(),
+            Some(&mut sources),
+            related,
+            cause,
+        )?;
         Ok((size, sources))
     }
 
@@ -254,6 +270,7 @@ impl DiagnosticLimits {
         frames: impl ExactSizeIterator<Item = &'a CallFrame>,
         owners: Option<&mut Vec<Arc<SourceFile>>>,
         related: Option<(&str, &Span)>,
+        cause: Option<&Diagnostic>,
     ) -> Result<DiagnosticSize, BWErr> {
         self.validate()?;
         let mut measurement = Measurement {
@@ -262,7 +279,11 @@ impl DiagnosticLimits {
             sources: HashSet::new(),
             owners,
         };
-        let mut pending = vec![(std::slice::from_ref(diagnostic).iter(), 1)];
+        let mut pending = Vec::new();
+        if let Some(cause) = cause {
+            pending.push((std::slice::from_ref(cause).iter(), 2));
+        }
+        pending.push((std::slice::from_ref(diagnostic).iter(), 1));
         while let Some((nodes, depth)) = pending.last_mut() {
             if let Some(node) = nodes.next() {
                 let depth = *depth;

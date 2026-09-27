@@ -52,11 +52,14 @@ impl Context {
     pub(crate) fn after_evaluation<T>(&self, result: EvaluationResult<T>) -> EvaluationResult<T> {
         match self.checkpoint() {
             Ok(()) => result,
-            Err(stopped) => match result {
-                Err(original) if original.code() == stopped.code() => Err(original),
-                Err(original) => Err(RuntimeDiagnostic::from(stopped).while_handling(original)),
-                Ok(_) => Err(stopped.into()),
-            },
+            Err(stopped) => {
+                match result {
+                    Err(original) if original.code() == stopped.code() => Err(original),
+                    Err(original) => Err(RuntimeDiagnostic::from(stopped)
+                        .while_handling(original, self.budget.as_ref())),
+                    Ok(_) => Err(stopped.into()),
+                }
+            }
         }
     }
 
@@ -88,7 +91,7 @@ impl Context {
             return error.map(Diagnostic::omit_handled_cause);
         }
         match StoredDiagnostic::take(original, self.budget.as_ref()) {
-            Ok(original) => error.while_handling(original.into()),
+            Ok(original) => error.while_handling(original.into(), self.budget.as_ref()),
             Err(violation) => error
                 .reject(violation.into_error())
                 .map(Diagnostic::omit_handled_cause),
