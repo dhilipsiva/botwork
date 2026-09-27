@@ -406,7 +406,7 @@ impl Context {
                 let environment = context.environment.as_ref().ok_or_else(|| {
                     BWErr::RunConfiguration("Native operation needs a configured run".into())
                 })?;
-                callback(values, environment)
+                callback(values, environment).map_err(Diagnostic::new)
             }),
         )
     }
@@ -560,7 +560,10 @@ impl Context {
             ))
             .at(signature.header()));
         }
-        self.insert_native(signature, Arc::new(move |values, _| callback(values)))
+        self.insert_native(
+            signature,
+            Arc::new(move |values, _| callback(values).map_err(Diagnostic::new)),
+        )
     }
 
     /// Visible metadata in normalized order, with lexical shadowing resolved.
@@ -739,7 +742,7 @@ impl Context {
                 metadata.normalized(),
                 metadata.header(),
                 StmtType::Native {
-                    callback: Arc::new(|values, _| log_param(values)),
+                    callback: Arc::new(log_param),
                     builtin_log: true,
                     metadata: Arc::clone(&metadata),
                     _registry: None,
@@ -766,16 +769,23 @@ impl Context {
     }
 }
 
-type Callback = Arc<dyn Fn(&[Literal], &mut Context) -> LiteralResult + Send + Sync>;
+type Callback = Arc<dyn Fn(&[Literal], &mut Context) -> RuntimeResult + Send + Sync>;
 
-fn log_param(values: &[Literal]) -> LiteralResult {
+fn log_param(values: &[Literal], context: &mut Context) -> RuntimeResult {
     let value = &values[0]; // Arity was checked before entering the callback.
-    write_log(value, &mut io::stdout().lock())?;
+    write_log(value, &mut io::stdout().lock(), context)?;
     Ok(value.clone())
 }
 
-fn write_log(value: &Literal, output: &mut impl Write) -> Result<(), BWErr> {
-    writeln!(output, "{value}").map_err(|error| BWErr::OutputError(error.to_string()))
+fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> DiagnosticResult<()> {
+    writeln!(output, "{value}").map_err(|error| {
+        context.formatted_error(
+            BWErr::OutputError,
+            format_args!("{error}"),
+            context.calls.last().map(|record| &record.frame.call_site),
+            false,
+        )
+    })
 }
 
 fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {
@@ -874,9 +884,7 @@ fn invoke_resolved(
                     )
                 })
                 .and_then(|result| {
-                    result.map_err(|error| {
-                        context.diagnostic(Diagnostic::new(error), Some(&call.span), false)
-                    })
+                    result.map_err(|error| context.diagnostic(error, Some(&call.span), false))
                 });
             let result = context.after_operation(result.map(Owned::new))?;
             context.check_value(&result)?;

@@ -627,6 +627,31 @@ fn log_writes_readable_values_to_stdout() {
     assert!(output.stderr.is_empty());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn log_failure_on_a_full_output_device_reports_its_call_site_and_nonzero_status() {
+    let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .arg("--file")
+        .arg(fixture("log-values.botwork"))
+        .stdout(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap(),
+        )
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert!(diagnostic.contains("[BW4001]"), "{diagnostic}");
+    assert!(
+        diagnostic.contains("log-values.botwork:1:1"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("bytes already written"), "{diagnostic}");
+    assert!(!diagnostic.contains("panicked"), "{diagnostic}");
+}
+
 #[test]
 fn debug_traces_locations_without_changing_stdout() {
     let path = fixture("log-values.botwork");

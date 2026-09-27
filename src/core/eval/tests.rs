@@ -1,5 +1,7 @@
 use super::{evaluate_program, BWErr, Context, Literal, LiteralResult, Program};
 
+mod log_output;
+
 fn evaluate(source: &str, context: &mut Context) -> LiteralResult {
     let program = Program::parse("<test>", source).expect("valid test program");
     evaluate_program(&program, context)
@@ -1939,7 +1941,12 @@ fn map_keys_remain_identifiers_while_string_values_are_decoded() {
 #[test]
 fn log_output_is_a_value_followed_by_a_newline() {
     let mut output = Vec::new();
-    super::write_log(&Literal::String("hello".into()), &mut output).unwrap();
+    super::write_log(
+        &Literal::String("hello".into()),
+        &mut output,
+        &Context::default(),
+    )
+    .unwrap();
     assert_eq!(output, b"hello\n");
 }
 
@@ -1958,10 +1965,11 @@ fn log_output_failure_returns_a_typed_error() {
             Ok(())
         }
     }
-    assert!(matches!(
-        super::write_log(&Literal::Int(7), &mut BrokenWriter),
-        Err(BWErr::OutputError(message)) if message.contains("closed")
-    ));
+    let error =
+        super::write_log(&Literal::Int(7), &mut BrokenWriter, &Context::default()).unwrap_err();
+    assert!(
+        matches!(error.error.as_ref(), BWErr::OutputError(message) if message.contains("closed"))
+    );
 }
 
 #[test]
