@@ -14,6 +14,7 @@ use std::{
     collections::BTreeMap,
     ffi::OsString,
     fs,
+    path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
         mpsc, Arc, Mutex,
@@ -202,6 +203,121 @@ fn environment_overlay_is_per_run_and_never_changes_the_host() {
         },
     );
     assert_eq!(isolated.result.unwrap().to_string(), "0");
+}
+
+#[test]
+fn setup_failures_keep_default_diagnostic_quotas_and_exact_messages_before_input_installation() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    let harness = Harness::new();
+    let file = harness.workspace.join("file");
+    fs::write(&file, "").unwrap();
+    let engine = Engine::default();
+    for mut configured in [
+        RunOptions {
+            environment: BTreeMap::from([("bad=name".into(), Some("value".into()))]),
+            ..RunOptions::default()
+        },
+        RunOptions {
+            environment: BTreeMap::from([("name".into(), Some("bad\0value".into()))]),
+            ..RunOptions::default()
+        },
+        RunOptions {
+            timeout: Some(Duration::MAX),
+            ..RunOptions::default()
+        },
+        options(&file),
+        options(&harness.workspace.join("missing")),
+    ] {
+        configured.limits.diagnostics = DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        };
+        configured.variables = BTreeMap::from([("seed".into(), Literal::Int(7))]);
+        let run = engine.run_source("setup", "Unknown", configured);
+        assert_eq!(run.outcome(), RunOutcome::Failed);
+        assert!(run.variables.is_empty());
+        assert_eq!(run.steps, 0);
+        let error = run.result.unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::RunConfiguration);
+        assert!(error.span.is_none() && error.causes.is_empty() && error.omissions.is_none());
+        let BWErr::RunConfiguration(message) = error.error.as_ref() else {
+            panic!("configuration")
+        };
+        assert!(
+            message == "Environment names must be nonempty and contain neither '=' nor NUL"
+                || message == "Environment values must not contain NUL"
+                || message == "Timeout exceeds the monotonic clock range"
+                || message == "Working directory must be a directory"
+                || message.starts_with(&harness.workspace.join("missing").display().to_string())
+        );
+    }
+    let run = engine.run_source(
+        "input",
+        "Unknown",
+        RunOptions {
+            variables: BTreeMap::from([("invalid name".into(), Literal::None)]),
+            limits: RunLimits {
+                diagnostics: DiagnosticLimits {
+                    text_bytes: 0,
+                    ..DiagnosticLimits::default()
+                },
+                ..RunLimits::default()
+            },
+            ..RunOptions::default()
+        },
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert_eq!(
+        run.result.unwrap_err().causes[0].code(),
+        DiagnosticCode::Input
+    );
+}
+
+#[test]
+fn oversized_setup_messages_retain_bounded_configuration_evidence_and_release_deep_inputs() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    let path = PathBuf::from("é".repeat(DiagnosticLimits::default().text_bytes / 2));
+    let deep = (0..20_000).fold(Literal::None, |value, _| Literal::Array(vec![value]));
+    let effects = Arc::new(AtomicUsize::new(0));
+    let seen = effects.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Effect", move |_, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::None)
+        })
+        .unwrap();
+    let run = engine.run_source(
+        "setup",
+        "Effect",
+        RunOptions {
+            working_directory: Some(path),
+            inherit_environment: false,
+            variables: BTreeMap::from([("deep".into(), deep)]),
+            ..RunOptions::default()
+        },
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert!(run.variables.is_empty());
+    assert_eq!(run.steps, 0);
+    assert_eq!(effects.load(Ordering::SeqCst), 0);
+    let error = run.result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    let cause = &error.causes[0];
+    assert_eq!(cause.code(), DiagnosticCode::RunConfiguration);
+    assert_eq!(cause.omissions.as_ref().unwrap().detail_fields, 1);
+    assert!(cause.span.is_none());
+    let BWErr::RunConfiguration(message) = cause.error.as_ref() else {
+        panic!("configuration")
+    };
+    assert!(message.len() <= 256 && message.ends_with("…[truncated]"));
+    assert_eq!(
+        engine
+            .run_source("fresh", "Effect", RunOptions::default())
+            .outcome(),
+        RunOutcome::Succeeded
+    );
+    assert_eq!(effects.load(Ordering::SeqCst), 1);
 }
 
 #[test]

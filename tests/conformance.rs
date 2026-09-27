@@ -777,6 +777,53 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::SetupDiagnosticDefaults | Input::SetupDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let mut options = RunOptions {
+                    inherit_environment: false,
+                    variables: BTreeMap::from([("seed".into(), Literal::Int(7))]),
+                    limits: RunLimits {
+                        diagnostics: DiagnosticLimits {
+                            text_bytes: 0,
+                            ..DiagnosticLimits::default()
+                        },
+                        ..RunLimits::default()
+                    },
+                    ..RunOptions::default()
+                };
+                if case.error.is_some() {
+                    options.working_directory =
+                        Some("x".repeat(DiagnosticLimits::default().text_bytes).into());
+                } else {
+                    options
+                        .environment
+                        .insert("bad=name".into(), Some("value".into()));
+                }
+                let run = Engine::default().run_source(case.id, "Unknown", options);
+                assert!(run.variables.is_empty());
+                assert_eq!(run.steps, 0);
+                let error = run.result.unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW7002");
+                    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+                } else {
+                    assert_eq!(error.code().as_str(), "BW7002");
+                    let BWErr::RunConfiguration(message) = error.error.as_ref() else {
+                        panic!("category")
+                    };
+                    assert_eq!(
+                        message,
+                        "Environment names must be nonempty and contain neither '=' nor NUL"
+                    );
+                    assert!(error.causes.is_empty() && error.omissions.is_none());
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

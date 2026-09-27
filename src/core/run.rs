@@ -27,6 +27,9 @@ use super::{
     value_limits::{Owned, ValueLimits},
 };
 
+#[cfg(test)]
+mod tests;
+
 mod import_limits;
 pub(crate) use import_limits::ImportResource;
 pub use import_limits::{ImportLimits, MAX_MODULE_CHAIN_DEPTH};
@@ -188,15 +191,25 @@ impl RunEnvironment {
         &self.control
     }
 
+    fn configuration_error(reason: std::fmt::Arguments<'_>) -> Diagnostic {
+        DiagnosticLimits::default().formatted_detail(
+            BWErr::RunConfiguration,
+            reason,
+            None,
+            false,
+            std::iter::empty(),
+        )
+    }
+
     fn prepare(options: &RunOptions, start: tokio::time::Instant) -> DiagnosticResult<Self> {
         options.control.checkpoint()?;
-        let failure = |reason: String| Diagnostic::new(BWErr::RunConfiguration(reason));
+        let failure = Self::configuration_error;
         let deadline = options
             .timeout
             .map(|timeout| {
-                start
-                    .checked_add(timeout)
-                    .ok_or_else(|| failure("Timeout exceeds the monotonic clock range".into()))
+                start.checked_add(timeout).ok_or_else(|| {
+                    failure(format_args!("Timeout exceeds the monotonic clock range"))
+                })
             })
             .transpose()?;
         let control = options.control.child(deadline);
@@ -206,11 +219,13 @@ impl RunEnvironment {
             .clone()
             .map(Ok)
             .unwrap_or_else(std::env::current_dir)
-            .map_err(|error| failure(error.to_string()))?;
+            .map_err(|error| failure(format_args!("{error}")))?;
         let directory = fs::canonicalize(&directory)
-            .map_err(|error| failure(format!("{}: {error}", directory.display())))?;
+            .map_err(|error| failure(format_args!("{}: {error}", directory.display())))?;
         if !directory.is_dir() {
-            return Err(failure("Working directory must be a directory".into()));
+            return Err(failure(format_args!(
+                "Working directory must be a directory"
+            )));
         }
         let mut variables: BTreeMap<OsString, OsString> = if options.inherit_environment {
             std::env::vars_os().collect()
@@ -222,15 +237,17 @@ impl RunEnvironment {
                 || name.as_encoded_bytes().contains(&b'=')
                 || name.as_encoded_bytes().contains(&0)
             {
-                return Err(failure(
-                    "Environment names must be nonempty and contain neither '=' nor NUL".into(),
-                ));
+                return Err(failure(format_args!(
+                    "Environment names must be nonempty and contain neither '=' nor NUL"
+                )));
             }
             if value
                 .as_ref()
                 .is_some_and(|value| value.as_encoded_bytes().contains(&0))
             {
-                return Err(failure("Environment values must not contain NUL".into()));
+                return Err(failure(format_args!(
+                    "Environment values must not contain NUL"
+                )));
             }
             match value {
                 Some(value) => {

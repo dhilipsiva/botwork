@@ -58,6 +58,52 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn setup_message_rejection_adds_no_large_copies_and_prior_stops_skip_path_preparation() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        operation::OperationControl,
+    };
+    let length = DiagnosticLimits::default().text_bytes;
+    let path = std::path::PathBuf::from("x".repeat(length));
+    let (_, required_copies) = observe(length, || {
+        let directory = path.clone();
+        std::fs::canonicalize(&directory).unwrap_err()
+    });
+    let engine = Engine::default();
+    for stopped in 0..3 {
+        let control = OperationControl::default();
+        if stopped == 1 {
+            control.cancel();
+        }
+        let options = RunOptions {
+            working_directory: Some(path.clone()),
+            inherit_environment: false,
+            control,
+            timeout: (stopped == 2).then_some(std::time::Duration::ZERO),
+            ..RunOptions::default()
+        };
+        let (run, large) = observe(length, || engine.run_source("setup", "Unknown", options));
+        let error = run.result.unwrap_err();
+        if stopped == 0 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::RunConfiguration);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+            assert_eq!(large, required_copies);
+        } else {
+            assert_eq!(
+                error.code(),
+                if stopped == 1 {
+                    DiagnosticCode::Cancelled
+                } else {
+                    DiagnosticCode::Timeout
+                }
+            );
+            assert_eq!(large, 0);
+        }
+    }
+}
+
+#[test]
 fn import_messages_reserve_originating_site_before_copying_a_large_invalid_path() {
     use botwork::core::{
         ast::Program,
