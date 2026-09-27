@@ -95,7 +95,13 @@ impl Context {
             .operate_binary_with_error(left, right, &limits, |category, message| {
                 self.formatted_error(category, message, Some(span), true)
             })
-            .map_err(|error| self.retain_limit(error))?;
+            .inspect_err(|error| {
+                if let (Some(budget), BWErr::ResourceLimit { resource, limit }) =
+                    (&self.budget, error.error.as_ref())
+                {
+                    budget.limit(resource, *limit);
+                }
+            })?;
         match reserved {
             Some(reservation) => Ok(TemporaryValue::new(result, reservation)),
             None => self.temporary(result),
@@ -114,7 +120,13 @@ impl Context {
             .operate_unary_with_error(value, &self.limits().values, |category, message| {
                 self.formatted_error(category, message, Some(span), true)
             })
-            .map_err(|error| self.retain_limit(error))?;
+            .inspect_err(|error| {
+                if let (Some(budget), BWErr::ResourceLimit { resource, limit }) =
+                    (&self.budget, error.error.as_ref())
+                {
+                    budget.limit(resource, *limit);
+                }
+            })?;
         self.temporary(result)
     }
 }

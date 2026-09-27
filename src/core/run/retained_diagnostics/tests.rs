@@ -1117,3 +1117,104 @@ fn context_readmission_credits_existing_reservations_and_keeps_innermost_metadat
     assert_eq!(accepted.code(), DiagnosticCode::Native);
     drop((accepted, public));
 }
+
+#[test]
+fn construction_reservations_cover_formatting_and_concurrent_contexts_until_host_transfer() {
+    use crate::core::eval::Context;
+    use std::sync::mpsc;
+    struct Hold {
+        entered: mpsc::Sender<()>,
+        release: mpsc::Receiver<()>,
+        passes: std::cell::Cell<usize>,
+    }
+    impl std::fmt::Display for Hold {
+        fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if self.passes.replace(self.passes.get() + 1) == 0 {
+                self.entered.send(()).unwrap();
+                self.release
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+            }
+            output.write_str("first")
+        }
+    }
+    let context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let competitor = context.clone();
+    let observer = context.clone();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let hold = Hold {
+            entered: entered_tx,
+            release: release_rx,
+            passes: std::cell::Cell::new(0),
+        };
+        let error =
+            context.formatted_error(BWErr::NativeError, format_args!("{hold}"), None, false);
+        context.checkpoint().unwrap();
+        assert_eq!(hold.passes.get(), 2);
+        error
+    });
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    let rejected =
+        competitor.formatted_error(BWErr::NativeError, format_args!("second"), None, false);
+    assert!(rejected.is_emergency());
+    assert!(competitor.checkpoint().is_err());
+    observer.checkpoint().unwrap();
+    release_tx.send(()).unwrap();
+    let outgoing = worker.join().unwrap();
+    assert_eq!(outgoing.code(), DiagnosticCode::Native);
+    let tracker = &observer.budget.as_ref().unwrap().0.retained_diagnostics;
+    assert_eq!(tracker.used.lock().unwrap().counts[0], 1);
+    let host = outgoing.into_diagnostic();
+    assert_eq!(tracker.used.lock().unwrap().counts, [0; 5]);
+    let next = observer.formatted_error(BWErr::NativeError, format_args!("next"), None, false);
+    assert_eq!(next.code(), DiagnosticCode::Native);
+    drop((host, next));
+    assert_eq!(tracker.used.lock().unwrap().counts, [0; 5]);
+}
+
+#[test]
+fn construction_releases_initial_and_final_admission_on_late_formatting_failure() {
+    use crate::core::eval::Context;
+    struct Changing(std::cell::Cell<usize>);
+    impl std::fmt::Display for Changing {
+        fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let pass = self.0.replace(self.0.get() + 1);
+            output.write_str("partial")?;
+            if pass == 1 {
+                Err(std::fmt::Error)
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let context = Context::with_limits(RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let sibling = context.clone();
+    let value = Changing(std::cell::Cell::new(0));
+    let rejected =
+        context.formatted_error(BWErr::NativeError, format_args!("{value}"), None, false);
+    assert!(rejected.is_emergency());
+    assert_eq!(value.0.get(), 3); // Measurement, failed construction, bounded evidence.
+    let tracker = &sibling.budget.as_ref().unwrap().0.retained_diagnostics;
+    assert_eq!(tracker.used.lock().unwrap().counts, [0; 5]);
+    sibling.checkpoint().unwrap();
+    let accepted = sibling.formatted_error(BWErr::NativeError, format_args!("next"), None, false);
+    assert_eq!(accepted.code(), DiagnosticCode::Native);
+}

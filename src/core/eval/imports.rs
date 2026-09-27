@@ -74,7 +74,7 @@ pub(super) fn namespace_collision(
     namespace: &str,
     original: &Span,
     duplicate: &Span,
-) -> Diagnostic {
+) -> RuntimeDiagnostic {
     context.duplicate_error(
         |[namespace, original, duplicate]| BWErr::DuplicateNamespace {
             namespace,
@@ -98,9 +98,12 @@ pub(super) fn evaluate_import(
     let normalized = ast::normalize_sentence(&namespace.text);
     let frame = &context.frames[context.current];
     if let Some(original) = frame.namespaces.get(normalized.as_str()) {
-        return Err(
-            namespace_collision(context, &normalized, &original.span, &namespace.span).into(),
-        );
+        return Err(namespace_collision(
+            context,
+            &normalized,
+            &original.span,
+            &namespace.span,
+        ));
     }
     let prefix = format!("{normalized}::");
     if let Some((_, statement)) = frame
@@ -114,8 +117,7 @@ pub(super) fn evaluate_import(
             &normalized,
             statement.metadata().header(),
             &namespace.span,
-        )
-        .into());
+        ));
     }
     let module = load_module(path, path_span, import_site, context)?;
     publish_namespace(&module, namespace, &normalized, import_site, context)
@@ -285,8 +287,7 @@ fn load_module(
         return Err(failure(
             context,
             format_args!("`{path}` must name a local .botwork file"),
-        )
-        .into());
+        ));
     }
     let importer = Path::new(span.source().name());
     let base = if importer.is_absolute() {
@@ -318,14 +319,12 @@ fn load_module(
             loading: &context.loading[start..],
             repeated: &canonical,
         };
-        return Err(context
-            .import_error(
-                BWErr::ImportCycle,
-                format_args!("{chain}"),
-                span,
-                import_site,
-            )
-            .into());
+        return Err(context.import_error(
+            BWErr::ImportCycle,
+            format_args!("{chain}"),
+            span,
+            import_site,
+        ));
     }
     if !context.modules.resolved.contains_key(&requested) {
         if let Some(budget) = &context.budget {
@@ -360,7 +359,7 @@ fn load_module(
     check_dependency_depth(context, 0).map_err(|error| related(context, error.at(span)))?;
     let source = read_module_source(&canonical, context).map_err(|error| match error {
         SourceFailure::Io(error) => {
-            failure(context, format_args!("{}: {error}", canonical.display())).into()
+            failure(context, format_args!("{}: {error}", canonical.display()))
         }
         SourceFailure::Diagnostic(error) => related(context, error.at(span)),
     })?;

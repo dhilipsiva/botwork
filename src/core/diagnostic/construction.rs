@@ -1,7 +1,10 @@
 //! Admission for borrowed/formatted diagnostic details before their first owned copies.
 
-use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult};
-use crate::core::{ast::Span, grammar::BWErr};
+use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult, DiagnosticSize};
+use crate::core::{
+    ast::{SourceFile, Span},
+    grammar::BWErr,
+};
 use std::{
     fmt::{self, Write},
     sync::Arc,
@@ -18,12 +21,19 @@ pub(crate) struct FormattedDetail<'a> {
 }
 
 impl<'a> FormattedDetail<'a> {
-    fn exact(full: fmt::Arguments<'a>) -> Self {
+    pub(crate) fn exact(full: fmt::Arguments<'a>) -> Self {
         Self {
             full,
             summary: None,
         }
     }
+}
+
+#[derive(Default)]
+pub(crate) struct DiagnosticConstruction<'a> {
+    pub location: Option<(&'a Span, bool)>,
+    pub related: Option<(&'a str, &'a Span)>,
+    pub stopped: Option<Diagnostic>,
 }
 
 struct Counter {
@@ -115,6 +125,94 @@ impl Diagnostic {
 }
 
 impl DiagnosticLimits {
+    /// Admit the entire construction before owning message, location, or frame
+    /// payloads. The caller keeps the returned reservation with the diagnostic.
+    pub(crate) fn formatted_admitted<'a, const N: usize, R>(
+        &self,
+        category: impl Fn([String; N]) -> BWErr,
+        messages: [FormattedDetail<'_>; N],
+        context: DiagnosticConstruction<'_>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+        mut admit: impl FnMut(DiagnosticSize, Vec<Arc<SourceFile>>, Option<R>) -> Result<R, BWErr>,
+    ) -> (Diagnostic, Option<R>) {
+        let mut skeleton = Diagnostic::new(category(std::array::from_fn(|_| String::new())));
+        let admission = self
+            .retained_construction_size(
+                &skeleton,
+                context.stopped.as_ref(),
+                context.location,
+                context.related,
+                frames.clone(),
+            )
+            .and_then(|(mut size, sources)| {
+                let initial = admit(size, sources.clone(), None)?;
+                let sizes = self.measure_strings(&messages, size.text_bytes)?;
+                for bytes in sizes {
+                    size.text_bytes += bytes;
+                } // Checked by the grouped counter.
+                let reservation = admit(size, sources, Some(initial))?;
+                let details = self.write_strings(&messages, sizes)?;
+                Ok((details, reservation))
+            });
+        match admission {
+            Ok((details, reservation)) => {
+                skeleton.error = Arc::new(category(details));
+                let mut error = skeleton.capture_context(context.location, frames.clone());
+                if let Some((message, span)) = context.related {
+                    error = error.with_related(message, span);
+                }
+                if let Some(stopped) = context.stopped {
+                    error = stopped
+                        .capture_context(context.location, frames)
+                        .while_handling(error);
+                }
+                (error, Some(reservation))
+            }
+            Err(violation) => {
+                let error = if let Some(stopped) = context.stopped {
+                    // The deferred detail is one omitted cause. Its formatter need
+                    // not run when even the observed primary cannot be admitted.
+                    let preserve_control = matches!(
+                        stopped.code(),
+                        super::DiagnosticCode::Cancelled | super::DiagnosticCode::Timeout
+                    );
+                    let mut rejected =
+                        stopped.rejected_context(violation, context.location, frames.len());
+                    rejected = rejected.omit_handled_cause();
+                    if preserve_control {
+                        let mut primary = rejected.causes.pop().expect("bounded stop");
+                        primary.causes.push(rejected);
+                        primary
+                    } else {
+                        rejected
+                    }
+                } else {
+                    let mut shortened = 0;
+                    let details = std::array::from_fn(|index| {
+                        let message = &messages[index];
+                        let (detail, truncated) =
+                            formatted_prefix(message.summary.unwrap_or(message.full));
+                        shortened += usize::from(truncated || message.summary.is_some());
+                        detail
+                    });
+                    skeleton.error = Arc::new(category(details));
+                    let mut rejected =
+                        skeleton.rejected_context(violation, context.location, frames.len());
+                    rejected.causes[0]
+                        .omissions
+                        .as_mut()
+                        .expect("bounded detail")
+                        .detail_fields += shortened;
+                    if let Some((message, span)) = context.related {
+                        rejected = rejected.with_related(message, span);
+                    }
+                    rejected
+                };
+                (error, None)
+            }
+        }
+    }
+
     /// Source/syntax guards report a checked prefix ending just after the rejected
     /// token. Admit this new source owner together with prospective calls first.
     pub(crate) fn source_prefix<'a>(
@@ -285,6 +383,7 @@ impl DiagnosticLimits {
 
     /// The related label is fixed interpreter text. Its small owned record is
     /// measured with the complete prospective diagnostic before detail formatting.
+    #[cfg(test)]
     pub(crate) fn formatted_related_detail<'a>(
         &self,
         category: fn(String) -> BWErr,
@@ -348,32 +447,49 @@ impl DiagnosticLimits {
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Result<[String; N], BWErr> {
         self.check_with_stack(skeleton, frames).and_then(|size| {
-            let mut remaining = self.text_bytes - size.text_bytes;
-            let mut sizes = [0; N];
-            for (message, size) in messages.iter().zip(&mut sizes) {
-                let mut count = Counter {
-                    bytes: 0,
-                    maximum: remaining,
-                };
-                count
-                    .write_fmt(message.full)
-                    .map_err(|_| text_limit(self.text_bytes))?;
-                *size = count.bytes;
-                remaining -= count.bytes;
-            }
-            let mut details = std::array::from_fn(|_| String::new());
-            for ((message, size), detail) in messages.iter().zip(sizes).zip(&mut details) {
-                let mut output = BoundedText {
-                    text: String::with_capacity(size),
-                    maximum: size,
-                };
-                output
-                    .write_fmt(message.full)
-                    .map_err(|_| text_limit(self.text_bytes))?;
-                *detail = output.text;
-            }
-            Ok(details)
+            let sizes = self.measure_strings(messages, size.text_bytes)?;
+            self.write_strings(messages, sizes)
         })
+    }
+
+    fn measure_strings<const N: usize>(
+        &self,
+        messages: &[FormattedDetail<'_>; N],
+        context_bytes: usize,
+    ) -> Result<[usize; N], BWErr> {
+        let mut remaining = self.text_bytes - context_bytes;
+        let mut sizes = [0; N];
+        for (message, size) in messages.iter().zip(&mut sizes) {
+            let mut count = Counter {
+                bytes: 0,
+                maximum: remaining,
+            };
+            count
+                .write_fmt(message.full)
+                .map_err(|_| text_limit(self.text_bytes))?;
+            *size = count.bytes;
+            remaining -= count.bytes;
+        }
+        Ok(sizes)
+    }
+
+    fn write_strings<const N: usize>(
+        &self,
+        messages: &[FormattedDetail<'_>; N],
+        sizes: [usize; N],
+    ) -> Result<[String; N], BWErr> {
+        let mut details = std::array::from_fn(|_| String::new());
+        for ((message, size), detail) in messages.iter().zip(sizes).zip(&mut details) {
+            let mut output = BoundedText {
+                text: String::with_capacity(size),
+                maximum: size,
+            };
+            output
+                .write_fmt(message.full)
+                .map_err(|_| text_limit(self.text_bytes))?;
+            *detail = output.text;
+        }
+        Ok(details)
     }
 
     fn formatted_in<'a, const N: usize>(

@@ -7,7 +7,7 @@ fn run(source: &str, context: &mut Context) -> LiteralResult {
     evaluate_program(&program, context)
 }
 
-fn record(values: &[Literal], context: &mut Context) -> RuntimeResult {
+fn record(values: &[Literal], context: &mut Context) -> EvaluationResult<Literal> {
     let value = values[0].clone();
     let depth = context.frames.len() as i32;
     for (key, entry) in [

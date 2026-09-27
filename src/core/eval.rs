@@ -385,12 +385,14 @@ impl Context {
         callback: impl Fn(&[Literal], &RunEnvironment) -> LiteralResult + Send + Sync + 'static,
     ) -> DiagnosticResult<()> {
         if signature.origin() != StatementOrigin::Native {
-            return Err(self.detail_error(
-                BWErr::SignatureError,
-                "Native registration requires a native signature",
-                Some(signature.header()),
-                false,
-            ));
+            return Err(self
+                .detail_error(
+                    BWErr::SignatureError,
+                    "Native registration requires a native signature",
+                    Some(signature.header()),
+                    false,
+                )
+                .into_diagnostic());
         }
         self.insert_native(
             signature,
@@ -403,7 +405,7 @@ impl Context {
                         false,
                     )
                 })?;
-                callback(values, environment).map_err(Diagnostic::new)
+                callback(values, environment).map_err(RuntimeDiagnostic::from)
             }),
         )
     }
@@ -415,6 +417,14 @@ impl Context {
         &mut self,
         variables: BTreeMap<String, Literal>,
     ) -> DiagnosticResult<()> {
+        self.set_input_variables_runtime(variables)
+            .map_err(RuntimeDiagnostic::into_diagnostic)
+    }
+
+    pub(crate) fn set_input_variables_runtime(
+        &mut self,
+        variables: BTreeMap<String, Literal>,
+    ) -> EvaluationResult<()> {
         let variables = Owned::new(variables);
         self.checkpoint()?;
         for (name, value) in variables.iter() {
@@ -465,13 +475,14 @@ impl Context {
     fn get_variable_ref(&self, name: &str) -> DiagnosticResult<&Literal> {
         self.get_variable_binding(name, None)
             .map(|binding| &binding.value)
+            .map_err(RuntimeDiagnostic::into_diagnostic)
     }
 
     fn get_variable_binding(
         &self,
         name: &str,
         span: Option<&Span>,
-    ) -> DiagnosticResult<&Arc<StoredValue>> {
+    ) -> EvaluationResult<&Arc<StoredValue>> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
@@ -552,16 +563,18 @@ impl Context {
         callback: impl Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static,
     ) -> DiagnosticResult<()> {
         if signature.origin() != StatementOrigin::Native {
-            return Err(self.detail_error(
-                BWErr::SignatureError,
-                "Native registration requires a native signature",
-                Some(signature.header()),
-                false,
-            ));
+            return Err(self
+                .detail_error(
+                    BWErr::SignatureError,
+                    "Native registration requires a native signature",
+                    Some(signature.header()),
+                    false,
+                )
+                .into_diagnostic());
         }
         self.insert_native(
             signature,
-            Arc::new(move |values, _| callback(values).map_err(Diagnostic::new)),
+            Arc::new(move |values, _| callback(values).map_err(RuntimeDiagnostic::from)),
         )
     }
 
@@ -655,7 +668,8 @@ impl Context {
         signature: StatementSignature,
         callback: Callback,
     ) -> DiagnosticResult<()> {
-        self.check_statement_collision(signature.normalized(), signature.header())?;
+        self.check_statement_collision(signature.normalized(), signature.header())
+            .map_err(RuntimeDiagnostic::into_diagnostic)?;
         let registry = self
             .reserve_registry(RegistryPlan::signature(&signature))
             .map_err(|error| error.at(signature.header()))?;
@@ -670,6 +684,7 @@ impl Context {
                 _registry: registry,
             },
         )
+        .map_err(RuntimeDiagnostic::into_diagnostic)
     }
 
     fn insert_statement(
@@ -677,7 +692,7 @@ impl Context {
         signature: &str,
         span: &Span,
         statement: StmtType,
-    ) -> DiagnosticResult<()> {
+    ) -> EvaluationResult<()> {
         self.check_statement_collision(signature, span)?;
         let key = statement.registry().map_or_else(
             || Arc::from(signature),
@@ -687,7 +702,7 @@ impl Context {
         Ok(())
     }
 
-    fn check_statement_collision(&self, signature: &str, span: &Span) -> DiagnosticResult<()> {
+    fn check_statement_collision(&self, signature: &str, span: &Span) -> EvaluationResult<()> {
         if let Some((namespace, _)) = signature.split_once("::") {
             if let Some(original) = self.frames[self.current].namespaces.get(namespace) {
                 return Err(imports::namespace_collision(
@@ -768,15 +783,15 @@ impl Context {
     }
 }
 
-type Callback = Arc<dyn Fn(&[Literal], &mut Context) -> RuntimeResult + Send + Sync>;
+type Callback = Arc<dyn Fn(&[Literal], &mut Context) -> EvaluationResult<Literal> + Send + Sync>;
 
-fn log_param(values: &[Literal], context: &mut Context) -> RuntimeResult {
+fn log_param(values: &[Literal], context: &mut Context) -> EvaluationResult<Literal> {
     let value = &values[0]; // Arity was checked before entering the callback.
     write_log(value, &mut io::stdout().lock(), context)?;
     Ok(value.clone())
 }
 
-fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> DiagnosticResult<()> {
+fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> EvaluationResult<()> {
     writeln!(output, "{value}").map_err(|error| {
         context.formatted_error(
             BWErr::OutputError,
@@ -804,14 +819,12 @@ fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
     let metadata = definition.metadata();
     let parameter_count = metadata.parameters().len();
     if parameter_count != call.arguments.len() {
-        return Err(context
-            .detail_error(
-                BWErr::ParameterMissingError,
-                "The call does not match the definition's parameter count",
-                Some(&call.span),
-                false,
-            )
-            .into());
+        return Err(context.detail_error(
+            BWErr::ParameterMissingError,
+            "The call does not match the definition's parameter count",
+            Some(&call.span),
+            false,
+        ));
     }
     context.check_call_depth()?;
     let mut argument_slots = context
@@ -886,14 +899,16 @@ fn invoke_resolved(
             };
             let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
                 .map_err(|_| {
-                    context
-                        .detail_error(BWErr::NativePanic, &call.signature, Some(&call.span), false)
-                        .into()
+                    context.detail_error(
+                        BWErr::NativePanic,
+                        &call.signature,
+                        Some(&call.span),
+                        false,
+                    )
                 })
                 .and_then(|result| {
-                    result.map_err(|error| {
-                        context.runtime_diagnostic(error.into(), Some(&call.span), false)
-                    })
+                    result
+                        .map_err(|error| context.runtime_diagnostic(error, Some(&call.span), false))
                 });
             let result = context.after_evaluation(result.map(Owned::new))?;
             context.check_value(&result)?;
@@ -1000,7 +1015,6 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                     true,
                 )
             })
-            .map_err(RuntimeDiagnostic::from)
             .and_then(|value| context.temporary(value)),
         ExprKind::Float(text) => {
             let value = text.parse::<f32>().map_err(|error| {
@@ -1156,7 +1170,6 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                             true,
                         )
                     })
-                    .map_err(RuntimeDiagnostic::from)
                     .and_then(|value| context.temporary(value))
             }
             _ => {
@@ -1178,14 +1191,12 @@ fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> Tempor
                     } else {
                         "or"
                     };
-                    return Err(context
-                        .formatted_error(
-                            BWErr::OperationIncompatibleError,
-                            format_args!("The left operand of `{name}` must be a boolean"),
-                            Some(&expression.span),
-                            true,
-                        )
-                        .into());
+                    return Err(context.formatted_error(
+                        BWErr::OperationIncompatibleError,
+                        format_args!("The left operand of `{name}` must be a boolean"),
+                        Some(&expression.span),
+                        true,
+                    ));
                 };
                 if (*operator == BinaryOp::And && !value) || (*operator == BinaryOp::Or && *value) {
                     return Ok(left);
@@ -1219,7 +1230,7 @@ fn evaluate_access(
         &temporary
     };
     let error = |context: &Context, segment: &AccessSegment, reason: std::fmt::Arguments<'_>| {
-        RuntimeDiagnostic::from(context.access_error(base, segments, segment, reason))
+        context.access_error(base, segments, segment, reason)
     };
     for segment in segments {
         // Evaluate this key before checking its receiver/type; do not evaluate
@@ -1306,14 +1317,12 @@ fn evaluate_for(
 ) -> CompletionResult {
     let iterable_value = evaluate_expression(iterable, context)?;
     if !matches!(&*iterable_value, Literal::Array(_)) {
-        return Err(context
-            .detail_error(
-                BWErr::OperationIncompatibleError,
-                "For requires an array to iterate over",
-                Some(&iterable.span),
-                true,
-            )
-            .into());
+        return Err(context.detail_error(
+            BWErr::OperationIncompatibleError,
+            "For requires an array to iterate over",
+            Some(&iterable.span),
+            true,
+        ));
     }
     let (iterable_value, _iterable_reservation) = iterable_value.into_parts();
     let Literal::Array(values) = iterable_value else {
@@ -1355,14 +1364,12 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Comp
     loop {
         let value = evaluate_expression(condition, context)?;
         let Literal::Bool(should_loop) = &*value else {
-            return Err(context
-                .detail_error(
-                    BWErr::OperationIncompatibleError,
-                    "While requires a boolean condition",
-                    Some(&condition.span),
-                    true,
-                )
-                .into());
+            return Err(context.detail_error(
+                BWErr::OperationIncompatibleError,
+                "While requires a boolean condition",
+                Some(&condition.span),
+                true,
+            ));
         };
         let should_loop = *should_loop;
         drop(value);
@@ -1505,14 +1512,12 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
         } => {
             let value = evaluate_expression(condition, context)?;
             let Literal::Bool(condition) = &*value else {
-                return Err(context
-                    .detail_error(
-                        BWErr::OperationIncompatibleError,
-                        "If requires a boolean condition",
-                        Some(&condition.span),
-                        true,
-                    )
-                    .into());
+                return Err(context.detail_error(
+                    BWErr::OperationIncompatibleError,
+                    "If requires a boolean condition",
+                    Some(&condition.span),
+                    true,
+                ));
             };
             let condition = *condition;
             drop(value);
@@ -1565,14 +1570,12 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
                 .filter(|handler| handler.invocation == context.current)
             {
                 Some(handler) => Err(context.rethrow_handler(&handler.diagnostic, &statement.span)),
-                None => Err(context
-                    .detail_error(
-                        BWErr::ControlFlowError,
-                        "Rethrow requires an enclosing Catch in the same invocation",
-                        Some(&statement.span),
-                        false,
-                    )
-                    .into()),
+                None => Err(context.detail_error(
+                    BWErr::ControlFlowError,
+                    "Rethrow requires an enclosing Catch in the same invocation",
+                    Some(&statement.span),
+                    false,
+                )),
             }
         }
     }
@@ -1586,9 +1589,7 @@ fn finish_script(completion: Completion, context: &Context, span: &Span) -> Temp
         Completion::Break => "Break requires an enclosing loop in the same invocation",
         Completion::Continue => "Continue requires an enclosing loop in the same invocation",
     };
-    Err(context
-        .detail_error(BWErr::ControlFlowError, reason, Some(span), false)
-        .into())
+    Err(context.detail_error(BWErr::ControlFlowError, reason, Some(span), false))
 }
 
 /// Evaluate an already parsed, owned statement at script level in this context.

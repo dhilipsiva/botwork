@@ -917,3 +917,103 @@ fn grouped_rejection_records_each_shortened_unicode_field_once_and_releases_sour
         assert!(detail.len() <= SUMMARY_DETAIL_BYTES && detail.ends_with("…[truncated]"));
     }
 }
+
+#[test]
+fn construction_admission_measures_full_stop_context_and_reserves_before_formatting() {
+    use std::cell::Cell;
+    let program = Program::parse("é", "Read").unwrap();
+    let site = &program.statements[0].span;
+    let frame = CallFrame {
+        signature: "read".into(),
+        call_site: site.clone(),
+        definition_site: None,
+    };
+    let formats = Cell::new(0);
+    struct Counted<'a>(&'a Cell<usize>);
+    impl std::fmt::Display for Counted<'_> {
+        fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.set(self.0.get() + 1);
+            output.write_str("detail-é")
+        }
+    }
+    for stopped in [false, true] {
+        formats.set(0);
+        let detail = Counted(&formats);
+        let mut stages = Vec::new();
+        let (error, reservation) = DiagnosticLimits::default().formatted_admitted(
+            |[detail]| BWErr::NativeError(detail),
+            [FormattedDetail::exact(format_args!("{detail}"))],
+            DiagnosticConstruction {
+                location: Some((site, true)),
+                related: Some(("origin", site)),
+                stopped: stopped.then(|| Diagnostic::new(BWErr::Cancelled("stop".into()))),
+            },
+            std::iter::once(&frame),
+            |size, sources, previous| {
+                assert_eq!(sources.len(), 1);
+                assert_eq!(previous, if stages.is_empty() { None } else { Some(1) });
+                assert_eq!(formats.get(), stages.len());
+                stages.push(size);
+                Ok(1)
+            },
+        );
+        assert_eq!(reservation, Some(1));
+        assert_eq!(formats.get(), 2);
+        assert_eq!(
+            stages[1],
+            DiagnosticLimits::default().check(&error).unwrap()
+        );
+        assert_eq!(
+            stages[1].text_bytes - stages[0].text_bytes,
+            "detail-é".len()
+        );
+        assert_eq!(stages[1].diagnostics, 1 + usize::from(stopped));
+        assert_eq!(stages[1].call_frames, 1 + usize::from(stopped));
+        assert_eq!(stages[1].related_locations, 1);
+    }
+}
+
+#[test]
+fn rejected_stop_construction_skips_deferred_detail_formatting_and_preserves_primary_byte_evidence()
+{
+    struct NoFormat;
+    impl std::fmt::Display for NoFormat {
+        fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            panic!("known context rejection must not format the deferred detail")
+        }
+    }
+    let program = Program::parse("é", "Read").unwrap();
+    let span = &program.statements[0].span;
+    for aggregate in [false, true] {
+        let limits = DiagnosticLimits {
+            diagnostics: if aggregate { 2 } else { 1 },
+            ..Default::default()
+        };
+        let (error, reservation) = limits.formatted_admitted(
+            |[detail]| BWErr::NativeError(detail),
+            [FormattedDetail::exact(format_args!("{}", NoFormat))],
+            DiagnosticConstruction {
+                location: Some((span, true)),
+                stopped: Some(Diagnostic::new(BWErr::Cancelled("stop".into()))),
+                ..Default::default()
+            },
+            std::iter::empty(),
+            |_, _, _: Option<()>| {
+                Err(BWErr::ResourceLimit {
+                    resource: "retained diagnostic nodes",
+                    limit: 1,
+                })
+            },
+        );
+        assert!(reservation.is_none());
+        assert_eq!(
+            error.code(),
+            crate::core::diagnostic::DiagnosticCode::Cancelled
+        );
+        assert!(error.is_emergency());
+        let omitted = error.omissions.as_ref().unwrap();
+        assert_eq!(omitted.direct_causes, 1);
+        assert_eq!(omitted.source.as_ref().unwrap().file, "é");
+        assert_eq!(error.label, "expression");
+    }
+}

@@ -288,3 +288,117 @@ fn stopped_calls_release_their_record_and_cancelled_handler_admission_keeps_evid
     assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
     assert!(error.is_emergency());
 }
+
+#[test]
+fn initial_constructor_reserves_every_dimension_with_active_call_and_distinct_related_sources() {
+    for deficit in 0..=6 {
+        let caller = Program::parse("caller", "Call").unwrap();
+        let primary = Program::parse("primary", "Import |\"x.botwork\"| As |x|").unwrap();
+        let origin = Program::parse("origin", "Read").unwrap();
+        let call = &caller.statements[0].span;
+        let span = &primary.statements[0].span;
+        let site = &origin.statements[0].span;
+        let mut expected = Diagnostic::new(BWErr::ImportRead("detail-é".into()))
+            .at(span)
+            .with_related("imported here", site);
+        expected.call_stack.push(CallFrame {
+            signature: "call".into(),
+            call_site: call.clone(),
+            definition_site: None,
+        });
+        let size = DiagnosticLimits::default().check(&expected).unwrap();
+        let mut retained = RetainedDiagnosticLimits {
+            records: 2,
+            diagnostics: size.diagnostics,
+            call_frames: size.call_frames + 1,
+            related_locations: size.related_locations,
+            text_bytes: size.text_bytes + "call".len(),
+            source_bytes: size.source_bytes,
+        };
+        match deficit {
+            1 => retained.records -= 1,
+            2 => retained.diagnostics -= 1,
+            3 => retained.call_frames -= 1,
+            4 => retained.related_locations -= 1,
+            5 => retained.text_bytes -= 1,
+            6 => retained.source_bytes -= 1,
+            _ => (),
+        }
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: retained,
+            ..Default::default()
+        })
+        .unwrap();
+        context
+            .calls
+            .push(context.retain_call("call", call, None).unwrap());
+        let sibling = context.clone();
+        let error = context.import_error(BWErr::ImportRead, format_args!("detail-é"), span, site);
+        if deficit == 0 {
+            assert_eq!(error.to_string(), expected.to_string());
+            context.checkpoint().unwrap();
+        } else {
+            assert!(error.is_emergency());
+            assert_eq!(error.causes[0].code(), DiagnosticCode::ImportRead);
+            let omitted = error.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(omitted.call_frames, 1);
+            assert_eq!(omitted.related_locations, 1);
+            assert_eq!(omitted.source.as_ref().unwrap().file, "primary");
+            assert!(context.checkpoint().is_err());
+        }
+        sibling.checkpoint().unwrap();
+        let sources = [
+            Arc::downgrade(&primary.source),
+            Arc::downgrade(&origin.source),
+        ];
+        drop((expected, primary, origin));
+        assert_eq!(
+            sources.iter().all(|source| source.upgrade().is_none()),
+            deficit != 0
+        );
+        drop(error);
+        assert!(sources.iter().all(|source| source.upgrade().is_none()));
+    }
+}
+
+#[test]
+fn cancellation_during_message_formatting_keeps_prospective_primary_context_on_rejection() {
+    struct CancelWhileFormatting(OperationControl);
+    impl std::fmt::Display for CancelWhileFormatting {
+        fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.cancel();
+            output.write_str("reason")
+        }
+    }
+    let control = OperationControl::default();
+    let mut context = Context::with_control(
+        RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                diagnostics: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        control.clone(),
+    )
+    .unwrap();
+    let program = Program::parse("late-stop", "Read").unwrap();
+    let span = &program.statements[0].span;
+    context
+        .calls
+        .push(context.retain_call("read", span, None).unwrap());
+    let error = context.formatted_error(
+        BWErr::NativeError,
+        format_args!("{}", CancelWhileFormatting(control)),
+        Some(span),
+        true,
+    );
+    assert_eq!(error.code(), DiagnosticCode::Cancelled);
+    assert!(error.is_emergency());
+    let omitted = error.omissions.as_ref().unwrap();
+    assert_eq!(omitted.call_frames, 1);
+    assert_eq!(omitted.direct_causes, 1);
+    assert_eq!(omitted.source.as_ref().unwrap().file, "late-stop");
+    assert_eq!(error.label, "expression");
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+}

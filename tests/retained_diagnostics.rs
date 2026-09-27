@@ -657,3 +657,129 @@ async fn aggregate_context_rejection_preserves_an_observed_timeout_but_not_an_un
     assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
     assert_eq!(error.causes[0].code(), DiagnosticCode::Cancelled);
 }
+
+#[test]
+fn initial_message_construction_applies_shared_quotas_across_runtime_error_families() {
+    use botwork::core::{
+        diagnostic::DiagnosticLimits,
+        signature::{StatementSignature, ValueKind},
+    };
+    for source in [
+        "Missing",
+        "|x| = |unknown|",
+        "|x| = |true + 1|",
+        "|x| = |-true|",
+        "|x| = |1 / 0|",
+        "|x| = |{}.missing|",
+        "If |1| {}",
+        "Read {}\nRead {}",
+        "Need |true|",
+        "ReturnWrong",
+        "Import |\"bad-url\"| As |lib|",
+    ] {
+        let mut engine = Engine::default();
+        engine
+            .register_native_with_signature(
+                StatementSignature::native("Need |n|")
+                    .unwrap()
+                    .parameter("n", ValueKind::Int)
+                    .unwrap(),
+                |_, _| panic!("argument rejection must skip this callback"),
+            )
+            .unwrap();
+        engine
+            .register_native_with_signature(
+                StatementSignature::native("ReturnWrong")
+                    .unwrap()
+                    .returns(ValueKind::String),
+                |_, _| Ok(Literal::Bool(true)),
+            )
+            .unwrap();
+        let baseline = engine
+            .run_source("initial", source, RunOptions::default())
+            .result
+            .unwrap_err();
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        // ReturnWrong also owns the active native signature while constructing its error.
+        let active_bytes = if source == "ReturnWrong" {
+            "returnwrong".len()
+        } else {
+            0
+        };
+        for fits in [false, true] {
+            let run = engine.run_source(
+                "initial",
+                source,
+                options(RetainedDiagnosticLimits {
+                    text_bytes: size.text_bytes + active_bytes - usize::from(!fits),
+                    ..Default::default()
+                }),
+            );
+            let error = run.result.unwrap_err();
+            if fits {
+                assert_eq!(error.to_string(), baseline.to_string(), "{source}");
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit, "{source}");
+                assert_eq!(error.causes[0].code(), baseline.code(), "{source}");
+                assert!(error.causes[0].omissions.is_some());
+            }
+        }
+    }
+}
+
+#[test]
+fn public_constructor_boundaries_release_error_reservations_and_engine_inputs_stay_atomic() {
+    use std::collections::BTreeMap;
+    let limits = RunLimits {
+        retained_diagnostics: RetainedDiagnosticLimits {
+            records: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut context = Context::with_limits(limits.clone()).unwrap();
+    let first = context
+        .set_input_variables(BTreeMap::from([("bad name".into(), Literal::Int(1))]))
+        .unwrap_err();
+    let second = context
+        .set_input_variables(BTreeMap::from([("other bad name".into(), Literal::Int(2))]))
+        .unwrap_err();
+    assert_eq!(first.code(), DiagnosticCode::Input);
+    assert_eq!(second.code(), DiagnosticCode::Input);
+    context.checkpoint().unwrap(); // Both public errors can remain alive without holding capacity.
+    context
+        .register_native("Read", |_| Ok(Literal::None))
+        .unwrap();
+    let duplicate = context
+        .register_native("Read", |_| Ok(Literal::None))
+        .unwrap_err();
+    assert_eq!(duplicate.code(), DiagnosticCode::DuplicateStatement);
+    context
+        .register_native("Other", |_| Ok(Literal::None))
+        .unwrap();
+    let run = Engine::default().run_source(
+        "inputs",
+        "Unexpected",
+        RunOptions {
+            variables: BTreeMap::from([
+                ("bad name".into(), Literal::Int(1)),
+                ("valid".into(), Literal::Int(2)),
+            ]),
+            limits: RunLimits {
+                retained_diagnostics: RetainedDiagnosticLimits {
+                    text_bytes: 0,
+                    ..Default::default()
+                },
+                ..limits
+            },
+            ..Default::default()
+        },
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert!(run.variables.is_empty());
+    assert_eq!(run.steps, 0);
+    assert_eq!(
+        run.result.unwrap_err().causes[0].code(),
+        DiagnosticCode::Input
+    );
+}

@@ -2502,3 +2502,51 @@ fn aggregate_outgoing_admission_precedes_native_call_stack_signature_copy() {
     // Both enter the call; only the admitted error copies its complete snapshot.
     assert_eq!(allocations[1], allocations[0] + 1);
 }
+
+#[test]
+fn aggregate_construction_rejects_initial_borrowed_and_grouped_messages_before_large_copies() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticCode,
+        eval::{evaluate_program_detailed, Context},
+        run::RetainedDiagnosticLimits,
+    };
+    let length = 64 * 1024;
+    let name = "x".repeat(length);
+    for grouped in [false, true] {
+        let source = if grouped {
+            format!("|data| = |{{}}|\n|out| = |data.{name}|")
+        } else {
+            name.clone()
+        };
+        let program = Program::parse("construction", &source).unwrap();
+        let mut counts = Vec::new();
+        for admitted in [false, true] {
+            let mut context = Context::with_limits(RunLimits {
+                retained_diagnostics: RetainedDiagnosticLimits {
+                    text_bytes: if admitted { 3 * length } else { length + 1 },
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+            let (result, copies) =
+                observe(length, || evaluate_program_detailed(&program, &mut context));
+            let error = result.unwrap_err();
+            let category = if grouped {
+                DiagnosticCode::CollectionAccess
+            } else {
+                DiagnosticCode::UndefinedStatement
+            };
+            if admitted {
+                assert_eq!(error.code(), category);
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), category);
+            }
+            counts.push(copies);
+        }
+        assert_eq!(counts[0], 0);
+        assert_eq!(counts[1], if grouped { 2 } else { 1 });
+    }
+}

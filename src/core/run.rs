@@ -381,7 +381,7 @@ impl Engine {
                     None,
                     false,
                 ),
-                SourceFailure::Diagnostic(error) => error,
+                SourceFailure::Diagnostic(error) => error.into(),
             })?;
             let program = context.parse_source(name, &source)?;
             evaluate_program_runtime(&program, context)
@@ -406,7 +406,7 @@ impl Engine {
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
             context.environment = Some(environment);
             context.copy_native_template(&self.template)?;
-            context.set_input_variables(variables.into_inner())?;
+            context.set_input_variables_runtime(variables.into_inner())?;
             context.checkpoint()?;
             let result = execute(&mut context);
             context.after_evaluation(result)

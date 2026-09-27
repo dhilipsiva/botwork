@@ -2,7 +2,7 @@ use super::*;
 
 #[cfg(test)]
 mod tests;
-use crate::core::diagnostic::{DiagnosticCode, FormattedDetail};
+use crate::core::diagnostic::{DiagnosticCode, DiagnosticConstruction, FormattedDetail};
 
 struct OriginalLocation<'a> {
     span: &'a Span,
@@ -125,8 +125,7 @@ impl Context {
         original: (&Span, bool),
         duplicate: &Span,
         related_label: &'static str,
-    ) -> Diagnostic {
-        let stopped = self.checkpoint().err();
+    ) -> RuntimeDiagnostic {
         let original_display = OriginalLocation {
             span: original.0,
             native: original.1,
@@ -134,7 +133,7 @@ impl Context {
         let duplicate_display = duplicate.location_display();
         let original_full = format_args!("{original_display}");
         let original_summary = format_args!("{original_display:#}");
-        let error = self.limits().diagnostics.formatted_related_fields(
+        self.constructed_fields(
             category,
             [
                 FormattedDetail {
@@ -150,11 +149,9 @@ impl Context {
                     summary: Some(format_args!("{duplicate_display:#}")),
                 },
             ],
-            duplicate,
-            (related_label, original.0),
-            self.calls.iter().map(|record| &record.frame),
-        );
-        self.finish_constructed_error(error, stopped, Some(duplicate), false)
+            Some((duplicate, false)),
+            Some((related_label, original.0)),
+        )
     }
 
     pub(super) fn import_error(
@@ -163,16 +160,13 @@ impl Context {
         message: std::fmt::Arguments<'_>,
         span: &Span,
         import_site: &Span,
-    ) -> Diagnostic {
-        let stopped = self.checkpoint().err();
-        let error = self.limits().diagnostics.formatted_related_detail(
-            category,
-            message,
-            span,
-            ("imported here", import_site),
-            self.calls.iter().map(|record| &record.frame),
-        );
-        self.finish_constructed_error(error, stopped, Some(span), false)
+    ) -> RuntimeDiagnostic {
+        self.constructed_fields(
+            |[detail]| category(detail),
+            [FormattedDetail::exact(message)],
+            Some((span, false)),
+            Some(("imported here", import_site)),
+        )
     }
 
     pub(super) fn access_error(
@@ -181,25 +175,22 @@ impl Context {
         segments: &[AccessSegment],
         segment: &AccessSegment,
         reason: std::fmt::Arguments<'_>,
-    ) -> Diagnostic {
+    ) -> RuntimeDiagnostic {
         let path = AccessPath { base, segments };
         let (span, text) = match segment {
             AccessSegment::Literal(name) => (&name.span, name.text.as_str()),
             AccessSegment::Computed { span, .. } => (span, span.text().trim()),
         };
-        let stopped = self.checkpoint().err();
-        let error = self.limits().diagnostics.formatted_fields(
+        self.constructed_fields(
             |[path, segment, reason]| BWErr::CollectionAccessError {
                 path,
                 segment,
                 reason,
             },
-            [format_args!("{path}"), format_args!("{text}"), reason],
-            Some(span),
-            true,
-            self.calls.iter().map(|record| &record.frame),
-        );
-        self.finish_constructed_error(error, stopped, Some(span), true)
+            [format_args!("{path}"), format_args!("{text}"), reason].map(FormattedDetail::exact),
+            Some((span, true)),
+            None,
+        )
     }
 
     pub(crate) fn formatted_error(
@@ -208,16 +199,13 @@ impl Context {
         message: std::fmt::Arguments<'_>,
         span: Option<&Span>,
         expression: bool,
-    ) -> Diagnostic {
-        let stopped = self.checkpoint().err();
-        let error = self.limits().diagnostics.formatted_detail(
-            category,
-            message,
-            span,
-            expression,
-            self.calls.iter().map(|record| &record.frame),
-        );
-        self.finish_constructed_error(error, stopped, span, expression)
+    ) -> RuntimeDiagnostic {
+        self.constructed_fields(
+            |[detail]| category(detail),
+            [FormattedDetail::exact(message)],
+            span.map(|span| (span, expression)),
+            None,
+        )
     }
 
     pub(super) fn detail_error(
@@ -226,16 +214,56 @@ impl Context {
         detail: &str,
         span: Option<&Span>,
         expression: bool,
-    ) -> Diagnostic {
+    ) -> RuntimeDiagnostic {
+        self.formatted_error(category, format_args!("{detail}"), span, expression)
+    }
+
+    fn constructed_fields<const N: usize>(
+        &self,
+        category: impl Fn([String; N]) -> BWErr,
+        messages: [FormattedDetail<'_>; N],
+        location: Option<(&Span, bool)>,
+        related: Option<(&str, &Span)>,
+    ) -> RuntimeDiagnostic {
         let stopped = self.checkpoint().err();
-        let error = self.limits().diagnostics.borrowed_detail(
+        let (value, reservation) = self.limits().diagnostics.formatted_admitted(
             category,
-            detail,
-            span,
-            expression,
+            messages,
+            DiagnosticConstruction {
+                location,
+                related,
+                stopped,
+            },
             self.calls.iter().map(|record| &record.frame),
+            |size, sources, previous: Option<Option<_>>| {
+                self.budget
+                    .as_ref()
+                    .map(|budget| {
+                        budget.reserve_diagnostic_construction(size, sources, previous.flatten())
+                    })
+                    .transpose()
+            },
         );
-        self.finish_constructed_error(error, stopped, span, expression)
+        let error = RuntimeDiagnostic::constructed(value, reservation.flatten());
+        // Formatting can observe a newly requested stop. Check it before a
+        // construction quota latches, while retaining the admitted ownership.
+        let stopped = self.checkpoint().err();
+        if let (Some(budget), BWErr::ResourceLimit { resource, limit }) =
+            (&self.budget, error.error.as_ref())
+        {
+            budget.limit(resource, *limit);
+        }
+        let error = match stopped {
+            Some(stopped) if stopped.code() != error.code() => RuntimeDiagnostic::from(stopped)
+                .while_handling_in(
+                    error,
+                    self.budget.as_ref(),
+                    location,
+                    self.calls.iter().map(|record| &record.frame),
+                ),
+            _ => error,
+        };
+        self.runtime_diagnostic(error, None, false)
     }
 
     fn finish_constructed_error(

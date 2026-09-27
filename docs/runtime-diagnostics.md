@@ -10,7 +10,7 @@ Apply checks at expression, statement, call, native-result, and public program/s
 
 Environment preparation additionally admits working-directory/timeout/environment error details before formatting, using those same defaults. Oversized setup messages retain bounded RunConfiguration evidence; failures occur before input installation and script effects. See [setup construction](diagnostic-construction.md#run-setup-errors).
 
-Initial BWErr strings and active call frames already exist when this per-tree admission runs. [Message construction](diagnostic-construction.md) additionally checks interpreter-owned details before their first copy. [Retained call/handler limits](retained-diagnostics.md) reserve live records before call-signature copies and handler storage. The outgoing carrier now reserves complete synchronous errors, including native error/active-call overlap, and keeps reservations through handler unwind or host transfer. Initial aggregate message/context construction before that carrier boundary remains pending.
+Initial BWErr strings and active call frames already exist when this per-tree admission runs. [Message construction](diagnostic-construction.md) additionally checks interpreter-owned details before their first copy. [Retained call/handler limits](retained-diagnostics.md) reserve live records before call-signature copies and handler storage. The outgoing carrier now reserves complete synchronous errors, including native error/active-call overlap, and keeps reservations through handler unwind or host transfer. The main Context message constructors also reserve before initial message/context copies. AST/parser and source-origin constructors retain their pending aggregate pre-construction boundary.
 
 ## Failures, Cleanup, and Stops
 

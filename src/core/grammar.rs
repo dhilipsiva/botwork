@@ -1,4 +1,4 @@
-use super::diagnostic::{Diagnostic, DiagnosticResult};
+use super::diagnostic::Diagnostic;
 use pest::pratt_parser::PrattParser;
 use std::collections::HashMap;
 use std::fmt;
@@ -426,13 +426,13 @@ impl Rule {
             .map_err(Diagnostic::into_error)
     }
 
-    pub(crate) fn operate_binary_with_error(
+    pub(crate) fn operate_binary_with_error<E: From<BWErr>>(
         &self,
         lhs: Literal,
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
-        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<Literal> {
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> E,
+    ) -> Result<Literal, E> {
         let lhs = super::value_limits::Owned::new(lhs);
         let rhs = super::value_limits::Owned::new(rhs);
         let left_size = limits.check(&lhs)?;
@@ -458,12 +458,12 @@ impl Rule {
             .map_err(Diagnostic::into_error)
     }
 
-    pub(crate) fn operate_unary_with_error(
+    pub(crate) fn operate_unary_with_error<E: From<BWErr>>(
         &self,
         rhs: Literal,
         limits: &super::value_limits::ValueLimits,
-        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<Literal> {
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> E,
+    ) -> Result<Literal, E> {
         let rhs = super::value_limits::Owned::new(rhs);
         limits.check(&rhs)?;
         let result = super::value_limits::Owned::new(
@@ -473,12 +473,12 @@ impl Rule {
         Ok(result.into_inner())
     }
 
-    fn operate_binary_unchecked(
+    fn operate_binary_unchecked<E: From<BWErr>>(
         &self,
         lhs: Literal,
         rhs: Literal,
-        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<Literal> {
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> E,
+    ) -> Result<Literal, E> {
         if matches!(self, Rule::equal | Rule::not_equal) {
             return values_equal(&lhs, &rhs)
                 .map(|are_equal| {
@@ -619,11 +619,11 @@ impl Rule {
         result.map_err(|error| report(BWErr::ArithmeticError, format_args!("{error}")))
     }
 
-    fn operate_unary_unchecked(
+    fn operate_unary_unchecked<E: From<BWErr>>(
         &self,
         rhs: Literal,
-        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<Literal> {
+        report: impl FnOnce(fn(String) -> BWErr, fmt::Arguments<'_>) -> E,
+    ) -> Result<Literal, E> {
         if matches!(self, Rule::minus) && matches!(rhs, Literal::Int(_) | Literal::Float(_)) {
             if let Err(error) = validate_numeric_operand(&rhs) {
                 return Err(report(BWErr::ArithmeticError, format_args!("{error}")));

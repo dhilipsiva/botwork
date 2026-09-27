@@ -239,6 +239,11 @@ impl std::ops::Deref for RuntimeDiagnostic {
         self.value.as_ref().as_ref()
     }
 }
+impl From<BWErr> for RuntimeDiagnostic {
+    fn from(value: BWErr) -> Self {
+        Diagnostic::new(value).into()
+    }
+}
 impl From<Diagnostic> for RuntimeDiagnostic {
     fn from(value: Diagnostic) -> Self {
         Self {
@@ -256,6 +261,15 @@ impl From<StoredDiagnostic> for RuntimeDiagnostic {
     }
 }
 impl RuntimeDiagnostic {
+    pub(crate) fn constructed(
+        value: Diagnostic,
+        reservation: Option<DiagnosticReservation>,
+    ) -> Self {
+        Self::from(StoredDiagnostic {
+            value,
+            _reservation: reservation,
+        })
+    }
     pub(crate) fn into_diagnostic(self) -> Diagnostic {
         (*self.value).into_inner()
     }
@@ -513,6 +527,19 @@ pub(crate) struct StoredCallFrame {
 }
 
 impl RunBudget {
+    pub(crate) fn reserve_diagnostic_construction(
+        &self,
+        size: DiagnosticSize,
+        sources: Vec<Arc<SourceFile>>,
+        previous: Option<DiagnosticReservation>,
+    ) -> Result<DiagnosticReservation, BWErr> {
+        // Observe a newly requested stop before construction failure can latch.
+        let _ = self.checkpoint();
+        self.0
+            .retained_diagnostics
+            .replace(size, sources, &mut previous.into_iter().collect())
+    }
+
     fn reserve_diagnostic_copy(
         &self,
         diagnostic: &Diagnostic,

@@ -376,11 +376,11 @@ impl StatementSignature {
         )))
     }
 
-    pub(crate) fn validate_return(
+    pub(crate) fn validate_return<E>(
         &self,
         value: &Literal,
-        error: impl FnOnce(fmt::Arguments<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<()> {
+        error: impl FnOnce(fmt::Arguments<'_>) -> E,
+    ) -> Result<(), E> {
         if self.returns.contains(value.kind()) {
             return Ok(());
         }

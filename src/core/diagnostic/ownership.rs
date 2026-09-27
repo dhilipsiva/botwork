@@ -218,6 +218,75 @@ impl Measurement<'_> {
 }
 
 impl DiagnosticLimits {
+    /// Construction has one deferred detail record and an optional observed stop.
+    /// Both records will capture the known call context before becoming one tree.
+    pub(crate) fn retained_construction_size<'a>(
+        &self,
+        detail: &Diagnostic,
+        stopped: Option<&Diagnostic>,
+        context: Option<(&Span, bool)>,
+        related: Option<(&str, &Span)>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + Clone,
+    ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
+        let (mut size, mut sources) =
+            self.retained_runtime_size(detail, frames.clone(), context, related, None)?;
+        if let Some(stopped) = stopped {
+            let (stop, owners) =
+                self.retained_runtime_size(stopped, frames, context, None, None)?;
+            add(
+                &mut size.diagnostics,
+                stop.diagnostics,
+                self.diagnostics,
+                "diagnostic nodes",
+            )?;
+            size.depth += 1;
+            size.depth = size.depth.max(stop.depth);
+            if size.depth > self.depth {
+                return Err(BWErr::ResourceLimit {
+                    resource: "diagnostic depth",
+                    limit: self.depth as u64,
+                });
+            }
+            add(
+                &mut size.call_frames,
+                stop.call_frames,
+                self.call_frames,
+                "diagnostic call frames",
+            )?;
+            add(
+                &mut size.related_locations,
+                stop.related_locations,
+                self.related_locations,
+                "diagnostic related locations",
+            )?;
+            add(
+                &mut size.text_bytes,
+                stop.text_bytes,
+                self.text_bytes,
+                "diagnostic text bytes",
+            )?;
+            let mut identities: HashSet<_> = sources.iter().map(Arc::as_ptr).collect();
+            for source in owners {
+                if identities.insert(Arc::as_ptr(&source)) {
+                    add(
+                        &mut size.source_bytes,
+                        source.name().len(),
+                        self.source_bytes,
+                        "diagnostic source bytes",
+                    )?;
+                    add(
+                        &mut size.source_bytes,
+                        source.text().len(),
+                        self.source_bytes,
+                        "diagnostic source bytes",
+                    )?;
+                    sources.push(source);
+                }
+            }
+        }
+        Ok((size, sources))
+    }
+
     pub(crate) fn validate(&self) -> Result<(), BWErr> {
         if self.depth > MAX_DIAGNOSTIC_DEPTH {
             return Err(Diagnostic::formatted(

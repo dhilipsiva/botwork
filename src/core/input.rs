@@ -45,11 +45,11 @@ pub(crate) fn validate_name(
     validate_name_with(origin, name, input_error)
 }
 
-pub(crate) fn validate_name_with(
+pub(crate) fn validate_name_with<E>(
     origin: &(impl std::fmt::Display + ?Sized),
     name: &str,
-    error: impl FnOnce(std::fmt::Arguments<'_>) -> Diagnostic,
-) -> DiagnosticResult<()> {
+    error: impl FnOnce(std::fmt::Arguments<'_>) -> E,
+) -> Result<(), E> {
     // Preserve the former parser facade's fixed name ceiling without building
     // a Pest error. Configured name quotas can reject earlier.
     if name.len() <= super::syntax_limits::DEFAULT_SOURCE_BYTES
