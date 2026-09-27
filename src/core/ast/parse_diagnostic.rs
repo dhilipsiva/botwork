@@ -8,7 +8,7 @@ use std::fmt::{self, Write};
 #[cfg(test)]
 mod tests;
 
-pub(super) struct ParseDisplay<'a> {
+pub(crate) struct ParseDisplay<'a> {
     pub error: &'a Error<Rule>,
     pub span: &'a Span,
 }

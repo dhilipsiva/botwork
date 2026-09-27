@@ -2550,3 +2550,69 @@ fn aggregate_construction_rejects_initial_borrowed_and_grouped_messages_before_l
         assert_eq!(counts[1], if grouped { 2 } else { 1 });
     }
 }
+
+#[test]
+fn shared_ast_construction_quotas_reject_before_large_message_and_prefix_copies() {
+    use botwork::core::{diagnostic::DiagnosticCode, run::RetainedDiagnosticLimits};
+    let filename = "é".repeat(128 * 1024);
+    for (source, kind) in [
+        (format!("{}Log |1 + 2|", " ".repeat(128 * 1024)), 0),
+        (format!("{}|x| = |1 +|", " \t".repeat(128 * 1024)), 1),
+        ("Return".into(), 2),
+        ("Read |x| and |x| {}".into(), 3),
+    ] {
+        let mut accepted_copies = None;
+        for deficit in 0..=2 {
+            let (run, copies) = observe(64 * 1024, || {
+                Engine::default().run_source(
+                    &filename,
+                    &source,
+                    RunOptions {
+                        limits: RunLimits {
+                            syntax: botwork::core::syntax_limits::SyntaxLimits {
+                                operators: if kind == 0 {
+                                    0
+                                } else {
+                                    RunLimits::default().syntax.operators
+                                },
+                                ..Default::default()
+                            },
+                            retained_diagnostics: match deficit {
+                                1 => RetainedDiagnosticLimits {
+                                    text_bytes: 0,
+                                    ..Default::default()
+                                },
+                                2 => RetainedDiagnosticLimits {
+                                    source_bytes: 0,
+                                    ..Default::default()
+                                },
+                                _ => RetainedDiagnosticLimits::default(),
+                            },
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                )
+            });
+            let error = run.result.unwrap_err();
+            if deficit == 0 {
+                accepted_copies = Some(copies);
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert!(error.causes[0].omissions.is_some());
+                // Guard rejection owns no source; parser-owned buffers remain necessary
+                // for the other paths, but their complete error strings are skipped.
+                assert_eq!(
+                    accepted_copies.unwrap() - copies,
+                    match kind {
+                        0 | 3 => 2,
+                        _ => 1,
+                    }
+                );
+                if kind == 0 {
+                    assert_eq!(copies, 0);
+                }
+            }
+        }
+    }
+}

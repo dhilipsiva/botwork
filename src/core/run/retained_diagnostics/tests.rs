@@ -1218,3 +1218,79 @@ fn construction_releases_initial_and_final_admission_on_late_formatting_failure(
     let accepted = sibling.formatted_error(BWErr::NativeError, format_args!("next"), None, false);
     assert_eq!(accepted.code(), DiagnosticCode::Native);
 }
+
+#[test]
+fn pending_source_bytes_credit_replacements_and_publish_without_releasing_capacity() {
+    let source = source();
+    let bytes = source.name().len() + source.text().len();
+    let tracker = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits {
+        source_bytes: bytes,
+        ..Default::default()
+    }));
+    let mut previous = vec![tracker
+        .replace_with_source(size(), vec![], &mut vec![], bytes)
+        .unwrap()];
+    assert_eq!(tracker.used.lock().unwrap().source_bytes, bytes);
+    assert!(tracker.used.lock().unwrap().sources.is_empty());
+    assert!(tracker.reserve(size(), vec![source.clone()]).is_err());
+    for rejected in [bytes + 1, usize::MAX] {
+        assert!(tracker
+            .replace_with_source(size(), vec![source.clone()], &mut previous, rejected)
+            .is_err());
+        assert_eq!(previous.len(), 1);
+        assert_eq!(tracker.used.lock().unwrap().source_bytes, bytes);
+    }
+    let mut reservation = tracker
+        .replace_with_source(size(), vec![], &mut previous, bytes)
+        .unwrap();
+    assert!(previous.is_empty());
+    reservation.publish_source(&source);
+    assert_eq!(tracker.used.lock().unwrap().source_bytes, bytes);
+    assert_eq!(tracker.used.lock().unwrap().sources[&source_id(&source)], 1);
+    let shared = tracker.reserve(size(), vec![source.clone()]).unwrap();
+    assert_eq!(tracker.used.lock().unwrap().source_bytes, bytes);
+    drop(reservation);
+    assert_eq!(tracker.used.lock().unwrap().sources[&source_id(&source)], 1);
+    let mut previous = vec![shared];
+    let pending = tracker
+        .replace_with_source(size(), vec![], &mut previous, bytes)
+        .unwrap();
+    assert!(tracker.used.lock().unwrap().sources.is_empty());
+    drop(pending); // An abandoned construction refunds unpublished source bytes too.
+    assert_eq!(tracker.used.lock().unwrap().source_bytes, 0);
+    assert_eq!(tracker.used.lock().unwrap().counts, [0; 5]);
+}
+
+#[test]
+fn concurrent_pending_sources_share_capacity_and_overflow_never_changes_existing_ownership() {
+    let tracker = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits {
+        source_bytes: usize::MAX,
+        ..Default::default()
+    }));
+    let held = tracker
+        .replace_with_source(size(), vec![], &mut vec![], usize::MAX)
+        .unwrap();
+    let sibling = tracker.clone();
+    std::thread::spawn(move || {
+        assert!(sibling
+            .replace_with_source(size(), vec![], &mut vec![], 1)
+            .is_err());
+        assert_eq!(sibling.used.lock().unwrap().source_bytes, usize::MAX);
+    })
+    .join()
+    .unwrap();
+    drop(held);
+    assert_eq!(tracker.used.lock().unwrap().source_bytes, 0);
+    let zero = Arc::new(RetainedDiagnostics::new(RetainedDiagnosticLimits {
+        source_bytes: 0,
+        ..Default::default()
+    }));
+    assert!(zero
+        .replace_with_source(size(), vec![], &mut vec![], 1)
+        .is_err());
+    drop(
+        zero.replace_with_source(size(), vec![], &mut vec![], 0)
+            .unwrap(),
+    );
+    assert_eq!(zero.used.lock().unwrap().counts, [0; 5]);
+}

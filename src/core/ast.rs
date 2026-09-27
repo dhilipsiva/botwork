@@ -12,6 +12,7 @@ use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
 use super::syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES};
 
 mod parse_diagnostic;
+pub(crate) use parse_diagnostic::ParseDisplay;
 
 #[cfg(test)]
 mod tests;
@@ -175,14 +176,14 @@ impl Program {
         })
     }
 
-    pub(crate) fn parse_with_reporter(
+    pub(crate) fn parse_with_reporter<E: From<Diagnostic>>(
         name: &str,
         source: &str,
         source_bytes: usize,
         limits: &SyntaxLimits,
         ast_limits: &AstLimits,
-        report: impl Fn(AstFailure<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<Self> {
+        report: impl Fn(AstFailure<'_>) -> E,
+    ) -> Result<Self, E> {
         ast_limits.validate()?;
         check_source_with_reporter(name, source, source_bytes, limits, &report)?;
         let source = Arc::new(SourceFile {
@@ -221,12 +222,12 @@ impl Program {
         self.validate_with_reporter(limits, source_bytes, |failure| failure.default_diagnostic())
     }
 
-    pub(crate) fn validate_with_reporter(
+    pub(crate) fn validate_with_reporter<E: From<Diagnostic>>(
         &self,
         limits: &AstLimits,
         source_bytes: usize,
-        report: impl Fn(AstFailure<'_>) -> Diagnostic,
-    ) -> DiagnosticResult<()> {
+        report: impl Fn(AstFailure<'_>) -> E,
+    ) -> Result<(), E> {
         ast_limits::check_program(self, limits, source_bytes)?;
         validate_control_script(&self.statements).map_err(report)
     }
@@ -243,13 +244,13 @@ pub(crate) fn check_source(
     })
 }
 
-pub(crate) fn check_source_with_reporter(
+pub(crate) fn check_source_with_reporter<E>(
     name: &str,
     source: &str,
     source_bytes: usize,
     limits: &SyntaxLimits,
-    report: impl Fn(AstFailure<'_>) -> Diagnostic,
-) -> DiagnosticResult<()> {
+    report: impl Fn(AstFailure<'_>) -> E,
+) -> Result<(), E> {
     super::syntax_limits::check(source, source_bytes, limits, false).map_err(|violation| {
         let end = violation.offset
             + source[violation.offset..]
@@ -452,14 +453,6 @@ pub(crate) enum AstFailure<'a> {
 }
 
 impl AstFailure<'_> {
-    pub(crate) fn span(&self) -> Option<&Span> {
-        match self {
-            Self::Control { span, .. } | Self::Syntax { span, .. } => Some(span),
-            Self::DuplicateParameter { duplicate, .. } => Some(duplicate),
-            Self::SourceGuard { .. } => None,
-        }
-    }
-
     fn default_diagnostic(self) -> Diagnostic {
         self.diagnostic(&DiagnosticLimits::default(), std::iter::empty())
     }
@@ -718,10 +711,10 @@ pub(crate) fn from_pair(pair: Pair<Rule>) -> DiagnosticResult<Node> {
     from_pair_with_reporter(pair, |failure| failure.default_diagnostic())
 }
 
-pub(crate) fn from_pair_with_reporter(
+pub(crate) fn from_pair_with_reporter<E: From<Diagnostic>>(
     pair: Pair<Rule>,
-    report: impl Fn(AstFailure<'_>) -> Diagnostic,
-) -> DiagnosticResult<Node> {
+    report: impl Fn(AstFailure<'_>) -> E,
+) -> Result<Node, E> {
     let source = Arc::new(SourceFile {
         name: "<input>".to_owned(),
         text: pair.as_span().get_input().to_owned(),
@@ -757,7 +750,7 @@ pub(crate) fn from_pair_with_reporter(
         Rule::stmt_rethrow => statement(pair, &source).map(Node::Statement),
         _ => expression(pair, &source).map(Node::Expression),
     }
-    .map_err(|error| Diagnostic::new(error).at(&span))
+    .map_err(|error| E::from(Diagnostic::new(error).at(&span)))
 }
 
 fn invalid(part: &'static str) -> BWErr {
@@ -939,11 +932,11 @@ pub(crate) fn normalize_sentence(text: &str) -> String {
         .collect()
 }
 
-fn parse_error(
+fn parse_error<E>(
     error: pest::error::Error<Rule>,
     source: &Arc<SourceFile>,
-    report: impl Fn(AstFailure<'_>) -> Diagnostic,
-) -> Diagnostic {
+    report: impl Fn(AstFailure<'_>) -> E,
+) -> E {
     let (start, end) = match error.location {
         pest::error::InputLocation::Pos(start) => {
             let length = source.text[start..]

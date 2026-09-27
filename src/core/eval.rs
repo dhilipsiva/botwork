@@ -225,12 +225,16 @@ impl Context {
     }
 
     fn retain_limit(&self, error: Diagnostic) -> Diagnostic {
+        self.latch_limit(&error);
+        error
+    }
+
+    fn latch_limit(&self, error: &Diagnostic) {
         if let (Some(budget), BWErr::ResourceLimit { resource, limit }) =
             (&self.budget, error.error.as_ref())
         {
             budget.limit(resource, *limit);
         }
-        error
     }
 
     fn limits(&self) -> RunLimits {
@@ -324,7 +328,7 @@ impl Context {
         Ok(())
     }
 
-    pub(crate) fn check_syntax(&self, name: &str, source: &str) -> DiagnosticResult<()> {
+    pub(crate) fn check_syntax(&self, name: &str, source: &str) -> EvaluationResult<()> {
         let limits = self
             .budget
             .as_ref()
@@ -337,10 +341,10 @@ impl Context {
             &limits.syntax,
             |failure| self.ast_error(failure),
         )
-        .map_err(|error| self.retain_limit(error))
+        .inspect_err(|error| self.latch_limit(error))
     }
 
-    pub(crate) fn parse_source(&self, name: &str, source: &str) -> DiagnosticResult<Program> {
+    pub(crate) fn parse_source(&self, name: &str, source: &str) -> EvaluationResult<Program> {
         if let Some(budget) = &self.budget {
             budget.check_parser_entry()?;
         }
@@ -357,7 +361,7 @@ impl Context {
             &limits.ast,
             |failure| self.ast_error(failure),
         )
-        .map_err(|error| self.retain_limit(error))
+        .inspect_err(|error| self.latch_limit(error))
     }
 
     pub(crate) fn read_source(&self, path: &std::path::Path) -> Result<String, SourceFailure> {
@@ -1647,7 +1651,7 @@ pub(crate) fn evaluate_program_runtime(
             .validate_with_reporter(&limits.ast, limits.source_bytes, |failure| {
                 context.ast_error(failure)
             })
-            .map_err(|error| context.retain_limit(error))?;
+            .inspect_err(|error| context.latch_limit(error))?;
         let mut result = None;
         for statement in &program.statements {
             // A replaced script result is unobservable once the next statement starts.

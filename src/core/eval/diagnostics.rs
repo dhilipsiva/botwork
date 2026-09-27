@@ -2,7 +2,9 @@ use super::*;
 
 #[cfg(test)]
 mod tests;
-use crate::core::diagnostic::{DiagnosticCode, DiagnosticConstruction, FormattedDetail};
+#[cfg(test)]
+use crate::core::diagnostic::DiagnosticCode;
+use crate::core::diagnostic::{DiagnosticConstruction, FormattedDetail, SourcePrefix};
 
 struct OriginalLocation<'a> {
     span: &'a Span,
@@ -109,13 +111,83 @@ impl Context {
         }
     }
 
-    pub(super) fn ast_error(&self, failure: ast::AstFailure<'_>) -> Diagnostic {
-        let stopped = self.checkpoint().err();
-        let error = failure.diagnostic(
-            &self.limits().diagnostics,
-            self.calls.iter().map(|record| &record.frame),
-        );
-        self.finish_constructed_error(error, stopped, failure.span(), false)
+    pub(super) fn ast_error(&self, failure: ast::AstFailure<'_>) -> RuntimeDiagnostic {
+        match failure {
+            ast::AstFailure::SourceGuard {
+                error,
+                name,
+                prefix,
+                offset,
+            } => {
+                let (value, reservation) = self.limits().diagnostics.source_prefix_admitted(
+                    error.clone(),
+                    SourcePrefix {
+                        name,
+                        text: prefix,
+                        start: offset,
+                    },
+                    self.checkpoint().err(),
+                    self.calls.iter().map(|record| &record.frame),
+                    |size, sources, pending| {
+                        self.budget
+                            .as_ref()
+                            .map(|budget| {
+                                budget
+                                    .reserve_diagnostic_source_construction(size, sources, pending)
+                            })
+                            .transpose()
+                    },
+                    |reservation, source| {
+                        if let Some(reservation) = reservation {
+                            reservation.publish_source(source);
+                        }
+                    },
+                );
+                self.finish_construction(
+                    RuntimeDiagnostic::constructed(value, reservation.flatten()),
+                    None,
+                )
+            }
+            ast::AstFailure::Syntax { error, span } => {
+                let detail = ast::ParseDisplay { error, span };
+                self.constructed_fields(
+                    |[detail]| BWErr::ParsingError(detail),
+                    [FormattedDetail {
+                        full: format_args!("{detail}"),
+                        summary: Some(format_args!("{detail:#}")),
+                    }],
+                    Some((span, false)),
+                    None,
+                )
+            }
+            ast::AstFailure::Control { span, message } => {
+                let location = span.location_display();
+                self.constructed_fields(
+                    |[detail]| BWErr::ControlFlowError(detail),
+                    [FormattedDetail {
+                        full: format_args!("{location}: {message}"),
+                        summary: Some(format_args!("{location:#}: {message}")),
+                    }],
+                    Some((span, false)),
+                    None,
+                )
+            }
+            ast::AstFailure::DuplicateParameter {
+                name,
+                original,
+                duplicate,
+            } => self.duplicate_error(
+                |[name, original, duplicate]| BWErr::DuplicateParameter {
+                    name,
+                    original,
+                    duplicate,
+                },
+                name,
+                (original, false),
+                duplicate,
+                "first parameter",
+            ),
+        }
     }
 
     pub(super) fn duplicate_error(
@@ -244,7 +316,17 @@ impl Context {
                     .transpose()
             },
         );
-        let error = RuntimeDiagnostic::constructed(value, reservation.flatten());
+        self.finish_construction(
+            RuntimeDiagnostic::constructed(value, reservation.flatten()),
+            location,
+        )
+    }
+
+    fn finish_construction(
+        &self,
+        error: RuntimeDiagnostic,
+        location: Option<(&Span, bool)>,
+    ) -> RuntimeDiagnostic {
         // Formatting can observe a newly requested stop. Check it before a
         // construction quota latches, while retaining the admitted ownership.
         let stopped = self.checkpoint().err();
@@ -264,60 +346,6 @@ impl Context {
             _ => error,
         };
         self.runtime_diagnostic(error, None, false)
-    }
-
-    fn finish_constructed_error(
-        &self,
-        error: Diagnostic,
-        stopped: Option<Diagnostic>,
-        span: Option<&Span>,
-        expression: bool,
-    ) -> Diagnostic {
-        if let Some(stopped) = stopped {
-            // Preserve a prior observed stop before a construction quota can latch.
-            self.diagnostic(stopped.while_handling(error), span, expression)
-        } else {
-            self.diagnostic(self.retain_limit(error), None, false)
-        }
-    }
-
-    /// Admit a complete error and its prospective call snapshot before metadata copies.
-    /// Emergency evidence uses fixed independent bounds and must survive unwinding intact.
-    pub(crate) fn diagnostic(
-        &self,
-        error: Diagnostic,
-        span: Option<&Span>,
-        expression: bool,
-    ) -> Diagnostic {
-        if error.is_emergency() {
-            return error;
-        }
-        // Observe stops before a new diagnostic limit can latch. Preserve the native
-        // cause's own entered-call snapshot before wrapping it in a control failure.
-        let stopped = self.checkpoint().err();
-        let preserve_control = stopped.as_ref().is_some_and(|stopped| {
-            stopped.code() == error.code()
-                && matches!(
-                    stopped.code(),
-                    DiagnosticCode::Cancelled | DiagnosticCode::Timeout
-                )
-        });
-        let error = self.admit_diagnostic(error, span, expression, preserve_control);
-        match stopped {
-            Some(stopped) if stopped.code() != error.code() => {
-                let preserve_control = matches!(
-                    stopped.code(),
-                    DiagnosticCode::Cancelled | DiagnosticCode::Timeout
-                );
-                self.admit_diagnostic(
-                    stopped.while_handling(error),
-                    span,
-                    expression,
-                    preserve_control,
-                )
-            }
-            _ => error,
-        }
     }
 
     pub(super) fn retain_handler(
@@ -346,36 +374,5 @@ impl Context {
             },
             _reservation: reservation,
         }))
-    }
-
-    fn admit_diagnostic(
-        &self,
-        error: Diagnostic,
-        span: Option<&Span>,
-        expression: bool,
-        preserve_control: bool,
-    ) -> Diagnostic {
-        let error = match span {
-            Some(span) if expression => error.at_expression(span),
-            Some(span) => error.at(span),
-            None => error,
-        };
-        match self
-            .limits()
-            .diagnostics
-            .admit_with_stack(error, self.calls.iter().map(|record| &record.frame))
-        {
-            Ok(error) => error,
-            Err(error) => {
-                let mut error = self.retain_limit(error);
-                if preserve_control {
-                    let mut original = error.causes.pop().expect("bounded original");
-                    original.causes.push(error);
-                    original
-                } else {
-                    error
-                }
-            }
-        }
     }
 }

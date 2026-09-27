@@ -36,6 +36,12 @@ pub(crate) struct DiagnosticConstruction<'a> {
     pub stopped: Option<Diagnostic>,
 }
 
+pub(crate) struct SourcePrefix<'a> {
+    pub name: &'a str,
+    pub text: &'a str,
+    pub start: usize,
+}
+
 struct Counter {
     bytes: usize,
     maximum: usize,
@@ -110,6 +116,28 @@ fn text_limit(maximum: usize) -> BWErr {
     }
 }
 
+fn rejected_stopped_construction(
+    stopped: Diagnostic,
+    violation: BWErr,
+    location: Option<(&Span, bool)>,
+    frames: usize,
+) -> Diagnostic {
+    let preserve_control = matches!(
+        stopped.code(),
+        super::DiagnosticCode::Cancelled | super::DiagnosticCode::Timeout
+    );
+    let mut rejected = stopped
+        .rejected_context(violation, location, frames)
+        .omit_handled_cause();
+    if preserve_control {
+        let mut primary = rejected.causes.pop().expect("bounded stop");
+        primary.causes.push(rejected);
+        primary
+    } else {
+        rejected
+    }
+}
+
 impl Diagnostic {
     /// Setup and standalone helpers have no installed caller context. Use the
     /// default diagnostic budget before their first owned message allocation.
@@ -172,20 +200,12 @@ impl DiagnosticLimits {
                 let error = if let Some(stopped) = context.stopped {
                     // The deferred detail is one omitted cause. Its formatter need
                     // not run when even the observed primary cannot be admitted.
-                    let preserve_control = matches!(
-                        stopped.code(),
-                        super::DiagnosticCode::Cancelled | super::DiagnosticCode::Timeout
-                    );
-                    let mut rejected =
-                        stopped.rejected_context(violation, context.location, frames.len());
-                    rejected = rejected.omit_handled_cause();
-                    if preserve_control {
-                        let mut primary = rejected.causes.pop().expect("bounded stop");
-                        primary.causes.push(rejected);
-                        primary
-                    } else {
-                        rejected
-                    }
+                    rejected_stopped_construction(
+                        stopped,
+                        violation,
+                        context.location,
+                        frames.len(),
+                    )
                 } else {
                     let mut shortened = 0;
                     let details = std::array::from_fn(|index| {
@@ -223,32 +243,76 @@ impl DiagnosticLimits {
         start: usize,
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
+        self.source_prefix_admitted(
+            error,
+            SourcePrefix {
+                name,
+                text: prefix,
+                start,
+            },
+            None,
+            frames,
+            |_, _, _| Ok(()),
+            |_, _| {},
+        )
+        .0
+    }
+
+    pub(crate) fn source_prefix_admitted<'a, R>(
+        &self,
+        error: BWErr,
+        origin: SourcePrefix<'_>,
+        stopped: Option<Diagnostic>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+        admit: impl FnOnce(DiagnosticSize, Vec<Arc<SourceFile>>, usize) -> Result<R, BWErr>,
+        publish: impl FnOnce(&mut R, &Arc<SourceFile>),
+    ) -> (Diagnostic, Option<R>) {
+        let SourcePrefix {
+            name,
+            text: prefix,
+            start,
+        } = origin;
         let skeleton = Diagnostic::new(error);
         let admission = self
-            .check_with_stack(&skeleton, frames.clone())
-            .and_then(|size| {
-                size.source_bytes
-                    .checked_add(name.len())
-                    .and_then(|bytes| bytes.checked_add(prefix.len()))
+            .retained_construction_size(&skeleton, stopped.as_ref(), None, None, frames.clone())
+            .and_then(|(mut size, sources)| {
+                let violation = || BWErr::ResourceLimit {
+                    resource: "diagnostic source bytes",
+                    limit: self.source_bytes as u64,
+                };
+                let pending = name.len().checked_add(prefix.len()).ok_or_else(violation)?;
+                size.source_bytes = size
+                    .source_bytes
+                    .checked_add(pending)
                     .filter(|bytes| *bytes <= self.source_bytes)
-                    .map(|_| ())
-                    .ok_or(BWErr::ResourceLimit {
-                        resource: "diagnostic source bytes",
-                        limit: self.source_bytes as u64,
-                    })
+                    .ok_or_else(violation)?;
+                admit(size, sources, pending)
             });
         match admission {
-            Ok(()) => skeleton
-                .at(&Span::source_prefix(name, prefix, start))
-                .capture_stack(frames),
-            Err(violation) => super::rejection::reject_source_prefix(
-                skeleton,
-                name,
-                start,
-                prefix.len(),
-                violation,
-                frames.len(),
-            ),
+            Ok(mut reservation) => {
+                let span = Span::source_prefix(name, prefix, start);
+                publish(&mut reservation, span.source());
+                let mut error = skeleton.at(&span).capture_stack(frames.clone());
+                if let Some(stopped) = stopped {
+                    error = stopped.capture_stack(frames).while_handling(error);
+                }
+                (error, Some(reservation))
+            }
+            Err(violation) => {
+                let error = if let Some(stopped) = stopped {
+                    rejected_stopped_construction(stopped, violation, None, frames.len())
+                } else {
+                    super::rejection::reject_source_prefix(
+                        skeleton,
+                        name,
+                        start,
+                        prefix.len(),
+                        violation,
+                        frames.len(),
+                    )
+                };
+                (error, None)
+            }
         }
     }
 

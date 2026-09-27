@@ -84,6 +84,16 @@ impl RetainedDiagnostics {
         sources: Vec<Arc<SourceFile>>,
         previous: &mut Vec<DiagnosticReservation>,
     ) -> Result<DiagnosticReservation, BWErr> {
+        self.replace_with_source(size, sources, previous, 0)
+    }
+
+    fn replace_with_source(
+        self: &Arc<Self>,
+        size: DiagnosticSize,
+        sources: Vec<Arc<SourceFile>>,
+        previous: &mut Vec<DiagnosticReservation>,
+        pending_source_bytes: usize,
+    ) -> Result<DiagnosticReservation, BWErr> {
         let charge = [
             1,
             size.diagnostics,
@@ -104,11 +114,13 @@ impl RetainedDiagnostics {
         ];
         let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
         let mut next = used.counts;
+        let mut source_bytes = used.source_bytes;
         let mut changes: HashMap<usize, (&Arc<SourceFile>, usize, usize)> = HashMap::new();
         for reservation in previous
             .iter()
             .filter(|value| Arc::ptr_eq(&value.owner, self))
         {
+            source_bytes -= reservation.pending_source_bytes;
             for (value, old) in next.iter_mut().zip(reservation.charge) {
                 *value -= old;
             }
@@ -125,7 +137,6 @@ impl RetainedDiagnostics {
         for source in &sources {
             changes.entry(source_id(source)).or_insert((source, 0, 0)).2 += 1;
         }
-        let mut source_bytes = used.source_bytes;
         let mut references = Vec::with_capacity(changes.len());
         // Release identities no longer owned before admitting replacement owners.
         for (&id, &(source, removed, added)) in &changes {
@@ -150,11 +161,16 @@ impl RetainedDiagnostics {
                     })?;
             }
         }
+        source_bytes = source_bytes
+            .checked_add(pending_source_bytes)
+            .filter(|bytes| *bytes <= limits.source_bytes)
+            .ok_or_else(|| exceeded("retained diagnostic source bytes", limits.source_bytes))?;
         drop(changes);
         let reservation = DiagnosticReservation {
             owner: Arc::clone(self),
             charge,
             sources,
+            pending_source_bytes,
         };
         for (id, _, after) in references {
             if after == 0 {
@@ -171,6 +187,7 @@ impl RetainedDiagnostics {
         {
             old.charge = [0; 5];
             old.sources.clear();
+            old.pending_source_bytes = 0;
         }
         drop(used);
         previous.clear();
@@ -183,6 +200,28 @@ pub(crate) struct DiagnosticReservation {
     charge: [usize; 5],
     // Keep pointer identities alive until their tracker entries have been removed.
     sources: Vec<Arc<SourceFile>>,
+    // Bytes reserved before a new source allocation has an identity to track.
+    pending_source_bytes: usize,
+}
+
+impl DiagnosticReservation {
+    pub(crate) fn publish_source(&mut self, source: &Arc<SourceFile>) {
+        assert_eq!(
+            self.pending_source_bytes,
+            source.name().len() + source.text().len()
+        );
+        let mut used = self
+            .owner
+            .used
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        // This allocation has not escaped construction; it cannot already be owned.
+        let id = source_id(source);
+        assert!(!used.sources.contains_key(&id));
+        self.sources.push(Arc::clone(source));
+        used.sources.insert(id, 1);
+        self.pending_source_bytes = 0;
+    }
 }
 
 impl Drop for DiagnosticReservation {
@@ -195,6 +234,7 @@ impl Drop for DiagnosticReservation {
         for (count, charge) in used.counts.iter_mut().zip(self.charge) {
             *count -= charge;
         }
+        used.source_bytes -= self.pending_source_bytes;
         for source in &self.sources {
             let id = source_id(source);
             let references = used
@@ -527,6 +567,21 @@ pub(crate) struct StoredCallFrame {
 }
 
 impl RunBudget {
+    pub(crate) fn reserve_diagnostic_source_construction(
+        &self,
+        size: DiagnosticSize,
+        sources: Vec<Arc<SourceFile>>,
+        pending_source_bytes: usize,
+    ) -> Result<DiagnosticReservation, BWErr> {
+        let _ = self.checkpoint();
+        self.0.retained_diagnostics.replace_with_source(
+            size,
+            sources,
+            &mut Vec::new(),
+            pending_source_bytes,
+        )
+    }
+
     pub(crate) fn reserve_diagnostic_construction(
         &self,
         size: DiagnosticSize,

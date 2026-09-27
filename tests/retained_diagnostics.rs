@@ -783,3 +783,124 @@ fn public_constructor_boundaries_release_error_reservations_and_engine_inputs_st
         DiagnosticCode::Input
     );
 }
+
+#[test]
+fn ast_and_source_guard_construction_honor_each_shared_quota_before_any_effects() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    for (source, guard) in [
+        ("|x| = |1 +|", false),
+        ("Return", false),
+        ("Read |x| and |x| {}", false),
+        ("Log |1 + 2|", true),
+    ] {
+        let name = "ast-é";
+        let run = |retained| {
+            Engine::default().run_source(
+                name,
+                source,
+                RunOptions {
+                    limits: RunLimits {
+                        syntax: botwork::core::syntax_limits::SyntaxLimits {
+                            operators: if guard {
+                                0
+                            } else {
+                                RunLimits::default().syntax.operators
+                            },
+                            ..Default::default()
+                        },
+                        retained_diagnostics: retained,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )
+        };
+        let baseline = run(RetainedDiagnosticLimits::default()).result.unwrap_err();
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        let exact = RetainedDiagnosticLimits {
+            records: 1,
+            diagnostics: size.diagnostics,
+            call_frames: size.call_frames,
+            related_locations: size.related_locations,
+            text_bytes: size.text_bytes,
+            source_bytes: size.source_bytes,
+        };
+        for deficit in 0..=6 {
+            if deficit == 3 || (deficit == 4 && size.related_locations == 0) {
+                continue;
+            }
+            let mut limits = exact.clone();
+            match deficit {
+                1 => limits.records -= 1,
+                2 => limits.diagnostics -= 1,
+                4 => limits.related_locations -= 1,
+                5 => limits.text_bytes -= 1,
+                6 => limits.source_bytes -= 1,
+                _ => (),
+            }
+            let result = run(limits);
+            assert_eq!(result.steps, 0);
+            assert!(result.variables.is_empty());
+            let error = result.result.unwrap_err();
+            if deficit == 0 {
+                assert_eq!(error.to_string(), baseline.to_string());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), baseline.code());
+                let evidence = error.causes[0].omissions.as_ref().unwrap();
+                assert_eq!(evidence.source.as_ref().unwrap().file, name);
+                assert_eq!(evidence.related_locations, size.related_locations);
+                assert!(error.span.is_none() && error.call_stack.is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn imported_parser_failures_include_live_caller_and_import_sites_in_shared_construction_limits() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    let harness = cli_harness::Harness::new();
+    let path = harness.workspace.join("invalid.botwork");
+    let source = format!(
+        "Outer {{ Import |{:?}| As |lib| }}\nOuter",
+        path.to_str().unwrap()
+    );
+    for module in ["|x| = |1 +|", "Return", "Read |x| and |x| {}"] {
+        std::fs::write(&path, module).unwrap();
+        let baseline = Engine::default()
+            .run_source("importer", &source, RunOptions::default())
+            .result
+            .unwrap_err();
+        assert_eq!(baseline.call_stack.len(), 1);
+        assert_eq!(baseline.related.last().unwrap().message, "imported here");
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        for fits in [false, true] {
+            let run = Engine::default().run_source(
+                "importer",
+                &source,
+                options(RetainedDiagnosticLimits {
+                    records: 2,
+                    diagnostics: 1,
+                    call_frames: 2,
+                    related_locations: size.related_locations,
+                    text_bytes: size.text_bytes + "outer".len(),
+                    source_bytes: size.source_bytes - usize::from(!fits),
+                }),
+            );
+            let error = run.result.unwrap_err();
+            if fits {
+                assert_eq!(error.to_string(), baseline.to_string());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), baseline.code());
+                let omitted = error.causes[0].omissions.as_ref().unwrap();
+                assert_eq!(omitted.call_frames, 1);
+                assert!(omitted.related_locations >= 1);
+                assert_eq!(
+                    omitted.source.as_ref().unwrap().file,
+                    path.to_str().unwrap()
+                );
+            }
+        }
+    }
+}

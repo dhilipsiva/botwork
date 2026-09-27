@@ -368,7 +368,9 @@ fn load_module(
         .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
     let program = context
         .parse_source(source_name, &source)
-        .map_err(|error| related(context, error))?;
+        .map_err(|error| {
+            error.with_related("imported here", import_site, context.budget.as_ref())
+        })?;
     let mut module_context = prepare_module_context(context, &canonical)
         .map_err(|error| related(context, error.at(span)))?;
     let result = evaluate_program_runtime(&program, &mut module_context);

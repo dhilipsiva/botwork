@@ -402,3 +402,167 @@ fn cancellation_during_message_formatting_keeps_prospective_primary_context_on_r
     assert_eq!(error.label, "expression");
     assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
 }
+
+#[test]
+fn source_guard_construction_reserves_distinct_prefix_and_live_calls_before_copying() {
+    let caller = Program::parse("é", "Read {}").unwrap();
+    let span = &caller.statements[0].span;
+    let original = BWErr::ResourceLimit {
+        resource: "source bytes",
+        limit: 4,
+    };
+    let frame = CallFrame {
+        signature: "read".into(),
+        call_site: span.clone(),
+        definition_site: None,
+    };
+    let expected = DiagnosticLimits::default().source_prefix(
+        original.clone(),
+        "é",
+        "Read {}",
+        4,
+        std::iter::once(&frame),
+    );
+    let size = DiagnosticLimits::default().check(&expected).unwrap();
+    for deficit in [0, 1, 2, 3, 5, 6] {
+        let mut limits = RetainedDiagnosticLimits {
+            records: 2,
+            diagnostics: size.diagnostics,
+            call_frames: size.call_frames + 1,
+            related_locations: 0,
+            text_bytes: size.text_bytes + "read".len(),
+            source_bytes: size.source_bytes,
+        };
+        match deficit {
+            1 => limits.records -= 1,
+            2 => limits.diagnostics -= 1,
+            3 => limits.call_frames -= 1,
+            5 => limits.text_bytes -= 1,
+            6 => limits.source_bytes -= 1,
+            _ => (),
+        }
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: limits,
+            ..Default::default()
+        })
+        .unwrap();
+        context
+            .calls
+            .push(context.retain_call("read", span, None).unwrap());
+        let sibling = context.clone();
+        let error = context.ast_error(ast::AstFailure::SourceGuard {
+            error: &original,
+            name: "é",
+            prefix: "Read {}",
+            offset: 4,
+        });
+        if deficit == 0 {
+            assert_eq!(error.to_string(), expected.to_string());
+            assert!(!Arc::ptr_eq(
+                error.span.as_ref().unwrap().source(),
+                &caller.source
+            ));
+            let owner = Arc::downgrade(error.span.as_ref().unwrap().source());
+            assert!(sibling
+                .clone()
+                .retain_handler(Diagnostic::new(BWErr::NativeError("probe".into())))
+                .is_err());
+            drop(error);
+            assert!(owner.upgrade().is_none());
+        } else {
+            assert!(error.is_emergency());
+            assert!(error.span.is_none() && error.call_stack.is_empty());
+            let evidence = error.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(evidence.call_frames, 1);
+            let origin = evidence.source.as_ref().unwrap();
+            assert_eq!(
+                (&*origin.file, origin.start_byte, origin.end_byte),
+                ("é", 4, 7)
+            );
+        }
+        assert!(context.checkpoint().is_err());
+        sibling.checkpoint().unwrap();
+    }
+}
+
+#[test]
+fn parser_reporters_keep_reservations_until_disposal_or_public_transfer() {
+    for source in ["|x| = |1 +|", "Return", "Read |x| and |x| {}"] {
+        let context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        let sibling = context.clone();
+        let first = context.parse_source("first", source).unwrap_err();
+        let owner = Arc::downgrade(first.span.as_ref().unwrap().source());
+        let second = sibling.clone().parse_source("second", source).unwrap_err();
+        assert!(second.is_emergency());
+        assert_eq!(second.causes[0].code(), first.code());
+        assert!(second.causes[0].omissions.is_some());
+        context.checkpoint().unwrap();
+        let published = first.into_diagnostic();
+        let next = sibling.parse_source("next", source).unwrap_err();
+        assert_eq!(next.code(), published.code());
+        assert!(owner.upgrade().is_some());
+        drop(published);
+        assert!(owner.upgrade().is_none());
+        drop(next);
+        assert_eq!(
+            sibling.parse_source("again", source).unwrap_err().code(),
+            second.causes[0].code()
+        );
+    }
+}
+
+#[test]
+fn stopped_source_construction_admits_both_snapshots_and_preserves_control_on_rejection() {
+    for reject in [false, true] {
+        let control = OperationControl::default();
+        let mut context = Context::with_control(
+            RunLimits {
+                retained_diagnostics: RetainedDiagnosticLimits {
+                    diagnostics: if reject { 1 } else { 2 },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            control.clone(),
+        )
+        .unwrap();
+        let caller = Program::parse("caller", "Read").unwrap();
+        context.calls.push(
+            context
+                .retain_call("read", &caller.statements[0].span, None)
+                .unwrap(),
+        );
+        control.cancel();
+        let error = context.ast_error(ast::AstFailure::SourceGuard {
+            error: &BWErr::ResourceLimit {
+                resource: "source bytes",
+                limit: 0,
+            },
+            name: "é",
+            prefix: "🙂",
+            offset: 0,
+        });
+        assert_eq!(error.code(), DiagnosticCode::Cancelled);
+        if reject {
+            assert!(error.is_emergency());
+            assert!(error.span.is_none() && error.call_stack.is_empty());
+            assert_eq!(error.omissions.as_ref().unwrap().direct_causes, 1);
+            assert_eq!(error.omissions.as_ref().unwrap().call_frames, 1);
+        } else {
+            assert_eq!(error.call_stack.len(), 1);
+            assert_eq!(error.causes[0].call_stack.len(), 1);
+            assert_eq!(error.causes[0].span.as_ref().unwrap().text(), "🙂");
+        }
+        assert_eq!(
+            context.checkpoint().unwrap_err().code(),
+            DiagnosticCode::Cancelled
+        );
+    }
+}

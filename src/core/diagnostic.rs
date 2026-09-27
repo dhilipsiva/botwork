@@ -8,7 +8,7 @@ use super::{
 };
 
 mod construction;
-pub(crate) use construction::{DiagnosticConstruction, FormattedDetail};
+pub(crate) use construction::{DiagnosticConstruction, FormattedDetail, SourcePrefix};
 mod rejection;
 pub use rejection::{
     DiagnosticOmissions, OmittedSource, SUMMARY_DETAIL_BYTES, SUMMARY_SOURCE_NAME_BYTES,
