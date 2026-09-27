@@ -196,7 +196,11 @@ pub enum Literal {
     Map(HashMap<String, Literal>),
 }
 
-struct CollectionValue<'a>(&'a Literal);
+struct CollectionValue<'a>(&'a Literal, bool);
+
+// Counting uses unordered maps, so admission never allocates a sorting buffer.
+// Sorting changes only order, not the number of bytes in the representation.
+pub(crate) struct DisplayValue<'a>(pub &'a Literal, pub bool);
 
 struct QuotedString<'a>(&'a str);
 
@@ -220,34 +224,38 @@ impl fmt::Display for CollectionValue<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Literal::String(value) => write!(formatter, "{}", QuotedString(value)),
-            value => write!(formatter, "{value}"),
+            value => write!(formatter, "{}", DisplayValue(value, self.1)),
         }
     }
 }
 
 impl fmt::Display for Literal {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::None => formatter.write_str("none"),
-            Self::Int(value) => write!(formatter, "{value}"),
-            Self::Float(value) => write!(formatter, "{value}"),
-            Self::Bool(value) => write!(formatter, "{value}"),
-            Self::String(value) => formatter.write_str(value),
-            Self::Array(values) => {
+        DisplayValue(self, true).fmt(formatter)
+    }
+}
+
+impl fmt::Display for DisplayValue<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Literal::None => formatter.write_str("none"),
+            Literal::Int(value) => write!(formatter, "{value}"),
+            Literal::Float(value) => write!(formatter, "{value}"),
+            Literal::Bool(value) => write!(formatter, "{value}"),
+            Literal::String(value) => formatter.write_str(value),
+            Literal::Array(values) => {
                 formatter.write_str("[")?;
                 for (index, value) in values.iter().enumerate() {
                     if index != 0 {
                         formatter.write_str(", ")?;
                     }
-                    write!(formatter, "{}", CollectionValue(value))?;
+                    write!(formatter, "{}", CollectionValue(value, self.1))?;
                 }
                 formatter.write_str("]")
             }
-            Self::Map(values) => {
-                let mut entries: Vec<_> = values.iter().collect();
-                entries.sort_unstable_by_key(|(key, _)| *key);
+            Literal::Map(values) => {
                 formatter.write_str("{")?;
-                for (index, (key, value)) in entries.into_iter().enumerate() {
+                let mut entry = |index, (key, value): (&String, &Literal)| {
                     if index != 0 {
                         formatter.write_str(", ")?;
                     }
@@ -255,8 +263,19 @@ impl fmt::Display for Literal {
                         formatter,
                         "{}: {}",
                         QuotedString(key),
-                        CollectionValue(value)
-                    )?;
+                        CollectionValue(value, self.1)
+                    )
+                };
+                if self.1 {
+                    let mut entries: Vec<_> = values.iter().collect();
+                    entries.sort_unstable_by_key(|(key, _)| *key);
+                    for (index, pair) in entries.into_iter().enumerate() {
+                        entry(index, pair)?;
+                    }
+                } else {
+                    for (index, pair) in values.iter().enumerate() {
+                        entry(index, pair)?;
+                    }
                 }
                 formatter.write_str("}")
             }

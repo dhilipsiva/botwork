@@ -329,22 +329,15 @@ impl StatementSignature {
         &self.errors
     }
 
+    /// Stream help without building intermediate lines or an owned header.
+    pub fn display_help(&self) -> impl fmt::Display + '_ {
+        StatementHelp(self)
+    }
+
+    /// Host-owned convenience rendering; use Context::write_output with
+    /// display_help() for checked buffering and destination writes.
     pub fn help(&self) -> String {
-        let mut lines = vec![self.display_header()];
-        if !self.description.is_empty() {
-            lines.push(self.description.clone());
-        }
-        for parameter in &self.parameters {
-            lines.push(format!("  {}: {}", parameter.name, parameter.accepted));
-        }
-        lines.push(format!("  returns: {}", self.returns));
-        for error in &self.errors {
-            lines.push(format!("  {}: {}", error.code, error.description));
-        }
-        if self.origin == StatementOrigin::Dsl {
-            lines.push("  Dynamic DSL body; return kinds and errors are not inferred.".into());
-        }
-        lines.join("\n")
+        self.display_help().to_string()
     }
 
     pub(crate) fn validate_argument<E>(
@@ -397,5 +390,31 @@ impl Definition {
     /// Untyped DSL parameters/results are Any; dynamic errors are not inferred.
     pub fn signature_metadata(&self) -> StatementSignature {
         StatementSignature::from_definition(self)
+    }
+}
+
+struct StatementHelp<'a>(&'a StatementSignature);
+
+impl fmt::Display for StatementHelp<'_> {
+    fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let signature = self.0;
+        if let Some(namespace) = &signature.namespace {
+            write!(output, "{namespace}::")?;
+        }
+        write!(output, "{}", signature.header.text().trim())?;
+        if !signature.description.is_empty() {
+            write!(output, "\n{}", signature.description)?;
+        }
+        for parameter in &signature.parameters {
+            write!(output, "\n  {}: {}", parameter.name, parameter.accepted)?;
+        }
+        write!(output, "\n  returns: {}", signature.returns)?;
+        for error in &signature.errors {
+            write!(output, "\n  {}: {}", error.code, error.description)?;
+        }
+        if signature.origin == StatementOrigin::Dsl {
+            output.write_str("\n  Dynamic DSL body; return kinds and errors are not inferred.")?;
+        }
+        Ok(())
     }
 }

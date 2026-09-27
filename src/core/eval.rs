@@ -9,6 +9,7 @@ use std::{
 
 mod diagnostics;
 mod imports;
+mod output;
 mod results;
 mod snapshots;
 mod temporaries;
@@ -801,14 +802,7 @@ fn log_param(values: &[Literal], context: &mut Context) -> EvaluationResult<Lite
 }
 
 fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> EvaluationResult<()> {
-    writeln!(output, "{value}").map_err(|error| {
-        context.formatted_error(
-            BWErr::OutputError,
-            format_args!("{error}"),
-            context.calls.last().map(|record| &record.frame.call_site),
-            false,
-        )
-    })
+    context.write_value_record(value, output, true).map(|_| ())
 }
 
 fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {

@@ -221,6 +221,8 @@ Arrays use brackets and maps use braces. Nested strings and map keys are quoted 
 
 Output failures become evaluation errors. Errors are reported on stderr with a nonzero process status when uncaught. Pass `--debug` to the CLI to add top-level statement locations and kinds on stderr; it does not copy statement contents or trace nested execution. Normal logging remains on stdout.
 
+[Output admission](output-limits.md) checks complete encoded records and cumulative run bytes before writing. Log, CLI traces, and checked host output share the run budget; imported modules share it too. Success requires complete writing, a successful flush, and a final cancellation/deadline check. Failed attempts retain their byte charge, and byte-limit failures stop the run with BW8001.
+
 An output error is catchable as BW4001 when its message and call context fit the configured diagnostic limits. [Output-error construction](diagnostic-construction.md#log-output-failures) checks those limits before formatting the error detail; exceeding them stops the run with bounded Output evidence. A failed write can leave some bytes written, so recovery does not automatically retry it.
 
 ## Variables and Invocation Scope

@@ -63,7 +63,8 @@ fn output_errors_admit_complete_calls_at_exact_limits_and_reject_each_context_de
         Arc::new(Mutex::new(PartialWriter::new(reason))),
     );
     let baseline = evaluate_program_detailed(&program, &mut baseline_context).unwrap_err();
-    assert!(matches!(baseline.error.as_ref(), BWErr::OutputError(detail) if detail == reason));
+    assert!(matches!(baseline.error.as_ref(), BWErr::OutputError(detail)
+        if detail == &format!("{reason}; 1 of 6 bytes accepted by destination; output incomplete")));
     assert_eq!(baseline.span.as_ref().unwrap().text(), "Log |\"hello\"|");
     assert_eq!(baseline.call_stack.len(), 2);
     assert_eq!(baseline.call_stack[0].signature, "log|param|");

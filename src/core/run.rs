@@ -31,8 +31,10 @@ use super::{
 mod tests;
 
 mod import_limits;
+mod output_limits;
 pub(crate) use import_limits::ImportResource;
 pub use import_limits::{ImportLimits, MAX_MODULE_CHAIN_DEPTH};
+pub use output_limits::{OutputLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES};
 mod retained_values;
 pub use retained_values::RetainedValueLimits;
 pub(crate) use retained_values::{StoredValue, ValueReservation};
@@ -85,6 +87,7 @@ pub struct RunLimits {
     pub diagnostic_values: DiagnosticValueLimits,
     pub diagnostics: DiagnosticLimits,
     pub retained_diagnostics: RetainedDiagnosticLimits,
+    pub output: OutputLimits,
 }
 
 impl Default for RunLimits {
@@ -109,6 +112,7 @@ impl Default for RunLimits {
             diagnostic_values: DiagnosticValueLimits::default(),
             diagnostics: DiagnosticLimits::default(),
             retained_diagnostics: RetainedDiagnosticLimits::default(),
+            output: OutputLimits::default(),
         }
     }
 }
@@ -429,6 +433,7 @@ struct BudgetState {
     control: OperationControl,
     used: AtomicU64,
     active: AtomicUsize,
+    output: AtomicUsize,
     imports: Mutex<[usize; 5]>,
     snapshots: Mutex<[usize; 2]>,
     retained_values: Arc<retained_values::RetainedValues>,
@@ -451,6 +456,7 @@ impl Clone for RunBudget {
             control: self.0.control.clone(),
             used: AtomicU64::new(self.used()),
             active: AtomicUsize::new(0),
+            output: AtomicUsize::new(self.0.output.load(Ordering::Relaxed)),
             imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
             snapshots: Mutex::new(*self.0.snapshots.lock().unwrap_or_else(|e| e.into_inner())),
             retained_values: Arc::clone(&self.0.retained_values),
@@ -495,6 +501,7 @@ impl RunBudget {
             control,
             used: AtomicU64::new(0),
             active: AtomicUsize::new(0),
+            output: AtomicUsize::new(0),
             imports: Mutex::new([0; 5]),
             snapshots: Mutex::new([0; 2]),
             stopped: Mutex::new(None),

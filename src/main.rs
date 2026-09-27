@@ -5,13 +5,16 @@ use botwork::core::{
     grammar::BWErr,
     input::load_variables,
     operation::OperationControl,
-    run::{RunLimits, DEFAULT_STEPS, MAX_EVALUATION_DEPTH},
+    run::{
+        OutputLimits, RunLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES, DEFAULT_STEPS,
+        MAX_EVALUATION_DEPTH,
+    },
     syntax_limits::DEFAULT_SOURCE_BYTES,
 };
 use clap::Parser as Clap;
 use std::{
     fs::File,
-    io::{self, Read, Write},
+    io::{self, Read},
     path::{Path, PathBuf},
     process::ExitCode,
     time::Duration,
@@ -48,6 +51,12 @@ struct Args {
     /// Maximum combined evaluation depth (ceiling 96)
     #[arg(long, default_value_t = MAX_EVALUATION_DEPTH)]
     max_evaluation_depth: usize,
+    /// Maximum bytes in one Log, debug trace, or statement-help record
+    #[arg(long, default_value_t = DEFAULT_OUTPUT_RECORD_BYTES)]
+    max_output_record_bytes: usize,
+    /// Maximum total bytes admitted for output (failed writes also count)
+    #[arg(long, default_value_t = DEFAULT_OUTPUT_BYTES)]
+    max_output_bytes: usize,
     /// Cooperative timeout in milliseconds, including loading and parsing
     #[arg(long)]
     timeout_ms: Option<u64>,
@@ -59,10 +68,6 @@ enum CliError {
     Read { file: PathBuf, source: io::Error },
     #[error(transparent)]
     Script(#[from] Diagnostic),
-    #[error("Writing debug trace failed: {0}")]
-    Trace(io::Error),
-    #[error("Writing statement help failed: {0}")]
-    Help(io::Error),
     #[error("{file}: {source}")]
     SourceLimit {
         file: PathBuf,
@@ -121,12 +126,10 @@ fn run(
         if debug {
             let (line, column) = statement.span.line_column();
             let kind = statement.kind_name();
-            writeln!(
-                io::stderr().lock(),
-                "debug: {}:{line}:{column}: {kind}",
-                file.display()
-            )
-            .map_err(CliError::Trace)?;
+            context.write_output(
+                &mut io::stderr().lock(),
+                format_args!("debug: {}:{line}:{column}: {kind}\n", file.display()),
+            )?;
         }
         execute_statement_detailed(statement, &mut context)?;
     }
@@ -136,8 +139,12 @@ fn run(
 
 fn main() -> ExitCode {
     let args = Args::parse();
+    let output_limits = OutputLimits {
+        record_bytes: args.max_output_record_bytes,
+        total_bytes: args.max_output_bytes,
+    };
     let result = if args.list_statements || args.statement_help.is_some() {
-        statement_help(args.statement_help.as_deref())
+        statement_help(args.statement_help.as_deref(), output_limits)
     } else {
         run(
             args.file
@@ -147,6 +154,7 @@ fn main() -> ExitCode {
             &args.variable_files,
             &args.variables,
             RunLimits {
+                output: output_limits,
                 steps: args.max_steps,
                 call_depth: args.max_call_depth,
                 evaluation_depth: args.max_evaluation_depth,
@@ -158,26 +166,37 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = writeln!(io::stderr().lock(), "{error}");
+            // Failure reporting has its own bounded allowance, so an exhausted
+            // script output budget does not hide the reason for failure.
+            let _ = Context::default()
+                .write_output(&mut io::stderr().lock(), format_args!("{error}\n"));
             ExitCode::FAILURE
         }
     }
 }
 
-fn statement_help(header: Option<&str>) -> Result<(), CliError> {
-    let mut context = Context::default();
+fn statement_help(header: Option<&str>, output: OutputLimits) -> Result<(), CliError> {
+    let mut context = Context::with_limits(RunLimits {
+        output,
+        ..RunLimits::default()
+    })?;
     context.init_statements();
-    let text = match header {
-        Some(header) => context
-            .statement_signature(header)?
-            .ok_or_else(|| Diagnostic::new(BWErr::StatementNotDefined(header.into())))?
-            .help(),
-        None => context
-            .statement_signatures()
-            .iter()
-            .map(|signature| signature.header().text().trim())
-            .collect::<Vec<_>>()
-            .join("\n"),
-    };
-    writeln!(io::stdout().lock(), "{text}").map_err(CliError::Help)
+    let mut stdout = io::stdout().lock();
+    match header {
+        Some(header) => {
+            let signature = context
+                .statement_signature(header)?
+                .ok_or_else(|| Diagnostic::new(BWErr::StatementNotDefined(header.into())))?;
+            context.write_output(&mut stdout, format_args!("{}\n", signature.display_help()))?;
+        }
+        None => {
+            for signature in context.statement_signatures() {
+                context.write_output(
+                    &mut stdout,
+                    format_args!("{}\n", signature.header().text().trim()),
+                )?;
+            }
+        }
+    }
+    Ok(())
 }

@@ -325,6 +325,13 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::OutputBoundary | Input::OutputLimit => {
+                arguments.extend([
+                    "--max-output-bytes",
+                    if case.error.is_some() { "2" } else { "3" },
+                ]);
+                "Log |\"é\"|"
+            }
             Input::NonFiniteHost => {
                 check_host_case(&case);
                 continue;

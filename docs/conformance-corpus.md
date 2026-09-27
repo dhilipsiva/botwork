@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 129 cases against the 53 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 131 cases against the 54 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -61,6 +61,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R21 | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary, syntax-diagnostic-boundary, guard-diagnostic-boundary, worker-join-boundary, numeric-diagnostic-boundary | borrowed-diagnostic-limit, operation-panic-limit, signature-diagnostic-limit, access-diagnostic-limit, operator-diagnostic-limit, input-diagnostic-limit, input-origin-limit, signature-builder-limit, entry-file-diagnostic-limit, import-diagnostic-limit, setup-diagnostic-limit, collision-diagnostic-limit, validation-diagnostic-limit, syntax-diagnostic-limit, guard-diagnostic-limit, worker-join-limit, numeric-diagnostic-limit | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary, import-diagnostic-boundary, setup-diagnostic-defaults, collision-diagnostic-boundary, validation-diagnostic-boundary, syntax-diagnostic-boundary, guard-diagnostic-boundary, worker-join-boundary, numeric-diagnostic-boundary |
 | R22 | operation-ownership-boundary | operation-ownership-limit | operation-ownership-boundary |
 | R23 | diagnostic-rendering-boundary | diagnostic-rendering-limit | diagnostic-rendering-boundary |
+| R24 | output-boundary | output-limit | output-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -133,3 +134,5 @@ Two lexical-guard host cases admit the filename and checked prefix at their exac
 Two worker-join host cases preserve escaped panic details at the native-header source boundary or reject one fewer byte with bounded AsyncRuntime evidence.
 
 Two numeric-error host cases admit an arithmetic detail with its expression label and entered call at exactly 31 text bytes, or reject one fewer byte with bounded Arithmetic evidence.
+
+Two output CLI cases admit a Unicode Log and its newline at exactly three cumulative bytes, or reject two bytes before writing, preserving BW8001 and failure status.

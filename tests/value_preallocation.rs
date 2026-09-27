@@ -60,6 +60,46 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn output_rejection_precedes_map_sorting_and_complete_string_buffering() {
+    use botwork::core::{eval::Context, run::OutputLimits};
+    let value = Literal::Map(
+        (0..10_000)
+            .map(|index| (format!("key{index:05}"), Literal::None))
+            .collect(),
+    );
+    let threshold = 100_000;
+    for record_bytes in [0, 1024 * 1024] {
+        let context = Context::with_limits(RunLimits {
+            output: OutputLimits {
+                record_bytes,
+                total_bytes: 1024 * 1024,
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        let (result, large) = observe(threshold, || {
+            context.write_value(&value, &mut std::io::sink())
+        });
+        assert_eq!(result.is_ok(), record_bytes != 0);
+        assert_eq!(large, usize::from(record_bytes != 0)); // Only the admitted map sorting table.
+    }
+    let value = Literal::String("x".repeat(threshold * 2));
+    let context = Context::with_limits(RunLimits {
+        output: OutputLimits {
+            record_bytes: threshold,
+            total_bytes: usize::MAX,
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let mut output = Vec::new();
+    let (result, large) = observe(threshold, || context.write_value(&value, &mut output));
+    assert!(result.is_err());
+    assert_eq!(large, 0);
+    assert_eq!(output.capacity(), 0);
+}
+
+#[test]
 fn rejected_rethrow_copy_never_allocates_large_call_metadata() {
     use botwork::core::{
         ast::Program,

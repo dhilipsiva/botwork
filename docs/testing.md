@@ -127,3 +127,5 @@ Call composition is covered in `tests/call_composition.rs`: nested effects, argu
 `tests/embedded_runs.rs` checks fresh/reused/concurrent Engine execution, owned outcomes, per-run directory/environment overlays, source loading/imports, initial source/step/call-depth budgets, binding cleanup, cancellation/deadlines, callback causes, and clock consistency. Handshakes have five-second timeouts; controlled Tokio time checks relative deadline construction and expiry during a native callback without wall-clock timing thresholds.
 
 `tests/syntax_limits.rs` exercises source/parser guard boundaries, high-depth and long-chain inputs, quotes/comments/Else-If context, direct Pest and Program APIs, local configuration isolation, imported source and reused programs, and CLI rejection before output/debug traces. CLI cases run with five-second process deadlines and check normal error exit rather than abort/panic.
+
+`tests/output_limits.rs`, the output writer/budget unit tests, allocation observations, and R24 corpus cases check byte admission, complete flush semantics, partial writes, cancellation, and CLI/module accounting; see [output limits](output-limits.md).
