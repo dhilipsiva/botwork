@@ -2,7 +2,22 @@ use super::*;
 
 #[cfg(test)]
 mod tests;
-use crate::core::diagnostic::DiagnosticCode;
+use crate::core::diagnostic::{DiagnosticCode, FormattedDetail};
+
+struct OriginalLocation<'a> {
+    span: &'a Span,
+    native: bool,
+}
+
+impl std::fmt::Display for OriginalLocation<'_> {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.native {
+            output.write_str(self.span.source().name())
+        } else {
+            std::fmt::Display::fmt(&self.span.location_display(), output)
+        }
+    }
+}
 
 struct AccessPath<'a> {
     base: &'a Expr,
@@ -25,6 +40,45 @@ impl std::fmt::Display for AccessPath<'_> {
 }
 
 impl Context {
+    pub(super) fn duplicate_error(
+        &self,
+        category: fn([String; 3]) -> BWErr,
+        name: &str,
+        original: (&Span, bool),
+        duplicate: &Span,
+        related_label: &'static str,
+    ) -> Diagnostic {
+        let stopped = self.checkpoint().err();
+        let original_display = OriginalLocation {
+            span: original.0,
+            native: original.1,
+        };
+        let duplicate_display = duplicate.location_display();
+        let original_full = format_args!("{original_display}");
+        let original_summary = format_args!("{original_display:#}");
+        let error = self.limits().diagnostics.formatted_related_fields(
+            category,
+            [
+                FormattedDetail {
+                    full: format_args!("{name}"),
+                    summary: None,
+                },
+                FormattedDetail {
+                    full: original_full,
+                    summary: (!original.1).then_some(original_summary),
+                },
+                FormattedDetail {
+                    full: format_args!("{duplicate_display}"),
+                    summary: Some(format_args!("{duplicate_display:#}")),
+                },
+            ],
+            duplicate,
+            (related_label, original.0),
+            self.calls.iter().map(|record| &record.frame),
+        );
+        self.finish_constructed_error(error, stopped, Some(duplicate), false)
+    }
+
     pub(super) fn import_error(
         &self,
         category: fn(String) -> BWErr,

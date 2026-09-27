@@ -777,6 +777,77 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::CollisionDiagnosticBoundary | Input::CollisionDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let source = "Read {}\nRead {}";
+                let original = format!("{}:1:1", case.id);
+                let duplicate = format!("{}:2:1", case.id);
+                let bytes = "source".len()
+                    + "first definition".len()
+                    + "read".len()
+                    + original.len()
+                    + duplicate.len();
+                let run = Engine::default().run_source(
+                    case.id,
+                    source,
+                    RunOptions {
+                        limits: RunLimits {
+                            diagnostics: DiagnosticLimits {
+                                text_bytes: bytes - usize::from(case.error.is_some()),
+                                ..DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                let error = run.result.unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW2003");
+                    let omissions = error.causes[0].omissions.as_ref().unwrap();
+                    assert_eq!(omissions.detail_fields, 2);
+                    assert_eq!(omissions.related_locations, 1);
+                    assert!(error.causes[0].span.is_none());
+                    let BWErr::DuplicateStatement {
+                        original,
+                        duplicate,
+                        ..
+                    } = error.causes[0].error.as_ref()
+                    else {
+                        panic!("category")
+                    };
+                    assert_eq!(
+                        original,
+                        &format!("{}:[byte 0; coordinates omitted]", case.id)
+                    );
+                    assert_eq!(
+                        duplicate,
+                        &format!("{}:[byte 8; coordinates omitted]", case.id)
+                    );
+                } else {
+                    assert_eq!(error.code().as_str(), "BW2003");
+                    let BWErr::DuplicateStatement {
+                        signature,
+                        original: actual,
+                        duplicate: second,
+                    } = error.error.as_ref()
+                    else {
+                        panic!("category")
+                    };
+                    assert_eq!(signature, "read");
+                    assert_eq!(actual, &original);
+                    assert_eq!(second, &duplicate);
+                    assert_eq!(error.related.len(), 1);
+                    assert_eq!(error.related[0].message, "first definition");
+                    assert!(error.omissions.is_none());
+                }
+                continue;
+            }
             Input::SetupDiagnosticDefaults | Input::SetupDiagnosticLimit => {
                 use botwork::core::{
                     diagnostic::DiagnosticLimits,

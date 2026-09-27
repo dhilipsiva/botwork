@@ -58,6 +58,83 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn collision_errors_reject_large_source_names_without_location_message_copies() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::{evaluate_program_detailed, Context},
+    };
+    let filename = "é".repeat(128 * 1024);
+    let original = Program::parse(&filename, "Read { Return |7| }").unwrap();
+    let duplicate = Program::parse(&filename, "Read {}").unwrap();
+    for native in [false, true] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                source_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        if native {
+            context
+                .register_native("Read", |_| Ok(Literal::Int(7)))
+                .unwrap();
+        } else {
+            evaluate_program_detailed(&original, &mut context).unwrap();
+        }
+        let mut sibling = context.clone();
+        let (result, large) = observe(64 * 1024, || {
+            evaluate_program_detailed(&duplicate, &mut context)
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::DuplicateStatement);
+        let omitted = error.causes[0].omissions.as_ref().unwrap();
+        assert_eq!(omitted.detail_fields, if native { 1 } else { 2 });
+        assert!(omitted.source.as_ref().unwrap().file_truncated);
+        assert_eq!(large, 0);
+        let call = Program::parse("call", "Read").unwrap();
+        assert_eq!(
+            evaluate_program_detailed(&call, &mut sibling)
+                .unwrap()
+                .to_string(),
+            "7"
+        );
+    }
+}
+
+#[test]
+fn native_collision_rejects_a_large_signature_before_error_detail_allocation() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        eval::Context,
+        signature::StatementSignature,
+    };
+    let name = "R".repeat(64 * 1024);
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .register_native(&name, |_| Ok(Literal::Int(1)))
+        .unwrap();
+    let duplicate = StatementSignature::native(&name).unwrap();
+    let (result, large) = observe(name.len(), || {
+        context.register_native_with_signature(duplicate, |_| Ok(Literal::Int(2)))
+    });
+    let error = result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::DuplicateStatement);
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 2);
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn setup_message_rejection_adds_no_large_copies_and_prior_stops_skip_path_preparation() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},

@@ -70,17 +70,22 @@ pub(super) struct LoadedModule {
 }
 
 pub(super) fn namespace_collision(
+    context: &Context,
     namespace: &str,
     original: &Span,
     duplicate: &Span,
 ) -> Diagnostic {
-    Diagnostic::new(BWErr::DuplicateNamespace {
-        namespace: namespace.into(),
-        original: original.location(),
-        duplicate: duplicate.location(),
-    })
-    .at(duplicate)
-    .with_related("first namespace occupant", original)
+    context.duplicate_error(
+        |[namespace, original, duplicate]| BWErr::DuplicateNamespace {
+            namespace,
+            original,
+            duplicate,
+        },
+        namespace,
+        (original, false),
+        duplicate,
+        "first namespace occupant",
+    )
 }
 
 pub(super) fn evaluate_import(
@@ -94,6 +99,7 @@ pub(super) fn evaluate_import(
     let frame = &context.frames[context.current];
     if let Some(original) = frame.namespaces.get(normalized.as_str()) {
         return Err(namespace_collision(
+            context,
             &normalized,
             &original.span,
             &namespace.span,
@@ -107,6 +113,7 @@ pub(super) fn evaluate_import(
         .min_by_key(|(name, _)| *name)
     {
         return Err(namespace_collision(
+            context,
             &normalized,
             statement.metadata().header(),
             &namespace.span,

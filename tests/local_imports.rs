@@ -21,6 +21,74 @@ use std::{
 struct Project(Harness);
 
 #[test]
+fn namespace_collision_admits_both_locations_before_loading_and_preserves_original_namespace() {
+    use botwork::core::{diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits};
+    let project = Project::new();
+    project.write("good.botwork", "Value { Return |7| }");
+    for text_bytes in [0, DiagnosticLimits::default().text_bytes] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        project
+            .run("Import |\"good.botwork\"| As |lib|", &mut context)
+            .unwrap();
+        let mut sibling = context.clone();
+        // Collision must precede validation/loading of this invalid path.
+        for source in ["Import |\"missing.txt\"| As |LIB|", "lib::Other {}"] {
+            let mut copy = context.clone();
+            let error = project.run(source, &mut copy).unwrap_err();
+            if text_bytes == 0 {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::DuplicateNamespace);
+                let omitted = error.causes[0].omissions.as_ref().unwrap();
+                assert_eq!(omitted.detail_fields, 2);
+                assert_eq!(omitted.related_locations, 1);
+                let BWErr::DuplicateNamespace {
+                    namespace,
+                    original,
+                    duplicate,
+                } = error.causes[0].error.as_ref()
+                else {
+                    panic!("namespace")
+                };
+                assert_eq!(namespace, "lib");
+                assert!(
+                    original.contains("coordinates omitted")
+                        && duplicate.contains("coordinates omitted")
+                );
+                assert!(copy.checkpoint().is_err());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::DuplicateNamespace);
+                let BWErr::DuplicateNamespace {
+                    namespace,
+                    original,
+                    duplicate,
+                } = error.error.as_ref()
+                else {
+                    panic!("namespace")
+                };
+                assert_eq!(namespace, "lib");
+                assert_eq!(original, &error.related[0].span.location());
+                assert_eq!(duplicate, &error.span.as_ref().unwrap().location());
+                assert_eq!(
+                    project.run("lib::Value", &mut copy).unwrap().to_string(),
+                    "7"
+                );
+            }
+        }
+        assert_eq!(
+            project.run("lib::Value", &mut sibling).unwrap().to_string(),
+            "7"
+        );
+    }
+}
+
+#[test]
 fn import_read_construction_admits_message_call_and_originating_site_together() {
     use botwork::core::{diagnostic::DiagnosticLimits, run::RunLimits};
     let project = Project::new();

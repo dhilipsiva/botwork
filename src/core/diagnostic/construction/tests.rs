@@ -5,6 +5,120 @@ use crate::core::{
 };
 
 #[test]
+fn alternative_detail_summaries_skip_full_formatters_after_context_rejection() {
+    struct Forbidden;
+    impl std::fmt::Display for Forbidden {
+        fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            panic!("rejected location formatter was visited")
+        }
+    }
+    let program = Program::parse("source", "Read {}").unwrap();
+    let span = &program.statements[0].span;
+    let owner = Arc::downgrade(&program.source);
+    let error = DiagnosticLimits {
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    }
+    .formatted_related_fields(
+        |[signature, original, duplicate]| BWErr::DuplicateStatement {
+            signature,
+            original,
+            duplicate,
+        },
+        [
+            FormattedDetail {
+                full: format_args!("read"),
+                summary: None,
+            },
+            FormattedDetail {
+                full: format_args!("{}", Forbidden),
+                summary: Some(format_args!("file:[byte 0; coordinates omitted]")),
+            },
+            FormattedDetail {
+                full: format_args!("{}", Forbidden),
+                summary: Some(format_args!("file:[byte 4; coordinates omitted]")),
+            },
+        ],
+        span,
+        ("first definition", span),
+        std::iter::empty(),
+    );
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::DuplicateStatement);
+    let omitted = error.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omitted.detail_fields, 2);
+    assert_eq!(omitted.related_locations, 1);
+    assert!(error.causes[0].span.is_none());
+    drop(program);
+    assert!(owner.upgrade().is_none());
+}
+
+#[test]
+fn alternative_fields_count_precision_loss_and_prefix_truncation_once_per_field() {
+    use std::cell::Cell;
+    struct Full<'a>(&'a Cell<usize>);
+    impl std::fmt::Display for Full<'_> {
+        fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.set(self.0.get() + 1);
+            out.write_str("source:1:1")
+        }
+    }
+    let visits = Cell::new(0);
+    let program = Program::parse("source", "Read {}").unwrap();
+    let span = &program.statements[0].span;
+    let long = "🦀".repeat(1024);
+    let make = |text_bytes| {
+        DiagnosticLimits {
+            text_bytes,
+            ..DiagnosticLimits::default()
+        }
+        .formatted_related_fields(
+            |[signature, original, duplicate]| BWErr::DuplicateStatement {
+                signature,
+                original,
+                duplicate,
+            },
+            [
+                FormattedDetail {
+                    full: format_args!("read"),
+                    summary: None,
+                },
+                FormattedDetail {
+                    full: format_args!("{}", Full(&visits)),
+                    summary: Some(format_args!("{long}")),
+                },
+                FormattedDetail {
+                    full: format_args!("{}", Full(&visits)),
+                    summary: Some(format_args!("source:[byte 0; coordinates omitted]")),
+                },
+            ],
+            span,
+            ("first definition", span),
+            std::iter::empty(),
+        )
+    };
+    let exact = "source".len() + "first definition".len() + "read".len() + 2 * "source:1:1".len();
+    let accepted = make(exact);
+    assert_eq!(accepted.code(), DiagnosticCode::DuplicateStatement);
+    assert!(accepted.omissions.is_none());
+    assert_eq!(visits.get(), 4); // Two measurements and two admitted copies.
+    visits.set(0);
+    let error = make(exact - 1);
+    assert_eq!(visits.get(), 2); // Measurement only; rejection uses alternatives.
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 2);
+    let BWErr::DuplicateStatement {
+        original,
+        duplicate,
+        ..
+    } = error.causes[0].error.as_ref()
+    else {
+        panic!("duplicate")
+    };
+    assert!(original.len() <= 256 && original.ends_with("…[truncated]"));
+    assert_eq!(duplicate, "source:[byte 0; coordinates omitted]");
+}
+
+#[test]
 fn formatted_related_details_admit_complete_site_and_call_metrics_before_message_copying() {
     let primary = Program::parse("primary", "|x| = |1|").unwrap();
     let related = Program::parse("related-é", "|y| = |2|").unwrap();

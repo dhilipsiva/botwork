@@ -10,6 +10,22 @@ use std::{
 #[cfg(test)]
 mod tests;
 
+/// Internal alternative evidence for fields whose full formatting requires work
+/// that must not run after admission fails (for example source-coordinate scans).
+pub(crate) struct FormattedDetail<'a> {
+    pub full: fmt::Arguments<'a>,
+    pub summary: Option<fmt::Arguments<'a>>,
+}
+
+impl<'a> FormattedDetail<'a> {
+    fn exact(full: fmt::Arguments<'a>) -> Self {
+        Self {
+            full,
+            summary: None,
+        }
+    }
+}
+
 struct Counter {
     bytes: usize,
     maximum: usize,
@@ -176,7 +192,12 @@ impl DiagnosticLimits {
                 skeleton.at(span)
             };
         }
-        self.formatted_in(skeleton, category, messages, frames)
+        self.formatted_in(
+            skeleton,
+            category,
+            messages.map(FormattedDetail::exact),
+            frames,
+        )
     }
 
     /// The related label is fixed interpreter text. Its small owned record is
@@ -189,15 +210,34 @@ impl DiagnosticLimits {
         related: (&'static str, &Span),
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
-        let skeleton = skeleton(category, Some(span), false).with_related(related.0, related.1);
-        self.formatted_in(skeleton, |[detail]| category(detail), [message], frames)
+        self.formatted_related_fields(
+            |[detail]| category(detail),
+            [FormattedDetail::exact(message)],
+            span,
+            related,
+            frames,
+        )
+    }
+
+    pub(crate) fn formatted_related_fields<'a, const N: usize>(
+        &self,
+        category: impl Fn([String; N]) -> BWErr,
+        details: [FormattedDetail<'_>; N],
+        span: &Span,
+        related: (&'static str, &Span),
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Diagnostic {
+        let skeleton = Diagnostic::new(category(std::array::from_fn(|_| String::new())))
+            .at(span)
+            .with_related(related.0, related.1);
+        self.formatted_in(skeleton, category, details, frames)
     }
 
     fn formatted_in<'a, const N: usize>(
         &self,
         mut skeleton: Diagnostic,
         category: impl Fn([String; N]) -> BWErr,
-        messages: [fmt::Arguments<'_>; N],
+        messages: [FormattedDetail<'_>; N],
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
         let admission = self
@@ -211,7 +251,7 @@ impl DiagnosticLimits {
                         maximum: remaining,
                     };
                     count
-                        .write_fmt(*message)
+                        .write_fmt(message.full)
                         .map_err(|_| text_limit(self.text_bytes))?;
                     *size = count.bytes;
                     remaining -= count.bytes;
@@ -223,7 +263,7 @@ impl DiagnosticLimits {
                         maximum: size,
                     };
                     output
-                        .write_fmt(*message)
+                        .write_fmt(message.full)
                         .map_err(|_| text_limit(self.text_bytes))?;
                     *detail = output.text;
                 }
@@ -237,8 +277,10 @@ impl DiagnosticLimits {
             Err(violation) => {
                 let mut shortened = 0;
                 let details = std::array::from_fn(|index| {
-                    let (detail, truncated) = formatted_prefix(messages[index]);
-                    shortened += usize::from(truncated);
+                    let message = &messages[index];
+                    let (detail, truncated) =
+                        formatted_prefix(message.summary.unwrap_or(message.full));
+                    shortened += usize::from(truncated || message.summary.is_some());
                     detail
                 });
                 skeleton.error = Arc::new(category(details));

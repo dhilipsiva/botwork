@@ -21,6 +21,206 @@ fn options(diagnostics: DiagnosticLimits) -> RunOptions {
 }
 
 #[test]
+fn declaration_collisions_preserve_exact_locations_and_admit_all_fields_context_together() {
+    use botwork::core::grammar::{BWErr, Literal};
+    for (source, native_original, register) in [
+        ("Read {}\nRead {}", false, false),
+        ("Read {}", true, true),
+        ("Log |value| {}", true, false),
+        ("Outer { Read {}\nRead {} }\nOuter", false, false),
+    ] {
+        let mut engine = Engine::default();
+        if register {
+            engine
+                .register_native("Read", |_, _| Ok(Literal::None))
+                .unwrap();
+        }
+        let baseline = engine
+            .run_source("collision-é", source, RunOptions::default())
+            .result
+            .unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::DuplicateStatement);
+        let BWErr::DuplicateStatement {
+            original,
+            duplicate,
+            ..
+        } = baseline.error.as_ref()
+        else {
+            panic!("duplicate")
+        };
+        let original_span = &baseline.related[0].span;
+        assert_eq!(
+            original,
+            &if native_original {
+                original_span.source().name().to_owned()
+            } else {
+                original_span.location()
+            }
+        );
+        assert_eq!(duplicate, &baseline.span.as_ref().unwrap().location());
+        assert_eq!(baseline.related.len(), 1);
+        assert_eq!(baseline.related[0].message, "first definition");
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        let exact = DiagnosticLimits {
+            diagnostics: size.diagnostics,
+            depth: size.depth,
+            call_frames: size.call_frames,
+            related_locations: size.related_locations,
+            text_bytes: size.text_bytes,
+            source_bytes: size.source_bytes,
+        };
+        let error = engine
+            .run_source("collision-é", source, options(exact.clone()))
+            .result
+            .unwrap_err();
+        assert_eq!(
+            error.to_value().to_string(),
+            baseline.to_value().to_string()
+        );
+        let mut deficient = vec![
+            DiagnosticLimits {
+                text_bytes: size.text_bytes - 1,
+                ..exact.clone()
+            },
+            DiagnosticLimits {
+                source_bytes: size.source_bytes - 1,
+                ..exact.clone()
+            },
+            DiagnosticLimits {
+                related_locations: 0,
+                ..exact.clone()
+            },
+        ];
+        if size.call_frames != 0 {
+            deficient.push(DiagnosticLimits {
+                call_frames: 0,
+                ..exact
+            });
+        }
+        for diagnostics in deficient {
+            let error = engine
+                .run_source("collision-é", source, options(diagnostics))
+                .result
+                .unwrap_err();
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            let original = &error.causes[0];
+            assert_eq!(original.code(), DiagnosticCode::DuplicateStatement);
+            let omitted = original.omissions.as_ref().unwrap();
+            assert_eq!(omitted.detail_fields, if native_original { 1 } else { 2 });
+            assert_eq!(omitted.related_locations, 1);
+            assert_eq!(omitted.call_frames, size.call_frames);
+            let BWErr::DuplicateStatement {
+                original,
+                duplicate,
+                ..
+            } = original.error.as_ref()
+            else {
+                panic!("duplicate")
+            };
+            if !native_original {
+                assert!(original.contains("coordinates omitted"));
+            }
+            assert!(duplicate.contains("coordinates omitted"));
+        }
+    }
+}
+
+#[test]
+fn collision_limits_preserve_prior_effects_and_skip_handlers_and_later_statements() {
+    use botwork::core::grammar::Literal;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Effect", move |_, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::None)
+        })
+        .unwrap();
+    let source = "|error| = |7|\n|before| = |1|\nRead { Return |7| }\nEffect\nTry { Read {} } Catch |error| { |caught| = |1|\nEffect }\n|after| = |2|";
+    let run = engine.run_source(
+        "collision",
+        source,
+        options(DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        }),
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(run.variables["error"].to_string(), "7");
+    assert_eq!(run.variables["before"].to_string(), "1");
+    assert!(!run.variables.contains_key("caught") && !run.variables.contains_key("after"));
+    assert_eq!(
+        run.result.unwrap_err().causes[0].code(),
+        DiagnosticCode::DuplicateStatement
+    );
+    assert_eq!(
+        engine
+            .run_source(
+                "fresh",
+                "Read {}\nRead",
+                options(DiagnosticLimits {
+                    text_bytes: 0,
+                    ..DiagnosticLimits::default()
+                })
+            )
+            .outcome(),
+        RunOutcome::Succeeded
+    );
+}
+
+#[test]
+fn native_registration_collision_preserves_original_and_releases_rejected_source_ownership() {
+    use botwork::core::{grammar::Literal, signature::StatementSignature};
+    use std::sync::Arc;
+    for text_bytes in [0, DiagnosticLimits::default().text_bytes] {
+        let mut context = Context::with_limits(limits(DiagnosticLimits {
+            text_bytes,
+            ..DiagnosticLimits::default()
+        }))
+        .unwrap();
+        context
+            .register_native("Read", |_| Ok(Literal::Int(1)))
+            .unwrap();
+        let mut sibling = context.clone();
+        let duplicate = StatementSignature::native("Read").unwrap();
+        let owner = Arc::downgrade(duplicate.header().source());
+        let error = context
+            .register_native_with_signature(duplicate, |_| Ok(Literal::Int(2)))
+            .unwrap_err();
+        let call = Program::parse("call", "Read").unwrap();
+        if text_bytes == 0 {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::DuplicateStatement);
+            assert!(owner.upgrade().is_none());
+            assert!(context.checkpoint().is_err());
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::DuplicateStatement);
+            assert!(owner.upgrade().is_some());
+            assert_eq!(
+                evaluate_program_detailed(&call, &mut context)
+                    .unwrap()
+                    .to_string(),
+                "1"
+            );
+        }
+        assert_eq!(
+            evaluate_program_detailed(&call, &mut sibling)
+                .unwrap()
+                .to_string(),
+            "1"
+        );
+        drop(error);
+        assert!(owner.upgrade().is_none());
+    }
+}
+
+#[test]
 fn exact_message_context_limits_preserve_full_errors_and_one_less_rejects_before_catch() {
     for source in [
         "Outer { |x| = |absent| }\nOuter",

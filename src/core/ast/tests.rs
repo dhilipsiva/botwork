@@ -1,5 +1,30 @@
 use super::*;
 
+#[test]
+fn deferred_locations_preserve_coordinates_and_byte_summaries_never_index_source_text() {
+    let program = Program::parse("é.botwork", "#🦀\r\n\tRead {}").unwrap();
+    let span = &program.statements[0].span;
+    assert_eq!(format!("{}", span.location_display()), span.location());
+    assert_eq!(
+        format!("{:#}", span.location_display()),
+        format!("é.botwork:[byte {}; coordinates omitted]", span.start())
+    );
+    // Deliberately invalid private offsets prove alternate formatting never
+    // indexes source contents. Public parsers cannot create this span.
+    let sentinel = Span {
+        source: Arc::new(SourceFile {
+            name: "file".into(),
+            text: String::new(),
+        }),
+        start: usize::MAX,
+        end: usize::MAX,
+    };
+    assert_eq!(
+        format!("{:#}", sentinel.location_display()),
+        format!("file:[byte {}; coordinates omitted]", usize::MAX)
+    );
+}
+
 fn assigned_expression(source: &str) -> Expr {
     let program = Program::parse("expression.botwork", &format!("|answer| = |{source}|")).unwrap();
     let StatementKind::Assign {

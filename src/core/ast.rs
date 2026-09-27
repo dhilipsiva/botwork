@@ -35,6 +35,21 @@ pub struct Span {
     end: usize,
 }
 
+pub(crate) struct LocationDisplay<'a>(&'a Span);
+
+impl std::fmt::Display for LocationDisplay<'_> {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        output.write_str(self.0.source.name())?;
+        if output.alternate() {
+            // Emergency evidence must never scan source text for coordinates.
+            write!(output, ":[byte {}; coordinates omitted]", self.0.start)
+        } else {
+            let (line, column) = self.0.line_column();
+            write!(output, ":{line}:{column}")
+        }
+    }
+}
+
 impl Span {
     /// An input origin without retaining its payload; location refers to input start.
     pub(crate) fn input_origin(name: &str) -> Self {
@@ -90,6 +105,10 @@ impl Span {
     pub fn location(&self) -> String {
         let (line, column) = self.line_column();
         format!("{}:{line}:{column}", self.source.name())
+    }
+
+    pub(crate) fn location_display(&self) -> LocationDisplay<'_> {
+        LocationDisplay(self)
     }
 
     fn of(pair: &Pair<Rule>, source: &Arc<SourceFile>) -> Self {

@@ -682,6 +682,7 @@ impl Context {
         if let Some((namespace, _)) = signature.split_once("::") {
             if let Some(original) = self.frames[self.current].namespaces.get(namespace) {
                 return Err(imports::namespace_collision(
+                    self,
                     namespace,
                     &original.span,
                     span,
@@ -690,25 +691,22 @@ impl Context {
         }
         let statements = &self.frames[self.current].statements;
         if let Some(original) = statements.get(signature) {
-            let (origin, origin_span) = match original {
-                StmtType::Native { metadata, .. } => (
-                    metadata.header().source().name().to_owned(),
-                    metadata.header(),
-                ),
-                StmtType::UserDefined { definition, .. } => {
-                    (definition.span.location(), &definition.span)
-                }
-                StmtType::Imported { metadata, .. } => {
-                    (metadata.header().location(), metadata.header())
-                }
+            let origin = match original {
+                StmtType::Native { metadata, .. } => (metadata.header(), true),
+                StmtType::UserDefined { definition, .. } => (&definition.span, false),
+                StmtType::Imported { metadata, .. } => (metadata.header(), false),
             };
-            return Err(Diagnostic::new(BWErr::DuplicateStatement {
-                signature: signature.into(),
-                original: origin,
-                duplicate: span.location(),
-            })
-            .at(span)
-            .with_related("first definition", origin_span));
+            return Err(self.duplicate_error(
+                |[signature, original, duplicate]| BWErr::DuplicateStatement {
+                    signature,
+                    original,
+                    duplicate,
+                },
+                signature,
+                origin,
+                span,
+                "first definition",
+            ));
         }
         Ok(())
     }

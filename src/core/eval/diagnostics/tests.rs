@@ -1,5 +1,58 @@
 use super::*;
+use crate::core::diagnostic::DiagnosticLimits;
 use crate::core::run::{RetainedDiagnosticLimits, SnapshotLimits};
+
+#[test]
+fn collision_construction_preserves_native_names_and_marks_only_replaced_location_fields() {
+    let program = Program::parse("é.botwork", "Read {}").unwrap();
+    let span = &program.statements[0].span;
+    for native in [false, true] {
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let mut sibling = context.clone();
+        let error = context.duplicate_error(
+            |[signature, original, duplicate]| BWErr::DuplicateStatement {
+                signature,
+                original,
+                duplicate,
+            },
+            "read",
+            (span, native),
+            span,
+            "first definition",
+        );
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(
+            error.causes[0].omissions.as_ref().unwrap().detail_fields,
+            if native { 1 } else { 2 }
+        );
+        let BWErr::DuplicateStatement {
+            original,
+            duplicate,
+            ..
+        } = error.causes[0].error.as_ref()
+        else {
+            panic!("duplicate")
+        };
+        if native {
+            assert_eq!(original, "é.botwork");
+        } else {
+            assert!(original.ends_with("coordinates omitted]"));
+        }
+        assert!(duplicate.ends_with("coordinates omitted]"));
+        assert!(context.checkpoint().is_err());
+        assert!(sibling.checkpoint().is_ok());
+        let next = Program::parse("next", "|x| = |1|").unwrap();
+        assert!(evaluate_program_detailed(&next, &mut context).is_err());
+        evaluate_program_detailed(&next, &mut sibling).unwrap();
+    }
+}
 
 #[test]
 fn snapshots_share_call_and_handler_records_and_charge_their_copied_handles() {
