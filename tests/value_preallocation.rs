@@ -58,6 +58,24 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn signature_builder_rejects_large_unknown_parameter_messages_before_owned_copies() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        signature::{StatementSignature, ValueKind},
+    };
+    let name = "é".repeat(DiagnosticLimits::default().text_bytes / 2);
+    let signature = StatementSignature::native("Read |value|").unwrap();
+    let (result, large) = observe(64 * 1024, || signature.parameter(&name, ValueKind::Int));
+    let error = result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Signature);
+    let omitted = error.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omitted.detail_fields, 1);
+    assert_eq!(omitted.source.as_ref().unwrap().file, "<native>");
+    assert_eq!(large, 0);
+}
+
+#[test]
 fn input_conversion_and_resource_errors_admit_large_origins_before_message_or_source_copies() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},

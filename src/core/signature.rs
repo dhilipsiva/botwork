@@ -4,9 +4,12 @@ use std::fmt;
 
 use super::{
     ast::{self, Definition, Name, Span},
-    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticResult},
+    diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLimits, DiagnosticResult},
     grammar::{BWErr, Literal},
 };
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ValueKind {
@@ -181,6 +184,16 @@ impl StatementSignature {
         }
     }
 
+    fn builder_error(&self, message: fmt::Arguments<'_>) -> Diagnostic {
+        DiagnosticLimits::default().formatted_detail(
+            BWErr::SignatureError,
+            message,
+            Some(&self.header),
+            false,
+            std::iter::empty(),
+        )
+    }
+
     /// Constrain an exact case-sensitive parameter name; unknown names are errors.
     pub fn parameter(
         mut self,
@@ -192,11 +205,10 @@ impl StatementSignature {
             .iter_mut()
             .find(|parameter| parameter.name == name)
         else {
-            return Err(Diagnostic::new(BWErr::SignatureError(format!(
+            return Err(self.builder_error(format_args!(
                 "Unknown parameter `{name}` in `{}`",
                 self.header.text()
-            )))
-            .at(&self.header));
+            )));
         };
         parameter.accepted = accepted.into();
         Ok(self)
@@ -219,10 +231,9 @@ impl StatementSignature {
     ) -> DiagnosticResult<Self> {
         let description = description.into();
         if description.trim().is_empty() || self.errors.iter().any(|error| error.code == code) {
-            return Err(Diagnostic::new(BWErr::SignatureError(
-                "Document each error code once with a nonempty description".into(),
-            ))
-            .at(&self.header));
+            return Err(self.builder_error(format_args!(
+                "Document each error code once with a nonempty description"
+            )));
         }
         self.errors.push(StatementError { code, description });
         self.errors.sort_by_key(|error| error.code.as_str());
@@ -232,6 +243,7 @@ impl StatementSignature {
     pub fn normalized(&self) -> &str {
         &self.normalized
     }
+
     pub fn header(&self) -> &Span {
         &self.header
     }

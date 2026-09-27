@@ -65,6 +65,8 @@ pub enum Input {
     HostInputDiagnosticLimit,
     HostInputOriginBoundary,
     HostInputOriginLimit,
+    SignatureBuilderBoundary,
+    SignatureBuilderLimit,
 }
 
 #[derive(Clone)]
@@ -297,5 +299,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::HostInputOriginBoundary, stdout: "", code: None, error: None },
         Case { id: "input-origin-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::HostInputOriginLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic source bytes") },
+        Case { id: "signature-builder-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::SignatureBuilderBoundary, stdout: "", code: None, error: None },
+        Case { id: "signature-builder-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::SignatureBuilderLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
     ]
 }

@@ -647,6 +647,38 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::SignatureBuilderBoundary | Input::SignatureBuilderLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    signature::{StatementSignature, ValueKind},
+                };
+                let maximum = DiagnosticLimits::default().text_bytes;
+                let overhead = "source".len() + "Unknown parameter `` in `Read |value|`".len();
+                let name = "x".repeat(maximum - overhead + usize::from(case.error.is_some()));
+                let error = StatementSignature::native("Read |value|")
+                    .unwrap()
+                    .parameter(&name, ValueKind::Int)
+                    .unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW1004");
+                    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+                    assert!(error.causes[0].span.is_none());
+                } else {
+                    assert_eq!(error.code().as_str(), "BW1004");
+                    assert_eq!(
+                        DiagnosticLimits::default()
+                            .check(&error)
+                            .unwrap()
+                            .text_bytes,
+                        maximum
+                    );
+                    assert_eq!(error.span.as_ref().unwrap().text(), "Read |value|");
+                    assert!(error.omissions.is_none());
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

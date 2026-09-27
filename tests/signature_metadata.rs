@@ -27,6 +27,114 @@ fn typed(header: &str, parameter: ValueKind, returns: ValueKind) -> StatementSig
 }
 
 #[test]
+fn builder_errors_preserve_exact_messages_locations_and_other_metadata_owners() {
+    use botwork::core::{diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits};
+    let signature = StatementSignature::native("Read |value|").unwrap();
+    for name in ["Value", "missing", "é\n`value`"] {
+        let error = signature
+            .clone()
+            .parameter(name, ValueKind::Int)
+            .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::Signature);
+        let BWErr::SignatureError(message) = error.error.as_ref() else {
+            panic!("signature")
+        };
+        assert_eq!(
+            message,
+            &format!("Unknown parameter `{name}` in `Read |value|`")
+        );
+        let span = error.span.as_ref().unwrap();
+        assert_eq!(span.text(), "Read |value|");
+        assert_eq!(span.source().name(), "<native>");
+        assert_eq!(span.line_column(), (1, 1));
+        assert!(error.causes.is_empty() && error.omissions.is_none());
+    }
+    for error in [
+        signature
+            .clone()
+            .documents_error(DiagnosticCode::Native, "\n \t")
+            .unwrap_err(),
+        signature
+            .clone()
+            .documents_error(DiagnosticCode::Native, "first")
+            .unwrap()
+            .documents_error(DiagnosticCode::Native, "second")
+            .unwrap_err(),
+    ] {
+        assert_eq!(error.code(), DiagnosticCode::Signature);
+        let BWErr::SignatureError(message) = error.error.as_ref() else {
+            panic!("signature")
+        };
+        assert_eq!(
+            message,
+            "Document each error code once with a nonempty description"
+        );
+        assert!(error.omissions.is_none());
+        assert_eq!(error.span.as_ref().unwrap().text(), "Read |value|");
+    }
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 0,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    context
+        .register_native_with_signature(
+            signature.parameter("value", ValueKind::Int).unwrap(),
+            |values| Ok(values[0].clone()),
+        )
+        .unwrap();
+    assert_eq!(run("Read |7|", &mut context).unwrap().to_string(), "7");
+}
+
+#[test]
+fn dsl_derived_builder_errors_reject_oversized_sources_and_release_consumed_metadata() {
+    use botwork::core::{
+        ast_limits::AstLimits, diagnostic::DiagnosticLimits, syntax_limits::SyntaxLimits,
+    };
+    let filename = "é".repeat(DiagnosticLimits::default().source_bytes / 2);
+    for documentation_error in [false, true] {
+        let program = Program::parse_with_budgets(
+            &filename,
+            "Read |value| { Return |value| }",
+            1024,
+            &SyntaxLimits::default(),
+            &AstLimits {
+                source_bytes: usize::MAX,
+                ..AstLimits::default()
+            },
+        )
+        .unwrap();
+        let owner = Arc::downgrade(&program.source);
+        let StatementKind::Define(definition) = program.statements[0].kind() else {
+            panic!("definition")
+        };
+        let signature = definition.signature_metadata();
+        let start = signature.header().start();
+        let end = signature.header().end();
+        drop(program);
+        let error = if documentation_error {
+            signature.documents_error(DiagnosticCode::Native, " ")
+        } else {
+            signature.parameter("missing", ValueKind::Int)
+        }
+        .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert!(owner.upgrade().is_none());
+        let cause = &error.causes[0];
+        assert_eq!(cause.code(), DiagnosticCode::Signature);
+        assert!(cause.span.is_none());
+        let omitted = cause.omissions.as_ref().unwrap();
+        assert_eq!(omitted.detail_fields, 0);
+        let evidence = omitted.source.as_ref().unwrap();
+        assert!(evidence.file_truncated && evidence.file.len() <= 256);
+        assert_eq!((evidence.start_byte, evidence.end_byte), (start, end));
+    }
+}
+
+#[test]
 fn all_kinds_and_every_nonempty_union_have_deterministic_membership_and_display() {
     let values = [
         Literal::None,
