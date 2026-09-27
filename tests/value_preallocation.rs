@@ -58,6 +58,43 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn input_conversion_and_resource_errors_admit_large_origins_before_message_or_source_copies() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        input::{parse_variable, parse_variables, parse_variables_with_limits, InputLimits},
+    };
+    let origin = "é".repeat(DiagnosticLimits::default().source_bytes / 2 + 1);
+    for branch in 0..4 {
+        let (result, large) = observe(64 * 1024, || match branch {
+            0 => parse_variable(&origin, "no_equals").map(|_| ()),
+            1 => parse_variables(&origin, r#"{"x":1e9999}"#).map(|_| ()),
+            2 => parse_variables(&origin, r#"{"x":"#).map(|_| ()),
+            _ => parse_variables_with_limits(
+                &origin,
+                "{}",
+                &InputLimits {
+                    sources: 0,
+                    ..InputLimits::default()
+                },
+            )
+            .map(|_| ()),
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(large, 0);
+        if branch == 3 {
+            assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+            let omitted = error.causes[0].omissions.as_ref().unwrap();
+            assert!(omitted.source.as_ref().unwrap().file_truncated);
+            assert_eq!(omitted.detail_fields, 0);
+        } else {
+            assert_eq!(error.causes[0].code(), DiagnosticCode::Input);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+        }
+    }
+}
+
+#[test]
 fn standalone_invalid_input_names_reject_large_origins_before_detail_allocation() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},

@@ -84,6 +84,26 @@ fn text_limit(maximum: usize) -> BWErr {
 }
 
 impl DiagnosticLimits {
+    /// Admit a payload-free input origin before copying its borrowed name into a
+    /// SourceFile. Input resource errors already contain only fixed-size details.
+    pub(crate) fn input_origin(&self, error: BWErr, origin: &str) -> Diagnostic {
+        let skeleton = Diagnostic::new(error);
+        let admission = self
+            .check(&skeleton)
+            .and(if origin.len() <= self.source_bytes {
+                Ok(())
+            } else {
+                Err(BWErr::ResourceLimit {
+                    resource: "diagnostic source bytes",
+                    limit: self.source_bytes as u64,
+                })
+            });
+        match admission {
+            Ok(()) => skeleton.at(&Span::input_origin(origin)),
+            Err(violation) => super::rejection::reject_input_origin(skeleton, origin, violation),
+        }
+    }
+
     pub(crate) fn borrowed_detail<'a>(
         &self,
         category: fn(String) -> BWErr,

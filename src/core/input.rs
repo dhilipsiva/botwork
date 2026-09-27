@@ -21,19 +21,21 @@ use limits::{resource, Budget};
 pub const MAX_JSON_DEPTH: usize = 128;
 
 fn invalid(origin: &str, path: &str, reason: impl std::fmt::Display) -> Diagnostic {
-    Diagnostic::new(BWErr::InputError(format!("{origin}: {path}: {reason}")))
+    input_error(format_args!("{origin}: {path}: {reason}"))
+}
+
+fn input_error(message: std::fmt::Arguments<'_>) -> Diagnostic {
+    DiagnosticLimits::default().formatted_detail(
+        BWErr::InputError,
+        message,
+        None,
+        false,
+        std::iter::empty(),
+    )
 }
 
 pub(crate) fn validate_name(origin: &str, name: &str) -> DiagnosticResult<()> {
-    validate_name_with(origin, name, |message| {
-        DiagnosticLimits::default().formatted_detail(
-            BWErr::InputError,
-            message,
-            None,
-            false,
-            std::iter::empty(),
-        )
-    })
+    validate_name_with(origin, name, input_error)
 }
 
 pub(crate) fn validate_name_with(

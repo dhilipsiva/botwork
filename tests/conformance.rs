@@ -596,6 +596,57 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::HostInputOriginBoundary | Input::HostInputOriginLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    input::{parse_variables_with_limits, InputLimits},
+                };
+                let maximum = DiagnosticLimits::default().source_bytes;
+                let origin = "x".repeat(maximum + usize::from(case.error.is_some()));
+                let error = parse_variables_with_limits(
+                    &origin,
+                    "{}",
+                    &InputLimits {
+                        sources: 0,
+                        ..InputLimits::default()
+                    },
+                )
+                .unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert!(matches!(
+                        error.causes[0].error.as_ref(),
+                        BWErr::ResourceLimit {
+                            resource: "input sources",
+                            limit: 0
+                        }
+                    ));
+                    let evidence = error.causes[0]
+                        .omissions
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .as_ref()
+                        .unwrap();
+                    assert!(evidence.file_truncated && evidence.file.len() <= 256);
+                    assert!(error.causes[0].span.is_none());
+                } else {
+                    assert!(matches!(
+                        error.error.as_ref(),
+                        BWErr::ResourceLimit {
+                            resource: "input sources",
+                            limit: 0
+                        }
+                    ));
+                    assert!(error.causes.is_empty() && error.omissions.is_none());
+                    let span = error.span.as_ref().unwrap();
+                    assert_eq!(span.source().name(), origin);
+                    assert_eq!(span.source().text(), "");
+                    assert_eq!(span.line_column(), (1, 1));
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

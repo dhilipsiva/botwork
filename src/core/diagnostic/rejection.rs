@@ -186,6 +186,26 @@ fn rejected(diagnostic: Diagnostic, violation: BWErr, pending_frames: usize) -> 
     Diagnostic::new(violation).while_handling(summary)
 }
 
+pub(super) fn reject_input_origin(
+    skeleton: Diagnostic,
+    origin: &str,
+    violation: BWErr,
+) -> Diagnostic {
+    let mut error = rejected(skeleton, violation, 0);
+    let (file, file_truncated) = prefix(origin, SUMMARY_SOURCE_NAME_BYTES);
+    error.causes[0]
+        .omissions
+        .as_mut()
+        .expect("bounded original")
+        .source = Some(OmittedSource {
+        file,
+        file_truncated,
+        start_byte: 0,
+        end_byte: 0,
+    });
+    error
+}
+
 pub(super) fn reject_borrowed_detail(
     skeleton: Diagnostic,
     category: fn(String) -> BWErr,

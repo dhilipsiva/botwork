@@ -2,6 +2,33 @@ use super::*;
 use crate::core::diagnostic::DiagnosticCode;
 
 #[test]
+fn ordinary_input_errors_keep_exact_format_and_measure_before_building_the_detail() {
+    use std::cell::Cell;
+    struct Reason<'a>(&'a Cell<usize>);
+    impl std::fmt::Display for Reason<'_> {
+        fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.set(self.0.get() + 1);
+            out.write_str("reason")
+        }
+    }
+    let visits = Cell::new(0);
+    let error = invalid("é.json", "$[\"name\"]", Reason(&visits));
+    assert_eq!(visits.get(), 2);
+    let BWErr::InputError(detail) = error.error.as_ref() else {
+        panic!("input")
+    };
+    assert_eq!(detail, "é.json: $[\"name\"]: reason");
+    assert!(error.span.is_none() && error.omissions.is_none());
+    visits.set(0);
+    let origin = "x".repeat(DiagnosticLimits::default().text_bytes);
+    let error = invalid(&origin, "$", Reason(&visits));
+    assert_eq!(visits.get(), 0); // Neither failed measurement nor prefix reaches the reason.
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Input);
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+}
+
+#[test]
 fn valid_names_never_format_errors_and_invalid_names_invoke_the_reporter_once() {
     validate_name_with("origin", "é", |_| panic!("valid identifier was formatted")).unwrap();
     let mut calls = 0;

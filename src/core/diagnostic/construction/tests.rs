@@ -5,6 +5,116 @@ use crate::core::{
 };
 
 #[test]
+fn input_origin_construction_measures_the_source_name_before_retaining_it() {
+    let origin = "config-é.json";
+    let resource = || BWErr::ResourceLimit {
+        resource: "input source bytes",
+        limit: 0,
+    };
+    let baseline = Diagnostic::new(resource()).at(&Span::input_origin(origin));
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    let exact = DiagnosticLimits {
+        diagnostics: 1,
+        depth: 1,
+        call_frames: 0,
+        related_locations: 0,
+        text_bytes: size.text_bytes,
+        source_bytes: origin.len(),
+    };
+    let error = exact.input_origin(resource(), origin);
+    assert_eq!(
+        error.to_value().to_string(),
+        baseline.to_value().to_string()
+    );
+    assert_eq!(exact.check(&error).unwrap(), size);
+    assert_eq!(error.span.as_ref().unwrap().line_column(), (1, 1));
+    assert_eq!(error.span.as_ref().unwrap().source().text(), "");
+    assert!(error.causes.is_empty() && error.omissions.is_none());
+    for limits in [
+        DiagnosticLimits {
+            source_bytes: origin.len() - 1,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            text_bytes: size.text_bytes - 1,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            diagnostics: 0,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            depth: 0,
+            ..exact.clone()
+        },
+        DiagnosticLimits {
+            depth: usize::MAX,
+            ..exact.clone()
+        },
+    ] {
+        let error = limits.input_origin(resource(), origin);
+        assert!(error.is_emergency());
+        assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+        assert!(matches!(
+            error.causes[0].error.as_ref(),
+            BWErr::ResourceLimit {
+                resource: "input source bytes",
+                limit: 0
+            }
+        ));
+        assert!(error.span.is_none() && error.causes[0].span.is_none());
+        let evidence = error.causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .source
+            .as_ref()
+            .unwrap();
+        assert_eq!(evidence.file, origin);
+        assert!(!evidence.file_truncated);
+        assert_eq!((evidence.start_byte, evidence.end_byte), (0, 0));
+    }
+    let error = DiagnosticLimits {
+        source_bytes: 0,
+        ..exact
+    }
+    .input_origin(resource(), "");
+    assert!(error.causes.is_empty());
+    assert_eq!(error.span.as_ref().unwrap().source().name(), "");
+}
+
+#[test]
+fn rejected_input_origins_have_utf8_bounded_evidence_without_source_owners() {
+    let origin = "🦀".repeat(1024);
+    let error = DiagnosticLimits {
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    }
+    .input_origin(
+        BWErr::ResourceLimit {
+            resource: "input sources",
+            limit: 0,
+        },
+        &origin,
+    );
+    let cause = &error.causes[0];
+    assert!(error.span.is_none() && cause.span.is_none());
+    let omitted = cause.omissions.as_ref().unwrap();
+    assert_eq!(omitted.detail_fields, 0);
+    let source = omitted.source.as_ref().unwrap();
+    assert!(source.file_truncated && source.file.len() <= SUMMARY_SOURCE_NAME_BYTES);
+    assert!(source.file.ends_with("…[truncated]"));
+    assert_eq!((source.start_byte, source.end_byte), (0, 0));
+    assert_eq!(
+        DiagnosticLimits::default()
+            .check(&error)
+            .unwrap()
+            .source_bytes,
+        0
+    );
+}
+
+#[test]
 fn exact_borrowed_details_match_full_diagnostics_and_preserve_their_call_order() {
     let program = Program::parse("source", "|x| = |1|").unwrap();
     let span = &program.statements[0].span;

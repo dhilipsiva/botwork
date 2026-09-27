@@ -293,3 +293,200 @@ fn host_json_and_flags_share_exact_unicode_and_reserved_word_rules() {
         );
     }
 }
+
+#[test]
+fn input_helper_failures_preserve_messages_and_bound_oversized_origins() {
+    let origin = "é".repeat(DiagnosticLimits::default().text_bytes / 2);
+    let too_deep = format!("x={}0{}", "[".repeat(129), "]".repeat(129));
+    for (json, text, reason) in [
+        (false, "missing", "expected NAME=JSON"),
+        (false, "x=", "EOF while parsing a value"),
+        (
+            false,
+            "x=2147483648",
+            "integer is outside -2147483648..2147483647",
+        ),
+        (false, "x=1e9999", "decimal exceeds the finite f32 range"),
+        (
+            false,
+            too_deep.as_str(),
+            "JSON exceeds 128 nested containers",
+        ),
+        (
+            true,
+            "[]",
+            "expected a JSON object of variable names and values",
+        ),
+        (true, r#"{"x":"#, "EOF while parsing"),
+        (true, r#"{"x":"\uD800"}"#, "unexpected end of hex escape"),
+        (
+            true,
+            r#"{"x":[{"key":2147483648}]}"#,
+            "$[\"x\"][0][\"key\"]",
+        ),
+    ] {
+        let parse = |origin| {
+            if json {
+                parse_variables(origin, text).map(|_| ())
+            } else {
+                parse_variable(origin, text).map(|_| ())
+            }
+        };
+        let ordinary = parse("config").unwrap_err();
+        assert_eq!(ordinary.code(), DiagnosticCode::Input, "{text}");
+        assert!(ordinary.to_string().contains(reason), "{ordinary}");
+        assert!(ordinary.span.is_none() && ordinary.omissions.is_none());
+        let rejected = parse(&origin).unwrap_err();
+        assert_eq!(rejected.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(rejected.causes[0].code(), DiagnosticCode::Input);
+        assert_eq!(
+            rejected.causes[0].omissions.as_ref().unwrap().detail_fields,
+            1
+        );
+        assert!(rejected.causes[0].span.is_none());
+    }
+    assert_eq!(parse_variable("fresh", "x=7").unwrap().1.to_string(), "7");
+}
+
+#[test]
+fn standalone_input_helper_messages_accept_exact_default_text_bytes_and_reject_one_more() {
+    let limits = DiagnosticLimits::default();
+    let suffix = ": $: expected NAME=JSON";
+    let mut origin = "x".repeat(limits.text_bytes - "source".len() - suffix.len());
+    let error = parse_variable(&origin, "missing").unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::Input);
+    assert_eq!(limits.check(&error).unwrap().text_bytes, limits.text_bytes);
+    let BWErr::InputError(detail) = error.error.as_ref() else {
+        panic!("input")
+    };
+    assert!(detail.starts_with(&origin) && detail.ends_with(suffix));
+    drop(error);
+    origin.push('x');
+    let error = parse_variable(&origin, "missing").unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Input);
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+}
+
+#[test]
+fn input_resource_origin_has_exact_source_budget_and_retains_original_limit_on_rejection() {
+    use botwork::core::input::{parse_variables_with_limits, InputLimits};
+    let diagnostics = DiagnosticLimits::default();
+    let input = InputLimits {
+        source_bytes: 0,
+        ..InputLimits::default()
+    };
+    let mut origin = "x".repeat(diagnostics.source_bytes);
+    let error = parse_variables_with_limits(&origin, "{}", &input).unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert!(matches!(
+        error.error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "input source bytes",
+            limit: 0
+        }
+    ));
+    assert!(error.causes.is_empty());
+    assert_eq!(
+        diagnostics.check(&error).unwrap().source_bytes,
+        diagnostics.source_bytes
+    );
+    let span = error.span.as_ref().unwrap();
+    assert_eq!(span.source().name(), origin);
+    assert_eq!(span.source().text(), "");
+    assert_eq!(span.line_column(), (1, 1));
+    drop(error);
+    origin.push('x');
+    let error = parse_variables_with_limits(&origin, "{}", &input).unwrap_err();
+    assert!(matches!(
+        error.error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "diagnostic source bytes",
+            ..
+        }
+    ));
+    assert!(matches!(
+        error.causes[0].error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "input source bytes",
+            limit: 0
+        }
+    ));
+    assert!(error.span.is_none() && error.causes[0].span.is_none());
+    let evidence = error.causes[0]
+        .omissions
+        .as_ref()
+        .unwrap()
+        .source
+        .as_ref()
+        .unwrap();
+    assert!(evidence.file_truncated && evidence.file.len() <= 256);
+    assert_eq!((evidence.start_byte, evidence.end_byte), (0, 0));
+    assert_eq!(diagnostics.check(&error).unwrap().source_bytes, 0);
+}
+
+#[test]
+fn input_limits_precede_later_conversion_failures_even_when_origin_is_rejected() {
+    use botwork::core::input::{parse_variables_with_limits, InputLimits};
+    let origin = "é".repeat(DiagnosticLimits::default().source_bytes / 2 + 1);
+    for (limits, expected) in [
+        (
+            InputLimits {
+                sources: 0,
+                ..InputLimits::default()
+            },
+            "input sources",
+        ),
+        (
+            InputLimits {
+                source_bytes: 0,
+                ..InputLimits::default()
+            },
+            "input source bytes",
+        ),
+        (
+            InputLimits {
+                total_bytes: 0,
+                ..InputLimits::default()
+            },
+            "total input bytes",
+        ),
+        (
+            InputLimits {
+                raw_nodes: 0,
+                ..InputLimits::default()
+            },
+            "input raw nodes",
+        ),
+        (
+            InputLimits {
+                variables: 0,
+                ..InputLimits::default()
+            },
+            "input variables",
+        ),
+    ] {
+        let error =
+            parse_variables_with_limits(&origin, r#"{"x":2147483648}"#, &limits).unwrap_err();
+        assert!(matches!(
+            error.error.as_ref(),
+            BWErr::ResourceLimit {
+                resource: "diagnostic source bytes",
+                ..
+            }
+        ));
+        assert!(
+            matches!(error.causes[0].error.as_ref(), BWErr::ResourceLimit { resource, limit: 0 } if *resource == expected)
+        );
+        assert!(
+            error.causes[0]
+                .omissions
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap()
+                .file_truncated
+        );
+    }
+}

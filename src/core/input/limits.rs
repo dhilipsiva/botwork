@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::{ast::Span, value_limits::ValueLimits};
+use crate::core::value_limits::ValueLimits;
 
 #[cfg(test)]
 mod tests;
@@ -29,7 +29,7 @@ impl Default for InputLimits {
 }
 
 pub(super) fn resource(origin: &str, error: BWErr) -> Diagnostic {
-    Diagnostic::new(error).at(&Span::input_origin(origin))
+    DiagnosticLimits::default().input_origin(error, origin)
 }
 fn exceeded(origin: &str, name: &'static str, maximum: usize) -> Diagnostic {
     resource(
