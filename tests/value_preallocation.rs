@@ -11,6 +11,8 @@ use std::{
 };
 
 struct ObservedAllocator;
+#[path = "support/worker_panic.rs"]
+mod worker_panic;
 thread_local! {
     static THRESHOLD:Cell<usize>=const {Cell::new(usize::MAX)};
     static LARGE:Cell<usize>=const {Cell::new(0)};
@@ -55,6 +57,112 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
     let result = action();
     drop(reset);
     (result, LARGE.with(Cell::get))
+}
+
+#[test]
+fn worker_join_construction_allocates_only_admitted_full_messages_and_cleanup_causes() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        operation::{NativeOperation, OperationControl},
+        signature::StatementSignature,
+    };
+    use std::{
+        future::Future,
+        num::NonZeroUsize,
+        task::{Context, Waker},
+        time::Duration,
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    for cleanup in [false, true] {
+        for reject in [false, true] {
+            let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let release_rx = Mutex::new(release_rx);
+            let operation = NativeOperation::blocking(
+                StatementSignature::native("Read").unwrap(),
+                NonZeroUsize::new(1).unwrap(),
+                move |_, _| {
+                    if cleanup {
+                        started_tx.send(()).unwrap();
+                        release_rx
+                            .lock()
+                            .unwrap()
+                            .recv_timeout(Duration::from_secs(5))
+                            .unwrap();
+                    }
+                    std::panic::panic_any(worker_panic::EscapingPanic(Some("é\n".repeat(32_768))));
+                },
+            )
+            .unwrap()
+            .with_diagnostic_limits(if reject {
+                if cleanup {
+                    // The worker error alone fits; its known stop root does not.
+                    DiagnosticLimits {
+                        diagnostics: 1,
+                        ..DiagnosticLimits::default()
+                    }
+                } else {
+                    DiagnosticLimits {
+                        text_bytes: 32,
+                        ..DiagnosticLimits::default()
+                    }
+                }
+            } else {
+                DiagnosticLimits::default()
+            })
+            .unwrap();
+            // Only the invoking thread's allocations are observed. Worker-owned
+            // panic payloads and Tokio's panic handling are a separate boundary.
+            let (error, copies) = observe(64 * 1024, || {
+                runtime.block_on(async {
+                    let control = OperationControl::default();
+                    let mut invocation = Box::pin(operation.invoke(vec![], control.clone()));
+                    if cleanup {
+                        assert!(invocation
+                            .as_mut()
+                            .poll(&mut Context::from_waker(Waker::noop()))
+                            .is_pending());
+                        started_rx.recv().await.unwrap();
+                        control.cancel();
+                        assert!(invocation
+                            .as_mut()
+                            .poll(&mut Context::from_waker(Waker::noop()))
+                            .is_pending());
+                        release_tx.send(()).unwrap();
+                    }
+                    invocation.await.unwrap_err()
+                })
+            });
+            assert_eq!(
+                copies,
+                usize::from(!reject),
+                "cleanup={cleanup}, reject={reject}"
+            );
+            assert_eq!(
+                error.code(),
+                if cleanup {
+                    DiagnosticCode::Cancelled
+                } else if reject {
+                    DiagnosticCode::ResourceLimit
+                } else {
+                    DiagnosticCode::AsyncRuntime
+                }
+            );
+            if cleanup {
+                assert_eq!(
+                    error.causes[0].code(),
+                    if reject {
+                        DiagnosticCode::ResourceLimit
+                    } else {
+                        DiagnosticCode::AsyncRuntime
+                    }
+                );
+            }
+        }
+    }
 }
 
 #[test]

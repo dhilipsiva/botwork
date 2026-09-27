@@ -309,14 +309,12 @@ impl NativeOperation {
                         worker.abort(); // Cancels queued work; started callbacks must cooperate.
                         match worker.await {
                             Ok(Err(cause)) => error.causes.push(cause.into_inner().at(self.signature.header())),
-                            Err(cause) if !cause.is_cancelled() => error.causes.push(
-                                Diagnostic::new(BWErr::AsyncRuntime(format!("Blocking worker ended during cleanup: {cause}"))).at(self.signature.header())
-                            ),
+                            Err(cause) if !cause.is_cancelled() => error = self.worker_cleanup_error(error, &cause),
                             _ => (),
                         }
                         return Err(error);
                     }
-                    value = &mut worker => value.map_err(|error| BWErr::AsyncRuntime(format!("Blocking worker ended unexpectedly: {error}")))?.map_err(OwnedDiagnostic::into_inner)?,
+                    value = &mut worker => value.map_err(|error| self.worker_error(&error))?.map_err(OwnedDiagnostic::into_inner)?,
                 }
             }
         };
@@ -326,6 +324,43 @@ impl NativeOperation {
         self.signature
             .validate_return(&value, |message| self.signature_error(message))?;
         Ok(value)
+    }
+
+    fn worker_error(&self, error: &tokio::task::JoinError) -> Diagnostic {
+        self.diagnostic_limits.formatted_detail(
+            BWErr::AsyncRuntime,
+            format_args!("Blocking worker ended unexpectedly: {error}"),
+            Some(self.signature.header()),
+            false,
+            std::iter::empty(),
+        )
+    }
+
+    fn worker_cleanup_error(
+        &self,
+        primary: Diagnostic,
+        cause: &tokio::task::JoinError,
+    ) -> Diagnostic {
+        // This stop was observed before requesting cancellation to drain the
+        // worker. Its known context is part of initial cause admission.
+        let preserve_stop = matches!(
+            primary.code(),
+            DiagnosticCode::Cancelled | DiagnosticCode::Timeout
+        );
+        self.diagnostic_limits
+            .formatted_cause(
+                primary,
+                BWErr::AsyncRuntime,
+                format_args!("Blocking worker ended during cleanup: {cause}"),
+                self.signature.header(),
+            )
+            .unwrap_or_else(|rejection| {
+                if preserve_stop {
+                    preserve_primary(rejection)
+                } else {
+                    rejection
+                }
+            })
     }
 
     fn signature_error(&self, message: std::fmt::Arguments<'_>) -> Diagnostic {
@@ -394,11 +429,13 @@ fn admit_error(
     }
     match limits.admit(error.at(signature.header())) {
         Ok(error) => error,
-        Err(mut error) if preserve_stop => {
-            let mut original = error.causes.pop().expect("bounded original");
-            original.causes.push(error);
-            original
-        }
+        Err(error) if preserve_stop => preserve_primary(error),
         Err(error) => error,
     }
+}
+
+fn preserve_primary(mut rejection: Diagnostic) -> Diagnostic {
+    let mut original = rejection.causes.pop().expect("bounded original");
+    original.causes.push(rejection);
+    original
 }

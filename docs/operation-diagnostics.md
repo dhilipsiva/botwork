@@ -14,6 +14,8 @@ Factory, poll, and worker panic details also use [borrowed construction admissio
 
 Signature argument/return failures use [formatted construction admission](diagnostic-construction.md#formatted-signature-failures), counting streamed message bytes before allocation. Wrong arguments reject before callback entry; wrong returns preserve completed effects and remain subordinate to observed stops.
 
+Unexpected worker join failures and their cleanup equivalents use [join construction admission](diagnostic-construction.md#worker-join-failures). Admit the complete known stop/cause tree before allocating a cleanup message; rejection preserves the stop with a resource-limit cause and an explicit omitted-cause count. Accepted task identifiers and escaped panic details retain their exact wording.
+
 ## Stops and Ownership
 
 Observe child cancellation/deadlines after callback completion, including failures returned during the same completion. Keep the observed stop primary and retain admitted callback evidence when the combined tree fits. If the stop tree exceeds diagnostic quotas, return its bounded original-category summary with the quota failure as its cause; record omitted causes explicitly. A callback-reported cancellation category alone does not signal an observed stop.
@@ -24,6 +26,6 @@ Dropped invocations signal their child. Owned result/error guards dispose abando
 
 ## Scope and Evidence
 
-These limits admit ownership after callbacks construct errors. They do not preflight callback allocations, initial error-message construction, arbitrary future/capture destructors, aggregate concurrent arguments/results/errors, host-retained results, formatting, or serialization. Synchronous DSL execution uses its separate runtime settings; async DSL dispatch and hard worker deadlines remain planned work.
+These limits admit ownership after callbacks construct errors. Named interpreter-generated messages have the construction checks above; callback allocations, other initial error-message construction, arbitrary future/capture destructors, aggregate concurrent arguments/results/errors, host-retained results, rendering, and serialization retain separate boundaries. Synchronous DSL execution uses its separate runtime settings; async DSL dispatch and hard worker deadlines remain planned work.
 
 Contract checks cover all dimensions, exact/zero/invalid allowances, source ownership, accepted identity, emergency-shaped host input, clone isolation, same-completion stops, controlled-clock deadlines, panic/error boundaries, deep rejection, and abandoned-worker capacity release. An allocation observation checks rejected large details without copies. R20 host corpus cases and a Rust doctest pin the operation boundary.

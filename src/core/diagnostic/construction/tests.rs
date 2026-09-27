@@ -5,6 +5,51 @@ use crate::core::{
 };
 
 #[test]
+fn cause_construction_rejects_complete_primary_context_before_visiting_the_cause_formatter() {
+    struct Forbidden;
+    impl std::fmt::Display for Forbidden {
+        fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            panic!("cause formatter visited")
+        }
+    }
+    let program = Program::parse("source", "Read {}").unwrap();
+    let weak = Arc::downgrade(&program.source);
+    for limits in [
+        DiagnosticLimits {
+            diagnostics: 1,
+            ..DiagnosticLimits::default()
+        },
+        DiagnosticLimits {
+            depth: 1,
+            ..DiagnosticLimits::default()
+        },
+        DiagnosticLimits {
+            text_bytes: "source".len() * 2,
+            ..DiagnosticLimits::default()
+        },
+        DiagnosticLimits {
+            source_bytes: 0,
+            ..DiagnosticLimits::default()
+        },
+    ] {
+        let error = limits
+            .formatted_cause(
+                Diagnostic::new(BWErr::Cancelled("stopped".into())),
+                BWErr::AsyncRuntime,
+                format_args!("{}", Forbidden),
+                &program.statements[0].span,
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].code(), DiagnosticCode::Cancelled);
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().direct_causes, 1);
+        assert!(error.causes[0].span.is_none());
+    }
+    drop(program);
+    assert!(weak.upgrade().is_none());
+}
+
+#[test]
 fn source_prefix_admits_complete_call_context_and_distinct_equal_source_owners_before_copying() {
     let caller = Program::parse("file", "Read {}").unwrap();
     let frame = CallFrame {

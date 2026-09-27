@@ -1,6 +1,6 @@
 //! Admission for a single borrowed error-detail field before its first owned copy.
 
-use super::{CallFrame, Diagnostic, DiagnosticLimits};
+use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult};
 use crate::core::{ast::Span, grammar::BWErr};
 use std::{
     fmt::{self, Write},
@@ -284,6 +284,66 @@ impl DiagnosticLimits {
         self.formatted_in(skeleton, category, details, frames)
     }
 
+    /// The caller already owns the primary error. Admit a newly constructed cause
+    /// with that entire tree before formatting its detail; rejection summarizes
+    /// the primary and explicitly counts the omitted cause.
+    pub(crate) fn formatted_cause(
+        &self,
+        primary: Diagnostic,
+        category: fn(String) -> BWErr,
+        message: fmt::Arguments<'_>,
+        span: &Span,
+    ) -> DiagnosticResult<Diagnostic> {
+        let mut primary = primary.at(span);
+        primary.causes.push(skeleton(category, Some(span), false));
+        match self.formatted_strings(
+            &primary,
+            &[FormattedDetail::exact(message)],
+            std::iter::empty(),
+        ) {
+            Ok([detail]) => {
+                primary.causes.last_mut().expect("new cause").error = Arc::new(category(detail));
+                Ok(primary)
+            }
+            Err(violation) => Err(primary.rejected(violation)),
+        }
+    }
+
+    fn formatted_strings<'a, const N: usize>(
+        &self,
+        skeleton: &Diagnostic,
+        messages: &[FormattedDetail<'_>; N],
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Result<[String; N], BWErr> {
+        self.check_with_stack(skeleton, frames).and_then(|size| {
+            let mut remaining = self.text_bytes - size.text_bytes;
+            let mut sizes = [0; N];
+            for (message, size) in messages.iter().zip(&mut sizes) {
+                let mut count = Counter {
+                    bytes: 0,
+                    maximum: remaining,
+                };
+                count
+                    .write_fmt(message.full)
+                    .map_err(|_| text_limit(self.text_bytes))?;
+                *size = count.bytes;
+                remaining -= count.bytes;
+            }
+            let mut details = std::array::from_fn(|_| String::new());
+            for ((message, size), detail) in messages.iter().zip(sizes).zip(&mut details) {
+                let mut output = BoundedText {
+                    text: String::with_capacity(size),
+                    maximum: size,
+                };
+                output
+                    .write_fmt(message.full)
+                    .map_err(|_| text_limit(self.text_bytes))?;
+                *detail = output.text;
+            }
+            Ok(details)
+        })
+    }
+
     fn formatted_in<'a, const N: usize>(
         &self,
         mut skeleton: Diagnostic,
@@ -291,35 +351,7 @@ impl DiagnosticLimits {
         messages: [FormattedDetail<'_>; N],
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
-        let admission = self
-            .check_with_stack(&skeleton, frames.clone())
-            .and_then(|size| {
-                let mut remaining = self.text_bytes - size.text_bytes;
-                let mut sizes = [0; N];
-                for (message, size) in messages.iter().zip(&mut sizes) {
-                    let mut count = Counter {
-                        bytes: 0,
-                        maximum: remaining,
-                    };
-                    count
-                        .write_fmt(message.full)
-                        .map_err(|_| text_limit(self.text_bytes))?;
-                    *size = count.bytes;
-                    remaining -= count.bytes;
-                }
-                let mut details = std::array::from_fn(|_| String::new());
-                for ((message, size), detail) in messages.iter().zip(sizes).zip(&mut details) {
-                    let mut output = BoundedText {
-                        text: String::with_capacity(size),
-                        maximum: size,
-                    };
-                    output
-                        .write_fmt(message.full)
-                        .map_err(|_| text_limit(self.text_bytes))?;
-                    *detail = output.text;
-                }
-                Ok(details)
-            });
+        let admission = self.formatted_strings(&skeleton, &messages, frames.clone());
         match admission {
             Ok(details) => {
                 skeleton.error = Arc::new(category(details));

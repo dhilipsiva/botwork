@@ -17,6 +17,146 @@ use std::{
     time::Duration,
 };
 
+#[path = "support/worker_panic.rs"]
+mod worker_panic;
+use worker_panic::EscapingPanic;
+
+#[tokio::test]
+async fn worker_join_failures_keep_bounded_runtime_evidence_and_release_capacity_for_reuse() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for reject in [false, true] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let operation = NativeOperation::blocking(
+            StatementSignature::native("Read").unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+            move |_, _| {
+                if seen.fetch_add(1, Ordering::SeqCst) == 0 {
+                    std::panic::panic_any(EscapingPanic(Some("é\n".repeat(256))));
+                }
+                Ok(Literal::Int(7))
+            },
+        )
+        .unwrap()
+        .with_diagnostic_limits(if reject {
+            DiagnosticLimits {
+                text_bytes: 32,
+                ..DiagnosticLimits::default()
+            }
+        } else {
+            DiagnosticLimits::default()
+        })
+        .unwrap();
+        let parent = OperationControl::default();
+        let error = operation.invoke(vec![], parent.clone()).await.unwrap_err();
+        let detail = if reject {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::AsyncRuntime);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+            assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
+            error.causes[0].error.as_ref()
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::AsyncRuntime);
+            assert_eq!(error.span.as_ref().unwrap().text(), "Read");
+            error.error.as_ref()
+        };
+        let BWErr::AsyncRuntime(detail) = detail else {
+            panic!("worker detail")
+        };
+        assert!(detail.starts_with("Blocking worker ended unexpectedly: task "));
+        if reject {
+            assert!(detail.len() <= 256 && detail.ends_with("…[truncated]"));
+        }
+        assert!(!parent.is_cancelled());
+        assert_eq!(
+            operation.invoke(vec![], parent).await.unwrap().to_string(),
+            "7"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn worker_join_cleanup_preserves_observed_stops_and_omits_causes_that_do_not_fit() {
+    for timeout in [false, true] {
+        for reject in [false, true] {
+            let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let release_rx = Mutex::new(release_rx);
+            let operation = NativeOperation::blocking(
+                StatementSignature::native("Wait").unwrap(),
+                NonZeroUsize::new(1).unwrap(),
+                move |_, control| {
+                    started_tx.send(()).unwrap();
+                    release_rx
+                        .lock()
+                        .unwrap()
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                    assert!(control.is_cancelled());
+                    std::panic::panic_any(EscapingPanic(Some("cleanup é failure".into())));
+                },
+            )
+            .unwrap()
+            .with_diagnostic_limits(if reject {
+                DiagnosticLimits {
+                    diagnostics: 1,
+                    ..DiagnosticLimits::default()
+                }
+            } else {
+                DiagnosticLimits::default()
+            })
+            .unwrap();
+            let parent = OperationControl::default();
+            let control = parent.child(if timeout {
+                Some(tokio::time::Instant::now() + Duration::from_secs(1))
+            } else {
+                None
+            });
+            let mut invocation = Box::pin(operation.invoke(vec![], control.clone()));
+            assert!(invocation
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending());
+            started_rx.recv().await.unwrap();
+            if timeout {
+                tokio::time::advance(Duration::from_secs(1)).await;
+            } else {
+                control.cancel();
+            }
+            assert!(invocation
+                .as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending());
+            release_tx.send(()).unwrap();
+            let error = invocation.await.unwrap_err();
+            assert_eq!(
+                error.code(),
+                if timeout {
+                    DiagnosticCode::Timeout
+                } else {
+                    DiagnosticCode::Cancelled
+                }
+            );
+            if reject {
+                assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.omissions.as_ref().unwrap().direct_causes, 1);
+                assert!(!error.omissions.as_ref().unwrap().prior_summary);
+            } else {
+                assert_eq!(error.causes[0].code(), DiagnosticCode::AsyncRuntime);
+                let BWErr::AsyncRuntime(detail) = error.causes[0].error.as_ref() else {
+                    panic!("worker cause")
+                };
+                assert!(
+                    detail.starts_with("Blocking worker ended during cleanup: task ")
+                        && detail.contains("cleanup é failure")
+                );
+            }
+            assert!(!parent.is_cancelled());
+        }
+    }
+}
+
 fn operation(error: Diagnostic, blocking: bool) -> NativeOperation {
     let error = Mutex::new(Some(error));
     let signature = StatementSignature::native("Fail").unwrap();

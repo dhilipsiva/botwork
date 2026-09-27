@@ -81,6 +81,8 @@ pub enum Input {
     SyntaxDiagnosticLimit,
     GuardDiagnosticBoundary,
     GuardDiagnosticLimit,
+    WorkerJoinBoundary,
+    WorkerJoinLimit,
 }
 
 #[derive(Clone)]
@@ -345,5 +347,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::GuardDiagnosticBoundary, stdout: "", code: None, error: None },
         Case { id: "guard-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::GuardDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic source bytes") },
+        Case { id: "worker-join-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::WorkerJoinBoundary, stdout: "", code: None, error: None },
+        Case { id: "worker-join-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::WorkerJoinLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic source bytes") },
     ]
 }

@@ -2,6 +2,8 @@
 mod cli_harness;
 #[path = "conformance/cases.rs"]
 mod corpus;
+#[path = "support/worker_panic.rs"]
+mod worker_panic;
 
 use botwork::core::grammar::{BWErr, Literal, Operate, Rule};
 use cli_harness::Harness;
@@ -384,6 +386,54 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                     assert!(error.omissions.is_none());
                     assert_eq!(error.span.as_ref().unwrap().source().name(), "<native>");
                 }
+                continue;
+            }
+            Input::WorkerJoinBoundary | Input::WorkerJoinLimit => {
+                use botwork::core::{
+                    diagnostic::{DiagnosticCode, DiagnosticLimits},
+                    operation::{NativeOperation, OperationControl},
+                    signature::StatementSignature,
+                };
+                let operation = NativeOperation::blocking(
+                    StatementSignature::native("Read").unwrap(),
+                    std::num::NonZeroUsize::new(1).unwrap(),
+                    |_, _| {
+                        std::panic::panic_any(worker_panic::EscapingPanic(Some("join é\n".into())))
+                    },
+                )
+                .unwrap()
+                .with_diagnostic_limits(DiagnosticLimits {
+                    source_bytes: 12 - usize::from(case.error.is_some()),
+                    ..DiagnosticLimits::default()
+                })
+                .unwrap();
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .unwrap();
+                let error = runtime
+                    .block_on(operation.invoke(vec![], OperationControl::default()))
+                    .unwrap_err();
+                let detail = if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code(), DiagnosticCode::AsyncRuntime);
+                    assert!(error.causes[0].span.is_none());
+                    let omitted = error.causes[0].omissions.as_ref().unwrap();
+                    assert_eq!(omitted.detail_fields, 0);
+                    assert!(!omitted.prior_summary);
+                    error.causes[0].error.as_ref()
+                } else {
+                    assert_eq!(error.code(), DiagnosticCode::AsyncRuntime);
+                    assert_eq!(error.span.as_ref().unwrap().text(), "Read");
+                    assert!(error.omissions.is_none());
+                    error.error.as_ref()
+                };
+                let BWErr::AsyncRuntime(detail) = detail else {
+                    panic!("join category")
+                };
+                assert!(detail.starts_with("Blocking worker ended unexpectedly: task "));
+                assert!(detail.contains("join é\\n"));
                 continue;
             }
             Input::BorrowedDiagnosticBoundary | Input::BorrowedDiagnosticLimit => {
