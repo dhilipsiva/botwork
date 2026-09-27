@@ -676,3 +676,20 @@ assert!(error.causes[0].span.is_none());
 assert!(context.checkpoint().is_err());
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Validation Diagnostic Construction
+
+Control-placement and duplicate-parameter diagnostics use local construction limits before formatting their owned locations. Even unreachable invalid controls are rejected before effects; bounded evidence keeps their original category and byte offset.
+
+```rust
+use botwork::core::{diagnostic::{DiagnosticCode, DiagnosticLimits}, run::{Engine, RunLimits, RunOptions}};
+let run = Engine::default().run_source("validation", "If |false| { Break }", RunOptions {
+    limits: RunLimits { diagnostics: DiagnosticLimits { text_bytes: 0, ..DiagnosticLimits::default() }, ..RunLimits::default() },
+    ..RunOptions::default()
+});
+assert_eq!(run.steps, 0);
+let error = run.result.unwrap_err();
+assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+assert_eq!(error.causes[0].code(), DiagnosticCode::InvalidControl);
+assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+```

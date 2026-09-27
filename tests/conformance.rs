@@ -777,6 +777,52 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::ValidationDiagnosticBoundary | Input::ValidationDiagnosticLimit => {
+                use botwork::core::{
+                    ast::Program,
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                for source in ["If |false| { Return }", "Read |é| with |é| {}"] {
+                    let baseline = Program::parse_detailed(case.id, source).unwrap_err();
+                    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+                    let run = Engine::default().run_source(
+                        case.id,
+                        source,
+                        RunOptions {
+                            limits: RunLimits {
+                                diagnostics: DiagnosticLimits {
+                                    text_bytes: size.text_bytes - usize::from(case.error.is_some()),
+                                    ..DiagnosticLimits::default()
+                                },
+                                ..RunLimits::default()
+                            },
+                            ..RunOptions::default()
+                        },
+                    );
+                    assert_eq!(run.steps, 0);
+                    let error = run.result.unwrap_err();
+                    if let Some(expected) = case.error {
+                        assert_eq!(error.code().as_str(), case.code.unwrap());
+                        assert!(error.to_string().contains(expected));
+                        assert_eq!(error.causes[0].code(), baseline.code());
+                        let omissions = error.causes[0].omissions.as_ref().unwrap();
+                        assert_eq!(omissions.detail_fields, 1 + size.related_locations);
+                        assert_eq!(omissions.related_locations, size.related_locations);
+                        assert_eq!(
+                            omissions.source.as_ref().unwrap().start_byte,
+                            baseline.span.as_ref().unwrap().start()
+                        );
+                        assert!(error.causes[0].span.is_none());
+                    } else {
+                        assert_eq!(
+                            error.to_value().to_string(),
+                            baseline.to_value().to_string()
+                        );
+                    }
+                }
+                continue;
+            }
             Input::CollisionDiagnosticBoundary | Input::CollisionDiagnosticLimit => {
                 use botwork::core::{
                     diagnostic::DiagnosticLimits,

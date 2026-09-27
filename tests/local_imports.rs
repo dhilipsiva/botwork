@@ -21,6 +21,60 @@ use std::{
 struct Project(Harness);
 
 #[test]
+fn module_validation_admits_entered_calls_before_details_and_preserves_pre_import_effects() {
+    use botwork::core::{diagnostic::DiagnosticLimits, run::RunLimits};
+    let project = Project::new();
+    for (module, code, fields) in [
+        ("Effect\nBreak", DiagnosticCode::InvalidControl, 1),
+        (
+            "Effect\nRead |é| with |é| {}",
+            DiagnosticCode::DuplicateParameter,
+            2,
+        ),
+    ] {
+        project.write("invalid.botwork", module);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                call_frames: 0,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        let seen = calls.clone();
+        context
+            .register_native("Effect", move |_| {
+                seen.fetch_add(1, Ordering::SeqCst);
+                Ok(Literal::None)
+            })
+            .unwrap();
+        let mut sibling = context.clone();
+        let error = project.run("Effect\nRead { Import |\"invalid.botwork\"| As |lib| }\nTry { Read } Catch { Effect }\nEffect", &mut context).unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        let original = &error.causes[0];
+        assert_eq!(original.code(), code);
+        let omissions = original.omissions.as_ref().unwrap();
+        assert_eq!(omissions.call_frames, 1);
+        assert_eq!(omissions.detail_fields, fields);
+        assert_eq!(omissions.related_locations, if fields == 1 { 1 } else { 2 });
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(context.checkpoint().is_err());
+        project.write("invalid.botwork", "Value { Return |7| }");
+        assert_eq!(
+            project
+                .run(
+                    "Import |\"invalid.botwork\"| As |lib|\nlib::Value",
+                    &mut sibling
+                )
+                .unwrap()
+                .to_string(),
+            "7"
+        );
+    }
+}
+
+#[test]
 fn namespace_collision_admits_both_locations_before_loading_and_preserves_original_namespace() {
     use botwork::core::{diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits};
     let project = Project::new();

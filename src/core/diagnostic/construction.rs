@@ -184,6 +184,23 @@ impl DiagnosticLimits {
         expression: bool,
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
+        self.formatted_evidence(
+            category,
+            messages.map(FormattedDetail::exact),
+            span,
+            expression,
+            frames,
+        )
+    }
+
+    pub(crate) fn formatted_evidence<'a, const N: usize>(
+        &self,
+        category: impl Fn([String; N]) -> BWErr,
+        details: [FormattedDetail<'_>; N],
+        span: Option<&Span>,
+        expression: bool,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Diagnostic {
         let mut skeleton = Diagnostic::new(category(std::array::from_fn(|_| String::new())));
         if let Some(span) = span {
             skeleton = if expression {
@@ -192,12 +209,7 @@ impl DiagnosticLimits {
                 skeleton.at(span)
             };
         }
-        self.formatted_in(
-            skeleton,
-            category,
-            messages.map(FormattedDetail::exact),
-            frames,
-        )
+        self.formatted_in(skeleton, category, details, frames)
     }
 
     /// The related label is fixed interpreter text. Its small owned record is

@@ -342,12 +342,13 @@ impl Context {
             .as_ref()
             .map(|budget| budget.limits().clone())
             .unwrap_or_default();
-        Program::parse_with_budgets(
+        Program::parse_with_reporter(
             name,
             source,
             limits.source_bytes,
             &limits.syntax,
             &limits.ast,
+            |failure| self.validation_error(failure),
         )
         .map_err(|error| self.retain_limit(error))
     }
@@ -1541,7 +1542,8 @@ pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) 
         let limits = context.limits();
         super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
             .map_err(|error| context.retain_limit(error))?;
-        ast::validate_control_script_detailed(statements)?;
+        ast::validate_control_script(statements)
+            .map_err(|failure| context.validation_error(failure))?;
         finish_script(evaluate_statement(statement, context)?).map(TemporaryValue::into_inner)
     })();
     result.map_err(|error| context.diagnostic(error, None, false))
@@ -1558,7 +1560,9 @@ pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> Ru
         context.checkpoint()?;
         let limits = context.limits();
         program
-            .validate_with_limits(&limits.ast, limits.source_bytes)
+            .validate_with_reporter(&limits.ast, limits.source_bytes, |failure| {
+                context.validation_error(failure)
+            })
             .map_err(|error| context.retain_limit(error))?;
         let mut result = None;
         for statement in &program.statements {
@@ -1585,7 +1589,7 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
 pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
     let result = (|| {
         context.checkpoint()?;
-        let node = ast::from_pair(pair)?;
+        let node = ast::from_pair_with_reporter(pair, |failure| context.validation_error(failure))?;
         let limits = context.limits();
         super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)
             .map_err(|error| context.retain_limit(error))?;
@@ -1595,7 +1599,8 @@ pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResul
                 evaluate_expression(&expression, context).map(TemporaryValue::into_inner)
             }
             Node::Block(block) => {
-                ast::validate_control_script_detailed(&block.statements)?;
+                ast::validate_control_script(&block.statements)
+                    .map_err(|failure| context.validation_error(failure))?;
                 finish_script(evaluate_block(&block, context)?).map(TemporaryValue::into_inner)
             }
             Node::None => context

@@ -58,6 +58,59 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn validation_limits_skip_large_location_copies_while_preserving_required_source_ownership() {
+    use botwork::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
+    let filename = "é".repeat(128 * 1024);
+    let engine = Engine::default();
+    for (source, code, location_fields) in [
+        ("Return", DiagnosticCode::InvalidControl, 1),
+        (
+            "Read |x| with |x| {}",
+            DiagnosticCode::DuplicateParameter,
+            2,
+        ),
+    ] {
+        let (accepted, full_copies) = observe(64 * 1024, || {
+            engine.run_source(&filename, source, RunOptions::default())
+        });
+        assert_eq!(accepted.result.unwrap_err().code(), code);
+        for diagnostics in [
+            DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            DiagnosticLimits {
+                source_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+        ] {
+            let (rejected, copies) = observe(64 * 1024, || {
+                engine.run_source(
+                    &filename,
+                    source,
+                    RunOptions {
+                        limits: RunLimits {
+                            diagnostics,
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                )
+            });
+            let error = rejected.result.unwrap_err();
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), code);
+            assert_eq!(
+                error.causes[0].omissions.as_ref().unwrap().detail_fields,
+                location_fields
+            );
+            assert_eq!(copies, 1); // The parser still owns its source filename.
+            assert_eq!(full_copies, copies + location_fields);
+        }
+    }
+}
+
+#[test]
 fn collision_errors_reject_large_source_names_without_location_message_copies() {
     use botwork::core::{
         ast::Program,

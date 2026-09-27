@@ -40,6 +40,15 @@ impl std::fmt::Display for AccessPath<'_> {
 }
 
 impl Context {
+    pub(super) fn validation_error(&self, failure: ast::ValidationFailure<'_>) -> Diagnostic {
+        let stopped = self.checkpoint().err();
+        let error = failure.diagnostic(
+            &self.limits().diagnostics,
+            self.calls.iter().map(|record| &record.frame),
+        );
+        self.finish_constructed_error(error, stopped, Some(failure.span()), false)
+    }
+
     pub(super) fn duplicate_error(
         &self,
         category: fn([String; 3]) -> BWErr,

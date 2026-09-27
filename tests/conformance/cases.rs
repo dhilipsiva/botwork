@@ -75,6 +75,8 @@ pub enum Input {
     SetupDiagnosticLimit,
     CollisionDiagnosticBoundary,
     CollisionDiagnosticLimit,
+    ValidationDiagnosticBoundary,
+    ValidationDiagnosticLimit,
 }
 
 #[derive(Clone)]
@@ -327,5 +329,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::CollisionDiagnosticBoundary, stdout: "", code: None, error: None },
         Case { id: "collision-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::CollisionDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
+        Case { id: "validation-diagnostic-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::ValidationDiagnosticBoundary, stdout: "", code: None, error: None },
+        Case { id: "validation-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::ValidationDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
     ]
 }

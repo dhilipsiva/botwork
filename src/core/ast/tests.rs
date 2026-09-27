@@ -1,6 +1,109 @@
 use super::*;
 
 #[test]
+fn rejected_validation_evidence_never_scans_source_coordinates_and_releases_owners() {
+    let owner = Arc::new(SourceFile {
+        name: "é".into(),
+        text: String::new(),
+    });
+    let weak = Arc::downgrade(&owner);
+    // Invalid private offsets are a sentinel: coordinate formatting would panic.
+    let span = Span {
+        source: owner.clone(),
+        start: usize::MAX,
+        end: usize::MAX,
+    };
+    let limits = DiagnosticLimits {
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    };
+    let control = ValidationFailure::Control {
+        span: &span,
+        message: "invalid placement",
+    }
+    .diagnostic(&limits, std::iter::empty());
+    let duplicate = ValidationFailure::DuplicateParameter {
+        name: "é",
+        original: &span,
+        duplicate: &span,
+    }
+    .diagnostic(&limits, std::iter::empty());
+    assert_eq!(
+        control.causes[0].omissions.as_ref().unwrap().detail_fields,
+        1
+    );
+    assert_eq!(
+        duplicate.causes[0]
+            .omissions
+            .as_ref()
+            .unwrap()
+            .detail_fields,
+        2
+    );
+    let BWErr::ControlFlowError(message) = control.causes[0].error.as_ref() else {
+        panic!("control")
+    };
+    assert_eq!(
+        message,
+        &format!(
+            "é:[byte {}; coordinates omitted]: invalid placement",
+            usize::MAX
+        )
+    );
+    drop(span);
+    drop(owner);
+    assert!(weak.upgrade().is_none());
+}
+
+#[test]
+fn program_and_native_parameter_validation_use_exact_default_text_quotas() {
+    let maximum = DiagnosticLimits::default().text_bytes;
+    let fixed = "source".len() + "first parameter".len() + "x".len() + ":1:4".len() + ":1:8".len();
+    assert_eq!((maximum - fixed) % 2, 0);
+    let name = "n".repeat((maximum - fixed) / 2);
+    for native in [false, true] {
+        let error = if native {
+            native_signature(&name, "R |x| |x|").err().unwrap()
+        } else {
+            Program::parse_detailed(&name, "R |x| |x| {}").unwrap_err()
+        };
+        assert_eq!(
+            error.code(),
+            super::super::diagnostic::DiagnosticCode::DuplicateParameter
+        );
+        assert_eq!(
+            DiagnosticLimits::default()
+                .check(&error)
+                .unwrap()
+                .text_bytes,
+            maximum
+        );
+        let longer = format!("{name}é");
+        let error = if native {
+            native_signature(&longer, "R |x| |x|").err().unwrap()
+        } else {
+            Program::parse_detailed(&longer, "R |x| |x| {}").unwrap_err()
+        };
+        assert_eq!(
+            error.code(),
+            super::super::diagnostic::DiagnosticCode::ResourceLimit
+        );
+        assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 2);
+        assert!(
+            error.causes[0]
+                .omissions
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap()
+                .file_truncated
+        );
+        assert!(error.causes[0].span.is_none());
+    }
+}
+
+#[test]
 fn deferred_locations_preserve_coordinates_and_byte_summaries_never_index_source_text() {
     let program = Program::parse("é.botwork", "#🦀\r\n\tRead {}").unwrap();
     let span = &program.statements[0].span;
