@@ -731,3 +731,21 @@ assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
 assert_eq!(error.causes[0].code(), DiagnosticCode::Syntax);
 assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
 ```
+
+## Diagnostic Rendering
+
+[Rendering limits](diagnostic-rendering.md) bound complete output and source-position work while leaving structured errors unchanged. A truncated rendering preserves the original primary/cause codes and identifies what was omitted; the returned text owns no source references.
+
+```rust
+use botwork::core::{diagnostic::{Diagnostic, DiagnosticCode, DiagnosticRenderLimits, RENDER_SUMMARY_BYTES}, grammar::BWErr};
+let error = Diagnostic::new(BWErr::NativeError("destination unavailable".into()));
+let rendered = error.render_with_limits(&DiagnosticRenderLimits {
+    output_bytes: 0,
+    ..DiagnosticRenderLimits::default()
+});
+assert!(rendered.truncation.is_some());
+assert!(rendered.text.starts_with("[BW4002]"));
+assert!(rendered.text.contains("diagnostic rendering truncated"));
+assert!(rendered.text.len() <= RENDER_SUMMARY_BYTES);
+assert_eq!(error.code(), DiagnosticCode::Native);
+```

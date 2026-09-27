@@ -60,6 +60,58 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn diagnostic_rendering_allocates_one_admitted_output_without_an_intermediate_help_string() {
+    use botwork::core::{
+        diagnostic::{Diagnostic, DiagnosticRenderLimits},
+        grammar::BWErr,
+    };
+    let name = "é".repeat(16 * 1024);
+    let error = Diagnostic::new(BWErr::VariableNotDefined(name.clone()));
+    let (rendered, copies) = observe(16 * 1024, || {
+        error.render_with_limits(&DiagnosticRenderLimits {
+            output_bytes: 128 * 1024,
+            ..Default::default()
+        })
+    });
+    assert!(rendered.truncation.is_none());
+    assert_eq!(rendered.text.matches(&name).count(), 2); // Message and repair guidance.
+    assert_eq!(copies, 1); // The single complete output buffer.
+}
+
+#[test]
+fn rejected_diagnostic_rendering_never_copies_large_filename_detail_or_help_buffers() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::{Diagnostic, RENDER_SUMMARY_BYTES},
+        grammar::BWErr,
+    };
+    for filename in [false, true] {
+        let name = if filename {
+            "é".repeat(100_000)
+        } else {
+            "source".into()
+        };
+        let program = Program::parse(&name, "|x| = |1|").unwrap();
+        let error = Diagnostic::new(if filename {
+            BWErr::NativeError("failed".into())
+        } else {
+            BWErr::VariableNotDefined("🙂".repeat(100_000))
+        })
+        .at(&program.statements[0].span);
+        let (rendered, copies) = observe(64 * 1024, || error.to_string());
+        assert!(rendered.len() <= RENDER_SUMMARY_BYTES);
+        assert!(rendered.contains("diagnostic rendering truncated"));
+        assert_eq!(copies, 0);
+        if !filename {
+            let (help, copies) = observe(64 * 1024, || error.help());
+            assert!(help.contains("repair guidance truncated"));
+            assert!(help.len() <= RENDER_SUMMARY_BYTES);
+            assert_eq!(copies, 0);
+        }
+    }
+}
+
+#[test]
 fn operation_ownership_admission_moves_values_and_rejects_errors_without_large_copies() {
     use botwork::core::{
         diagnostic::{Diagnostic, DiagnosticCode},

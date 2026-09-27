@@ -62,7 +62,7 @@ impl Write for BoundedText {
     }
 }
 
-fn formatted_prefix(message: fmt::Arguments<'_>) -> (String, bool) {
+pub(super) fn formatted_prefix(message: fmt::Arguments<'_>) -> (String, bool) {
     formatted_prefix_with_limit(message, super::SUMMARY_DETAIL_BYTES)
 }
 

@@ -341,6 +341,30 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 check_async_case(&case);
                 continue;
             }
+            Input::DiagnosticRenderingBoundary | Input::DiagnosticRenderingLimit => {
+                use botwork::core::diagnostic::{
+                    Diagnostic, DiagnosticCode, DiagnosticRenderLimits, RENDER_SUMMARY_BYTES,
+                };
+                let error = Diagnostic::new(BWErr::NativeError("é".into()));
+                let complete = error.to_string();
+                let rendered = error.render_with_limits(&DiagnosticRenderLimits {
+                    output_bytes: complete.len() - usize::from(case.error.is_some()),
+                    ..Default::default()
+                });
+                if let Some(expected) = case.error {
+                    assert!(rendered.truncation.is_some());
+                    assert!(rendered.text.contains(expected));
+                    assert!(rendered
+                        .text
+                        .starts_with(&format!("[{}]", case.code.unwrap())));
+                    assert!(rendered.text.len() <= RENDER_SUMMARY_BYTES);
+                } else {
+                    assert!(rendered.truncation.is_none());
+                    assert_eq!(rendered.text, complete);
+                }
+                assert_eq!(error.code(), DiagnosticCode::Native);
+                continue;
+            }
             Input::OperationOwnershipBoundary | Input::OperationOwnershipLimit => {
                 use botwork::core::{
                     operation::{

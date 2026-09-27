@@ -2,6 +2,8 @@
 
 The CLI reports the failing source file, range, stable code, error, relevant source text, and repair guidance. A header such as `file.botwork:2:14-2:19: [BW2001]` uses one-based scalar positions with an exclusive end; an empty EOF range shows only its start. Runtime errors identify the innermost failing expression or access segment. Invalid conditions point to the condition, not the entire body. Entered calls appear innermost first, with call and definition locations. Native calls have no DSL definition.
 
+[Bounded rendering](diagnostic-rendering.md) preserves this layout for admitted output. Oversized output or source-position work produces an explicit summary with original codes, leading cause evidence, bounded filenames, and byte offsets. Hosts can inspect truncation and choose local limits through `render_with_limits`; Display and CLI diagnostics use the defaults. Standalone repair-guidance helpers also bound their returned strings.
+
 ## Stable Codes and Repairs
 
 Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str()` and Display return the stable identifier. Use `help()` for current guidance. Codes identify categories independently of wording, source locations, and call stacks. Existing identifiers will not be reassigned to a different meaning; new categories require new IDs. Rust's code enum is non-exhaustive so callers can handle future additions. Do not parse human-readable message wording as a protocol.

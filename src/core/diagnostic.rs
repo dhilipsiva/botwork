@@ -18,6 +18,10 @@ pub(crate) use ownership::OwnedDiagnostic;
 pub use ownership::{DiagnosticLimits, DiagnosticSize, MAX_DIAGNOSTIC_DEPTH};
 mod value;
 pub use value::DiagnosticValueLimits;
+mod render;
+pub use render::{
+    DiagnosticRenderLimits, DiagnosticRenderTruncation, RenderedDiagnostic, RENDER_SUMMARY_BYTES,
+};
 
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
@@ -122,7 +126,13 @@ impl BWErr {
     }
 
     pub fn help(&self) -> String {
-        Help(self).to_string()
+        self.help_with_limit(DiagnosticRenderLimits::default().output_bytes)
+            .text
+    }
+
+    /// Format repair guidance with a byte limit and explicit bounded truncation evidence.
+    pub fn help_with_limit(&self, output_bytes: usize) -> RenderedDiagnostic {
+        render::help(self, output_bytes)
     }
 }
 
@@ -242,6 +252,10 @@ impl Diagnostic {
         self.error.help()
     }
 
+    pub fn help_with_limit(&self, output_bytes: usize) -> RenderedDiagnostic {
+        self.error.help_with_limit(output_bytes)
+    }
+
     pub fn new(error: BWErr) -> Self {
         Self {
             error: Arc::new(error),
@@ -356,54 +370,14 @@ impl From<BWErr> for Diagnostic {
 
 impl fmt::Display for Diagnostic {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(span) = &self.span {
-            write!(formatter, "{}", span.location())?;
-            if span.start() != span.end() {
-                let (line, column) = span.end_line_column();
-                write!(formatter, "-{line}:{column}")?;
-            }
-            formatter.write_str(": ")?;
-        }
-        write!(formatter, "[{}] {}", self.code(), self.error)?;
-        if let Some(span) = &self.span {
-            if !span.text().trim().is_empty() {
-                write!(formatter, "\n  {}: {}", self.label, span.text().trim())?;
-            }
-        }
-        for location in &self.related {
-            write!(
-                formatter,
-                "\n  {}: {}",
-                location.message,
-                location.span.location()
-            )?;
-        }
-        for frame in &self.call_stack {
-            write!(
-                formatter,
-                "\n  in `{}` called at {}",
-                frame.signature,
-                frame.call_site.location()
-            )?;
-            if let Some(definition) = &frame.definition_site {
-                write!(formatter, " (defined at {})", definition.location())?;
-            }
-        }
-        if let Some(omissions) = &self.omissions {
-            write!(formatter, "\n  diagnostic metadata omitted: {} shortened detail fields, {} call frames, {} related locations, {} direct causes; label omitted: {}; prior summary omitted: {}", omissions.detail_fields, omissions.call_frames, omissions.related_locations, omissions.direct_causes, omissions.label, omissions.prior_summary)?;
-            if let Some(source) = &omissions.source {
-                write!(
-                    formatter,
-                    "; source {} bytes {}..{} (filename shortened: {})",
-                    source.file, source.start_byte, source.end_byte, source.file_truncated
-                )?;
-            }
-        }
-        write!(formatter, "\n  help: {}", self.help())?;
-        for cause in &self.causes {
-            write!(formatter, "\nwhile handling: {cause}")?;
-        }
-        Ok(())
+        render::display(self, formatter)
+    }
+}
+
+impl Diagnostic {
+    /// Render under local byte/work limits, or return explicit bounded truncation evidence.
+    pub fn render_with_limits(&self, limits: &DiagnosticRenderLimits) -> RenderedDiagnostic {
+        render::render(self, limits)
     }
 }
 

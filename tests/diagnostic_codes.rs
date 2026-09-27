@@ -205,6 +205,14 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
         );
         assert_eq!(diagnostic.code(), category);
         assert!(diagnostic.to_string().starts_with(&format!("[{code}] ")));
+        let rendered =
+            diagnostic.render_with_limits(&botwork::core::diagnostic::DiagnosticRenderLimits {
+                output_bytes: 0,
+                ..Default::default()
+            });
+        assert!(rendered.truncation.is_some());
+        assert!(rendered.text.starts_with(&format!("[{code}] ")));
+        assert_eq!(diagnostic.code(), category);
         assert!(diagnostic.to_string().contains("\n  help: "));
         assert_eq!(diagnostic.into_error().code(), category);
     }
