@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLimits, DiagnosticResult, OwnedDiagnostic},
-    grammar::{validate_value, BWErr, Literal},
+    grammar::{validate_numeric_values, ArithmeticFailure, BWErr, Literal},
     signature::{StatementOrigin, StatementSignature},
     value_limits::{Owned, ValueLimits},
 };
@@ -52,12 +52,18 @@ impl OperationControl {
 
     pub fn checkpoint(&self) -> DiagnosticResult<()> {
         if self.is_cancelled() {
-            Err(BWErr::Cancelled("Operation cancellation requested".into()).into())
+            Err(Diagnostic::formatted(
+                BWErr::Cancelled,
+                format_args!("Operation cancellation requested"),
+            ))
         } else if self
             .deadline
             .is_some_and(|deadline| Instant::now() >= deadline)
         {
-            Err(BWErr::Timeout("Operation deadline expired".into()).into())
+            Err(Diagnostic::formatted(
+                BWErr::Timeout,
+                format_args!("Operation deadline expired"),
+            ))
         } else {
             Ok(())
         }
@@ -70,25 +76,29 @@ impl OperationControl {
         }
         match self.deadline {
             Some(deadline) => {
-                let timer =
-                    match catch_unwind(AssertUnwindSafe(|| tokio::time::sleep_until(deadline))) {
-                        Ok(timer) => timer,
-                        Err(_) => {
-                            return BWErr::AsyncRuntime(
-                                "Enable the Tokio time driver for operation deadlines".into(),
-                            )
-                            .into()
-                        }
-                    };
+                let timer = match catch_unwind(AssertUnwindSafe(|| {
+                    tokio::time::sleep_until(deadline)
+                })) {
+                    Ok(timer) => timer,
+                    Err(_) => {
+                        return Diagnostic::formatted(
+                            BWErr::AsyncRuntime,
+                            format_args!("Enable the Tokio time driver for operation deadlines"),
+                        )
+                    }
+                };
                 tokio::select! {
                     biased;
-                    _ = self.cancellation.cancelled() => BWErr::Cancelled("Operation cancellation requested".into()).into(),
-                    _ = timer => BWErr::Timeout("Operation deadline expired".into()).into(),
+                    _ = self.cancellation.cancelled() => Diagnostic::formatted(BWErr::Cancelled, format_args!("Operation cancellation requested")),
+                    _ = timer => Diagnostic::formatted(BWErr::Timeout, format_args!("Operation deadline expired")),
                 }
             }
             None => {
                 self.cancellation.cancelled().await;
-                BWErr::Cancelled("Operation cancellation requested".into()).into()
+                Diagnostic::formatted(
+                    BWErr::Cancelled,
+                    format_args!("Operation cancellation requested"),
+                )
             }
         }
     }
@@ -144,10 +154,9 @@ impl NativeOperation {
             + 'static,
     ) -> DiagnosticResult<Self> {
         if max_in_flight.get() > Semaphore::MAX_PERMITS {
-            return Err(Diagnostic::new(BWErr::SignatureError(
-                "Blocking capacity exceeds the runtime's supported maximum".into(),
-            ))
-            .at(signature.header()));
+            return Err(signature.builder_error(format_args!(
+                "Blocking capacity exceeds the runtime's supported maximum"
+            )));
         }
         Self::new(
             signature,
@@ -163,10 +172,9 @@ impl NativeOperation {
         implementation: Implementation,
     ) -> DiagnosticResult<Self> {
         if signature.origin() != StatementOrigin::Native {
-            return Err(Diagnostic::new(BWErr::SignatureError(
-                "Native operations require native signature metadata".into(),
-            ))
-            .at(signature.header()));
+            return Err(signature.builder_error(format_args!(
+                "Native operations require native signature metadata"
+            )));
         }
         Ok(Self {
             signature: Arc::new(signature),
@@ -245,19 +253,23 @@ impl NativeOperation {
     ) -> DiagnosticResult<Owned<Literal>> {
         control.checkpoint()?;
         if values.len() != self.signature.parameters().len() {
-            return Err(BWErr::ParameterMissingError(
-                "The operation does not match the signature's parameter count".into(),
-            )
-            .into());
+            return Err(self.detail_error(
+                BWErr::ParameterMissingError,
+                "The operation does not match the signature's parameter count",
+            ));
         }
         for (index, value) in values.iter().enumerate() {
             self.value_limits.check(value)?;
-            validate_value(value)?;
+            validate_numeric_values(value).map_err(|error| self.numeric_error(error))?;
             self.signature
                 .validate_argument(index, value, |message| self.signature_error(message))?;
         }
-        tokio::runtime::Handle::try_current()
-            .map_err(|_| BWErr::AsyncRuntime("Invoke operations inside a Tokio runtime".into()))?;
+        tokio::runtime::Handle::try_current().map_err(|_| {
+            self.detail_error(
+                BWErr::AsyncRuntime,
+                "Invoke operations inside a Tokio runtime",
+            )
+        })?;
         let child = control;
         let value = match &self.implementation {
             Implementation::Async(callback) => {
@@ -280,7 +292,7 @@ impl NativeOperation {
                 let permit = tokio::select! {
                     biased;
                     error = child.stopped() => return Err(error),
-                    permit = Arc::clone(capacity).acquire_owned() => permit.map_err(|_| BWErr::AsyncRuntime("Blocking operation capacity is closed".into()))?,
+                    permit = Arc::clone(capacity).acquire_owned() => permit.map_err(|_| self.detail_error(BWErr::AsyncRuntime, "Blocking operation capacity is closed"))?,
                 };
                 child.checkpoint()?;
                 let callback = Arc::clone(callback);
@@ -320,10 +332,30 @@ impl NativeOperation {
         };
         child.checkpoint()?;
         self.value_limits.check(&value)?;
-        validate_value(&value)?;
+        validate_numeric_values(&value).map_err(|error| self.numeric_error(error))?;
         self.signature
             .validate_return(&value, |message| self.signature_error(message))?;
         Ok(value)
+    }
+
+    fn detail_error(&self, category: fn(String) -> BWErr, message: &str) -> Diagnostic {
+        self.diagnostic_limits.borrowed_detail(
+            category,
+            message,
+            Some(self.signature.header()),
+            false,
+            std::iter::empty(),
+        )
+    }
+
+    fn numeric_error(&self, error: ArithmeticFailure) -> Diagnostic {
+        self.diagnostic_limits.formatted_detail(
+            BWErr::ArithmeticError,
+            format_args!("{error}"),
+            Some(self.signature.header()),
+            false,
+            std::iter::empty(),
+        )
     }
 
     fn worker_error(&self, error: &tokio::task::JoinError) -> Diagnostic {

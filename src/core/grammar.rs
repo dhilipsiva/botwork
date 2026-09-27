@@ -328,13 +328,7 @@ fn numeric_pair(left: &Literal, right: &Literal) -> Option<(f64, f64)> {
     Some((widen(left)?, widen(right)?))
 }
 
-pub(crate) fn validate_value(value: &Literal) -> Result<(), BWErr> {
-    validate_numeric_values(value).map_err(|error| {
-        operator_detail(BWErr::ArithmeticError, format_args!("{error}")).into_error()
-    })
-}
-
-fn validate_numeric_values(value: &Literal) -> Result<(), ArithmeticFailure> {
+pub(super) fn validate_numeric_values(value: &Literal) -> Result<(), ArithmeticFailure> {
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         validate_numeric_operand(value)?;

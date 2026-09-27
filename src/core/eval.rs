@@ -21,7 +21,7 @@ use super::{
         ExprKind, Name, Node, Program, Span, Statement, StatementKind, UnaryOp,
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
-    grammar::{finite_float, validate_value, BWErr, Literal, LiteralResult, Rule},
+    grammar::{finite_float, validate_numeric_values, BWErr, Literal, LiteralResult, Rule},
     operation::OperationControl,
     run::{
         DefinitionReservation, EvaluationGuard, RegistryPlan, RegistryReservation, RetainedName,
@@ -395,16 +395,23 @@ impl Context {
         callback: impl Fn(&[Literal], &RunEnvironment) -> LiteralResult + Send + Sync + 'static,
     ) -> DiagnosticResult<()> {
         if signature.origin() != StatementOrigin::Native {
-            return Err(Diagnostic::new(BWErr::SignatureError(
-                "Native registration requires a native signature".into(),
-            ))
-            .at(signature.header()));
+            return Err(self.detail_error(
+                BWErr::SignatureError,
+                "Native registration requires a native signature",
+                Some(signature.header()),
+                false,
+            ));
         }
         self.insert_native(
             signature,
             Arc::new(move |values, context| {
                 let environment = context.environment.as_ref().ok_or_else(|| {
-                    BWErr::RunConfiguration("Native operation needs a configured run".into())
+                    context.detail_error(
+                        BWErr::RunConfiguration,
+                        "Native operation needs a configured run",
+                        context.calls.last().map(|record| &record.frame.call_site),
+                        false,
+                    )
                 })?;
                 callback(values, environment).map_err(Diagnostic::new)
             }),
@@ -428,7 +435,7 @@ impl Context {
                 self.formatted_error(BWErr::InputError, message, None, false)
             })?;
             self.check_value(value)?;
-            validate_value(value).map_err(|_| {
+            validate_numeric_values(value).map_err(|_| {
                 self.formatted_error(
                     BWErr::InputError,
                     format_args!(
@@ -555,10 +562,12 @@ impl Context {
         callback: impl Fn(&[Literal]) -> LiteralResult + Send + Sync + 'static,
     ) -> DiagnosticResult<()> {
         if signature.origin() != StatementOrigin::Native {
-            return Err(Diagnostic::new(BWErr::SignatureError(
-                "Native registration requires a native signature".into(),
-            ))
-            .at(signature.header()));
+            return Err(self.detail_error(
+                BWErr::SignatureError,
+                "Native registration requires a native signature",
+                Some(signature.header()),
+                false,
+            ));
         }
         self.insert_native(
             signature,
@@ -804,10 +813,12 @@ fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
     let metadata = definition.metadata();
     let parameter_count = metadata.parameters().len();
     if parameter_count != call.arguments.len() {
-        return Err(BWErr::ParameterMissingError(
-            "The call does not match the definition's parameter count".into(),
-        )
-        .into());
+        return Err(context.detail_error(
+            BWErr::ParameterMissingError,
+            "The call does not match the definition's parameter count",
+            Some(&call.span),
+            false,
+        ));
     }
     context.check_call_depth()?;
     let mut argument_slots = context
@@ -824,8 +835,14 @@ fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
                 reservation.release_argument_slot();
             }
             let value = evaluate_expression(argument, context)?;
-            validate_value(&value)
-                .map_err(|error| Diagnostic::new(error).at_expression(&argument.span))?;
+            validate_numeric_values(&value).map_err(|error| {
+                context.formatted_error(
+                    BWErr::ArithmeticError,
+                    format_args!("{error}"),
+                    Some(&argument.span),
+                    true,
+                )
+            })?;
             metadata.validate_argument(index, &value, |message| {
                 context.formatted_error(
                     BWErr::OperationIncompatibleError,
@@ -888,7 +905,14 @@ fn invoke_resolved(
                 });
             let result = context.after_operation(result.map(Owned::new))?;
             context.check_value(&result)?;
-            validate_value(&result)?;
+            validate_numeric_values(&result).map_err(|error| {
+                context.formatted_error(
+                    BWErr::ArithmeticError,
+                    format_args!("{error}"),
+                    Some(&call.span),
+                    false,
+                )
+            })?;
             metadata.validate_return(&result, |message| {
                 context.formatted_error(
                     BWErr::OperationIncompatibleError,
@@ -934,7 +958,7 @@ fn invoke_resolved(
                             let value = match completion {
                                 Completion::Return(value) => value,
                                 // Reject unconsumed controls at their invocation boundary.
-                                completion => finish_script(completion)?,
+                                completion => finish_script(completion, context, &call.span)?,
                             };
                             metadata.validate_return(&value, |message| {
                                 context.formatted_error(
@@ -1286,10 +1310,12 @@ fn evaluate_for(
 ) -> CompletionResult {
     let iterable_value = evaluate_expression(iterable, context)?;
     if !matches!(&*iterable_value, Literal::Array(_)) {
-        return Err(Diagnostic::new(BWErr::OperationIncompatibleError(
-            "For requires an array to iterate over".into(),
-        ))
-        .at_expression(&iterable.span));
+        return Err(context.detail_error(
+            BWErr::OperationIncompatibleError,
+            "For requires an array to iterate over",
+            Some(&iterable.span),
+            true,
+        ));
     }
     let (iterable_value, _iterable_reservation) = iterable_value.into_parts();
     let Literal::Array(values) = iterable_value else {
@@ -1331,10 +1357,12 @@ fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> Comp
     loop {
         let value = evaluate_expression(condition, context)?;
         let Literal::Bool(should_loop) = &*value else {
-            return Err(Diagnostic::new(BWErr::OperationIncompatibleError(
-                "While requires a boolean condition".into(),
-            ))
-            .at_expression(&condition.span));
+            return Err(context.detail_error(
+                BWErr::OperationIncompatibleError,
+                "While requires a boolean condition",
+                Some(&condition.span),
+                true,
+            ));
         };
         let should_loop = *should_loop;
         drop(value);
@@ -1480,10 +1508,12 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
         } => {
             let value = evaluate_expression(condition, context)?;
             let Literal::Bool(condition) = &*value else {
-                return Err(Diagnostic::new(BWErr::OperationIncompatibleError(
-                    "If requires a boolean condition".into(),
-                ))
-                .at_expression(&condition.span));
+                return Err(context.detail_error(
+                    BWErr::OperationIncompatibleError,
+                    "If requires a boolean condition",
+                    Some(&condition.span),
+                    true,
+                ));
             };
             let condition = *condition;
             drop(value);
@@ -1540,31 +1570,26 @@ fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> Com
                     .value
                     .clone()
                     .with_related("rethrow", &statement.span)),
-                None => Err(BWErr::ControlFlowError(
-                    "Rethrow requires an enclosing Catch in the same invocation".into(),
-                )
-                .into()),
+                None => Err(context.detail_error(
+                    BWErr::ControlFlowError,
+                    "Rethrow requires an enclosing Catch in the same invocation",
+                    Some(&statement.span),
+                    false,
+                )),
             }
         }
     }
 }
 
 // Retain runtime boundary guards even though public entry points validate placement.
-fn finish_script(completion: Completion) -> TemporaryResult {
-    match completion {
-        Completion::Normal(value) => Ok(value),
-        Completion::Return(_) => {
-            Err(BWErr::ControlFlowError("Return requires a custom-statement body".into()).into())
-        }
-        Completion::Break => Err(BWErr::ControlFlowError(
-            "Break requires an enclosing loop in the same invocation".into(),
-        )
-        .into()),
-        Completion::Continue => Err(BWErr::ControlFlowError(
-            "Continue requires an enclosing loop in the same invocation".into(),
-        )
-        .into()),
-    }
+fn finish_script(completion: Completion, context: &Context, span: &Span) -> TemporaryResult {
+    let reason = match completion {
+        Completion::Normal(value) => return Ok(value),
+        Completion::Return(_) => "Return requires a custom-statement body",
+        Completion::Break => "Break requires an enclosing loop in the same invocation",
+        Completion::Continue => "Continue requires an enclosing loop in the same invocation",
+    };
+    Err(context.detail_error(BWErr::ControlFlowError, reason, Some(span), false))
 }
 
 /// Evaluate an already parsed, owned statement at script level in this context.
@@ -1584,7 +1609,12 @@ pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) 
         super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
             .map_err(|error| context.retain_limit(error))?;
         ast::validate_control_script(statements).map_err(|failure| context.ast_error(failure))?;
-        finish_script(evaluate_statement(statement, context)?).map(TemporaryValue::into_inner)
+        finish_script(
+            evaluate_statement(statement, context)?,
+            context,
+            &statement.span,
+        )
+        .map(TemporaryValue::into_inner)
     })();
     result.map_err(|error| context.diagnostic(error, None, false))
 }
@@ -1608,7 +1638,11 @@ pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> Ru
         for statement in &program.statements {
             // A replaced script result is unobservable once the next statement starts.
             drop(result.take());
-            result = Some(finish_script(evaluate_statement(statement, context)?)?);
+            result = Some(finish_script(
+                evaluate_statement(statement, context)?,
+                context,
+                &statement.span,
+            )?);
         }
         result
             .map_or_else(|| context.temporary(Literal::None), Ok)
@@ -1641,7 +1675,8 @@ pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResul
             Node::Block(block) => {
                 ast::validate_control_script(&block.statements)
                     .map_err(|failure| context.ast_error(failure))?;
-                finish_script(evaluate_block(&block, context)?).map(TemporaryValue::into_inner)
+                finish_script(evaluate_block(&block, context)?, context, &block.span)
+                    .map(TemporaryValue::into_inner)
             }
             Node::None => context
                 .temporary(Literal::None)

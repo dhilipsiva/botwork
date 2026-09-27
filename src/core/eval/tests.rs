@@ -1,5 +1,6 @@
 use super::{evaluate_program, BWErr, Context, Literal, LiteralResult, Program};
 
+mod guards;
 mod log_output;
 
 fn evaluate(source: &str, context: &mut Context) -> LiteralResult {
@@ -25,7 +26,7 @@ fn evaluate_unvalidated_statement(source: &str, context: &mut Context) -> Litera
         panic!("expected statement");
     };
     evaluate_statement(&statement, context)
-        .and_then(finish_script)
+        .and_then(|completion| finish_script(completion, context, &statement.span))
         .map(super::TemporaryValue::into_inner)
         .map_err(super::Diagnostic::into_error)
 }

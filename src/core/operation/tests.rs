@@ -1,6 +1,246 @@
 use super::*;
 
 #[tokio::test]
+async fn operation_numeric_guards_use_local_limits_before_argument_and_result_messages() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    for invalid_return in [false, true] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let operation = NativeOperation::asynchronous(
+            StatementSignature::native("Read |value|").unwrap(),
+            move |_, _| {
+                seen.fetch_add(1, Ordering::SeqCst);
+                async { Ok(Literal::Array(vec![Literal::Float(f32::NAN)])) }
+            },
+        )
+        .unwrap();
+        let arguments = || {
+            vec![if invalid_return {
+                Literal::Int(1)
+            } else {
+                Literal::Array(vec![Literal::Float(f32::INFINITY)])
+            }]
+        };
+        let baseline = operation
+            .invoke(arguments(), OperationControl::default())
+            .await
+            .unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::Arithmetic);
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        for text_bytes in [size.text_bytes, size.text_bytes - 1, 0] {
+            calls.store(0, Ordering::SeqCst);
+            let limited = operation
+                .clone()
+                .with_diagnostic_limits(DiagnosticLimits {
+                    text_bytes,
+                    ..DiagnosticLimits::default()
+                })
+                .unwrap();
+            let error = limited
+                .invoke(arguments(), OperationControl::default())
+                .await
+                .unwrap_err();
+            assert_eq!(calls.load(Ordering::SeqCst), usize::from(invalid_return));
+            if text_bytes == size.text_bytes {
+                assert_eq!(error.to_string(), baseline.to_string());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::Arithmetic);
+                assert!(error.causes[0].span.is_none());
+                assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn operation_guards_admit_complete_header_before_arity_and_capacity_errors() {
+    for closed in [false, true] {
+        let operation = if closed {
+            let operation = NativeOperation::blocking(
+                StatementSignature::native("Read").unwrap(),
+                NonZeroUsize::new(1).unwrap(),
+                |_, _| panic!("callback must not run"),
+            )
+            .unwrap();
+            let Implementation::Blocking { capacity, .. } = &operation.implementation else {
+                unreachable!()
+            };
+            capacity.close();
+            operation
+        } else {
+            NativeOperation::asynchronous(
+                StatementSignature::native("Read |value|").unwrap(),
+                |_, _| async { panic!("callback must not run") },
+            )
+            .unwrap()
+        };
+        let baseline = operation
+            .invoke(vec![], OperationControl::default())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            baseline.code(),
+            if closed {
+                DiagnosticCode::AsyncRuntime
+            } else {
+                DiagnosticCode::ParameterCount
+            }
+        );
+        let size = DiagnosticLimits::default().check(&baseline).unwrap();
+        for dimension in 0..6 {
+            let mut limits = DiagnosticLimits {
+                diagnostics: size.diagnostics,
+                depth: size.depth,
+                call_frames: size.call_frames,
+                related_locations: size.related_locations,
+                text_bytes: size.text_bytes,
+                source_bytes: size.source_bytes,
+            };
+            match dimension {
+                0 => {}
+                1 => limits.text_bytes -= 1,
+                2 => limits.source_bytes -= 1,
+                3 => limits.diagnostics = 0,
+                4 => limits.depth = 0,
+                _ => limits.text_bytes = 0,
+            }
+            let limited = operation.clone().with_diagnostic_limits(limits).unwrap();
+            let parent = OperationControl::default();
+            let error = limited.invoke(vec![], parent.clone()).await.unwrap_err();
+            assert!(!parent.is_cancelled());
+            if dimension == 0 {
+                assert_eq!(error.to_string(), baseline.to_string());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), baseline.code());
+                assert!(error.causes[0].span.is_none());
+                assert!(!error.causes[0].omissions.as_ref().unwrap().prior_summary);
+            }
+            parent.cancel();
+            let stopped = limited.invoke(vec![], parent).await.unwrap_err();
+            assert_eq!(stopped.code(), DiagnosticCode::Cancelled);
+        }
+    }
+}
+
+#[test]
+fn absent_runtime_guard_admits_header_and_text_without_entering_callback() {
+    use std::task::Waker;
+    let operation =
+        NativeOperation::asynchronous(StatementSignature::native("Read").unwrap(), |_, _| async {
+            panic!("callback must not run")
+        })
+        .unwrap();
+    let invoke = |operation: &NativeOperation| {
+        let mut future = std::pin::pin!(operation.invoke(vec![], OperationControl::default()));
+        let Poll::Ready(result) = future
+            .as_mut()
+            .poll(&mut TaskContext::from_waker(Waker::noop()))
+        else {
+            panic!("missing runtime must fail immediately")
+        };
+        result.unwrap_err()
+    };
+    let baseline = invoke(&operation);
+    assert_eq!(baseline.code(), DiagnosticCode::AsyncRuntime);
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    for text_bytes in [size.text_bytes, size.text_bytes - 1, 0] {
+        let limited = operation
+            .clone()
+            .with_diagnostic_limits(DiagnosticLimits {
+                text_bytes,
+                ..DiagnosticLimits::default()
+            })
+            .unwrap();
+        let error = invoke(&limited);
+        if text_bytes == size.text_bytes {
+            assert_eq!(error.to_string(), baseline.to_string());
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::AsyncRuntime);
+            assert!(error.causes[0].span.is_none());
+        }
+    }
+}
+
+#[test]
+fn operation_builder_guards_admit_exact_default_source_ownership_and_release_rejections() {
+    use crate::core::{
+        ast::{Program, StatementKind},
+        ast_limits::AstLimits,
+        syntax_limits::SyntaxLimits,
+    };
+    let maximum = DiagnosticLimits::default().source_bytes;
+    for invalid_capacity in [false, true] {
+        for extra in [0, 1] {
+            let text = if invalid_capacity { "Read" } else { "Read {}" };
+            let name = "x".repeat(maximum - text.len() + extra);
+            let signature = if invalid_capacity {
+                StatementSignature::native_at(&name, text).unwrap()
+            } else {
+                let program = Program::parse_with_budgets(
+                    &name,
+                    text,
+                    1024,
+                    &SyntaxLimits::default(),
+                    &AstLimits {
+                        source_bytes: usize::MAX,
+                        ..AstLimits::default()
+                    },
+                )
+                .unwrap();
+                let StatementKind::Define(definition) = program.statements[0].kind() else {
+                    panic!("definition")
+                };
+                definition.signature_metadata()
+            };
+            let source = Arc::downgrade(signature.header().source());
+            let error = if invalid_capacity {
+                NativeOperation::blocking(
+                    signature,
+                    NonZeroUsize::new(Semaphore::MAX_PERMITS + 1).unwrap(),
+                    |_, _| panic!("callback must not run"),
+                )
+            } else {
+                NativeOperation::asynchronous(signature, |_, _| async {
+                    panic!("callback must not run")
+                })
+            }
+            .err()
+            .unwrap();
+            if extra == 0 {
+                assert_eq!(error.code(), DiagnosticCode::Signature);
+                assert_eq!(
+                    DiagnosticLimits::default()
+                        .check(&error)
+                        .unwrap()
+                        .source_bytes,
+                    maximum
+                );
+                assert!(source.upgrade().is_some());
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::Signature);
+                assert!(source.upgrade().is_none());
+                assert!(
+                    error.causes[0]
+                        .omissions
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .as_ref()
+                        .unwrap()
+                        .file_truncated
+                );
+            }
+            drop(error);
+            assert!(source.upgrade().is_none());
+        }
+    }
+}
+
+#[tokio::test]
 async fn worker_join_construction_preserves_exact_details_and_every_context_boundary() {
     let join = tokio::spawn(async { std::panic::panic_any("é\njoin failure".to_owned()) })
         .await

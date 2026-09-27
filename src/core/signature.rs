@@ -184,7 +184,7 @@ impl StatementSignature {
         }
     }
 
-    fn builder_error(&self, message: fmt::Arguments<'_>) -> Diagnostic {
+    pub(crate) fn builder_error(&self, message: fmt::Arguments<'_>) -> Diagnostic {
         DiagnosticLimits::default().formatted_detail(
             BWErr::SignatureError,
             message,
