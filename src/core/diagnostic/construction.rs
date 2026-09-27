@@ -100,6 +100,45 @@ fn text_limit(maximum: usize) -> BWErr {
 }
 
 impl DiagnosticLimits {
+    /// Source/syntax guards report a checked prefix ending just after the rejected
+    /// token. Admit this new source owner together with prospective calls first.
+    pub(crate) fn source_prefix<'a>(
+        &self,
+        error: BWErr,
+        name: &str,
+        prefix: &str,
+        start: usize,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Diagnostic {
+        let skeleton = Diagnostic::new(error);
+        let admission = self
+            .check_with_stack(&skeleton, frames.clone())
+            .and_then(|size| {
+                size.source_bytes
+                    .checked_add(name.len())
+                    .and_then(|bytes| bytes.checked_add(prefix.len()))
+                    .filter(|bytes| *bytes <= self.source_bytes)
+                    .map(|_| ())
+                    .ok_or(BWErr::ResourceLimit {
+                        resource: "diagnostic source bytes",
+                        limit: self.source_bytes as u64,
+                    })
+            });
+        match admission {
+            Ok(()) => skeleton
+                .at(&Span::source_prefix(name, prefix, start))
+                .capture_stack(frames),
+            Err(violation) => super::rejection::reject_source_prefix(
+                skeleton,
+                name,
+                start,
+                prefix.len(),
+                violation,
+                frames.len(),
+            ),
+        }
+    }
+
     /// Admit a payload-free input origin before copying its borrowed name into a
     /// SourceFile. Input resource errors already contain only fixed-size details.
     pub(crate) fn input_origin(&self, error: BWErr, origin: &str) -> Diagnostic {

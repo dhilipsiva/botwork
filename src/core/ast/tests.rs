@@ -1,6 +1,52 @@
 use super::*;
 
 #[test]
+fn native_source_guards_apply_default_diagnostic_source_admission_before_prefix_ownership() {
+    let text = "x".repeat(DEFAULT_SOURCE_BYTES + 1);
+    let maximum = DiagnosticLimits::default().source_bytes;
+    for extra in [0, 1] {
+        let name = "n".repeat(maximum - text.len() + extra);
+        let error = native_signature(&name, &text).err().unwrap();
+        if extra == 0 {
+            assert!(matches!(
+                error.error.as_ref(),
+                BWErr::ResourceLimit {
+                    resource: "source bytes",
+                    ..
+                }
+            ));
+            assert_eq!(
+                DiagnosticLimits::default()
+                    .check(&error)
+                    .unwrap()
+                    .source_bytes,
+                maximum
+            );
+            assert_eq!(error.span.as_ref().unwrap().end(), text.len());
+        } else {
+            assert!(error.causes[0].span.is_none());
+            assert!(matches!(
+                error.causes[0].error.as_ref(),
+                BWErr::ResourceLimit {
+                    resource: "source bytes",
+                    ..
+                }
+            ));
+            assert!(
+                error.causes[0]
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .source
+                    .as_ref()
+                    .unwrap()
+                    .file_truncated
+            );
+        }
+    }
+}
+
+#[test]
 fn rejected_validation_evidence_never_scans_source_coordinates_and_releases_owners() {
     let owner = Arc::new(SourceFile {
         name: "é".into(),

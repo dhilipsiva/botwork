@@ -79,6 +79,8 @@ pub enum Input {
     ValidationDiagnosticLimit,
     SyntaxDiagnosticBoundary,
     SyntaxDiagnosticLimit,
+    GuardDiagnosticBoundary,
+    GuardDiagnosticLimit,
 }
 
 #[derive(Clone)]
@@ -339,5 +341,9 @@ pub fn cases() -> Vec<Case> {
             input: Input::SyntaxDiagnosticBoundary, stdout: "", code: None, error: None },
         Case { id: "syntax-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
             input: Input::SyntaxDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic text bytes") },
+        Case { id: "guard-diagnostic-boundary", positive: &["R21"], invalid: &[], boundary: &["R21"],
+            input: Input::GuardDiagnosticBoundary, stdout: "", code: None, error: None },
+        Case { id: "guard-diagnostic-limit", positive: &[], invalid: &["R21"], boundary: &[],
+            input: Input::GuardDiagnosticLimit, stdout: "", code: Some("BW8001"), error: Some("diagnostic source bytes") },
     ]
 }

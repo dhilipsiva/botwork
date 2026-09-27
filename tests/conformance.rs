@@ -777,6 +777,59 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::GuardDiagnosticBoundary | Input::GuardDiagnosticLimit => {
+                use botwork::core::{
+                    ast::Program,
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                    syntax_limits::SyntaxLimits,
+                };
+                let source = "Log |[[1]]|";
+                let syntax = SyntaxLimits {
+                    nesting: 2,
+                    operators: 64,
+                };
+                let baseline =
+                    Program::parse_bounded(case.id, source, source.len(), &syntax).unwrap_err();
+                let size = DiagnosticLimits::default().check(&baseline).unwrap();
+                let run = Engine::default().run_source(
+                    case.id,
+                    source,
+                    RunOptions {
+                        limits: RunLimits {
+                            syntax,
+                            diagnostics: DiagnosticLimits {
+                                source_bytes: size.source_bytes - usize::from(case.error.is_some()),
+                                ..DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                );
+                assert_eq!(run.steps, 0);
+                let error = run.result.unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(
+                        error.causes[0].error.to_string(),
+                        baseline.error.to_string()
+                    );
+                    let omitted = error.causes[0].omissions.as_ref().unwrap();
+                    assert_eq!(omitted.detail_fields, 0);
+                    assert_eq!(omitted.source.as_ref().unwrap().start_byte, 6);
+                    assert_eq!(omitted.source.as_ref().unwrap().end_byte, 7);
+                    assert!(error.causes[0].span.is_none());
+                } else {
+                    assert_eq!(
+                        error.to_value().to_string(),
+                        baseline.to_value().to_string()
+                    );
+                    assert_eq!(error.span.as_ref().unwrap().source().text(), "Log |[[");
+                }
+                continue;
+            }
             Input::SyntaxDiagnosticBoundary | Input::SyntaxDiagnosticLimit => {
                 use botwork::core::{
                     ast::Program,

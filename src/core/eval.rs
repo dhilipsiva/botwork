@@ -329,8 +329,14 @@ impl Context {
             .as_ref()
             .map(|budget| budget.limits().clone())
             .unwrap_or_default();
-        ast::check_source(name, source, limits.source_bytes, &limits.syntax)
-            .map_err(|error| self.retain_limit(error))
+        ast::check_source_with_reporter(
+            name,
+            source,
+            limits.source_bytes,
+            &limits.syntax,
+            |failure| self.ast_error(failure),
+        )
+        .map_err(|error| self.retain_limit(error))
     }
 
     pub(crate) fn parse_source(&self, name: &str, source: &str) -> DiagnosticResult<Program> {

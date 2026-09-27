@@ -191,7 +191,18 @@ pub(super) fn reject_input_origin(
     origin: &str,
     violation: BWErr,
 ) -> Diagnostic {
-    let mut error = rejected(skeleton, violation, 0);
+    reject_source_prefix(skeleton, origin, 0, 0, violation, 0)
+}
+
+pub(super) fn reject_source_prefix(
+    skeleton: Diagnostic,
+    origin: &str,
+    start_byte: usize,
+    end_byte: usize,
+    violation: BWErr,
+    pending_frames: usize,
+) -> Diagnostic {
+    let mut error = rejected(skeleton, violation, pending_frames);
     let (file, file_truncated) = prefix(origin, SUMMARY_SOURCE_NAME_BYTES);
     error.causes[0]
         .omissions
@@ -200,8 +211,8 @@ pub(super) fn reject_input_origin(
         .source = Some(OmittedSource {
         file,
         file_truncated,
-        start_byte: 0,
-        end_byte: 0,
+        start_byte,
+        end_byte,
     });
     error
 }

@@ -58,6 +58,111 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn guard_rejection_copies_neither_large_filenames_nor_checked_source_prefixes() {
+    use botwork::core::{
+        diagnostic::{DiagnosticCode, DiagnosticLimits},
+        syntax_limits::SyntaxLimits,
+    };
+    let filename = "é".repeat(128 * 1024);
+    let engine = Engine::default();
+    for (source, source_bytes, syntax) in [
+        (
+            format!("{}Log |1 + 2|", " ".repeat(128 * 1024)),
+            1024 * 1024,
+            SyntaxLimits {
+                nesting: 32,
+                operators: 0,
+            },
+        ),
+        (
+            format!("{}Log |[[1]]|", " ".repeat(128 * 1024)),
+            1024 * 1024,
+            SyntaxLimits {
+                nesting: 2,
+                operators: 64,
+            },
+        ),
+    ] {
+        for reject in [false, true] {
+            let (run, copies) = observe(64 * 1024, || {
+                engine.run_source(
+                    &filename,
+                    &source,
+                    RunOptions {
+                        limits: RunLimits {
+                            source_bytes,
+                            syntax: syntax.clone(),
+                            diagnostics: if reject {
+                                DiagnosticLimits {
+                                    source_bytes: 0,
+                                    ..DiagnosticLimits::default()
+                                }
+                            } else {
+                                DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        ..RunOptions::default()
+                    },
+                )
+            });
+            let error = run.result.unwrap_err();
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            if reject {
+                assert!(error.causes[0].span.is_none());
+                assert!(
+                    error.causes[0]
+                        .omissions
+                        .as_ref()
+                        .unwrap()
+                        .source
+                        .as_ref()
+                        .unwrap()
+                        .file_truncated
+                );
+                assert_eq!(copies, 0);
+            } else {
+                assert!(error.span.as_ref().unwrap().source().text().len() >= 128 * 1024);
+                assert!(error.causes.is_empty());
+                assert_eq!(copies, 2); // Admitted filename and checked prefix only.
+            }
+        }
+    }
+}
+
+#[test]
+fn standalone_source_guard_rejection_precedes_default_filename_and_prefix_copies() {
+    use botwork::core::{ast::Program, diagnostic::DiagnosticLimits, syntax_limits::SyntaxLimits};
+    let source = format!("{}🦀", "x".repeat(128 * 1024));
+    for reject in [false, true] {
+        let filename = "n"
+            .repeat(DiagnosticLimits::default().source_bytes - source.len() + usize::from(reject));
+        let (result, copies) = observe(64 * 1024, || {
+            Program::parse_bounded(&filename, &source, 128 * 1024 + 2, &SyntaxLimits::default())
+        });
+        let error = result.unwrap_err();
+        if reject {
+            assert!(error.causes[0].span.is_none());
+            assert_eq!(copies, 0);
+            let evidence = error.causes[0]
+                .omissions
+                .as_ref()
+                .unwrap()
+                .source
+                .as_ref()
+                .unwrap();
+            assert_eq!(
+                (evidence.start_byte, evidence.end_byte),
+                (128 * 1024, source.len())
+            );
+        } else {
+            assert!(error.span.is_some());
+            assert_eq!(copies, 2);
+        }
+    }
+}
+
+#[test]
 fn syntax_construction_allocates_only_the_admitted_final_message_beyond_parser_owned_buffers() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},

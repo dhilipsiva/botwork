@@ -21,6 +21,68 @@ use std::{
 struct Project(Harness);
 
 #[test]
+fn imported_syntax_guards_admit_calls_before_source_prefix_copy_and_keep_original_limits() {
+    use botwork::core::{
+        diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits, syntax_limits::SyntaxLimits,
+    };
+    let project = Project::new();
+    project.write("nested.botwork", "Effect\nLog |[[1]]|");
+    project.write("good.botwork", "Value { Return |7| }");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut context = Context::with_limits(RunLimits {
+        syntax: SyntaxLimits {
+            nesting: 2,
+            operators: 64,
+        },
+        diagnostics: DiagnosticLimits {
+            call_frames: 0,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let seen = calls.clone();
+    context
+        .register_native("Effect", move |_| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::None)
+        })
+        .unwrap();
+    let mut sibling = context.clone();
+    let error = project
+        .run(
+            "Effect\nRead { Import |\"nested.botwork\"| As |lib| }\nTry { Read } Catch { Effect }",
+            &mut context,
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert!(matches!(
+        error.causes[0].error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "syntax nesting",
+            limit: 2
+        }
+    ));
+    assert!(error.causes[0].span.is_none());
+    let omitted = error.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omitted.call_frames, 1);
+    assert_eq!(omitted.related_locations, 1);
+    assert_eq!(omitted.detail_fields, 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(context.checkpoint().is_err());
+    assert_eq!(
+        project
+            .run(
+                "Import |\"good.botwork\"| As |lib|\nlib::Value",
+                &mut sibling
+            )
+            .unwrap()
+            .to_string(),
+        "7"
+    );
+}
+
+#[test]
 fn entry_file_syntax_errors_use_installed_diagnostic_quotas_and_keep_input_snapshots() {
     use botwork::core::{
         diagnostic::DiagnosticLimits,

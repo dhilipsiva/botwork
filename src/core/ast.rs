@@ -57,13 +57,17 @@ impl std::fmt::Display for LocationDisplay<'_> {
 impl Span {
     /// An input origin without retaining its payload; location refers to input start.
     pub(crate) fn input_origin(name: &str) -> Self {
+        Self::source_prefix(name, "", 0)
+    }
+
+    pub(crate) fn source_prefix(name: &str, prefix: &str, start: usize) -> Self {
         Self {
             source: Arc::new(SourceFile {
                 name: name.into(),
-                text: String::new(),
+                text: prefix.into(),
             }),
-            start: 0,
-            end: 0,
+            start,
+            end: prefix.len(),
         }
     }
     pub fn source(&self) -> &Arc<SourceFile> {
@@ -173,7 +177,7 @@ impl Program {
         report: impl Fn(AstFailure<'_>) -> Diagnostic,
     ) -> DiagnosticResult<Self> {
         ast_limits.validate()?;
-        check_source(name, source, source_bytes, limits)?;
+        check_source_with_reporter(name, source, source_bytes, limits, &report)?;
         let source = Arc::new(SourceFile {
             name: name.to_owned(),
             text: source.to_owned(),
@@ -227,22 +231,29 @@ pub(crate) fn check_source(
     source_bytes: usize,
     limits: &SyntaxLimits,
 ) -> DiagnosticResult<()> {
+    check_source_with_reporter(name, source, source_bytes, limits, |failure| {
+        failure.default_diagnostic()
+    })
+}
+
+pub(crate) fn check_source_with_reporter(
+    name: &str,
+    source: &str,
+    source_bytes: usize,
+    limits: &SyntaxLimits,
+    report: impl Fn(AstFailure<'_>) -> Diagnostic,
+) -> DiagnosticResult<()> {
     super::syntax_limits::check(source, source_bytes, limits, false).map_err(|violation| {
         let end = violation.offset
             + source[violation.offset..]
                 .chars()
                 .next()
                 .map_or(0, char::len_utf8);
-        // Keep only the checked prefix on rejection; diagnostics must not clone an
-        // unbounded rejected source merely to report the first excessive token.
-        let owner = Arc::new(SourceFile {
-            name: name.to_owned(),
-            text: source[..end].to_owned(),
-        });
-        Diagnostic::new(violation.error).at(&Span {
-            source: owner,
-            start: violation.offset,
-            end,
+        report(AstFailure::SourceGuard {
+            error: &violation.error,
+            name,
+            prefix: &source[..end],
+            offset: violation.offset,
         })
     })
 }
@@ -412,6 +423,12 @@ fn control_placement_error<'a>(statement: &'a Statement, message: &'static str) 
 
 /// Borrow parsing/validation evidence until the caller can admit its diagnostic context.
 pub(crate) enum AstFailure<'a> {
+    SourceGuard {
+        error: &'a BWErr,
+        name: &'a str,
+        prefix: &'a str,
+        offset: usize,
+    },
     Syntax {
         error: &'a pest::error::Error<Rule>,
         span: &'a Span,
@@ -428,10 +445,11 @@ pub(crate) enum AstFailure<'a> {
 }
 
 impl AstFailure<'_> {
-    pub(crate) fn span(&self) -> &Span {
+    pub(crate) fn span(&self) -> Option<&Span> {
         match self {
-            Self::Control { span, .. } | Self::Syntax { span, .. } => span,
-            Self::DuplicateParameter { duplicate, .. } => duplicate,
+            Self::Control { span, .. } | Self::Syntax { span, .. } => Some(span),
+            Self::DuplicateParameter { duplicate, .. } => Some(duplicate),
+            Self::SourceGuard { .. } => None,
         }
     }
 
@@ -445,6 +463,16 @@ impl AstFailure<'_> {
         frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
     ) -> Diagnostic {
         match self {
+            Self::SourceGuard {
+                error,
+                name,
+                prefix,
+                offset,
+            } => {
+                // Guard errors contain only fixed resource names/numeric limits
+                // or a short configuration message; their source is still borrowed.
+                limits.source_prefix((*error).clone(), name, prefix, *offset, frames)
+            }
             Self::Syntax { error, span } => {
                 let detail = parse_diagnostic::ParseDisplay { error, span };
                 limits.formatted_evidence(

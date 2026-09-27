@@ -3,6 +3,36 @@ use crate::core::diagnostic::DiagnosticLimits;
 use crate::core::run::{RetainedDiagnosticLimits, SnapshotLimits};
 
 #[test]
+fn context_source_guard_admission_preserves_unicode_offsets_and_latches_only_the_requester() {
+    let context = Context::with_limits(RunLimits {
+        source_bytes: 2,
+        diagnostics: DiagnosticLimits {
+            source_bytes: 0,
+            ..DiagnosticLimits::default()
+        },
+        ..RunLimits::default()
+    })
+    .unwrap();
+    let sibling = context.clone();
+    let error = context.check_syntax("é", "🙂").unwrap_err();
+    assert!(matches!(
+        error.causes[0].error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "source bytes",
+            limit: 2
+        }
+    ));
+    let omitted = error.causes[0].omissions.as_ref().unwrap();
+    assert_eq!(omitted.detail_fields, 0);
+    let source = omitted.source.as_ref().unwrap();
+    assert_eq!((source.start_byte, source.end_byte), (0, 4));
+    assert_eq!(source.file, "é");
+    assert!(context.checkpoint().is_err());
+    assert!(sibling.checkpoint().is_ok());
+    assert!(sibling.check_syntax("valid", "").is_ok());
+}
+
+#[test]
 fn collision_construction_preserves_native_names_and_marks_only_replaced_location_fields() {
     let program = Program::parse("é.botwork", "Read {}").unwrap();
     let span = &program.statements[0].span;

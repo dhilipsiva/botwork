@@ -5,6 +5,91 @@ use crate::core::{
 };
 
 #[test]
+fn source_prefix_admits_complete_call_context_and_distinct_equal_source_owners_before_copying() {
+    let caller = Program::parse("file", "Read {}").unwrap();
+    let frame = CallFrame {
+        signature: "read".into(),
+        call_site: caller.statements[0].span.clone(),
+        definition_site: None,
+    };
+    let original = || BWErr::ResourceLimit {
+        resource: "source bytes",
+        limit: 4,
+    };
+    let baseline = Diagnostic::new(original())
+        .at(&Span::source_prefix("file", "Read {}", 4))
+        .capture_stack(std::iter::once(&frame));
+    let size = DiagnosticLimits::default().check(&baseline).unwrap();
+    assert_eq!(size.source_bytes, 2 * ("file".len() + "Read {}".len()));
+    let exact = DiagnosticLimits {
+        diagnostics: size.diagnostics,
+        depth: size.depth,
+        call_frames: size.call_frames,
+        related_locations: size.related_locations,
+        text_bytes: size.text_bytes,
+        source_bytes: size.source_bytes,
+    };
+    let error = exact.source_prefix(original(), "file", "Read {}", 4, std::iter::once(&frame));
+    assert_eq!(
+        error.to_value().to_string(),
+        baseline.to_value().to_string()
+    );
+    assert!(!Arc::ptr_eq(
+        error.span.as_ref().unwrap().source(),
+        &caller.source
+    ));
+    for dimension in 0..5 {
+        let mut limits = exact.clone();
+        match dimension {
+            0 => limits.source_bytes -= 1,
+            1 => limits.text_bytes -= 1,
+            2 => limits.call_frames = 0,
+            3 => limits.depth = 0,
+            _ => limits.diagnostics = 0,
+        }
+        let error = limits.source_prefix(original(), "file", "Read {}", 4, std::iter::once(&frame));
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        assert_eq!(error.causes[0].error.to_string(), original().to_string());
+        assert!(error.causes[0].span.is_none());
+        let omitted = error.causes[0].omissions.as_ref().unwrap();
+        assert_eq!(omitted.call_frames, 1);
+        assert_eq!(omitted.detail_fields, 0);
+        let source = omitted.source.as_ref().unwrap();
+        assert_eq!((source.start_byte, source.end_byte), (4, 7));
+    }
+}
+
+#[test]
+fn rejected_source_prefix_preserves_large_offsets_unicode_and_configuration_without_source_owners()
+{
+    let name = "🦀".repeat(1024);
+    let error = DiagnosticLimits {
+        source_bytes: 0,
+        ..DiagnosticLimits::default()
+    }
+    .source_prefix(
+        BWErr::RunConfiguration("invalid syntax configuration".into()),
+        &name,
+        "",
+        usize::MAX,
+        std::iter::empty(),
+    );
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::RunConfiguration);
+    assert!(error.causes[0].span.is_none());
+    let source = error.causes[0]
+        .omissions
+        .as_ref()
+        .unwrap()
+        .source
+        .as_ref()
+        .unwrap();
+    assert!(source.file_truncated && source.file.ends_with("…[truncated]"));
+    assert!(source.file.len() <= SUMMARY_SOURCE_NAME_BYTES);
+    assert_eq!((source.start_byte, source.end_byte), (usize::MAX, 0));
+}
+
+#[test]
 fn alternative_detail_summaries_skip_full_formatters_after_context_rejection() {
     struct Forbidden;
     impl std::fmt::Display for Forbidden {

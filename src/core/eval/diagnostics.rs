@@ -46,7 +46,7 @@ impl Context {
             &self.limits().diagnostics,
             self.calls.iter().map(|record| &record.frame),
         );
-        self.finish_constructed_error(error, stopped, Some(failure.span()), false)
+        self.finish_constructed_error(error, stopped, failure.span(), false)
     }
 
     pub(super) fn duplicate_error(
