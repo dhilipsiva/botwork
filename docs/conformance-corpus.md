@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 103 cases against the 51 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 105 cases against the 51 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -58,7 +58,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R18 | runtime-diagnostic-boundary | runtime-diagnostic-limit | runtime-diagnostic-boundary |
 | R19 | retained-diagnostic-boundary | retained-diagnostic-limit | retained-diagnostic-boundary |
 | R20 | operation-diagnostic-boundary | operation-diagnostic-limit | operation-diagnostic-boundary |
-| R21 | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary | borrowed-diagnostic-limit, operation-panic-limit, signature-diagnostic-limit, access-diagnostic-limit, operator-diagnostic-limit, input-diagnostic-limit, input-origin-limit, signature-builder-limit | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary |
+| R21 | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary | borrowed-diagnostic-limit, operation-panic-limit, signature-diagnostic-limit, access-diagnostic-limit, operator-diagnostic-limit, input-diagnostic-limit, input-origin-limit, signature-builder-limit, entry-file-diagnostic-limit | borrowed-diagnostic-boundary, operation-panic-boundary, signature-diagnostic-boundary, access-diagnostic-boundary, operator-diagnostic-boundary, input-diagnostic-boundary, input-origin-boundary, signature-builder-boundary, entry-file-diagnostic-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -113,3 +113,5 @@ Two input-diagnostic host cases preserve exact invalid-name details at the text 
 Two input-origin host cases retain the payload-free origin at the default source-byte boundary or reject one extra byte while preserving bounded original input-limit evidence.
 
 Two signature-builder host cases preserve an unknown-parameter message at the default text-byte boundary or reject one extra byte before formatting its owned detail.
+
+Two entry-file host cases preserve a read error at its exact text-byte boundary or reject one fewer byte before message construction, retaining installed inputs without script steps.

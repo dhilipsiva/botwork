@@ -679,6 +679,54 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 }
                 continue;
             }
+            Input::EntryFileDiagnosticBoundary | Input::EntryFileDiagnosticLimit => {
+                use botwork::core::{
+                    diagnostic::DiagnosticLimits,
+                    run::{Engine, RunLimits, RunOptions},
+                };
+                let path = harness
+                    .workspace
+                    .join(format!("missing-{}.botwork", case.id));
+                let engine = Engine::default();
+                let baseline = engine
+                    .run_file(&path, RunOptions::default())
+                    .result
+                    .unwrap_err();
+                assert_eq!(baseline.code().as_str(), "BW7003");
+                let bytes = DiagnosticLimits::default()
+                    .check(&baseline)
+                    .unwrap()
+                    .text_bytes;
+                let run = engine.run_file(
+                    &path,
+                    RunOptions {
+                        limits: RunLimits {
+                            diagnostics: DiagnosticLimits {
+                                text_bytes: bytes - usize::from(case.error.is_some()),
+                                ..DiagnosticLimits::default()
+                            },
+                            ..RunLimits::default()
+                        },
+                        variables: BTreeMap::from([("seed".into(), Literal::Int(7))]),
+                        ..RunOptions::default()
+                    },
+                );
+                assert_eq!(run.steps, 0);
+                assert_eq!(run.variables["seed"].to_string(), "7");
+                let error = run.result.unwrap_err();
+                if let Some(expected) = case.error {
+                    assert_eq!(error.code().as_str(), case.code.unwrap());
+                    assert!(error.to_string().contains(expected));
+                    assert_eq!(error.causes[0].code().as_str(), "BW7003");
+                    assert!(error.causes[0].span.is_none());
+                } else {
+                    assert_eq!(
+                        error.to_value().to_string(),
+                        baseline.to_value().to_string()
+                    );
+                }
+                continue;
+            }
             Input::EmbeddedSuccess | Input::EmbeddedLimit => {
                 check_embedded_case(&case);
                 continue;

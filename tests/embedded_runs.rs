@@ -358,6 +358,187 @@ fn source_byte_limit_applies_before_parsing_and_uses_exact_utf8_bytes() {
 }
 
 #[test]
+fn entry_file_errors_admit_exact_text_before_detail_formatting_and_preserve_installed_inputs() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    let harness = Harness::new();
+    fs::write(harness.workspace.join("invalid.botwork"), [0xff]).unwrap();
+    let engine = Engine::default();
+    for name in ["missing-é.botwork", "invalid.botwork", ".", "nul\0.botwork"] {
+        let baseline = engine
+            .run_file(name, options(&harness.workspace))
+            .result
+            .unwrap_err();
+        assert_eq!(baseline.code(), DiagnosticCode::SourceRead);
+        assert!(baseline.span.is_none() && baseline.call_stack.is_empty());
+        let bytes = DiagnosticLimits::default()
+            .check(&baseline)
+            .unwrap()
+            .text_bytes;
+        for shortage in [0, 1] {
+            let run = engine.run_file(
+                name,
+                RunOptions {
+                    limits: RunLimits {
+                        diagnostics: DiagnosticLimits {
+                            text_bytes: bytes - shortage,
+                            ..DiagnosticLimits::default()
+                        },
+                        ..RunLimits::default()
+                    },
+                    variables: BTreeMap::from([("seed".into(), Literal::Int(7))]),
+                    ..options(&harness.workspace)
+                },
+            );
+            assert_eq!(run.steps, 0);
+            assert_eq!(run.variables["seed"].to_string(), "7");
+            assert_eq!(run.variables.len(), 1);
+            assert!(run.snapshot_error.is_none());
+            let error = run.result.unwrap_err();
+            if shortage == 0 {
+                assert_eq!(
+                    error.to_value().to_string(),
+                    baseline.to_value().to_string()
+                );
+            } else {
+                assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+                assert_eq!(error.causes[0].code(), DiagnosticCode::SourceRead);
+                assert!(error.causes[0].omissions.is_some());
+                assert!(error.causes[0].span.is_none());
+            }
+        }
+    }
+}
+
+#[test]
+fn rejected_entry_file_errors_skip_callbacks_and_fresh_runs_need_no_diagnostic_text() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    let harness = Harness::new();
+    fs::write(harness.workspace.join("valid.botwork"), "Effect").unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Effect", move |_, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::None)
+        })
+        .unwrap();
+    let configured = || RunOptions {
+        limits: RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            ..RunLimits::default()
+        },
+        ..options(&harness.workspace)
+    };
+    let failed = engine.run_file("missing.botwork", configured());
+    assert_eq!(failed.outcome(), RunOutcome::LimitExceeded);
+    assert_eq!(
+        failed.result.unwrap_err().causes[0].code(),
+        DiagnosticCode::SourceRead
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        engine.run_file("valid.botwork", configured()).outcome(),
+        RunOutcome::Succeeded
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn entry_file_construction_preserves_prior_cancellation_and_source_byte_limits() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    let harness = Harness::new();
+    let control = OperationControl::default();
+    control.cancel();
+    let run = Engine::default().run_file(
+        "missing.botwork",
+        RunOptions {
+            control,
+            limits: RunLimits {
+                diagnostics: DiagnosticLimits {
+                    text_bytes: 0,
+                    ..DiagnosticLimits::default()
+                },
+                ..RunLimits::default()
+            },
+            ..options(&harness.workspace)
+        },
+    );
+    assert_eq!(run.outcome(), RunOutcome::Cancelled);
+    assert!(run.result.unwrap_err().causes.is_empty());
+    fs::write(harness.workspace.join("too-big.botwork"), [0xff]).unwrap();
+    let run = Engine::default().run_file(
+        "too-big.botwork",
+        RunOptions {
+            limits: RunLimits {
+                source_bytes: 0,
+                diagnostics: DiagnosticLimits {
+                    text_bytes: 0,
+                    ..DiagnosticLimits::default()
+                },
+                ..RunLimits::default()
+            },
+            ..options(&harness.workspace)
+        },
+    );
+    let error = run.result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+    assert!(matches!(
+        error.causes[0].error.as_ref(),
+        BWErr::ResourceLimit {
+            resource: "source bytes",
+            limit: 0
+        }
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_entry_paths_use_construction_admission_before_filesystem_access() {
+    use botwork::core::diagnostic::DiagnosticLimits;
+    use std::os::unix::ffi::OsStringExt;
+    let path = OsString::from_vec(vec![0xff]);
+    let baseline = Engine::default()
+        .run_file(&path, RunOptions::default())
+        .result
+        .unwrap_err();
+    assert_eq!(baseline.code(), DiagnosticCode::SourceRead);
+    let BWErr::SourceRead(message) = baseline.error.as_ref() else {
+        panic!("source read")
+    };
+    assert_eq!(message, "Source paths must be valid UTF-8");
+    let exact = DiagnosticLimits::default()
+        .check(&baseline)
+        .unwrap()
+        .text_bytes;
+    for bytes in [exact, exact - 1] {
+        let run = Engine::default().run_file(
+            &path,
+            RunOptions {
+                limits: RunLimits {
+                    diagnostics: DiagnosticLimits {
+                        text_bytes: bytes,
+                        ..DiagnosticLimits::default()
+                    },
+                    ..RunLimits::default()
+                },
+                ..RunOptions::default()
+            },
+        );
+        let error = run.result.unwrap_err();
+        if bytes == exact {
+            assert_eq!(error.code(), DiagnosticCode::SourceRead);
+        } else {
+            assert_eq!(error.causes[0].code(), DiagnosticCode::SourceRead);
+        }
+    }
+}
+
+#[test]
 fn file_limits_precede_truncated_utf8_and_import_failures_retain_sites() {
     let harness = Harness::new();
     let engine = Engine::default();

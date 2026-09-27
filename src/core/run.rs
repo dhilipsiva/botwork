@@ -355,13 +355,21 @@ impl Engine {
                 .expect("configured run")
                 .directory
                 .join(path);
-            let name = path
-                .to_str()
-                .ok_or_else(|| BWErr::SourceRead("Source paths must be valid UTF-8".into()))?;
+            let name = path.to_str().ok_or_else(|| {
+                context.formatted_error(
+                    BWErr::SourceRead,
+                    format_args!("Source paths must be valid UTF-8"),
+                    None,
+                    false,
+                )
+            })?;
             let source = context.read_source(&path).map_err(|error| match error {
-                SourceFailure::Io(error) => {
-                    Diagnostic::new(BWErr::SourceRead(format!("{name}: {error}")))
-                }
+                SourceFailure::Io(error) => context.formatted_error(
+                    BWErr::SourceRead,
+                    format_args!("{name}: {error}"),
+                    None,
+                    false,
+                ),
                 SourceFailure::Diagnostic(error) => error,
             })?;
             let program = context.parse_source(name, &source)?;

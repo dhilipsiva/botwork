@@ -52,7 +52,7 @@ impl Context {
         self.finish_constructed_error(error, stopped, Some(span), true)
     }
 
-    pub(super) fn formatted_error(
+    pub(crate) fn formatted_error(
         &self,
         category: fn(String) -> BWErr,
         message: std::fmt::Arguments<'_>,

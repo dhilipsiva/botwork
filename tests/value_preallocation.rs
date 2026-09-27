@@ -58,6 +58,43 @@ fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
+fn entry_file_read_errors_admit_detail_before_copying_the_large_requested_path() {
+    use botwork::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
+    let path = "x".repeat(64 * 1024);
+    let engine = Engine::default();
+    let run = |text_bytes| {
+        engine.run_file(
+            &path,
+            RunOptions {
+                inherit_environment: false,
+                limits: RunLimits {
+                    diagnostics: DiagnosticLimits {
+                        text_bytes,
+                        ..DiagnosticLimits::default()
+                    },
+                    ..RunLimits::default()
+                },
+                ..RunOptions::default()
+            },
+        )
+    };
+    let (ordinary, full_copies) =
+        observe(path.len(), || run(DiagnosticLimits::default().text_bytes));
+    assert_eq!(
+        ordinary.result.unwrap_err().code(),
+        DiagnosticCode::SourceRead
+    );
+    let (rejected, limited_copies) = observe(path.len(), || run(0));
+    let error = rejected.result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::SourceRead);
+    assert_eq!(error.causes[0].omissions.as_ref().unwrap().detail_fields, 1);
+    // Path joining and the platform file-open argument still own their required
+    // path copies. Rejection removes the single additional diagnostic message.
+    assert_eq!(full_copies, limited_copies + 1);
+}
+
+#[test]
 fn signature_builder_rejects_large_unknown_parameter_messages_before_owned_copies() {
     use botwork::core::{
         diagnostic::{DiagnosticCode, DiagnosticLimits},
