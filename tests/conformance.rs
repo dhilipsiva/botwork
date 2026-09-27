@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::ProgressBoundary | Input::ProgressIncomplete => {
+                check_progress_case(&case);
+                continue;
+            }
             Input::ShutdownBoundary | Input::ShutdownInvalid => {
                 check_shutdown_case(&case);
                 continue;
@@ -2073,4 +2077,63 @@ fn check_shutdown_case(case: &Case) {
         .unwrap()
         .active
         .is_empty());
+}
+
+fn check_progress_case(case: &Case) {
+    use botwork::core::{
+        operation::OperationControl,
+        worker::{WorkerCommand, WorkerLimits, WorkerPool},
+    };
+    let pool = WorkerPool::new(WorkerLimits::default()).unwrap();
+    let start = pool.start(
+        WorkerCommand {
+            executable: "/bin/sh".into(),
+            arguments: vec![
+                "-c".into(),
+                if case.error.is_some() {
+                    "exec 0<&-; exit 0"
+                } else {
+                    "exec /bin/cat"
+                }
+                .into(),
+            ],
+            directory: std::env::temp_dir(),
+            environment: Default::default(),
+        },
+        if case.error.is_some() {
+            vec![1; 64 * 1024]
+        } else {
+            vec![]
+        },
+        OperationControl::default(),
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use botwork::core::worker::{WorkerCleanup, WorkerOutcome};
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let report = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), start.unwrap().wait())
+                .await
+                .unwrap()
+        });
+        assert_eq!(report.cleanup, WorkerCleanup::Reaped);
+        assert!(report.progress_complete);
+        if let Some(expected) = case.error {
+            assert_eq!(report.outcome, WorkerOutcome::Failed);
+            assert!(!report.io_complete);
+            assert!(report.stdin_written < 64 * 1024);
+            let error = report.diagnostic.unwrap();
+            assert_eq!(error.code().as_str(), case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+        } else {
+            assert_eq!(report.outcome, WorkerOutcome::Succeeded);
+            assert!(report.io_complete);
+            assert_eq!(report.stdin_written, 0);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    assert!(start.is_err());
 }

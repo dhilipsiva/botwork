@@ -66,6 +66,7 @@ fn complete_binary_io_exit_status_and_empty_environment_are_preserved() {
     assert_eq!(report.cleanup, WorkerCleanup::Reaped);
     assert!(report.exit_status.unwrap().success());
     assert!(report.io_complete);
+    assert!(report.progress_complete);
     assert_eq!(report.stdin_written, input.len());
     assert_eq!(report.stdout, input);
     assert_eq!(report.stderr, "é".as_bytes());
@@ -111,6 +112,7 @@ fn nonzero_exit_and_incomplete_requests_are_failures_even_with_valid_output() {
     );
     assert_eq!(report.outcome, WorkerOutcome::Failed);
     assert!(!report.io_complete);
+    assert!(report.progress_complete);
     assert!(report.stdin_written < 1024 * 1024);
     assert!(report.diagnostic.is_some());
     assert_eq!(report.cleanup, WorkerCleanup::Reaped);
@@ -174,6 +176,7 @@ fn blocked_stdin_and_inherited_output_descriptors_do_not_hold_completion_forever
     );
     assert_eq!(report.outcome, WorkerOutcome::TimedOut);
     assert!(!report.io_complete);
+    assert!(report.progress_complete);
     assert!(report.stdin_written < 1024 * 1024);
     let pool = WorkerPool::new(limits()).unwrap();
     let report = wait(
@@ -474,6 +477,7 @@ fn simultaneous_pipe_backpressure_is_drained_without_deadlock() {
     assert_eq!(report.stdout, input);
     assert_eq!(report.stderr, input);
     assert!(report.io_complete);
+    assert!(report.progress_complete);
 }
 
 #[test]

@@ -95,6 +95,8 @@ pub struct WorkerReport {
     pub stderr: Vec<u8>,
     /// Both output streams reached EOF and every request byte was written.
     pub io_complete: bool,
+    /// False for early/uncertain reports: an in-flight OS call may still make progress.
+    pub progress_complete: bool,
     pub diagnostic: Option<Diagnostic>,
 }
 
@@ -109,7 +111,7 @@ pub struct WorkerRecord {
 #[derive(Clone, Debug)]
 pub struct ActiveWorker {
     pub id: u64,
-    /// None until child transfer; this does not prove that no process exists.
+    /// None until process creation returns; this does not prove that no process exists.
     pub pid: Option<u32>,
     pub stopping: bool,
     /// Pending or unverified cleanup survives completed-history eviction.
@@ -149,6 +151,8 @@ struct Shared {
     changed: Condvar,
     #[cfg(all(test, target_os = "linux"))]
     launcher: Mutex<Option<linux::LaunchHook>>,
+    #[cfg(all(test, target_os = "linux"))]
+    io_hooks: Mutex<VecDeque<linux::IoHook>>,
     limits: WorkerLimits,
     state: Mutex<State>,
 }
@@ -180,6 +184,8 @@ impl WorkerPool {
             changed: Condvar::new(),
             #[cfg(all(test, target_os = "linux"))]
             launcher: Mutex::new(None),
+            #[cfg(all(test, target_os = "linux"))]
+            io_hooks: Mutex::new(VecDeque::new()),
             limits,
             state: Mutex::new(State {
                 closed: false,
@@ -508,6 +514,7 @@ impl WorkerReport {
             stdout: Vec::new(),
             stderr: Vec::new(),
             io_complete: false,
+            progress_complete: cleanup == WorkerCleanup::NotStarted,
             diagnostic: Some(diagnostic),
         }
     }

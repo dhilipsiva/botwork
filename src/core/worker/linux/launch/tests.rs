@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::mpsc;
 use std::{
     num::NonZeroUsize,
     sync::mpsc::{Receiver, Sender},
@@ -274,16 +275,10 @@ fn late_child_within_cleanup_allowance_is_reaped_before_terminal_report() {
 }
 
 #[test]
-fn failed_launch_result_delivery_destroys_and_reaps_the_owned_child() {
-    let pool = pool();
+fn abandoning_child_ownership_runs_the_guard_before_the_thread_can_finish() {
     let child = spawn(command()).unwrap();
     let pid = child.child.id();
-    let (send, receive) = mpsc::sync_channel(1);
-    drop(receive);
-    drop(send.send(LaunchResult {
-        result: Ok(child),
-        _shared: pool.0 .0.clone(),
-    }));
+    std::thread::spawn(move || drop(child)).join().unwrap();
     assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
 }
 

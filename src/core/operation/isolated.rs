@@ -143,6 +143,7 @@ impl Isolated {
         let successful = report.outcome == WorkerOutcome::Succeeded
             && report.cleanup == WorkerCleanup::Reaped
             && report.io_complete
+            && report.progress_complete
             && report.exit_status.is_some_and(|status| status.success())
             && report.diagnostic.is_none();
         // A terminal stop still permits bounded recovery of a complete foreign
