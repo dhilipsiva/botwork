@@ -445,9 +445,14 @@ pub(super) fn invoke_imported(
             .with_related("imported here", import_site)
     })?;
     let mut module_context = isolated(module.frame.clone(), context);
-    let (definition, owner) = module_context
-        .get_statement(exported)
-        .ok_or_else(|| BWErr::StatementNotDefined(exported.into()))?;
+    let (definition, owner) = module_context.get_statement(exported).ok_or_else(|| {
+        module_context.import_error(
+            BWErr::StatementNotDefined,
+            format_args!("{exported}"),
+            &call.span,
+            import_site,
+        )
+    })?;
     let result = invoke_resolved(call, definition, owner, arguments, &mut module_context)
         .map_err(|error| error.with_related("imported here", import_site));
     merge_cache(context, &mut module_context);

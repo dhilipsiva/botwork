@@ -100,6 +100,8 @@ Cycle details stream the active canonical path slice and repeated path in their 
 
 Other load failures acquire the originating site once at the load boundary. Parent import sites are attached and admitted as errors unwind; they are separate from the initial constructor's known site. Emergency errors increment omitted-location counts instead of retaining further sources. Preserve resource/parse/execution categories, completed effects, successful dependency caches, and namespace publication only after successful initialization. Construction quota failures share the module run's stop state, bypass Catch, and retain normal scope/handler cleanup.
 
+Defensive imported-call lookup failures also admit the borrowed export name, call location, originating import site, and inherited calls before constructing StatementNotDefined. Successful module registration preserves the export invariant; this guard covers an internally inconsistent module. It enters no callee frame and preserves earlier snapshot admission. A construction rejection shares the caller's stop state while independently cloned Contexts remain usable.
+
 Path joins, canonicalization/platform buffers, existing source/path owners, and module parser/validation diagnostics keep their separate ownership or construction contracts. Streaming a path into an error does not change import resolution or file access.
 
 ## Runtime Declaration Collisions
@@ -167,6 +169,8 @@ Entry-file checks cover exact/zero text quotas, missing files, directory reads, 
 Import checks cover exact text/source/frame/site limits, shared and distinct source owners, path/URL policy, working-directory/read/encoding errors, cycle order, all parent sites, prior effects, skipped handlers, fresh runs, clone stops, and no namespace publication. Existing cache/symlink/stack/resource suites remain active. Allocation observations reject large details even when only the originating-site allowance is deficient, and reject a twelve-module cycle without a large chain buffer; acceptance creates one final chain. Two R21 cases pin the initial message/site boundary.
 
 Captured-directory tests additionally verify shared unformatted ownership, checked snapshot handle limits, release after the final owner, and formatter visits: accepted import details are counted then constructed; rejected details visit only the bounded Unicode prefix. Source release, original ImportRead evidence, import-site omissions, and sibling execution remain covered.
+
+Two defensive imported-export tests cover exact and one-less quotas across all diagnostic dimensions, complete accepted context, bounded Unicode evidence, rejected-source release, snapshot failure priority, and independent clone stops.
 
 Setup checks cover exact default message quotas, unchanged ordinary wording, separation from requested local quotas, oversized Unicode directory evidence, empty input snapshots, skipped effects/steps, and deep-input disposal. Allocation comparison retains only required directory/platform copies on rejection; prior cancellation and expired timeouts skip those copies too. Two R21 cases pin the setup/default-quota boundary and oversized-message rejection.
 

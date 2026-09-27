@@ -2,6 +2,158 @@ use super::*;
 use crate::core::run::{RunLimits, SnapshotLimits};
 
 #[test]
+fn missing_imported_exports_admit_name_and_complete_known_context() {
+    use crate::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
+
+    for deficit in [
+        None,
+        Some("text"),
+        Some("source"),
+        Some("calls"),
+        Some("sites"),
+        Some("records"),
+        Some("depth"),
+    ] {
+        let program = Program::parse("caller-é", "Read").unwrap();
+        let imports = Program::parse("importer", "Import |\"module.botwork\"| As |lib|").unwrap();
+        let call = Call {
+            span: program.statements[0].span.clone(),
+            signature: "read".into(),
+            arguments: vec![],
+        };
+        let site = &imports.statements[0].span;
+        let sources = [
+            Arc::downgrade(&program.source),
+            Arc::downgrade(&imports.source),
+        ];
+        let mut expected = Diagnostic::new(BWErr::StatementNotDefined("absent-é".into()))
+            .at(&call.span)
+            .with_related("imported here", site);
+        let outer = Context::default()
+            .retain_call("outer", &call.span, None)
+            .unwrap();
+        expected.call_stack.push(outer.frame.clone());
+        let size = DiagnosticLimits::default().check(&expected).unwrap();
+        let mut limits = DiagnosticLimits {
+            diagnostics: size.diagnostics,
+            depth: size.depth,
+            call_frames: size.call_frames,
+            related_locations: size.related_locations,
+            text_bytes: size.text_bytes,
+            source_bytes: size.source_bytes,
+        };
+        match deficit {
+            Some("text") => limits.text_bytes -= 1,
+            Some("source") => limits.source_bytes -= 1,
+            Some("calls") => limits.call_frames -= 1,
+            Some("sites") => limits.related_locations -= 1,
+            Some("records") => limits.diagnostics -= 1,
+            Some("depth") => limits.depth -= 1,
+            None => {}
+            _ => unreachable!(),
+        }
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: limits,
+            ..RunLimits::default()
+        })
+        .unwrap();
+        context.calls.push(outer);
+        let mut sibling = context.clone();
+        let module = LoadedModule {
+            frame: Frame::default(),
+        };
+        let error =
+            invoke_imported(&call, &module, "absent-é", vec![], site, &mut context).unwrap_err();
+        if deficit.is_some() {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), expected.code());
+            let omitted = error.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(omitted.call_frames, 1);
+            assert_eq!(omitted.related_locations, 1);
+            assert!(context.checkpoint().is_err());
+        } else {
+            assert_eq!(error.code(), expected.code());
+            assert_eq!(error.to_string(), expected.to_string());
+            assert_eq!(DiagnosticLimits::default().check(&error).unwrap(), size);
+            context.checkpoint().unwrap();
+        }
+        sibling.calls.clear();
+        sibling.checkpoint().unwrap();
+        evaluate_program_detailed(&Program::parse("valid", "|x| = |1|").unwrap(), &mut sibling)
+            .unwrap();
+        context.calls.clear();
+        drop((expected, call, imports, program));
+        assert_eq!(
+            sources.iter().all(|source| source.upgrade().is_none()),
+            deficit.is_some()
+        );
+        drop(error);
+        assert!(sources.iter().all(|source| source.upgrade().is_none()));
+    }
+}
+
+#[test]
+fn missing_imported_exports_bound_unicode_evidence_after_snapshot_admission() {
+    use crate::core::diagnostic::{DiagnosticCode, DiagnosticLimits};
+
+    for snapshot_entries in [0, usize::MAX] {
+        let program = Program::parse("caller", "Read").unwrap();
+        let call = Call {
+            span: program.statements[0].span.clone(),
+            signature: "read".into(),
+            arguments: vec![],
+        };
+        let mut context = Context::with_limits(RunLimits {
+            diagnostics: DiagnosticLimits {
+                text_bytes: 0,
+                ..DiagnosticLimits::default()
+            },
+            snapshots: SnapshotLimits {
+                entries: snapshot_entries,
+                path_bytes: usize::MAX,
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        // A captured directory error contributes one snapshot handle even in an empty module.
+        context.working_directory = Err(Arc::new(std::io::Error::other("unavailable")));
+        let module = LoadedModule {
+            frame: Frame::default(),
+        };
+        let error = invoke_imported(
+            &call,
+            &module,
+            &"é".repeat(64 * 1024),
+            vec![],
+            &call.span,
+            &mut context,
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+        if snapshot_entries == 0 {
+            assert!(error.causes.is_empty());
+            assert!(matches!(
+                error.error.as_ref(),
+                BWErr::ResourceLimit {
+                    resource: "snapshot table entries",
+                    ..
+                }
+            ));
+        } else {
+            let original = &error.causes[0];
+            let BWErr::StatementNotDefined(name) = original.error.as_ref() else {
+                panic!("original category")
+            };
+            assert!(name.starts_with('é'));
+            assert!(name.len() <= 256);
+            assert_eq!(original.omissions.as_ref().unwrap().detail_fields, 1);
+            assert!(original.span.is_none());
+        }
+        assert!(context.checkpoint().is_err());
+    }
+}
+
+#[test]
 fn working_directory_errors_share_one_unformatted_owner_across_snapshots() {
     #[derive(Debug)]
     struct NoDisplay;
