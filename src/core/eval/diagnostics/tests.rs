@@ -4,7 +4,8 @@ use crate::core::run::{RetainedDiagnosticLimits, SnapshotLimits};
 
 #[test]
 fn shared_handler_unwind_admits_copy_overlap_and_preserves_primary_failure_and_bindings() {
-    for records in [2, 3] {
+    // The snapshot owns a call and handler; the new error and copied cause overlap.
+    for records in [3, 4] {
         let captured = Arc::new(std::sync::Mutex::new(None));
         let save = captured.clone();
         let mut context = Context::with_limits(RunLimits {
@@ -42,7 +43,7 @@ fn shared_handler_unwind_admits_copy_overlap_and_preserves_primary_failure_and_b
             DiagnosticCode::UndefinedStatement
         );
         held.checkpoint().unwrap();
-        if records == 2 {
+        if records == 3 {
             assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
             assert_eq!(error.causes[0].code(), DiagnosticCode::UndefinedStatement);
             assert!(

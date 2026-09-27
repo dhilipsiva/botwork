@@ -1299,7 +1299,7 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
                 );
                 if handoff {
                     limits.retained_diagnostics = RetainedDiagnosticLimits {
-                        records: 1,
+                        records: 2,
                         diagnostics: 1 + capacity,
                         ..RetainedDiagnosticLimits::default()
                     };

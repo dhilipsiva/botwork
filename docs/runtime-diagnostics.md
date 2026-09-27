@@ -4,13 +4,13 @@
 
 ## Admission Before Call Copies
 
-Measure each complete error and any prospective call snapshot before cloning frame vectors or signature strings. Preserve an existing snapshot instead of adding later caller frames. Sources are shared Arc references, deduplicated by identity during measurement; checking their byte lengths does not copy source contents or scan coordinates. When admission succeeds, preserve full code, identity, spans, causes, and entered-call metadata.
+Measure each complete error, prospective innermost span/expression label, and prospective call snapshot before cloning frame vectors or signature strings. Synchronous boundaries also reserve the complete tree against the shared retained-diagnostic tracker before attaching that metadata; repeated unwinding credits the existing outgoing reservation. Preserve an existing snapshot instead of adding later caller frames. Sources are shared Arc references, deduplicated by identity during measurement; checking their byte lengths does not copy source contents or scan coordinates. When admission succeeds, preserve full code, identity, spans, causes, and entered-call metadata.
 
 Apply checks at expression, statement, call, native-result, and public program/statement/Pair boundaries, including validation failures. Engine finalization also admits errors from parsing, source reads, inputs, and setup. Configured quotas apply after valid run/environment preparation installs the run budget; earlier control/configuration/environment failures use the fresh Context's default diagnostic quotas. Invalid diagnostic depth is rejected before script effects.
 
 Environment preparation additionally admits working-directory/timeout/environment error details before formatting, using those same defaults. Oversized setup messages retain bounded RunConfiguration evidence; failures occur before input installation and script effects. See [setup construction](diagnostic-construction.md#run-setup-errors).
 
-Initial BWErr strings and active call frames already exist when this per-tree admission runs. [Message construction](diagnostic-construction.md) additionally checks interpreter-owned details before their first copy. [Retained call/handler limits](retained-diagnostics.md) reserve live records before call-signature copies and handler storage. Aggregate transient/outgoing synchronous errors and copies during rethrow/handler unwind remain a separate ownership task.
+Initial BWErr strings and active call frames already exist when this per-tree admission runs. [Message construction](diagnostic-construction.md) additionally checks interpreter-owned details before their first copy. [Retained call/handler limits](retained-diagnostics.md) reserve live records before call-signature copies and handler storage. The outgoing carrier now reserves complete synchronous errors, including native error/active-call overlap, and keeps reservations through handler unwind or host transfer. Initial aggregate message/context construction before that carrier boundary remains pending.
 
 ## Failures, Cleanup, and Stops
 
@@ -22,6 +22,6 @@ Observe cancellation/deadline state before a new diagnostic quota can latch. Pre
 
 ## Remaining Boundaries and Evidence
 
-These are per-tree limits. [Aggregate retained records](retained-diagnostics.md) account for active handlers, calls, shared Context snapshots, and their unique source owners. Host-retained run results, original message construction, registration-only APIs, standalone NativeOperation diagnostics, arbitrary callback allocations, general rendering, and output/serialization have separate contracts or pending work. These limits do not establish a process-memory ceiling or hard termination deadline.
+These individual limits work alongside [aggregate retained records](retained-diagnostics.md), which account for active handlers, calls, outgoing errors, shared Context snapshots, and their unique source owners. Host-retained run results, original message construction, registration-only APIs, standalone NativeOperation diagnostics, arbitrary callback allocations, general rendering, and output/serialization have separate contracts or pending work. These limits do not establish a process-memory ceiling or hard termination deadline.
 
 Tests cover exact/zero/invalid quotas, prospective versus existing stacks, source-byte evidence, prior effects, handler/rethrow/import cleanup, independent Context stops, native cancellation causes, controlled-clock timeouts, all synchronous entry points, pre-copy rejection, default CLI cause amplification, and recovery. Existing debug/release stack stress and completion matrices remain active. R18 corpus cases and a Rust doctest pin handler admission.

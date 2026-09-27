@@ -270,6 +270,37 @@ impl RuntimeDiagnostic {
         self
     }
 
+    pub(crate) fn with_context<'a>(
+        mut self,
+        context: Option<(&Span, bool)>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+        budget: Option<&RunBudget>,
+    ) -> Self {
+        if self.is_emergency() {
+            return self;
+        }
+        let stopped = budget.and_then(|budget| budget.checkpoint().err());
+        let preserve_control = stopped.as_ref().is_some_and(|stop| {
+            stop.code() == self.code()
+                && matches!(
+                    stop.code(),
+                    DiagnosticCode::Cancelled | DiagnosticCode::Timeout
+                )
+        });
+        if let Err(violation) = self.admit_mutation(budget, context, frames.clone(), None, None) {
+            if let Some(budget) = budget {
+                budget.stop(violation.clone());
+            }
+            let error = self.reject_context(violation, context, frames.len());
+            return if preserve_control {
+                error.preserve_control()
+            } else {
+                error
+            };
+        }
+        self.map(|error| error.capture_context(context, frames))
+    }
+
     pub(crate) fn with_related(
         mut self,
         message: &str,
@@ -277,16 +308,32 @@ impl RuntimeDiagnostic {
         budget: Option<&RunBudget>,
     ) -> Self {
         if !self.is_emergency() {
-            if let Err(violation) = self.admit_mutation(budget, Some((message, span)), None) {
+            if let Err(violation) = self.admit_mutation(
+                budget,
+                None,
+                std::iter::empty(),
+                Some((message, span)),
+                None,
+            ) {
                 return self
-                    .reject_mutation(violation, budget)
+                    .reject_mutation(violation, budget, None, 0)
                     .map(|error| error.with_related(message, span));
             }
         }
         self.map(|value| value.with_related(message, span))
     }
 
-    pub(crate) fn while_handling(mut self, mut original: Self, budget: Option<&RunBudget>) -> Self {
+    pub(crate) fn while_handling(self, original: Self, budget: Option<&RunBudget>) -> Self {
+        self.while_handling_in(original, budget, None, std::iter::empty())
+    }
+
+    pub(crate) fn while_handling_in<'a>(
+        mut self,
+        mut original: Self,
+        budget: Option<&RunBudget>,
+        context: Option<(&Span, bool)>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame> + DoubleEndedIterator + Clone,
+    ) -> Self {
         if Arc::ptr_eq(&self.error, &original.error) {
             return self;
         }
@@ -297,18 +344,26 @@ impl RuntimeDiagnostic {
         // Transfer leases before measuring the combined tree so replacing them
         // credits both inputs atomically without double-reserving moved payloads.
         self.reservations.append(&mut original.reservations);
-        if let Err(violation) = self.admit_mutation(budget, None, Some(&original)) {
+        if let Err(violation) =
+            self.admit_mutation(budget, context, frames.clone(), None, Some(&original))
+        {
             drop(original);
             return self
-                .reject_mutation(violation, budget)
+                .reject_mutation(violation, budget, context, frames.len())
                 .map(Diagnostic::omit_handled_cause);
         }
-        self.map(|error| error.while_handling((*original.value).into_inner()))
+        self.map(|error| {
+            error
+                .while_handling((*original.value).into_inner())
+                .capture_context(context, frames)
+        })
     }
 
-    fn admit_mutation(
+    fn admit_mutation<'a>(
         &mut self,
         budget: Option<&RunBudget>,
+        context: Option<(&Span, bool)>,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame>,
         related: Option<(&str, &Span)>,
         cause: Option<&Diagnostic>,
     ) -> Result<(), BWErr> {
@@ -319,7 +374,8 @@ impl RuntimeDiagnostic {
         }
         let defaults = DiagnosticLimits::default();
         let limits = budget.map_or(&defaults, |budget| &budget.limits().diagnostics);
-        let (size, sources) = limits.retained_mutation_size(self, related, cause)?;
+        let (size, sources) =
+            limits.retained_runtime_size(self, frames, context, related, cause)?;
         if let Some(budget) = budget {
             let reservation =
                 budget
@@ -331,7 +387,13 @@ impl RuntimeDiagnostic {
         Ok(())
     }
 
-    fn reject_mutation(self, violation: BWErr, budget: Option<&RunBudget>) -> Self {
+    fn reject_mutation(
+        self,
+        violation: BWErr,
+        budget: Option<&RunBudget>,
+        context: Option<(&Span, bool)>,
+        pending_frames: usize,
+    ) -> Self {
         let stopped = budget.map(|budget| budget.stop(violation.clone()));
         if matches!(
             self.code(),
@@ -342,23 +404,43 @@ impl RuntimeDiagnostic {
         {
             // Keep an observed control failure primary even when its added
             // evidence exceeds a quota. The original tree is disposed first.
-            self.reject(violation).map(|mut error| {
-                let mut original = error.causes.pop().expect("bounded original");
-                original.causes.push(error);
-                original
-            })
+            self.reject_context(violation, context, pending_frames)
+                .preserve_control()
         } else {
-            self.reject(stopped.map_or(violation, Diagnostic::into_error))
+            self.reject_context(
+                stopped.map_or(violation, Diagnostic::into_error),
+                context,
+                pending_frames,
+            )
         }
     }
 
+    fn preserve_control(self) -> Self {
+        self.map(|mut error| {
+            let mut original = error.causes.pop().expect("bounded original");
+            original.causes.push(error);
+            original
+        })
+    }
+
     pub(crate) fn reject(self, violation: BWErr) -> Self {
+        self.reject_context(violation, None, 0)
+    }
+
+    fn reject_context(
+        self,
+        violation: BWErr,
+        context: Option<(&Span, bool)>,
+        pending_frames: usize,
+    ) -> Self {
         // Dispose the old payload before refunding its retained ownership.
         let Self {
             value,
             reservations,
         } = self;
-        let error = (*value).into_inner().rejected(violation);
+        let error = (*value)
+            .into_inner()
+            .rejected_context(violation, context, pending_frames);
         drop(reservations);
         error.into()
     }

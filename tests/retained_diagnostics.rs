@@ -244,7 +244,7 @@ fn outer_handlers_admit_related_locations_and_complete_cause_trees() {
     ] {
         for fits in [false, true] {
             let mut limits = RetainedDiagnosticLimits {
-                records: if related { 2 } else { 1 },
+                records: 2, // Original handler and outgoing failure/copy coexist.
                 ..RetainedDiagnosticLimits::default()
             };
             if related {
@@ -416,7 +416,7 @@ fn default_and_raised_limits_allow_call_handler_overlap_with_native_errors() {
     engine
         .register_native("Fail", |_, _| Err(BWErr::NativeError("reason".into())))
         .unwrap();
-    for records in [2, defaults.records, defaults.records + 1] {
+    for records in [3, defaults.records, defaults.records + 1] {
         let run = engine.run_source(
             "overlap",
             "Outer { Try { Fail } Catch {} }\nOuter",
@@ -437,7 +437,7 @@ fn outgoing_handler_causes_require_capacity_without_an_outer_catch() {
             "outgoing",
             source,
             options(RetainedDiagnosticLimits {
-                records: 1,
+                records: 2, // The original handler remains live during the new failure.
                 diagnostics,
                 ..Default::default()
             }),
@@ -522,4 +522,138 @@ fn import_unwinding_reserves_parent_sites_before_outgoing_publication() {
             assert!(error.related.is_empty());
         }
     }
+}
+
+#[test]
+fn native_error_context_requires_exact_overlap_with_the_active_call() {
+    let entered = Arc::new(AtomicUsize::new(0));
+    let count = entered.clone();
+    let mut engine = Engine::default();
+    engine
+        .register_native("Fail", move |_, _| {
+            count.fetch_add(1, Ordering::SeqCst);
+            Err(BWErr::NativeError("reason".into()))
+        })
+        .unwrap();
+    for deficit in 0..=4 {
+        let mut limits = RetainedDiagnosticLimits {
+            records: 2,
+            diagnostics: 1,
+            call_frames: 2,
+            related_locations: 0,
+            text_bytes: 20, // Active "fail" plus error label, reason, and copied "fail".
+            source_bytes: "peakFail".len(),
+        };
+        match deficit {
+            1 => limits.records -= 1,
+            2 => limits.diagnostics -= 1,
+            3 => limits.call_frames -= 1,
+            4 => limits.text_bytes -= 1,
+            _ => (),
+        }
+        let run = engine.run_source("peak", "Fail", options(limits));
+        let error = run.result.unwrap_err();
+        if deficit == 0 {
+            assert_eq!(error.code(), DiagnosticCode::Native);
+            assert_eq!(error.call_stack.len(), 1);
+            assert_eq!(error.call_stack[0].signature, "fail");
+            assert_eq!(error.span.as_ref().unwrap().source().name(), "peak");
+        } else {
+            assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().call_frames, 1);
+        }
+        assert_eq!(entered.load(Ordering::SeqCst), deficit + 1);
+    }
+}
+
+#[test]
+fn aggregate_context_failure_keeps_cancellation_primary_and_skips_catch() {
+    let mut engine = Engine::default();
+    engine
+        .register_native("Stop", |_, environment| {
+            environment.control().cancel();
+            Err(BWErr::NativeError("reason".into()))
+        })
+        .unwrap();
+    for (records, call_frames) in [(1, 3), (2, 2), (2, 3)] {
+        let run = engine.run_source(
+            "cancel",
+            "Try { Stop } Catch { |unexpected| = |true| }",
+            options(RetainedDiagnosticLimits {
+                records,
+                call_frames,
+                ..Default::default()
+            }),
+        );
+        assert_eq!(run.outcome(), RunOutcome::Cancelled);
+        assert!(!run.variables.contains_key("unexpected"));
+        let error = run.result.unwrap_err();
+        if records == 1 || call_frames == 2 {
+            assert!(error.omissions.is_some());
+            assert_eq!(error.omissions.as_ref().unwrap().call_frames, 1);
+            assert_eq!(error.omissions.as_ref().unwrap().direct_causes, 1);
+            assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+            assert_eq!(
+                error
+                    .omissions
+                    .as_ref()
+                    .unwrap()
+                    .source
+                    .as_ref()
+                    .unwrap()
+                    .file,
+                "cancel"
+            );
+        } else {
+            assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+            assert_eq!(error.call_stack.len(), 1);
+            assert_eq!(error.causes[0].call_stack.len(), 1);
+        }
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn aggregate_context_rejection_preserves_an_observed_timeout_but_not_an_unobserved_category()
+{
+    use botwork::core::operation::OperationControl;
+    let control = OperationControl::default().child(Some(
+        tokio::time::Instant::now() + std::time::Duration::from_secs(1),
+    ));
+    let mut context = Context::with_control(
+        RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        control,
+    )
+    .unwrap();
+    tokio::time::advance(std::time::Duration::from_secs(1)).await;
+    let error = evaluate_program_detailed(&Program::parse("timeout", "").unwrap(), &mut context)
+        .unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::Timeout);
+    assert!(error.omissions.is_some());
+    assert_eq!(error.causes[0].code(), DiagnosticCode::ResourceLimit);
+
+    let mut engine = Engine::default();
+    engine
+        .register_native("Reported", |_, _| {
+            Err(BWErr::Cancelled("host category only".into()))
+        })
+        .unwrap();
+    let run = engine.run_source(
+        "reported",
+        "Reported",
+        options(RetainedDiagnosticLimits {
+            records: 1,
+            ..Default::default()
+        }),
+    );
+    assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
+    let error = run.result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Cancelled);
 }

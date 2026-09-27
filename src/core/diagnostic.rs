@@ -294,6 +294,32 @@ impl Diagnostic {
         self
     }
 
+    pub(crate) fn prospective_location<'a>(
+        &'a self,
+        context: Option<(&'a Span, bool)>,
+    ) -> (Option<&'a Span>, &'static str) {
+        match (self.span.as_ref(), context) {
+            (None, Some((span, expression))) => (
+                Some(span),
+                if expression { "expression" } else { self.label },
+            ),
+            (span, _) => (span, self.label),
+        }
+    }
+
+    pub(crate) fn capture_context<'a>(
+        self,
+        context: Option<(&Span, bool)>,
+        frames: impl DoubleEndedIterator<Item = &'a CallFrame>,
+    ) -> Self {
+        let error = match context {
+            Some((span, true)) => self.at_expression(span),
+            Some((span, false)) => self.at(span),
+            None => self,
+        };
+        error.capture_stack(frames)
+    }
+
     pub(crate) fn while_handling(mut self, original: Diagnostic) -> Self {
         if !Arc::ptr_eq(&self.error, &original.error) {
             if self.is_emergency() {

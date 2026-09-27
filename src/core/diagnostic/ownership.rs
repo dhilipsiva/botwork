@@ -149,7 +149,12 @@ impl Measurement<'_> {
         Ok(())
     }
 
-    fn node(&mut self, diagnostic: &Diagnostic, depth: usize) -> Result<(), BWErr> {
+    fn node(
+        &mut self,
+        diagnostic: &Diagnostic,
+        depth: usize,
+        context: Option<(&Span, bool)>,
+    ) -> Result<(), BWErr> {
         add(
             &mut self.size.diagnostics,
             1,
@@ -182,7 +187,8 @@ impl Measurement<'_> {
                 limit: self.limits.diagnostics as u64,
             });
         }
-        self.text(diagnostic.label)?;
+        let (span, label) = diagnostic.prospective_location(context);
+        self.text(label)?;
         if let Some(source) = diagnostic
             .omissions
             .as_ref()
@@ -193,7 +199,7 @@ impl Measurement<'_> {
         for text in error_text(&diagnostic.error) {
             self.text(text)?;
         }
-        if let Some(span) = &diagnostic.span {
+        if let Some(span) = span {
             self.source(span)?;
         }
         for frame in &diagnostic.call_stack {
@@ -234,7 +240,7 @@ impl DiagnosticLimits {
         diagnostic: &Diagnostic,
         frames: impl ExactSizeIterator<Item = &'a CallFrame>,
     ) -> Result<DiagnosticSize, BWErr> {
-        self.inspect(diagnostic, frames, None, None, None)
+        self.inspect(diagnostic, frames, None, None, None, None)
     }
 
     /// Inspect a copied tree and its new related site before copying either payload.
@@ -253,13 +259,25 @@ impl DiagnosticLimits {
         related: Option<(&str, &Span)>,
         cause: Option<&Diagnostic>,
     ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
+        self.retained_runtime_size(diagnostic, std::iter::empty(), None, related, cause)
+    }
+
+    pub(crate) fn retained_runtime_size<'a>(
+        &self,
+        diagnostic: &Diagnostic,
+        frames: impl ExactSizeIterator<Item = &'a CallFrame>,
+        context: Option<(&Span, bool)>,
+        related: Option<(&str, &Span)>,
+        cause: Option<&Diagnostic>,
+    ) -> Result<(DiagnosticSize, Vec<Arc<SourceFile>>), BWErr> {
         let mut sources = Vec::new();
         let size = self.inspect(
             diagnostic,
-            std::iter::empty(),
+            frames,
             Some(&mut sources),
             related,
             cause,
+            context,
         )?;
         Ok((size, sources))
     }
@@ -271,6 +289,7 @@ impl DiagnosticLimits {
         owners: Option<&mut Vec<Arc<SourceFile>>>,
         related: Option<(&str, &Span)>,
         cause: Option<&Diagnostic>,
+        context: Option<(&Span, bool)>,
     ) -> Result<DiagnosticSize, BWErr> {
         self.validate()?;
         let mut measurement = Measurement {
@@ -287,7 +306,7 @@ impl DiagnosticLimits {
         while let Some((nodes, depth)) = pending.last_mut() {
             if let Some(node) = nodes.next() {
                 let depth = *depth;
-                measurement.node(node, depth)?;
+                measurement.node(node, depth, if depth == 1 { context } else { None })?;
                 if !node.causes.is_empty() {
                     pending.push((node.causes.iter(), depth + 1));
                 }

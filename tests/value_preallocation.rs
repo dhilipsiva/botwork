@@ -70,10 +70,11 @@ fn rejected_rethrow_copy_never_allocates_large_call_metadata() {
     };
     let signature = "A".repeat(64 * 1024);
     let mut counts = Vec::new();
-    for (records, body) in [(1, ""), (1, "Rethrow"), (2, "Rethrow")] {
+    for (related_locations, body) in [(0, ""), (0, "Rethrow"), (1, "Rethrow")] {
         let mut context = Context::with_limits(RunLimits {
             retained_diagnostics: RetainedDiagnosticLimits {
-                records,
+                records: 2, // Active call plus its outgoing error, then original plus rethrow.
+                related_locations,
                 ..Default::default()
             },
             ..Default::default()
@@ -87,11 +88,11 @@ fn rejected_rethrow_copy_never_allocates_large_call_metadata() {
         let (result, allocations) = observe(signature.len(), || {
             evaluate_program_detailed(&program, &mut context)
         });
-        match (records, body) {
+        match (related_locations, body) {
             (_, "") => {
                 result.unwrap();
             }
-            (1, _) => assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit),
+            (0, _) => assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit),
             _ => assert_eq!(result.unwrap_err().code(), DiagnosticCode::Native),
         }
         counts.push(allocations);
@@ -2453,4 +2454,51 @@ fn json_preflight_avoids_escape_buffers_and_wide_raw_arrays() {
     });
     assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit);
     assert_eq!(large, 0);
+}
+
+#[test]
+fn aggregate_outgoing_admission_precedes_native_call_stack_signature_copy() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticCode,
+        eval::{evaluate_program_detailed, Context},
+        grammar::BWErr,
+        run::RetainedDiagnosticLimits,
+    };
+    let signature = "A".repeat(64 * 1024);
+    let mut allocations = Vec::new();
+    for records in [1, 2] {
+        let mut context = Context::with_limits(RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context
+            .register_native(&signature, |_| Err(BWErr::NativeError("failed".into())))
+            .unwrap();
+        let program = Program::parse("outgoing", &signature).unwrap();
+        let (result, copies) = observe(signature.len(), || {
+            evaluate_program_detailed(&program, &mut context)
+        });
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.code(),
+            if records == 1 {
+                DiagnosticCode::ResourceLimit
+            } else {
+                DiagnosticCode::Native
+            }
+        );
+        if records == 1 {
+            assert_eq!(error.causes[0].omissions.as_ref().unwrap().call_frames, 1);
+        } else {
+            assert_eq!(error.call_stack.len(), 1);
+        }
+        allocations.push(copies);
+    }
+    // Both enter the call; only the admitted error copies its complete snapshot.
+    assert_eq!(allocations[1], allocations[0] + 1);
 }

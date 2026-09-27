@@ -1,6 +1,7 @@
 //! Fixed emergency evidence for rejected owned diagnostics.
 
 use super::{CallFrame, Diagnostic, DiagnosticLimits, DiagnosticResult};
+use crate::core::ast::Span;
 use crate::core::grammar::BWErr;
 
 #[cfg(test)]
@@ -152,6 +153,17 @@ impl Diagnostic {
         rejected(self, violation, 0)
     }
 
+    pub(crate) fn rejected_context(
+        self,
+        violation: BWErr,
+        context: Option<(&Span, bool)>,
+        pending_frames: usize,
+    ) -> Self {
+        let summary = borrowed_context_summary(&self, pending_frames, context);
+        self.discard();
+        Diagnostic::new(violation).while_handling(summary)
+    }
+
     /// Preserve bounded evidence without first copying a retained original tree.
     pub(crate) fn rejected_copy(&self, violation: BWErr, pending_related: usize) -> Self {
         let mut summary = borrowed_summary(self, 0);
@@ -162,9 +174,18 @@ impl Diagnostic {
 }
 
 fn borrowed_summary(diagnostic: &Diagnostic, pending_frames: usize) -> Diagnostic {
+    borrowed_context_summary(diagnostic, pending_frames, None)
+}
+
+fn borrowed_context_summary(
+    diagnostic: &Diagnostic,
+    pending_frames: usize,
+    context: Option<(&Span, bool)>,
+) -> Diagnostic {
     let mut shortened = 0;
     let mut summary = Diagnostic::new(error_summary(&diagnostic.error, &mut shortened));
-    let source = diagnostic.span.as_ref().map(|span| {
+    let (span, label) = diagnostic.prospective_location(context);
+    let source = span.map(|span| {
         let (file, file_truncated) = prefix(span.source().name(), SUMMARY_SOURCE_NAME_BYTES);
         OmittedSource {
             file,
@@ -173,9 +194,9 @@ fn borrowed_summary(diagnostic: &Diagnostic, pending_frames: usize) -> Diagnosti
             end_byte: span.end(),
         }
     });
-    let label = !matches!(diagnostic.label, "source" | "expression");
-    if !label {
-        summary.label = diagnostic.label;
+    let omitted_label = !matches!(label, "source" | "expression");
+    if !omitted_label {
+        summary.label = label;
     }
     summary.omissions = Some(Box::new(DiagnosticOmissions {
         detail_fields: shortened,
@@ -186,7 +207,7 @@ fn borrowed_summary(diagnostic: &Diagnostic, pending_frames: usize) -> Diagnosti
         },
         related_locations: diagnostic.related.len(),
         direct_causes: diagnostic.causes.len(),
-        label,
+        label: omitted_label,
         prior_summary: diagnostic.omissions.is_some(),
         source,
     }));

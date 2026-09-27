@@ -947,3 +947,173 @@ fn mutation_rejection_preserves_observed_control_and_disposes_deep_causes_iterat
         .join()
         .unwrap();
 }
+
+#[test]
+fn runtime_context_admits_every_dimension_before_metadata_and_preserves_borrowed_rejection_evidence(
+) {
+    for deficit in 0..=6 {
+        let program = Program::parse("位置", "Missing").unwrap();
+        let site = &program.statements[0].span;
+        let call_source = Program::parse("caller", "Call").unwrap();
+        let frame = CallFrame {
+            signature: "call".into(),
+            call_site: call_source.statements[0].span.clone(),
+            definition_site: Some(site.clone()),
+        };
+        let mut original = Diagnostic::new(BWErr::NativeError("reason-é".into()));
+        original
+            .related
+            .push(crate::core::diagnostic::RelatedLocation {
+                message: "prior".into(),
+                span: site.clone(),
+            });
+        let identity = original.error.clone();
+        let context = Some((site, true));
+        let expected = original
+            .clone()
+            .capture_context(context, std::iter::once(&frame));
+        let size = DiagnosticLimits::default().check(&expected).unwrap();
+        let mut limits = RetainedDiagnosticLimits {
+            records: 1,
+            diagnostics: size.diagnostics,
+            call_frames: size.call_frames,
+            related_locations: size.related_locations,
+            text_bytes: size.text_bytes,
+            source_bytes: size.source_bytes,
+        };
+        match deficit {
+            1 => limits.records -= 1,
+            2 => limits.diagnostics -= 1,
+            3 => limits.call_frames -= 1,
+            4 => limits.related_locations -= 1,
+            5 => limits.text_bytes -= 1,
+            6 => limits.source_bytes -= 1,
+            _ => (),
+        }
+        let budget = RunBudget::new(
+            RunLimits {
+                retained_diagnostics: limits,
+                ..Default::default()
+            },
+            OperationControl::default(),
+        );
+        let sibling = budget.clone();
+        let result = RuntimeDiagnostic::from(original).with_context(
+            context,
+            std::iter::once(&frame),
+            Some(&budget),
+        );
+        let sources = [
+            Arc::downgrade(&program.source),
+            Arc::downgrade(&call_source.source),
+        ];
+        if deficit == 0 {
+            assert_eq!(result.to_string(), expected.to_string());
+            assert!(Arc::ptr_eq(&result.error, &identity));
+            assert_eq!(
+                budget.0.retained_diagnostics.used.lock().unwrap().counts,
+                [
+                    1,
+                    size.diagnostics,
+                    size.call_frames,
+                    size.related_locations,
+                    size.text_bytes
+                ]
+            );
+        } else {
+            assert!(result.is_emergency());
+            assert_eq!(result.causes[0].code(), DiagnosticCode::Native);
+            assert_eq!(result.causes[0].label, "expression");
+            let omitted = result.causes[0].omissions.as_ref().unwrap();
+            assert_eq!(omitted.call_frames, 1);
+            let source = omitted.source.as_ref().unwrap();
+            assert_eq!(source.file, "位置");
+            assert_eq!(
+                (source.start_byte, source.end_byte),
+                (site.start(), site.end())
+            );
+            assert!(budget.checkpoint().is_err());
+            assert_eq!(
+                budget.0.retained_diagnostics.used.lock().unwrap().counts,
+                [0; 5]
+            );
+        }
+        sibling.checkpoint().unwrap();
+        drop((expected, frame, program, call_source));
+        assert_eq!(
+            sources.iter().all(|source| source.upgrade().is_none()),
+            deficit != 0
+        );
+        drop(result);
+        assert!(sources.iter().all(|source| source.upgrade().is_none()));
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts,
+            [0; 5]
+        );
+    }
+}
+
+#[test]
+fn context_readmission_credits_existing_reservations_and_keeps_innermost_metadata() {
+    let budget = RunBudget::new(
+        RunLimits {
+            retained_diagnostics: RetainedDiagnosticLimits {
+                records: 1,
+                call_frames: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        OperationControl::default(),
+    );
+    let program = Program::parse("first", "Missing").unwrap();
+    let frame = CallFrame {
+        signature: "inner".into(),
+        call_site: program.statements[0].span.clone(),
+        definition_site: None,
+    };
+    let error = Diagnostic::new(BWErr::NativeError("reason".into())).into();
+    let mut error = RuntimeDiagnostic::with_context(
+        error,
+        Some((&frame.call_site, true)),
+        std::iter::once(&frame),
+        Some(&budget),
+    );
+    let initial = budget.0.retained_diagnostics.used.lock().unwrap().counts;
+    let outer = Program::parse("outer", "Call").unwrap();
+    let frames: Vec<_> = (0..3)
+        .map(|_| CallFrame {
+            signature: "outer".into(),
+            call_site: outer.statements[0].span.clone(),
+            definition_site: None,
+        })
+        .collect();
+    for _ in 0..100 {
+        error = error.with_context(
+            Some((&frames[0].call_site, false)),
+            frames.iter(),
+            Some(&budget),
+        );
+        assert_eq!(
+            budget.0.retained_diagnostics.used.lock().unwrap().counts,
+            initial
+        );
+        assert_eq!(error.span.as_ref().unwrap().source().name(), "first");
+        assert_eq!(error.call_stack[0].signature, "inner");
+        assert_eq!(error.label, "expression");
+    }
+    let probe = budget.clone();
+    let rejected = RuntimeDiagnostic::from(Diagnostic::new(BWErr::NativeError("another".into())))
+        .with_context(None, std::iter::empty(), Some(&probe));
+    assert!(rejected.is_emergency());
+    budget.checkpoint().unwrap();
+    let public = error.into_diagnostic();
+    assert_eq!(
+        budget.0.retained_diagnostics.used.lock().unwrap().counts,
+        [0; 5]
+    );
+    let accepted = RuntimeDiagnostic::from(Diagnostic::new(BWErr::NativeError("another".into())))
+        .with_context(None, std::iter::empty(), Some(&budget));
+    assert_eq!(accepted.code(), DiagnosticCode::Native);
+    drop((accepted, public));
+}

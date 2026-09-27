@@ -46,7 +46,18 @@ impl Context {
         span: Option<&Span>,
         expression: bool,
     ) -> RuntimeDiagnostic {
-        error.map(|error| self.diagnostic(error, span, expression))
+        if error.is_emergency() {
+            return error;
+        }
+        let stopped = self.checkpoint().err();
+        let location = span.map(|span| (span, expression));
+        let frames = self.calls.iter().map(|record| &record.frame);
+        let error = error.with_context(location, frames.clone(), self.budget.as_ref());
+        match stopped {
+            Some(stopped) if stopped.code() != error.code() => RuntimeDiagnostic::from(stopped)
+                .while_handling_in(error, self.budget.as_ref(), location, frames),
+            _ => error,
+        }
     }
 
     pub(crate) fn after_evaluation<T>(&self, result: EvaluationResult<T>) -> EvaluationResult<T> {

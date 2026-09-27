@@ -242,3 +242,50 @@ fn prospective_cause_measurement_matches_attached_tree_and_checks_shifted_depth(
         })
     ));
 }
+
+#[test]
+fn prospective_runtime_context_matches_owned_location_label_and_stack_without_replacement() {
+    let first = tree();
+    let program = Program::parse("new location", "Missing").unwrap();
+    let context = Some((&program.statements[0].span, true));
+    for existing in [false, true] {
+        let mut error = first.clone();
+        if !existing {
+            error.span = None;
+            error.call_stack.clear();
+            error.label = "custom label that will be replaced";
+        }
+        let limits = DiagnosticLimits::default();
+        let (prospective, sources) = limits
+            .retained_runtime_size(&error, first.call_stack.iter(), context, None, None)
+            .unwrap();
+        let expected = error
+            .clone()
+            .capture_context(context, first.call_stack.iter());
+        assert_eq!(prospective, limits.check(&expected).unwrap());
+        assert_eq!(sources.len(), if existing { 1 } else { 2 });
+        assert_eq!(
+            expected.label,
+            if existing { "source" } else { "expression" }
+        );
+        let exact = DiagnosticLimits {
+            text_bytes: prospective.text_bytes,
+            ..limits
+        };
+        assert!(exact
+            .retained_runtime_size(&error, first.call_stack.iter(), context, None, None)
+            .is_ok());
+        // Attaching a statement span preserves the caller's custom label; expressions replace it.
+        if !existing {
+            assert!(exact
+                .retained_runtime_size(
+                    &error,
+                    first.call_stack.iter(),
+                    Some((&program.statements[0].span, false)),
+                    None,
+                    None
+                )
+                .is_err());
+        }
+    }
+}
