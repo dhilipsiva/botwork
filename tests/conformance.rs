@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::JournalBoundary | Input::JournalLimit => {
+                check_journal_case(&case);
+                continue;
+            }
             Input::TreeBoundary | Input::TreeUnverified => {
                 check_tree_case(&case);
                 continue;
@@ -2196,4 +2200,72 @@ fn check_tree_case(case: &Case) {
     }
     #[cfg(not(target_os = "linux"))]
     assert!(pool.is_err());
+}
+
+fn check_journal_case(_case: &Case) {
+    #[cfg(target_os = "linux")]
+    {
+        use botwork::core::{
+            operation::OperationControl,
+            worker::{
+                journal::{JournalFlush, WorkerJournal},
+                WorkerCommand, WorkerLimits, WorkerOutcome, WorkerPool,
+            },
+        };
+        let workspace = Harness::new();
+        let journal = WorkerJournal::open(
+            &workspace.workspace.join("journal"),
+            std::num::NonZeroUsize::new(1).unwrap(),
+        )
+        .unwrap();
+        let pool = WorkerPool::with_recovery(
+            WorkerLimits::default(),
+            env!("CARGO_BIN_EXE_botwork").into(),
+            journal.clone(),
+        )
+        .unwrap();
+        let command = WorkerCommand {
+            executable: "/bin/true".into(),
+            arguments: vec![],
+            directory: workspace.workspace.clone(),
+            environment: Default::default(),
+        };
+        let handle = pool
+            .start(command.clone(), vec![], OperationControl::default())
+            .unwrap();
+        let id = handle.journal_id().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime
+                .block_on(async {
+                    tokio::time::timeout(Duration::from_secs(5), handle.wait())
+                        .await
+                        .unwrap()
+                })
+                .outcome,
+            WorkerOutcome::Succeeded
+        );
+        assert_eq!(
+            journal.flush_wait(Duration::from_secs(5)).unwrap(),
+            JournalFlush::default()
+        );
+        let records = journal.records().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].id, id);
+        assert_eq!(records[0].outcome, Some(WorkerOutcome::Succeeded));
+        assert!(!records[0].damaged);
+        if let Some(expected) = _case.error {
+            let error = pool
+                .start(command, vec![], OperationControl::default())
+                .err()
+                .unwrap();
+            assert_eq!(error.code().as_str(), _case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+            assert!(pool.snapshot().active.is_empty());
+            assert_eq!(journal.records().unwrap().len(), 1);
+        }
+    }
 }

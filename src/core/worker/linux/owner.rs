@@ -54,6 +54,16 @@ pub(super) fn run(
     input: RetainedInput,
     observation: &Arc<Observation>,
 ) {
+    if let Some(ticket) = &observation.request.journal {
+        if let Err(error) = ticket.file() {
+            observation.error(runtime(format_args!(
+                "Persisting worker intent failed: {error}"
+            )));
+            drop(input);
+            observation.finish(WorkerCleanup::NotStarted, false);
+            return;
+        }
+    }
     if observation.status().stopped {
         drop(input);
         observation.finish(WorkerCleanup::NotStarted, false);
@@ -254,7 +264,15 @@ fn launch_worker(
     observation: &Observation,
 ) -> io::Result<ChildOwner> {
     match &observation.shared.guardian {
-        Some(executable) => guardian::spawn(executable, specification),
+        Some(executable) => {
+            let record = observation
+                .request
+                .journal
+                .as_ref()
+                .map(|ticket| ticket.file())
+                .transpose()?;
+            guardian::spawn(executable, specification, record.as_deref())
+        }
         None => launch::spawn(specification),
     }
 }

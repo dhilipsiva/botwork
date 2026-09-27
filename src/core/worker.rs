@@ -23,6 +23,8 @@ use super::{
 };
 
 #[cfg(target_os = "linux")]
+pub mod journal;
+#[cfg(target_os = "linux")]
 mod linux;
 pub mod protocol;
 #[cfg(all(test, target_os = "linux"))]
@@ -131,6 +133,8 @@ pub struct WorkerSnapshot {
 struct Request {
     control: OperationControl,
     abandoned: AtomicBool,
+    #[cfg(target_os = "linux")]
+    journal: Option<Arc<journal::Ticket>>,
 }
 
 struct Active {
@@ -158,6 +162,8 @@ struct Shared {
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     guardian: Option<PathBuf>,
+    #[cfg(target_os = "linux")]
+    journal: Option<journal::WorkerJournal>,
     state: Mutex<State>,
 }
 
@@ -188,6 +194,23 @@ impl WorkerPool {
         Self::configured(limits, Some(guardian))
     }
 
+    /// Add durable invocation metadata to a process-tree pool. Journal IDs are
+    /// available on admitted handles. Await a report then flush the journal to
+    /// acknowledge persistence; ordinary report delivery never waits for disk.
+    #[cfg(target_os = "linux")]
+    pub fn with_recovery(
+        limits: WorkerLimits,
+        guardian: PathBuf,
+        journal: journal::WorkerJournal,
+    ) -> DiagnosticResult<Self> {
+        let mut pool = Self::with_process_tree(limits, guardian)?;
+        let owner = Arc::get_mut(&mut pool.0).expect("new pool is unique");
+        Arc::get_mut(&mut owner.0)
+            .expect("new state is unique")
+            .journal = Some(journal);
+        Ok(pool)
+    }
+
     fn configured(limits: WorkerLimits, _guardian: Option<PathBuf>) -> DiagnosticResult<Self> {
         let now = Instant::now();
         if now
@@ -208,6 +231,8 @@ impl WorkerPool {
             limits,
             #[cfg(target_os = "linux")]
             guardian: _guardian,
+            #[cfg(target_os = "linux")]
+            journal: None,
             state: Mutex::new(State {
                 closed: false,
                 next_id: 1,
@@ -260,11 +285,7 @@ impl WorkerPool {
         let deadline = Instant::now()
             .checked_add(shared.limits.timeout)
             .ok_or_else(|| configuration("Worker timeout exceeds the monotonic clock range"))?;
-        let request = Arc::new(Request {
-            control: control.child(None),
-            abandoned: AtomicBool::new(false),
-        });
-        let id = {
+        let (id, request) = {
             let mut state = shared.state.lock().unwrap_or_else(|e| e.into_inner());
             if state.closed {
                 return Err(configuration("Worker pool is shut down"));
@@ -276,6 +297,16 @@ impl WorkerPool {
             state.next_id = id
                 .checked_add(1)
                 .ok_or_else(|| configuration("Worker identifier space exhausted"))?;
+            let request = Arc::new(Request {
+                control: control.child(None),
+                abandoned: AtomicBool::new(false),
+                #[cfg(target_os = "linux")]
+                journal: shared
+                    .journal
+                    .as_ref()
+                    .map(journal::WorkerJournal::reserve)
+                    .transpose()?,
+            });
             state.active.insert(
                 id,
                 Active {
@@ -286,7 +317,7 @@ impl WorkerPool {
                     cleanup: None,
                 },
             );
-            id
+            (id, request)
         };
         let (send, receive) = oneshot::channel();
         let send = WorkerDelivery {
@@ -320,6 +351,17 @@ impl WorkerPool {
                 );
             });
         if let Err(error) = spawn {
+            #[cfg(target_os = "linux")]
+            if let Some(ticket) = &request.journal {
+                let metadata = journal::JournalMetadata {
+                    outcome: WorkerOutcome::Failed,
+                    cleanup: WorkerCleanup::NotStarted,
+                    exit_status: None,
+                    io_complete: false,
+                    progress_complete: true,
+                };
+                ticket.submit(Some(metadata), Some(metadata));
+            }
             shared
                 .state
                 .lock()
@@ -432,6 +474,10 @@ pub struct WorkerHandle {
 impl WorkerHandle {
     pub fn id(&self) -> u64 {
         self.id
+    }
+    #[cfg(target_os = "linux")]
+    pub fn journal_id(&self) -> Option<journal::JournalId> {
+        self.request.journal.as_ref().map(|ticket| ticket.id)
     }
     pub fn cancel(&self) {
         self.request.control.cancel();

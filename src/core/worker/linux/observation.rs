@@ -181,15 +181,16 @@ impl Observation {
     }
     fn watch(&self, mut delivery: WorkerDelivery) {
         loop {
-            let (finished, report) = {
+            let (finished, report, reconciled) = {
                 let mut flight = self.lock();
                 self.observe(&mut flight);
                 if flight.finished {
+                    let reconciled = super::super::journal::JournalMetadata::from(&flight.report);
                     self.shared.finish(&flight.report);
                     let cleanup = flight.report.cleanup;
                     let report =
                         (!flight.published).then(|| Self::take_report(&mut flight, cleanup));
-                    (true, report)
+                    (true, report, Some(reconciled))
                 } else if !flight.published
                     && flight
                         .cleanup_started
@@ -215,11 +216,20 @@ impl Observation {
                     (
                         false,
                         Some(Self::take_report(&mut flight, WorkerCleanup::Pending)),
+                        None,
                     )
                 } else {
-                    (false, None)
+                    (false, None, None)
                 }
             };
+            if let Some(ticket) = &self.request.journal {
+                ticket.submit(
+                    report
+                        .as_ref()
+                        .map(super::super::journal::JournalMetadata::from),
+                    reconciled,
+                );
+            }
             // Receiver wakeups can run host code; never invoke one under the state lock.
             if let Some(report) = report {
                 if let Some(sender) = delivery.send.take() {

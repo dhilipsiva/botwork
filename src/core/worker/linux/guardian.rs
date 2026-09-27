@@ -1,4 +1,5 @@
 //! A standalone subreaper owns one invocation, never unrelated host children.
+use super::super::journal::{self, GuardianReceipt};
 use super::*;
 use std::{
     fs::File,
@@ -10,12 +11,18 @@ use std::{
 };
 
 const ARGUMENT: &str = "--botwork-worker-guardian-v1";
+const JOURNAL_ARGUMENT: &str = "--botwork-worker-guardian-journal-v1";
 const CONTROL_FD: i32 = 3;
 const HOST_FD: i32 = 4;
+const JOURNAL_FD: i32 = 5;
 const FRAME_BYTES: usize = 13;
 const MAGIC: &[u8; 4] = b"BWG1";
 
-pub(super) fn spawn(executable: &Path, specification: WorkerCommand) -> io::Result<ChildOwner> {
+pub(super) fn spawn(
+    executable: &Path,
+    specification: WorkerCommand,
+    record: Option<&File>,
+) -> io::Result<ChildOwner> {
     // Open our own process identity while it cannot have been recycled.
     let raw_host = unsafe { libc::syscall(libc::SYS_pidfd_open, libc::getpid(), 0) };
     if raw_host == -1 {
@@ -32,9 +39,15 @@ pub(super) fn spawn(executable: &Path, specification: WorkerCommand) -> io::Resu
     // Sources are above stdio and both reserved targets, even if the host closed stdio.
     let remote_fd = passed_remote.as_raw_fd();
     let host_fd = passed_host.as_raw_fd();
+    let passed_record = record.map(|file| duplicate(file.as_raw_fd())).transpose()?;
+    let record_fd = passed_record.as_ref().map(AsRawFd::as_raw_fd);
     let mut command = Command::new(executable);
     command
-        .arg(ARGUMENT)
+        .arg(if record.is_some() {
+            JOURNAL_ARGUMENT
+        } else {
+            ARGUMENT
+        })
         .arg(&specification.executable)
         .args(&specification.arguments)
         .current_dir(&specification.directory)
@@ -49,6 +62,9 @@ pub(super) fn spawn(executable: &Path, specification: WorkerCommand) -> io::Resu
     unsafe {
         command.pre_exec(move || {
             if libc::dup2(remote_fd, CONTROL_FD) == -1 || libc::dup2(host_fd, HOST_FD) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            if record_fd.is_some_and(|fd| libc::dup2(fd, JOURNAL_FD) == -1) {
                 return Err(io::Error::last_os_error());
             }
             Ok(())
@@ -123,7 +139,7 @@ fn decode(frame: &[u8; FRAME_BYTES]) -> io::Result<Completion> {
 // Duplicate the inherited descriptor into a fresh Rust owner. Do not construct
 // an OwnedFd from a descriptor that another embedding caller might already own.
 fn duplicate(source: i32) -> io::Result<OwnedFd> {
-    let fd = unsafe { libc::fcntl(source, libc::F_DUPFD_CLOEXEC, 5) };
+    let fd = unsafe { libc::fcntl(source, libc::F_DUPFD_CLOEXEC, 6) };
     if fd == -1 {
         return Err(io::Error::last_os_error());
     }
@@ -164,14 +180,45 @@ fn control() -> io::Result<(UnixStream, OwnedFd)> {
 
 pub(crate) fn entry() -> Option<u8> {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(std::ffi::OsStr::new(ARGUMENT)) {
-        return None;
-    }
+    let journaled = match args.next().as_deref() {
+        Some(arg) if arg == std::ffi::OsStr::new(ARGUMENT) => false,
+        Some(arg) if arg == std::ffi::OsStr::new(JOURNAL_ARGUMENT) => true,
+        _ => return None,
+    };
     Some(match control() {
         Ok((mut control, host)) => {
+            let record = if journaled {
+                let result = duplicate(JOURNAL_FD).and_then(|owned| {
+                    if unsafe { libc::fcntl(JOURNAL_FD, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
+                        return Err(io::Error::last_os_error());
+                    }
+                    let file = File::from(owned);
+                    journal::guardian_file(&file).map(|id| (file, id))
+                });
+                match result {
+                    Ok(record) => Some(record),
+                    Err(_) => return Some(2),
+                }
+            } else {
+                None
+            };
             let result = run(&mut control, &host, args);
             match result {
                 Ok(frame) => {
+                    if let Some((file, id)) = record {
+                        let errno = i32::from_le_bytes(frame[9..13].try_into().unwrap());
+                        let receipt = if frame[4] == 1 {
+                            GuardianReceipt::NotStarted { errno }
+                        } else {
+                            GuardianReceipt::TreeSettled {
+                                exit_status: i32::from_le_bytes(frame[5..9].try_into().unwrap()),
+                                errno,
+                            }
+                        };
+                        if journal::receipt(&file, id, receipt).is_err() {
+                            return Some(1);
+                        }
+                    }
                     let _ = control.write_all(&frame);
                     0
                 }
