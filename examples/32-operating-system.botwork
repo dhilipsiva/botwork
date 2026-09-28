@@ -1,0 +1,13 @@
+|folder| = Create Temporary Directory In |"."| Prefix |"botwork_"|
+Try {
+    |file| = Join Path |[folder, "message.txt"]|
+    Write File |file| Text |"hello"|
+    Append To File |file| Text |" world"|
+    Copy File |file| To |@{ Join Path |[folder, "copy.txt"]| }|
+    Log |@{ Read File |file| }|
+    Log |@{ File Size |file| }|
+    Log |@{ List Directory |folder| }|
+    Log |@{ File Extension |file| }|
+} Finally {
+    Remove Directory |folder| Recursively |true|
+}

@@ -144,16 +144,18 @@ pub(super) fn invoke_resolved<'a>(
                 metadata,
                 _registry,
             } => {
-                // Inspection needs caller bindings. Log, regex searches, and
-                // arbitrary host callbacks run on bounded blocking workers.
+                // Inspection needs caller bindings. Log, regex, filesystem work,
+                // and arbitrary host callbacks run on bounded blocking workers.
                 let inline = matches!(&body, NativeBody::Builtin(kind) if !kind.needs_worker());
+                let directory =
+                    matches!(&body, NativeBody::Builtin(kind) if kind.needs_directory());
                 if context.asynchronous && !inline {
                     context.check_call_depth()?;
                     let frame = context.retain_call(&call.signature, &call.span, None)?;
                     context.calls.push(frame);
                     let span = call.span.clone();
                     let result = context
-                        .blocking(move |worker| {
+                        .blocking_with_directory(directory, move |worker| {
                             let _registry = _registry;
                             blocking::native_body(worker, body, &metadata, arguments, &span)
                         })

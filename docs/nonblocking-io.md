@@ -43,8 +43,9 @@ interfaces remain available alongside ordinary native registration.
 
 ## Admission and state
 
-Filesystem/environment work shares a process-wide pool of 32 permits. Ordinary
-native callbacks and Log/debug output share a separate pool of 32 permits.
+Source filesystem/environment preparation shares a process-wide pool of 32 permits.
+Ordinary native callbacks, Log/debug output, regex searches, and standard
+[filesystem statements](operating-system.md) share a separate pool of 32 permits.
 Permits cover queued/started blocking jobs and their undelivered results, and
 remain owned until delivery or disposal. Waiting for a permit does not occupy a
 blocking thread; a cancelled waiter never enters its job. Both pools use the
@@ -61,6 +62,11 @@ call handles count against `SnapshotLimits.entries` before job admission. For a
 direct native call this adds one snapshot entry beyond the Engine registry copy;
 nested calls copy every entered frame. Immutable registry/environment/source
 storage stays shared. No host environment or working directory is changed.
+
+Filesystem statements invoked on a standalone Context without an Engine
+environment also copy the Context's directory snapshot. That path is admitted
+against snapshot path bytes before worker handoff; Engine environment paths remain
+shared. Pure path and environment-snapshot statements stay inline.
 
 Argument leases, native registration ownership, call/source records, and result
 leases remain alive through worker handoff, including when a run is abandoned.

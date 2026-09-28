@@ -75,6 +75,13 @@ pub(crate) struct TemporaryReservation {
 }
 
 impl TemporaryReservation {
+    /// Admit streaming nodes/payload without inventing another live value handle.
+    pub(crate) fn grow(&mut self, nodes: usize, bytes: usize) -> Result<(), BWErr> {
+        let additional = self.owner.reserve_counts([0, nodes, bytes])?;
+        self.absorb(additional);
+        Ok(())
+    }
+
     pub(crate) fn release_argument_slot(&mut self) {
         let mut used = self
             .owner

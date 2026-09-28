@@ -2,8 +2,9 @@
 
 The default Engine and CLI provide these nine basic signatures plus sixteen
 [collection statements](collections.md), sixteen [string statements](strings.md),
-and sixteen [date/time statements](datetime.md),
-for 57 fixed signatures in total. Statement names are
+sixteen [date/time statements](datetime.md), and thirty-two
+[operating-system statements](operating-system.md),
+for 89 fixed signatures in total. Statement names are
 case insensitive and ignore spaces/tabs as usual; variable names are exact and
 case sensitive. Arguments evaluate left to right once. Parameter validation,
 call/source diagnostics, cleanup, and execution/resource limits use the normal

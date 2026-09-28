@@ -454,12 +454,12 @@ assert_eq!(context.statement_signatures().len(), 1);
 ```rust
 use botwork::core::{eval::Context, run::{RunLimits, SnapshotLimits}};
 let mut context = Context::with_limits(RunLimits {
-    snapshots: SnapshotLimits { entries: 57, path_bytes: usize::MAX },
+    snapshots: SnapshotLimits { entries: 89, path_bytes: usize::MAX },
     ..RunLimits::default()
 })?;
 context.init_statements();
 let copy = context.try_clone()?;
-assert_eq!(copy.statement_signatures().len(), 57);
+assert_eq!(copy.statement_signatures().len(), 89);
 assert!(context.try_clone().is_err());
 assert!(copy.checkpoint().is_ok());
 # Ok::<(), Box<dyn std::error::Error>>(())

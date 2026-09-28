@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "mutations": [
     {
       "id": "precedence-products",
@@ -719,8 +719,8 @@
       "id": "string-regex-worker-bypassed",
       "area": "strings",
       "file": "src/core/eval/builtins.rs",
-      "before": "matches!(self, Self::Log) || matches!(self, Self::String(kind) if kind.is_regex())",
-      "after": "matches!(self, Self::Log)"
+      "before": "matches!(self, Self::String(kind) if kind.is_regex())",
+      "after": "false"
     },
     {
       "id": "string-capture-none-becomes-empty",
@@ -847,6 +847,160 @@
       "file": "src/core/eval/builtins/datetime/moment.rs",
       "before": "LocalResult::None => {\n                return Err(invalid(\n                    context,\n                    \"The local time does not exist in this timezone\",\n                ))\n            }",
       "after": "LocalResult::None => naive.and_utc(),"
+    },
+    {
+      "id": "os-worker-bypassed",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins.rs",
+      "before": "|| matches!(self, Self::OperatingSystem(kind) if kind.needs_worker())",
+      "after": "|| false"
+    },
+    {
+      "id": "os-worker-directory-lost",
+      "area": "operating-system",
+      "file": "src/core/eval/blocking.rs",
+      "before": "worker.working_directory = self.working_directory.clone();",
+      "after": "worker.working_directory = Ok(PathBuf::new());"
+    },
+    {
+      "id": "os-entry-suffixes-followed",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "paths::entry(&path)",
+      "after": "path"
+    },
+    {
+      "id": "os-recursion-flag-ignored",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "let removal = if recursive {",
+      "after": "let removal = if true {"
+    },
+    {
+      "id": "os-copy-overwrites-existing",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": ".create_new(true)\n                .open(destination)",
+      "after": ".create(true).truncate(true)\n                .open(destination)"
+    },
+    {
+      "id": "os-create-is-not-exclusive",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "options.create_new(true);",
+      "after": "options.create(true);"
+    },
+    {
+      "id": "os-write-keeps-old-tail",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "if matches!(op, OsOp::Write | OsOp::WriteBinary) {",
+      "after": "if false {"
+    },
+    {
+      "id": "os-append-overwrites-prefix",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "options.append(true).create(true);",
+      "after": "options.create(true);"
+    },
+    {
+      "id": "os-invalid-byte-wraps",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "(0..=255).contains(value)",
+      "after": "(0..=256).contains(value)"
+    },
+    {
+      "id": "os-read-uses-lossy-utf8",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files/read.rs",
+      "before": "String::from_utf8(bytes)\n                .map_err(|_| invalid(context, \"File contents are not valid UTF-8\"))?",
+      "after": "String::from_utf8_lossy(&bytes).into_owned()"
+    },
+    {
+      "id": "os-stream-growth-unaccounted",
+      "area": "operating-system",
+      "file": "src/core/run/temporary_values.rs",
+      "before": "self.owner.reserve_counts([0, nodes, bytes])?",
+      "after": "self.owner.reserve_counts([0, 0, 0])?"
+    },
+    {
+      "id": "os-opened-size-hint-ignored",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files/read.rs",
+      "before": "let mut planned = output_size(hint)?;",
+      "after": "let mut planned = output_size(0)?;"
+    },
+    {
+      "id": "os-shrink-credit-kept",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files/read.rs",
+      "before": "reservation.release_child(ValueSize {\n            nodes: planned.nodes - actual.nodes,\n            depth: 0,\n            payload_bytes: planned.payload_bytes - actual.payload_bytes,\n        });",
+      "after": "let _ = (reservation, actual);"
+    },
+    {
+      "id": "os-binary-payload-undercounted",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/values.rs",
+      "before": ".checked_mul(std::mem::size_of::<i32>())",
+      "after": ".checked_mul(1)"
+    },
+    {
+      "id": "os-environment-keys-folded",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/environment.rs",
+      "before": "let value = environment.get(name);",
+      "after": "let value = environment.get(name.to_ascii_uppercase());"
+    },
+    {
+      "id": "os-environment-output-unreserved",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/environment.rs",
+      "before": "let reservation = context.temporary_reservation(size)?;",
+      "after": "let reservation = None;"
+    },
+    {
+      "id": "os-kind-follows-final-link",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "fs::symlink_metadata(path)",
+      "after": "fs::metadata(path)"
+    },
+    {
+      "id": "os-directory-order-unsorted",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/values.rs",
+      "before": "values.sort_unstable_by(|a, b| text(a).cmp(text(b)));",
+      "after": "values.reverse();"
+    },
+    {
+      "id": "os-size-truncates-to-int",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "write!(out, \"{}\", metadata.len())",
+      "after": "write!(out, \"{}\", metadata.len() as u32)"
+    },
+    {
+      "id": "os-short-write-drops-tail",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "bytes = &bytes[count..];",
+      "after": "bytes = &[];"
+    },
+    {
+      "id": "os-write-stop-not-checked",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "while !bytes.is_empty() {\n        context.checkpoint()?;",
+      "after": "while !bytes.is_empty() {"
+    },
+    {
+      "id": "os-temporary-permissions-too-wide",
+      "area": "operating-system",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "fs::Permissions::from_mode(0o700)",
+      "after": "fs::Permissions::from_mode(0o755)"
     }
   ]
 }

@@ -444,7 +444,11 @@ fn listing_completion_and_hover_reuse_registered_metadata_and_normalization() {
             .map(|signature| signature.normalized())
             .collect::<Vec<_>>(),
         [
+            "readbinaryfile|param|",
+            "readfile|param|",
             "read|param|",
+            "removedirectory|param|recursively|param|",
+            "removefile|param|",
             "removefrom|param|at|param|",
             "render|param|",
             "repeat|param|times|param|",
@@ -453,7 +457,7 @@ fn listing_completion_and_hover_reuse_registered_metadata_and_normalization() {
     );
     assert_eq!(context.complete_statements("வண").len(), 1);
     assert_eq!(context.complete_statements("ÅNG").len(), 1);
-    assert_eq!(context.complete_statements("Read |typed").len(), 1);
+    assert_eq!(context.complete_statements("Read |typed").len(), 3);
     assert!(context.complete_statements("unregistered").is_empty());
     let program = Program::parse("hover.botwork", "READ |\"file\"|").unwrap();
     let StatementKind::Invoke(call) = program.statements[0].kind() else {

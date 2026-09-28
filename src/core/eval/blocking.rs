@@ -8,14 +8,22 @@ static NATIVE_CAPACITY: OnceLock<Arc<Semaphore>> = OnceLock::new();
 impl Context {
     // Public callbacks receive only arguments/environment; Log needs output
     // budgets and diagnostic frames. No mutable DSL bindings enter a worker.
-    fn native_worker(&self) -> EvaluationResult<Self> {
+    fn native_worker(&self, directory: bool) -> EvaluationResult<Self> {
         let mut size = SnapshotSize::default();
         size.entries(self.calls.len());
+        if directory && self.environment.is_none() {
+            if let Ok(path) = &self.working_directory {
+                size.path(path);
+            }
+        }
         self.charge_snapshot(size)?;
         let mut worker = Self::with_directory_snapshot(Ok(PathBuf::new()));
         worker.calls = self.calls.clone();
         worker.budget = self.budget.as_ref().map(RunBudget::shared);
         worker.environment = self.environment.clone();
+        if directory && self.environment.is_none() {
+            worker.working_directory = self.working_directory.clone();
+        }
         Ok(worker)
     }
 
@@ -23,11 +31,19 @@ impl Context {
         &mut self,
         work: impl FnOnce(&mut Context) -> EvaluationResult<T> + Send + 'static,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = EvaluationResult<T>> + Send + '_>> {
+        self.blocking_with_directory(false, work)
+    }
+
+    pub(super) fn blocking_with_directory<T: Send + 'static>(
+        &mut self,
+        directory: bool,
+        work: impl FnOnce(&mut Context) -> EvaluationResult<T> + Send + 'static,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = EvaluationResult<T>> + Send + '_>> {
         // Keep the worker snapshot/future out of recursive evaluator poll frames.
         // Inlining it into every dispatch can exhaust the stack before depth admission.
         Box::pin(async move {
             self.checkpoint()?;
-            let mut worker = self.native_worker()?;
+            let mut worker = self.native_worker(directory)?;
             let control = self
                 .budget
                 .as_ref()

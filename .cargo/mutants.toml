@@ -1,6 +1,10 @@
-# Version 14: retain earlier semantics and add exact explicit-zone date/time statements.
+# Version 15: retain earlier semantics and add bounded operating-system statements.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/builtins/operating_system.rs",
+    "src/core/eval/builtins/operating_system/{environment,files,paths,values}.rs",
+    "src/core/eval/builtins/operating_system/files/read.rs",
+    "src/core/run/temporary_values.rs",
     "src/core/eval/builtins/datetime.rs",
     "src/core/eval/builtins/datetime/duration.rs",
     "src/core/eval/builtins/datetime/moment.rs",
@@ -38,6 +42,8 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/eval/builtins/operating_system(\.rs|/(environment|files|paths|values)\.rs|/files/read\.rs):',
+    ' (Context::blocking_with_directory|TemporaryReservation::grow)( ->|$)',
     '^src/core/eval/builtins/datetime(\.rs|/(duration|moment)\.rs):',
     '^src/core/eval/builtins.rs:',
     '^src/core/eval/builtins/collections(\.rs|/build\.rs):',
@@ -77,6 +83,7 @@ additional_cargo_args = [
     "--test", "collections",
     "--test", "strings",
     "--test", "datetime",
+    "--test", "operating_system",
     "--test", "value_preallocation",
     "--test", "suite_fixtures",
     "--test", "value_contract",

@@ -2,6 +2,35 @@ use super::*;
 use crate::core::diagnostic::DiagnosticCode;
 
 #[tokio::test]
+async fn filesystem_workers_copy_only_admitted_low_level_directory_snapshots() {
+    use crate::core::run::SnapshotLimits;
+    for (allowance, allowed) in [(2, false), (3, true)] {
+        let mut context = Context::with_limits(RunLimits {
+            snapshots: SnapshotLimits {
+                path_bytes: allowance,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context.working_directory = Ok(PathBuf::from("abc"));
+        let result = context
+            .blocking_with_directory(true, |worker| {
+                assert_eq!(
+                    worker.working_directory.as_ref().unwrap(),
+                    &PathBuf::from("abc")
+                );
+                Ok(())
+            })
+            .await;
+        assert_eq!(result.is_ok(), allowed);
+        if !allowed {
+            assert_eq!(result.unwrap_err().code(), DiagnosticCode::ResourceLimit);
+        }
+    }
+}
+
+#[tokio::test]
 async fn stop_during_error_handoff_preserves_the_completed_error() {
     for latched_limit in [false, true] {
         let control = OperationControl::default();

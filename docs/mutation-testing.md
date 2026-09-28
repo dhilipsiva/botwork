@@ -128,6 +128,18 @@ format allocation. The `datetime` integration suite joins the allocation oracle.
 [Date/time evidence](datetime-evidence.json) records the focused campaign; a new
 complete generated score is not claimed.
 
+Version 15 adds the operating-system catalogue, streaming file admission,
+directory/environment result planners, path entry normalization, and worker
+directory handoff. Its 143-entry targeted catalogue includes 22 new faults for
+worker isolation, symlink suffixes, recursion, exclusive creation/copy, truncation,
+append/partial writes, byte validation, UTF-8, size hints/growth/release, binary
+metrics, environment keys/admission, listing order, wide sizes, cancellation,
+and temporary-directory permissions. The `operating_system` suite joins the
+existing allocation oracle. [Operating-system evidence](operating-system-evidence.json)
+records the focused campaign separately. Generated discovery is not a new full
+campaign score. Root/parent removal rejection is tested through a pure validator,
+so deliberately broken validation cannot make its test attempt a real root removal.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

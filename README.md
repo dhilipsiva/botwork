@@ -129,7 +129,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Built-ins](docs/builtins.md)
   - [x] [Collections](docs/collections.md)
   - [x] [Datetime](docs/datetime.md)
-  - [ ] [Operation System](http://robotframework.org/robotframework/latest/libraries/OperatingSystem.html)
+  - [x] [Operating system](docs/operating-system.md)
   - [ ] [Process](http://robotframework.org/robotframework/latest/libraries/Process.html)
   - [x] [Strings](docs/strings.md)
   - [ ] Making HTTP Requests

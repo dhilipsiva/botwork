@@ -1969,6 +1969,70 @@ fn missing_format_fields_admit_diagnostic_text_before_copying_the_field_name() {
 }
 
 #[test]
+fn filesystem_reads_reject_metadata_size_before_large_content_allocation() {
+    let directory = tempfile::tempdir().unwrap();
+    let length = 128 * 1024;
+    std::fs::write(directory.path().join("big"), vec![b'x'; length]).unwrap();
+    let engine = Engine::default();
+    for allowed in [false, true] {
+        let options = RunOptions {
+            working_directory: Some(directory.path().into()),
+            inherit_environment: false,
+            limits: RunLimits {
+                values: ValueLimits {
+                    string_bytes: length - usize::from(!allowed),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let (result, copies) = observe(length, || {
+            engine.run_source("read", "Read File |\"big\"|", options)
+        });
+        assert_eq!(result.result.is_ok(), allowed, "{:?}", result.result);
+        assert_eq!(copies, usize::from(allowed));
+    }
+}
+
+#[test]
+fn environment_results_admit_payload_before_copying_snapshot_values() {
+    let directory = tempfile::tempdir().unwrap();
+    let length = 128 * 1024;
+    let engine = Engine::default();
+    for source in [
+        "Get Environment Variable |\"BIG\"|",
+        "Environment Variables",
+    ] {
+        let mut counts = Vec::new();
+        for allowed in [false, true] {
+            let options = RunOptions {
+                working_directory: Some(directory.path().into()),
+                inherit_environment: false,
+                environment: BTreeMap::from([("BIG".into(), Some("x".repeat(length).into()))]),
+                limits: RunLimits {
+                    values: ValueLimits {
+                        string_bytes: length - usize::from(!allowed),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let (result, copies) =
+                observe(length, || engine.run_source("environment", source, options));
+            assert_eq!(result.result.is_ok(), allowed, "{:?}", result.result);
+            counts.push(copies);
+        }
+        assert_eq!(
+            counts[1],
+            counts[0] + 1,
+            "only the admitted result copies the immutable snapshot value"
+        );
+    }
+}
+
+#[test]
 fn datetime_formatting_rejects_before_any_large_result_or_intermediate_allocation() {
     use botwork::core::{
         ast::Program,

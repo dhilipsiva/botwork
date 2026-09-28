@@ -181,6 +181,12 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("os-statements", include_str!("../../examples/32-operating-system.botwork"), "hello world\n11\n[\"copy.txt\", \"message.txt\"]\ntxt\n", &["B5"], &[]),
+        success("os-boundaries", r#"Assert |@{ Join Path |[]| }| Equals |""|
+Assert |@{ Parent Path |"name"| }| Equals |""|
+Assert |@{ File Extension |"name."| }| Equals |""|"#, "", &["B5"], &["B5"]),
+        failure("os-invalid-byte", r#"Write Binary File |"unused"| Bytes |[256]|"#, "", "BW3003", "Int values from 0 through 255", &["B5"]),
+        failure("os-missing-file", r#"Read File |"missing-file-for-b5"|"#, "", "BW4002", "Open for reading", &["B5"]),
         success("datetime-statements", include_str!("../../examples/31-datetime.botwork"), "2024-11-03T05:30:00Z\n2024-11-03T01:30:00-05:00\nPT1H\n1\n2024-11-03 01:30:00 EST\n", &["B4"], &[]),
         success("datetime-boundaries", r#"Assert |@{ Subtract Duration |"PT0.000000001S"| From Date Time |"1970-01-01T00:00:00Z"| }| Equals |"1969-12-31T23:59:59.999999999Z"|"#, "", &["B4"], &["B4"]),
         failure("datetime-gap", r#"Parse Date Time |"2024-03-10 02:30:00"| Using |"%F %T"| In |"America/New_York"| Choosing |"earlier"|"#, "", "BW3003", "does not exist", &["B4"]),

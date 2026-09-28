@@ -9,6 +9,24 @@ fn size(nodes: usize, payload_bytes: usize) -> ValueSize {
 }
 
 #[test]
+fn streaming_growth_is_atomic_and_does_not_charge_an_extra_value_handle() {
+    let owner = Arc::new(TemporaryValues::new(TemporaryLimits {
+        values: 1,
+        nodes: 3,
+        payload_bytes: 8,
+    }));
+    let mut reservation = owner.reserve(size(1, 0)).unwrap();
+    reservation.grow(2, 8).unwrap();
+    assert_eq!(*owner.used.lock().unwrap(), [1, 3, 8]);
+    for (nodes, bytes) in [(1, 0), (0, 1), (usize::MAX, usize::MAX)] {
+        assert!(reservation.grow(nodes, bytes).is_err());
+        assert_eq!(*owner.used.lock().unwrap(), [1, 3, 8]);
+    }
+    drop(reservation);
+    assert_eq!(*owner.used.lock().unwrap(), [0; 3]);
+}
+
+#[test]
 fn exact_admission_merge_and_release_preserve_all_counters() {
     let owner = Arc::new(TemporaryValues::new(TemporaryLimits {
         values: 2,

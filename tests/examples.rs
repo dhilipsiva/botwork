@@ -24,6 +24,19 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
 }
 
 #[test]
+fn operating_system_example_copies_files_and_removes_its_temporary_directory() {
+    assert_example(
+        "32-operating-system.botwork",
+        &[
+            "hello world",
+            "11",
+            "[\"copy.txt\", \"message.txt\"]",
+            "txt",
+        ],
+    );
+}
+
+#[test]
 fn datetime_example_resolves_a_repeated_local_time_explicitly() {
     assert_example(
         "31-datetime.botwork",

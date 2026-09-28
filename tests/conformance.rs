@@ -393,7 +393,7 @@ fn check_blocking_worker_case(case: &Case) {
             inherit_environment: false,
             limits: RunLimits {
                 snapshots: SnapshotLimits {
-                    entries: if case.error.is_some() { 58 } else { 59 },
+                    entries: if case.error.is_some() { 90 } else { 91 },
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1839,7 +1839,7 @@ Case |"other"| { Log |8| }
                     RunOptions {
                         limits: RunLimits {
                             snapshots: SnapshotLimits {
-                                entries: 56 + usize::from(case.error.is_none()),
+                                entries: 88 + usize::from(case.error.is_none()),
                                 path_bytes: 0,
                             },
                             ..RunLimits::default()
