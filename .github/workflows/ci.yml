@@ -57,6 +57,9 @@ jobs:
       - name: Check fuzz campaign helper
         if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: python3 tests/fuzz_tools.py
+      - name: Check mutation campaign helper
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: python3 tests/mutation_tools.py
       - name: Build all targets
         run: cargo +stable build --locked --all-targets --target ${{ matrix.target }} ${{ matrix.flags }}
       - name: Run tests and examples

@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "mutations": [
+    {
+      "id": "precedence-products",
+      "area": "precedence",
+      "file": "src/core/grammar.rs",
+      "before": "            .op(Op::infix(plus, Left) | Op::infix(minus, Left))\n            .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulus, Left))\n",
+      "after": "            .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulus, Left))\n            .op(Op::infix(plus, Left) | Op::infix(minus, Left))\n"
+    },
+    {
+      "id": "subtraction-associativity",
+      "area": "precedence",
+      "file": "src/core/grammar.rs",
+      "before": "            .op(Op::infix(plus, Left) | Op::infix(minus, Left))\n",
+      "after": "            .op(Op::infix(plus, Left) | Op::infix(minus, Right))\n"
+    },
+    {
+      "id": "while-stops-after-one",
+      "area": "control",
+      "file": "src/core/eval.rs",
+      "before": "\n            Completion::Normal(_) | Completion::Continue => (),",
+      "after": "\n            Completion::Normal(_) | Completion::Continue => break,"
+    },
+    {
+      "id": "for-discards-return",
+      "area": "control",
+      "file": "src/core/eval.rs",
+      "before": "                returned @ Completion::Return(_) => return Ok(returned),",
+      "after": "                Completion::Return(_) => break,"
+    },
+    {
+      "id": "caller-frame-not-restored",
+      "area": "scope",
+      "file": "src/core/eval.rs",
+      "before": "        self.frames.pop();\n        self.current = caller;",
+      "after": "        self.frames.pop();\n        let _ = caller;"
+    },
+    {
+      "id": "dynamic-parent",
+      "area": "scope",
+      "file": "src/core/eval.rs",
+      "before": "parent: Some(owner),\n                ..Frame::default()",
+      "after": "parent: Some(context.current),\n                ..Frame::default()"
+    },
+    {
+      "id": "variables-ignore-parent",
+      "area": "scope",
+      "file": "src/core/eval.rs",
+      "before": "return Ok(value);\n            }\n            index = frame.parent;",
+      "after": "return Ok(value);\n            }\n            index = None;"
+    },
+    {
+      "id": "handler-discards-cause",
+      "area": "errors",
+      "file": "src/core/eval/diagnostics.rs",
+      "before": "Ok(original) => error.while_handling(original.into(), self.budget.as_ref()),",
+      "after": "Ok(_original) => error,"
+    },
+    {
+      "id": "environment-always-inherited",
+      "area": "isolation",
+      "file": "src/core/run.rs",
+      "before": "if options.inherit_environment {",
+      "after": "if true {"
+    },
+    {
+      "id": "environment-removal-ignored",
+      "area": "isolation",
+      "file": "src/core/run.rs",
+      "before": "                None => {\n                    variables.remove(name);\n                }",
+      "after": "                None => {}"
+    },
+    {
+      "id": "input-variables-discarded",
+      "area": "isolation",
+      "file": "src/core/run.rs",
+      "before": "context.set_input_variables_runtime(variables.into_inner())?;",
+      "after": "drop(variables);"
+    },
+    {
+      "id": "local-deadline-discarded",
+      "area": "isolation",
+      "file": "src/core/run.rs",
+      "before": "let control = options.control.child(deadline);",
+      "after": "let control = options.control.child(None);\n        let _ = deadline;"
+    }
+  ]
+}

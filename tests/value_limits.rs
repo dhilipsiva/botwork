@@ -110,6 +110,72 @@ fn counts_are_exact_for_nodes_depth_unicode_and_scalar_payload() {
 }
 
 #[test]
+fn duplicate_map_replacements_remove_old_nodes_and_payload_before_value_checks() {
+    for source in [
+        "|value| = |{a: 7, a: 8}|",
+        "|value| = |{a: \"abcd\", a: 8}|",
+    ] {
+        let result = Engine::default().run_source(
+            "map-replacement",
+            source,
+            RunOptions {
+                limits: RunLimits {
+                    values: ValueLimits {
+                        nodes: 2,
+                        payload_bytes: 5,
+                        ..ValueLimits::default()
+                    },
+                    ..RunLimits::default()
+                },
+                ..RunOptions::default()
+            },
+        );
+        assert_eq!(
+            result.outcome(),
+            RunOutcome::Succeeded,
+            "{:?}",
+            result.result
+        );
+        assert_eq!(result.variables["value"].to_string(), r#"{"a": 8}"#);
+    }
+}
+
+#[test]
+fn static_map_width_is_checked_before_any_value_effects() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut engine = Engine::default();
+    engine
+        .register_native("Touch", move |_, _| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::Int(1))
+        })
+        .unwrap();
+    let result = engine.run_source(
+        "map-width",
+        "|value| = |{a: @{ Touch }, b: @{ Touch }}|",
+        RunOptions {
+            limits: RunLimits {
+                values: ValueLimits {
+                    entries: 1,
+                    ..ValueLimits::default()
+                },
+                ..RunLimits::default()
+            },
+            ..RunOptions::default()
+        },
+    );
+    assert_eq!(result.outcome(), RunOutcome::LimitExceeded);
+    assert!(result
+        .result
+        .unwrap_err()
+        .to_string()
+        .contains("value container entries"));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(!result.variables.contains_key("value"));
+}
+
+#[test]
 fn borrowed_validation_and_public_discard_handle_extreme_host_depth() {
     let value = deep(100_000);
     assert!(ValueLimits::default()

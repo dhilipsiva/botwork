@@ -154,6 +154,26 @@ fn duplicate_map_keys_require_replacement_overlap_and_reuse_the_existing_key() {
 }
 
 #[test]
+fn maps_accept_exact_temporary_node_budgets() {
+    for (source, nodes, bytes, expected) in [
+        ("|x| = |{a: 7}|", 2, 5, r#"{"a": 7}"#),
+        ("|x| = |{a: 7, b: 8}|", 3, 10, r#"{"a": 7, "b": 8}"#),
+    ] {
+        let accepted = run(source, 2, nodes, bytes);
+        assert_eq!(
+            accepted.outcome(),
+            RunOutcome::Succeeded,
+            "{:?}",
+            accepted.result
+        );
+        assert_eq!(accepted.variables["x"].to_string(), expected);
+        let rejected = run(source, 2, nodes - 1, bytes);
+        assert_eq!(rejected.outcome(), RunOutcome::LimitExceeded);
+        assert!(!rejected.variables.contains_key("x"));
+    }
+}
+
+#[test]
 fn static_container_width_and_key_bytes_fail_before_child_effects() {
     for (source, nodes, bytes) in [
         ("|x| = |[@{ Touch }, @{ Touch }]|", 2, usize::MAX),

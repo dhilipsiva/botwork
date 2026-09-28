@@ -127,6 +127,80 @@ fn every_unary_operator_checks_every_value_kind() {
 }
 
 #[test]
+fn numeric_operations_check_values_for_every_numeric_kind_pair() {
+    use Literal::{Float, Int};
+    // Fixed, independently calculated answers, including exact binary fractions.
+    for (left, right, expected) in [
+        (
+            Int(7),
+            Int(2),
+            [Int(9), Int(5), Int(14), Float(3.5), Int(1)],
+        ),
+        (
+            Int(7),
+            Float(2.0),
+            [Float(9.0), Float(5.0), Float(14.0), Float(3.5), Float(1.0)],
+        ),
+        (
+            Float(7.5),
+            Int(2),
+            [Float(9.5), Float(5.5), Float(15.0), Float(3.75), Float(1.5)],
+        ),
+        (
+            Float(7.5),
+            Float(2.0),
+            [Float(9.5), Float(5.5), Float(15.0), Float(3.75), Float(1.5)],
+        ),
+    ] {
+        for ((operator, spelling), expected) in [
+            (Rule::plus, "+"),
+            (Rule::minus, "-"),
+            (Rule::multiply, "*"),
+            (Rule::divide, "/"),
+            (Rule::modulus, "%"),
+        ]
+        .into_iter()
+        .zip(expected)
+        {
+            let literal_source = |value: &Literal| match value {
+                Float(value) => format!("{value:.1}"),
+                Int(value) => value.to_string(),
+                _ => unreachable!(),
+            };
+            let source = format!(
+                "|answer| = |{} {spelling} {}|",
+                literal_source(&left),
+                literal_source(&right)
+            );
+            for actual in [
+                operator
+                    .operate_binary(left.clone(), right.clone())
+                    .unwrap(),
+                evaluate(&source, &mut Context::default()).unwrap(),
+            ] {
+                match (&actual, &expected) {
+                    (Int(actual), Int(expected)) => assert_eq!(actual, expected, "{source}"),
+                    (Float(actual), Float(expected)) => {
+                        assert_eq!(actual.to_bits(), expected.to_bits(), "{source}")
+                    }
+                    _ => panic!("{source}: expected {expected:?}, got {actual:?}"),
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn invalid_left_boolean_operands_identify_the_operator_before_evaluating_the_right() {
+    for operator in ["and", "or"] {
+        let source = format!("|answer| = |1 {operator} missing|");
+        let error = evaluate(&source, &mut Context::default()).unwrap_err();
+        assert!(matches!(&error, BWErr::OperationIncompatibleError(message)
+            if message == &format!("The left operand of `{operator}` must be a boolean")));
+    }
+}
+
+#[test]
 fn conditions_require_booleans_and_for_requires_an_array_for_every_value_kind() {
     for (value, value_kind) in [
         ("none", "none"),

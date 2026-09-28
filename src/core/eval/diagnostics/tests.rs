@@ -3,6 +3,30 @@ use crate::core::diagnostic::DiagnosticLimits;
 use crate::core::run::{RetainedDiagnosticLimits, SnapshotLimits};
 
 #[test]
+fn cancellation_after_error_construction_keeps_stop_priority_and_original_cause() {
+    let control = OperationControl::default();
+    let context = Context::with_control(RunLimits::default(), control.clone()).unwrap();
+    let original = context.runtime_diagnostic(
+        Diagnostic::new(BWErr::NativeError("operation already failed".into())).into(),
+        None,
+        false,
+    );
+    assert_eq!(original.code(), DiagnosticCode::Native);
+    // A concurrent cancellation can arrive after construction and before return.
+    // Arrange that ordering directly so the regression needs no timing race.
+    control.cancel();
+    let error = context
+        .after_evaluation::<Literal>(Err(original))
+        .unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::Cancelled);
+    assert_eq!(error.causes.len(), 1);
+    assert_eq!(error.causes[0].code(), DiagnosticCode::Native);
+    assert!(error.causes[0]
+        .to_string()
+        .contains("operation already failed"));
+}
+
+#[test]
 fn shared_handler_unwind_admits_copy_overlap_and_preserves_primary_failure_and_bindings() {
     // The snapshot owns a call and handler; the new error and copied cause overlap.
     for records in [3, 4] {

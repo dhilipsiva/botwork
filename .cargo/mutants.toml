@@ -1,0 +1,37 @@
+# Version 1 core campaign. Selection is frozen before measuring outcomes.
+# Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
+examine_globs = [
+    "src/core/grammar.rs",
+    "src/core/eval.rs",
+    "src/core/eval/diagnostics.rs",
+    "src/core/run.rs",
+]
+examine_re = [
+    ' (Rule::operate_binary_unchecked|Rule::operate_unary_unchecked|numeric_pair(::widen)?)( ->|$)',
+    ' (Context::get_variable_binding|Context::get_statement_ref|Context::with_invocation|invoke_resolved)( ->|$)',
+    ' (evaluate_expression_inner|evaluate_for|evaluate_while|evaluate_handler|evaluate_statement_inner)( ->|$)',
+    ' (Context::after_evaluation|Context::finish_handler_error|RunEnvironment::prepare|Engine::run|RunResult::outcome)( ->|$)',
+]
+additional_cargo_args = [
+    "--locked", "--lib",
+    "--test", "regressions",
+    "--test", "language_contract",
+    "--test", "call_composition",
+    "--test", "catch_contract",
+    "--test", "value_contract",
+    "--test", "generated_properties",
+    "--test", "embedded_runs",
+    "--test", "runtime_limits",
+    "--test", "local_imports",
+    "--test", "diagnostic_codes",
+    "--test", "native_registration",
+    "--test", "numeric_diagnostics",
+    "--test", "runtime_diagnostics",
+    "--test", "temporary_limits",
+    "--test", "value_limits",
+    "--test", "retained_registry",
+]
+test_tool = "cargo"
+minimum_test_timeout = 60
+timeout_multiplier = 5
+build_timeout_multiplier = 5
