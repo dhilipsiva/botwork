@@ -1,5 +1,5 @@
 #[path = "http_fixture.rs"]
-mod http_fixture;
+pub(super) mod http_fixture;
 
 use std::{
     fs,

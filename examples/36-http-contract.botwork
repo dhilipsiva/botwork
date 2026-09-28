@@ -1,0 +1,5 @@
+# Supply url and examples/inputs/http-contract.json; see docs/automation-examples.md.
+Import |"modules/http-contract.botwork"| As |http|
+
+|response| = http::Check Response At |url| Against |contract|
+Log |@{ Format String |"HTTP contract passed ({status})"| With |{status: response.status}| }|

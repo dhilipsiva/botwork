@@ -1,0 +1,25 @@
+# Parameters carry configuration across the module's independent scope.
+Normalize Catalogue |text| With |sort_program| {
+    |entries| = Create Array
+    For |line| In |@{ Split Lines |text| }| {
+        |entry| = Trim String |line|
+        If |entry != ""| {
+            |entries| = Append To |entries| Value |entry|
+        }
+    }
+    Assert |@{ Length Of |entries| } > 0|
+    |input| = |@{ Join Strings |entries| With |"\n"| } + "\n"|
+    |sorted| = Run Process |sort_program| With Arguments |["-u"]| Options |{
+        stdin: input,
+        inherit_environment: false,
+        environment: {LC_ALL: "C"},
+        timeout_ms: 10000,
+        stdout_limit: 65536,
+        stderr_limit: 4096
+    }|
+    Assert |sorted.exit_code| Equals |0|
+    Assert |sorted.stderr| Equals |""|
+    |lines| = Split Lines |sorted.stdout|
+    Assert |@{ Length Of |lines| } > 0|
+    Return |{entries: lines, text: sorted.stdout}|
+}

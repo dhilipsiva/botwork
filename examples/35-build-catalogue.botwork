@@ -1,0 +1,18 @@
+# Run with examples/inputs/catalogue.json; see docs/automation-examples.md.
+Import |"modules/catalogue.botwork"| As |catalogue|
+
+|source| = Read File |source_file|
+|folder| = Create Temporary Directory In |scratch_directory| Prefix |"botwork_catalogue_"|
+Try {
+    |result| = catalogue::Normalize Catalogue |source| With |sort_program|
+    Assert |result.entries| Equals |expected_entries|
+    |staged| = Join Path |[folder, "catalogue.txt"]|
+    Write File |staged| Text |result.text|
+    Assert |@{ Read File |staged| }| Equals |result.text|
+    # Copy exclusively creates the destination after validation succeeds.
+    Copy File |staged| To |destination_file|
+    Assert |@{ Read File |destination_file| }| Equals |result.text|
+    Log |@{ Format String |"Published {count} entries"| With |{count: @{ Length Of |result.entries| }}| }|
+} Finally {
+    Remove Directory |folder| Recursively |true|
+}

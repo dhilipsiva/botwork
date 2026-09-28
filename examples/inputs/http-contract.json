@@ -1,0 +1,10 @@
+{
+  "contract": {
+    "status": 200,
+    "request_headers": {"accept": "application/json"},
+    "headers": {"content-type": ["application/json"]},
+    "body": "{\"message\":\"hello\"}",
+    "timeout_ms": 10000,
+    "max_body_bytes": 4096
+  }
+}

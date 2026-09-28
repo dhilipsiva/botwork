@@ -1,0 +1,215 @@
+{
+  "completed_at": "2026-09-28T20:33:54.725282+00:00",
+  "todo": "Add complete examples combining assertions, imports, variables, and standard statements into useful automation tasks.",
+  "base_revision": "c5c2f3fdfb9f58d1bc362eb217659c33350f01e3",
+  "scope": [
+    "Example 35: normalized, asserted, exclusively published text catalogue with imported process helper and Finally cleanup.",
+    "Example 36: configured HTTP status, required headers and exact UTF-8 body through an imported helper."
+  ],
+  "environment": {
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "python": "Python 3.14.4",
+    "platform": "Linux x86_64",
+    "musl_cc": "target/http-musl-toolchain/root/usr/bin/musl-gcc"
+  },
+  "changed_input_sha256": {
+    "README.md": "39c19030b63e9311d26ebd7d54217798ca2e4e5836dcf78147296b219b473491",
+    "docs/automation-examples.md": "513ac170c624a0c8cc56b49871aefe58b041337442219e73952acad42506714d",
+    "examples/35-build-catalogue.botwork": "fa33460e15a89dd29dcdde612a10207152a7a92fa20926c750a394e11d0d2861",
+    "examples/36-http-contract.botwork": "a8af03a386e0c286065f2dabb62e407210ff0c00fdd0e74be4f496bfd74e7b07",
+    "examples/fixtures/http-contract/hello.json": "9b2d43affbf49a367028df2e1414f84c0e099ac98c3d54a8a80157fd7771af25",
+    "examples/inputs/catalogue.json": "dfaada32d9cea5e45d35ed76cdec3dc4f4d4d8fb69c9ccfe8d3188c8f2ec9685",
+    "examples/inputs/catalogue.txt": "9bd986b7c4ec179ebcaa40fc058de775add31e9dcd8187010ad5b25d3d24ecf0",
+    "examples/inputs/http-contract.json": "a10d4a032e222382bff7357be9568895b74dc4b074d87cd22ce8da7bb22e97e3",
+    "examples/modules/catalogue.botwork": "b4af92de8bff97e3a2162ca61c61bb67fcbb6edcc2014e707dcb5d29a24b72ef",
+    "examples/modules/http-contract.botwork": "953e4c5c565af682d43ee8e05446f843c23b22172f9a3d2a554dcf9cc288a1fb",
+    "tests/automation_examples.rs": "563207073519716671cd127e40bf3b63c9d3da923e20d598e5b288c3b9883576",
+    "tests/support/cli_harness.rs": "3ed2e2165425e9aafe5d62302433608319cd0ee6961ba15a6285dde77409bb77"
+  },
+  "all_measured_inputs_sha256": "412939717b777724fceaa342453d4844d8dbb891b756911e33fa60d79fd50c24",
+  "local_full_record": "target/automation-validation-ps2d31ou/summary.json",
+  "checks": [
+    {
+      "label": "gnu-debug-full",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/gnu-debug-full.log",
+      "tests": {
+        "passed": 1705,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "gnu-release-examples",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--release",
+        "--test",
+        "automation_examples",
+        "--test",
+        "examples",
+        "--test",
+        "documentation"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/gnu-release-examples.log",
+      "tests": {
+        "passed": 51,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "musl-debug-examples",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--test",
+        "automation_examples",
+        "--test",
+        "examples",
+        "--test",
+        "documentation"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/musl-debug-examples.log",
+      "tests": {
+        "passed": 51,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "musl-release-examples",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--release",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--test",
+        "automation_examples",
+        "--test",
+        "examples",
+        "--test",
+        "documentation"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/musl-release-examples.log",
+      "tests": {
+        "passed": 51,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/clippy.log",
+      "tests": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "format",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/format.log",
+      "tests": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "documented-http-fixture",
+      "command": [
+        "python3",
+        "/tmp/botwork-automation-smoke.py"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/documented-http-fixture.log",
+      "tests": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      }
+    },
+    {
+      "label": "diff-whitespace",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "status": 0,
+      "log": "target/automation-validation-ps2d31ou/diff-whitespace.log",
+      "tests": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      }
+    }
+  ],
+  "http_fixture_smoke": {
+    "method": "Launch python3 -u -m http.server on an ephemeral loopback port with --directory examples/fixtures/http-contract; run the bundled HTTP script with its JSON inputs against hello.json and missing.json.",
+    "outcomes": [
+      {
+        "path": "hello.json",
+        "expected_success": true,
+        "status": 0,
+        "stdout": "HTTP contract passed (200)\n",
+        "stderr": ""
+      },
+      {
+        "path": "missing.json",
+        "expected_success": false,
+        "status": 1,
+        "stdout": "",
+        "stderr": "/home/dhilipsiva/projects/dhilipsiva/botwork/examples/modules/http-contract.botwork:9:5-9:54: [BW9001] Assertion failed: Expected 200 (Int), got 404 (Int)\n  source: Assert |response.status| Equals |contract.status|\n  imported here: examples/36-http-contract.botwork:2:1\n  in `assert|param|equals|param|` called at /home/dhilipsiva/projects/dhilipsiva/botwork/examples/modules/http-contract.botwork:9:5\n  in `http::checkresponseat|param|against|param|` called at examples/36-http-contract.botwork:4:14 (defined at /home/dhilipsiva/projects/dhilipsiva/botwork/examples/modules/http-contract.botwork:1:1)\n  help: Inspect the condition or compared values; fix the behavior or update the expectation deliberately.\n"
+      }
+    ]
+  },
+  "prior_run": {
+    "record": "target/automation-validation-nq9sgz22/summary.json",
+    "result": "All test profiles passed, then strict Clippy rejected duplicate_mod in the new integration tests. Reused the harness fixture module and repeated all checks successfully."
+  },
+  "scope_limits": [
+    "Full 1705-test suite executed in GNU debug; 51 example/documentation checks executed in GNU release and musl debug/release.",
+    "No runtime code or dependency changes. No new coverage, mutation or fuzz campaign was needed for this examples item.",
+    "The catalogue requires Linux and a trusted sort executable. HTTP assertions compare exact text, not parsed JSON. Broader acceptance workflows and diagnostic improvements remain separate TODO items."
+  ]
+}

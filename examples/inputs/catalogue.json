@@ -1,0 +1,7 @@
+{
+  "source_file": "examples/inputs/catalogue.txt",
+  "destination_file": "catalogue.txt",
+  "scratch_directory": ".",
+  "sort_program": "/usr/bin/sort",
+  "expected_entries": ["coffee", "tea", "water"]
+}

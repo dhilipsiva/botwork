@@ -1,0 +1,16 @@
+Check Response At |url| Against |contract| {
+    |response| = HTTP Request |"GET"| To |url| Options |{
+        headers: contract.request_headers,
+        timeout_ms: contract.timeout_ms,
+        max_body_bytes: contract.max_body_bytes,
+        redirects: "none",
+        max_retries: 0
+    }|
+    Assert |response.status| Equals |contract.status|
+    For |header| In |@{ Map Entries |contract.headers| }| {
+        Assert |@{ Collection Contains |response.headers| Item |header[0]| }|
+        Assert |response.headers[header[0]]| Equals |header[1]|
+    }
+    Assert |response.body| Equals |contract.body|
+    Return |response|
+}

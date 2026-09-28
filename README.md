@@ -41,6 +41,10 @@ for a later `--rerun-failed failed.json`. See [parameterized cases and reusable 
 for independent row execution, and [named suites](docs/suites.md) for
 stable IDs, library declarations, discovery order, and case isolation.
 
+For complete tasks, [build a verified catalogue or check an HTTP response contract](docs/automation-examples.md).
+Both examples combine imported helpers, JSON input variables, assertions, and
+standard statements, with runnable local fixtures and failure demonstrations.
+
 Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.
 [Runtime budgets](docs/embedded-runs.md#cli-and-low-level-contexts) stop excessive steps and recursion;
 configure `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and cooperative `--timeout-ms`.
