@@ -3,7 +3,7 @@
 Async Engine runs perform working-directory resolution, environment preparation,
 entry-file reads, import canonicalization, and module reads on blocking workers.
 Regular filesystem operations therefore leave the async executor available for
-other runs. The CLI similarly performs its single input/source preparation job,
+other runs. The CLI performs each admitted run's input/source preparation,
 including parsing and variable files, on a worker before entering the evaluator.
 
 Ordinary `register_native` callbacks also run on workers during async execution.
@@ -47,7 +47,8 @@ remain owned until delivery or disposal. Waiting for a permit does not occupy a
 blocking thread; a cancelled waiter never enters its job. Both pools use the
 host's Tokio blocking scheduler. Host scheduler limits and exhausted pool capacity
 can delay new work; this does not promise unlimited parallelism or a process-wide
-memory ceiling. The CLI has one additional preparation job per invocation.
+memory ceiling. The CLI has one additional preparation job per admitted run and
+one status-reporting job at a time for a [parallel batch](parallel-cli.md).
 
 Each run continues in source order. It awaits a file, callback, Log record, or
 debug record before proceeding. Mutable DSL bindings, import caches, and handler

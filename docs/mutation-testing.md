@@ -81,7 +81,7 @@ remain, with three additional return-value replacements for the extracted helper
 No survivor is removed from the scope or executable denominator.
 
 Macro bodies and many semantic changes are not generated automatically. The
-[21-entry targeted catalogue](../tests/mutation-core.json) therefore swaps
+[27-entry targeted catalogue](../tests/mutation-core.json) therefore swaps
 precedence levels, changes subtraction associativity, terminates While early,
 discards For returns, loses the caller frame, uses dynamic parents, skips parent
 variable lookup, discards handled causes, forces environment inheritance, ignores
@@ -92,6 +92,11 @@ testing. Each catalogue version was frozen before its first execution.
 Catalogue version 3 adds inline native/file work, premature worker permit release,
 skipped drain, lost callback control, and discarded cleanup causes. The selected
 suites now include `async_filesystem` and `async_blocking`.
+Catalogue version 4 adds single-file-only dispatch, unbounded batch admission,
+lost run IDs, hidden aggregate failures, skipped drain after reporting failure,
+and inline status writes. Scope version 5 includes the CLI binary unit tests and
+`parallel_cli`; its 286-entry generated inventory retains every prior semantic
+identity and adds 23 mutations in `src/batch.rs`.
 
 All library unit tests and the named integration suites in the Cargo config run
 for generated and targeted mutations. The initial suite omitted the existing
@@ -195,3 +200,27 @@ one reviewed buffer-size survivor, 67 compiler failures, and no equivalence
 exclusions. The original and intermediate timeouts are preserved, not counted as
 kills. All four GNU/musl debug/release profiles have a passing 1,350-test run;
 the evidence also retains the observed failures and repairs.
+
+## Parallel CLI campaign — 2026-09-28
+
+Version 5 preserves all 263 prior semantic identities and adds 23 mutations for
+batch admission, run identity, outcome classification, and reporting. The
+[parallel CLI evidence](parallel-cli-evidence.json) retains the frozen inventory,
+all outcomes and compiler errors, source/test/config hashes, and the exact replay.
+Catalogue version 4 adds six targeted scheduler/reporting changes to the prior 21.
+
+| Stage | Caught by tests | Survived | Did not compile | Timed out |
+| --- | ---: | ---: | ---: | ---: |
+| Generated inventory (286) | 215 | 3 | 68 | 0 |
+| Exact source-limit classification replay | 1 | 0 | 0 | 0 |
+| Targeted catalogue | 27 | 0 | 0 | 0 |
+
+The source-limit survivor exposed a missing terminal-label assertion. A new
+oversized-file CLI case checks limit classification before UTF-8 decoding and
+successful sibling completion; its exact replay is caught. Consolidating it once
+gives **243/245 compilable mutations caught (99.18%)**. Two reviewed survivors
+remain in the denominator: the earlier smaller read buffer and a defensive
+cancellation label with no supported CLI cancellation trigger yet. Signal/listener
+cancellation must extend that end-to-end coverage when implemented. Neither is
+excluded as equivalent; compiler failures are never test kills. All final GNU/musl
+debug/release profiles pass 1,365 tests, with no timeout relaxation.

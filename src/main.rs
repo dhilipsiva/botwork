@@ -20,18 +20,23 @@ use std::{
     time::Duration,
 };
 
-/// Run a Botwork automation script.
+mod batch;
+
+/// Run Botwork automation scripts.
 #[derive(Clap, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Name of the botwork file to run
+    /// Botwork file to run (repeatable; each occurrence starts a fresh run)
     #[arg(short, long, required_unless_present_any = ["list_statements", "statement_help"])]
-    file: Option<PathBuf>,
+    file: Vec<PathBuf>,
+    /// Maximum simultaneous runs, including file/input preparation (1-64)
+    #[arg(short = 'j', long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=64))]
+    jobs: u8,
     /// List built-in statement headers without executing a file
-    #[arg(long, conflicts_with_all = ["file", "statement_help", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
+    #[arg(long, conflicts_with_all = ["file", "jobs", "statement_help", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
     list_statements: bool,
     /// Show a built-in's parameters, return kinds, and documented errors
-    #[arg(long, value_name = "HEADER", conflicts_with_all = ["file", "list_statements", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
+    #[arg(long, value_name = "HEADER", conflicts_with_all = ["file", "jobs", "list_statements", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
     statement_help: Option<String>,
     /// Trace top-level statement locations on stderr
     #[arg(long)]
@@ -42,7 +47,7 @@ struct Args {
     /// Read root variables from a JSON object (repeatable; later files override earlier)
     #[arg(long = "vars-file", value_name = "PATH")]
     variable_files: Vec<PathBuf>,
-    /// Maximum evaluation steps before terminating the run
+    /// Maximum evaluation steps before terminating each run
     #[arg(long, default_value_t = DEFAULT_STEPS)]
     max_steps: u64,
     /// Maximum entered native or custom calls
@@ -54,16 +59,18 @@ struct Args {
     /// Maximum bytes in one Log, debug trace, or statement-help record
     #[arg(long, default_value_t = DEFAULT_OUTPUT_RECORD_BYTES)]
     max_output_record_bytes: usize,
-    /// Maximum total bytes admitted for output (failed writes also count)
+    /// Maximum output bytes per run or help request (failed writes also count)
     #[arg(long, default_value_t = DEFAULT_OUTPUT_BYTES)]
     max_output_bytes: usize,
-    /// Cooperative timeout in milliseconds, including loading and parsing
+    /// Per-run cooperative timeout in milliseconds, including loading/parsing after admission
     #[arg(long)]
     timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, thiserror::Error)]
 enum CliError {
+    #[error("Batch failed: {failed} of {total} runs failed")]
+    Batch { failed: usize, total: usize },
     #[error("{file}: {source}")]
     Read { file: PathBuf, source: io::Error },
     #[error(transparent)]
@@ -99,7 +106,7 @@ async fn run(
     let file = file.to_owned();
     let files = files.to_vec();
     let settings = settings.to_vec();
-    // The CLI admits one preparation job. File/variable loading and parsing
+    // Each admitted run owns one preparation job. File/variable loading and parsing
     // finish off the executor before the owned program/context are handed back.
     let (program, context) = tokio::task::spawn_blocking(move || {
         prepare(&file, debug, &files, &settings, limits, control)
@@ -172,26 +179,40 @@ fn main() -> ExitCode {
                 CliError::Script(Diagnostic::new(BWErr::AsyncRuntime(error.to_string())))
             })
             .and_then(|runtime| {
-                runtime.block_on(run(
-                    args.file
-                        .as_deref()
-                        .expect("clap requires a file for execution"),
-                    args.debug,
-                    &args.variable_files,
-                    &args.variables,
-                    RunLimits {
-                        output: output_limits,
-                        steps: args.max_steps,
-                        call_depth: args.max_call_depth,
-                        evaluation_depth: args.max_evaluation_depth,
-                        ..RunLimits::default()
-                    },
-                    args.timeout_ms,
-                ))
+                let limits = RunLimits {
+                    output: output_limits,
+                    steps: args.max_steps,
+                    call_depth: args.max_call_depth,
+                    evaluation_depth: args.max_evaluation_depth,
+                    ..RunLimits::default()
+                };
+                if args.file.len() == 1 {
+                    runtime.block_on(run(
+                        &args.file[0],
+                        args.debug,
+                        &args.variable_files,
+                        &args.variables,
+                        limits,
+                        args.timeout_ms,
+                    ))
+                } else {
+                    runtime.block_on(batch::run(
+                        args.file,
+                        usize::from(args.jobs),
+                        batch::Configuration {
+                            debug: args.debug,
+                            files: args.variable_files,
+                            settings: args.variables,
+                            limits,
+                            timeout_ms: args.timeout_ms,
+                        },
+                    ))
+                }
             })
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        Err(CliError::Batch { .. }) => ExitCode::FAILURE,
         Err(error) => {
             // Failure reporting has its own bounded allowance, so an exhausted
             // script output budget does not hide the reason for failure.

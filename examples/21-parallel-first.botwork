@@ -1,0 +1,5 @@
+# Run alongside 22-parallel-second.botwork with --jobs 2.
+|counter| = |0|
+Next { Return |counter + 1| }
+|counter| = Next
+Log |{script: "first", count: counter}|

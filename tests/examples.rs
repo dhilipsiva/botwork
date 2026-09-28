@@ -44,6 +44,18 @@ fn expressions_example_produces_expected_values() {
 }
 
 #[test]
+fn parallel_examples_also_run_independently_with_their_own_bindings() {
+    assert_example(
+        "21-parallel-first.botwork",
+        &[r#"{"count": 1, "script": "first"}"#],
+    );
+    assert_example(
+        "22-parallel-second.botwork",
+        &[r#"{"count": 2, "script": "second"}"#],
+    );
+}
+
+#[test]
 fn precedence_example_produces_expected_values() {
     assert_example(
         "03-precedence.botwork",

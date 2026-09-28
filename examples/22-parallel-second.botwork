@@ -1,0 +1,5 @@
+# This counter and definition belong only to this run.
+|counter| = |0|
+Next { Return |counter + 2| }
+|counter| = Next
+Log |{script: "second", count: counter}|

@@ -1,6 +1,7 @@
-# Version 4: preserve version 3 workers and include the extracted read loop.
+# Version 5: retain core/worker mutations and add CLI batch scheduling/reporting.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/batch.rs",
     "src/core/grammar.rs",
     "src/core/eval.rs",
     "src/core/eval/execution.rs",
@@ -12,6 +13,7 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/batch.rs:',
     ' (Rule::operate_binary_unchecked|Rule::operate_unary_unchecked|numeric_pair(::widen)?)( ->|$)',
     ' (Context::get_variable_binding|Context::get_statement_ref|Context::check_execution_mode|invoke_resolved)( ->|$)',
     ' (evaluate_expression_inner|evaluate_for|evaluate_while|evaluate_handler|evaluate_statement_inner)( ->|$)',
@@ -20,7 +22,7 @@ examine_re = [
     ' (Engine::prepare_run|Engine::prepare_async|Engine::run_async|ActiveRun::finish|tick)( ->|$)',
 ]
 additional_cargo_args = [
-    "--locked", "--lib",
+    "--locked", "--lib", "--bin", "botwork",
     "--test", "regressions",
     "--test", "language_contract",
     "--test", "call_composition",
@@ -40,6 +42,7 @@ additional_cargo_args = [
     "--test", "async_execution",
     "--test", "async_filesystem",
     "--test", "async_blocking",
+    "--test", "parallel_cli",
 ]
 test_tool = "cargo"
 minimum_test_timeout = 60

@@ -29,6 +29,11 @@ I wanted:
 script errors return a nonzero exit status. Add `--debug` after `cargo run --`
 to trace top-level statement locations on stderr. See [language behavior](docs/language.md)
 and [testing instructions](docs/testing.md) for the implemented contracts.
+
+Repeat `--file` and set `--jobs` to run scripts concurrently with independent
+state, for example `cargo run -- --file examples/21-parallel-first.botwork --file
+examples/22-parallel-second.botwork --jobs 2`. See [parallel CLI execution](docs/parallel-cli.md)
+for run IDs, ordering, per-run limits, and failure behavior.
 Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.
 [Runtime budgets](docs/embedded-runs.md#cli-and-low-level-contexts) stop excessive steps and recursion;
 configure `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and cooperative `--timeout-ms`.

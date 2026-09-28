@@ -27,6 +27,10 @@ Name validation checks borrowed characters directly without allocating parser re
 
 Replacement is whole-value replacement, without deep merging. Within a JSON object, duplicate keys use the last value before conversion. Each file/flag is validated even if a later input would replace it. A script can assign over inputs; custom statements read them lexically, while parameters/local assignments shadow them. Imported modules retain independent globals; pass input values as arguments to module statements.
 
+For [multiple CLI files](parallel-cli.md), the common input options are applied to
+each admitted run independently. Assigning an input in one run leaves sibling
+bindings unchanged. Queued runs read their variable files when admitted.
+
 ## Failure Behavior
 
 Malformed JSON, invalid names, range failures, unreadable/non-UTF-8 input files, and nesting beyond 128 containers return BW7001 and CLI status 1 before script effects or debug traces. The root object counts toward depth. Diagnostics identify the file or numbered `--var`, a collection path, and JSON syntax position when available; they avoid reproducing the complete input payload. Input validation precedes entry-script loading/parsing. Flag misuse returns Clap status 2; input flags conflict with statement-list/help modes.

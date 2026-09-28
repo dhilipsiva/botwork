@@ -141,3 +141,9 @@ Call composition is covered in `tests/call_composition.rs`: nested effects, argu
 
 [Nonblocking I/O validation](nonblocking-io.md) adds worker admission/draining tests,
 real stalled-file and output-pipe probes, native thread/control checks, and F9 corpus cases.
+
+[Parallel CLI validation](parallel-cli.md) covers bounded batch admission, fresh
+variables/module caches/quotas, queued deadlines, stable run IDs, sibling failures,
+whole output records, and reporter backpressure/failure. Linux tests use controlled
+FIFO peers and pipe capacity; child watchdogs always terminate/reap on failure.
+R32 adds two CLI corpus cases, and examples 21–22 run in the example suite.

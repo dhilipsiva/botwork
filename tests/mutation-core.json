@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "mutations": [
     {
       "id": "precedence-products",
@@ -147,6 +147,48 @@
       "file": "src/core/eval/blocking.rs",
       "before": "Err(error) if error.code() == stop.code() => Err(error),",
       "after": "Err(error) if error.code() == stop.code() => Err(stop.into()),"
+    },
+    {
+      "id": "parallel-first-file-only",
+      "area": "isolation",
+      "file": "src/main.rs",
+      "before": "if args.file.len() == 1 {",
+      "after": "if !args.file.is_empty() {"
+    },
+    {
+      "id": "parallel-admission-unbounded",
+      "area": "isolation",
+      "file": "src/batch.rs",
+      "before": "while reporting_error.is_none() && running.len() < jobs {",
+      "after": "while reporting_error.is_none() {"
+    },
+    {
+      "id": "parallel-identity-lost",
+      "area": "isolation",
+      "file": "src/batch.rs",
+      "before": "number: index + 1,",
+      "after": "number: 1,"
+    },
+    {
+      "id": "parallel-failure-hidden",
+      "area": "errors",
+      "file": "src/batch.rs",
+      "before": "failed += 1;",
+      "after": "failed += 0;"
+    },
+    {
+      "id": "parallel-report-failure-skips-drain",
+      "area": "cleanup",
+      "file": "src/batch.rs",
+      "before": "if let Err(error) = report(Message::Finished(identity, result)).await {\n                reporting_error = Some(error);\n            }",
+      "after": "if let Err(error) = report(Message::Finished(identity, result)).await {\n                return Err(error);\n            }"
+    },
+    {
+      "id": "parallel-report-runs-inline",
+      "area": "isolation",
+      "file": "src/batch.rs",
+      "before": "tokio::task::spawn_blocking(move || write_report(message))\n        .await\n        .map_err(|_| task_failure())?",
+      "after": "write_report(message)"
     }
   ]
 }

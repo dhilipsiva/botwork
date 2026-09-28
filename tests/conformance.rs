@@ -421,6 +421,41 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::ParallelCliSuccess | Input::ParallelCliFailure => {
+                let second = format!("{}-second.botwork", case.id);
+                let source = "|counter| = |counter + 1|\nLog |counter|";
+                fs::write(
+                    harness.workspace.join(&second),
+                    if case.error.is_some() {
+                        "Log |missing|"
+                    } else {
+                        source
+                    },
+                )
+                .unwrap();
+                let output = harness
+                    .run_with_args(
+                        case.id,
+                        source,
+                        &["--file", &second, "--jobs", "1", "--var", "counter=6"],
+                        Duration::from_secs(10),
+                    )
+                    .unwrap();
+                assert_eq!(output.stdout, case.stdout.as_bytes());
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                assert!(stderr.contains("[run 1] succeeded:"));
+                if let Some(error) = case.error {
+                    assert_eq!(output.status.code(), Some(1));
+                    assert!(stderr.contains(case.code.unwrap()));
+                    assert!(stderr.contains(error));
+                    assert!(stderr.contains("[run 2] failed:"));
+                } else {
+                    assert!(output.status.success());
+                    assert!(stderr.contains("[run 2] succeeded:"));
+                    assert_eq!(stderr.lines().count(), 5);
+                }
+                continue;
+            }
             Input::NamespaceBoundary | Input::NamespaceHelperFailure => {
                 check_namespace_case(&case);
                 continue;
