@@ -14,7 +14,7 @@
 
 An empty DSL signature costs one node. A namespace costs one entry/node and its key bytes. Imported wrappers have newly qualified metadata and keys; their exported lookup key shares the module's original key allocation. Shared signatures/namespaces in cloned frames count once. Independently constructed signature records count separately, including local declarations on separate invocations. Source identities are deduplicated across records; identical text in separate allocations counts separately. These source budgets overlap with definition-source accounting by design.
 
-All fields permit zero or explicit increases. The fixed built-in Log registration is exempt so existing infallible `init_statements()` remains usable with zero user-registry budgets. A user-supplied Log replacement is charged normally. Arbitrary native callback captures and standalone NativeOperation metadata remain host-owned.
+All fields permit zero or explicit increases. The fixed nine-statement [built-in catalogue](builtins.md) is exempt so existing infallible `init_statements()` remains usable with zero user-registry budgets. A user-supplied replacement registered before initialization is charged normally. Arbitrary native callback captures and standalone NativeOperation metadata remain host-owned.
 
 ## Admission and Publication
 

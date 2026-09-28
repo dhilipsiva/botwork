@@ -358,7 +358,7 @@ fn imported_catch_rejection_shares_stop_and_preserves_import_context() {
 #[test]
 fn default_cli_position_budget_rejects_repeated_distant_frames_and_recovers() {
     let harness = cli_harness::Harness::new();
-    let source = format!("# {}\nFail |n| {{ If |n > 0| {{ Fail |n - 1| }} Else {{ Unknown }} }}\nTry {{ Fail |12| }} Catch |error| {{ Log |\"unreachable\"| }}", "x".repeat(512 * 1024));
+    let source = format!("# {}\nBoom |n| {{ If |n > 0| {{ Boom |n - 1| }} Else {{ Unknown }} }}\nTry {{ Boom |12| }} Catch |error| {{ Log |\"unreachable\"| }}", "x".repeat(512 * 1024));
     let result = harness
         .run(
             "diagnostic-position",

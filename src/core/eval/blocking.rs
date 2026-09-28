@@ -90,33 +90,49 @@ impl Context {
 
 pub(super) fn native_body(
     context: &mut Context,
-    callback: Callback,
+    body: NativeBody,
     metadata: &StatementSignature,
-    builtin_log: bool,
     arguments: Vec<TemporaryValue>,
     span: &Span,
 ) -> TemporaryResult {
-    let arguments = TemporaryArguments::new(arguments);
-    let known_result = if builtin_log {
-        let size = context
-            .limits()
-            .values
-            .check(&arguments[0])
-            .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-        Some(context.temporary_reservation(size)?)
-    } else {
-        None
-    };
-    let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
-        .map_err(|_| {
-            context.detail_error(BWErr::NativePanic, metadata.normalized(), Some(span), false)
-        })
-        .and_then(|result| {
-            result.map_err(|error| context.runtime_diagnostic(error, Some(span), false))
-        });
-    let result = context.after_evaluation(result.map(Owned::new))?;
-    context.check_value(&result)?;
-    validate_numeric_values(&result).map_err(|error| {
+    match body {
+        NativeBody::Builtin(builtin) => {
+            let result = builtin
+                .invoke(arguments, context)
+                .map_err(|error| context.runtime_diagnostic(error, Some(span), false));
+            let result = context.after_evaluation(result)?;
+            validate_result(context, metadata, &result, span)?;
+            Ok(result)
+        }
+        NativeBody::Callback(callback) => {
+            let arguments = TemporaryArguments::new(arguments);
+            let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
+                .map_err(|_| {
+                    context.detail_error(
+                        BWErr::NativePanic,
+                        metadata.normalized(),
+                        Some(span),
+                        false,
+                    )
+                })
+                .and_then(|result| {
+                    result.map_err(|error| context.runtime_diagnostic(error, Some(span), false))
+                });
+            let result = context.after_evaluation(result.map(Owned::new))?;
+            validate_result(context, metadata, &result, span)?;
+            context.temporary(result.into_inner())
+        }
+    }
+}
+
+fn validate_result(
+    context: &Context,
+    metadata: &StatementSignature,
+    value: &Literal,
+    span: &Span,
+) -> EvaluationResult<()> {
+    context.check_value(value)?;
+    validate_numeric_values(value).map_err(|error| {
         context.formatted_error(
             BWErr::ArithmeticError,
             format_args!("{error}"),
@@ -124,18 +140,14 @@ pub(super) fn native_body(
             false,
         )
     })?;
-    metadata.validate_return(&result, |message| {
+    metadata.validate_return(value, |message| {
         context.formatted_error(
             BWErr::OperationIncompatibleError,
             message,
             Some(span),
             false,
         )
-    })?;
-    match known_result {
-        Some(reservation) => Ok(TemporaryValue::new(result.into_inner(), reservation)),
-        None => context.temporary(result.into_inner()),
-    }
+    })
 }
 
 #[cfg(test)]

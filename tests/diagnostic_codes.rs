@@ -15,6 +15,16 @@ fn execute(source: &str) -> Result<Literal, Diagnostic> {
 fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() {
     use DiagnosticCode::*;
     let entries = [
+        (
+            BWErr::AssertionFailed("mismatch".into()),
+            Assertion,
+            "BW9001",
+        ),
+        (
+            BWErr::ExplicitFailure("reason".into()),
+            ExplicitFailure,
+            "BW9002",
+        ),
         (BWErr::ParsingError("token".into()), Syntax, "BW1001"),
         (
             BWErr::ControlFlowError("placement".into()),

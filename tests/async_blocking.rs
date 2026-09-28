@@ -233,7 +233,7 @@ async fn worker_call_frame_snapshots_are_admitted_before_callback_effects() {
             Ok(Literal::None)
         })
         .unwrap();
-    for (entries, expected) in [(2, RunOutcome::LimitExceeded), (3, RunOutcome::Succeeded)] {
+    for (entries, expected) in [(10, RunOutcome::LimitExceeded), (11, RunOutcome::Succeeded)] {
         let result = engine
             .run_source_async(
                 "snapshot",

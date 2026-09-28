@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "mutations": [
     {
       "id": "precedence-products",
@@ -47,8 +47,8 @@
       "id": "variables-ignore-parent",
       "area": "scope",
       "file": "src/core/eval.rs",
-      "before": "return Ok(value);\n            }\n            index = frame.parent;",
-      "after": "return Ok(value);\n            }\n            index = None;"
+      "before": "return Some(value);\n            }\n            index = frame.parent;",
+      "after": "return Some(value);\n            }\n            index = None;"
     },
     {
       "id": "handler-discards-cause",
@@ -110,7 +110,7 @@
       "id": "native-worker-runs-inline",
       "area": "isolation",
       "file": "src/core/eval/execution.rs",
-      "before": "if context.asynchronous {\n                    context.check_call_depth()?;",
+      "before": "if context.asynchronous && !inline {\n                    context.check_call_depth()?;",
       "after": "if false {\n                    context.check_call_depth()?;"
     },
     {
@@ -511,6 +511,55 @@
       "file": "src/core/acceptance/totals.rs",
       "before": "            || self.skipped != 0\n",
       "after": ""
+    },
+    {
+      "id": "assert-false-passes",
+      "area": "builtins",
+      "file": "src/core/eval/builtins.rs",
+      "before": "if matches!(&*values[0], Literal::Bool(true)) {",
+      "after": "if true {"
+    },
+    {
+      "id": "assert-equality-always-passes",
+      "area": "builtins",
+      "file": "src/core/eval/builtins.rs",
+      "before": "if equal {",
+      "after": "if equal || true {"
+    },
+    {
+      "id": "explicit-failure-becomes-assertion",
+      "area": "builtins",
+      "file": "src/core/eval/builtins.rs",
+      "before": "context.detail_error(BWErr::ExplicitFailure, message, None, false)",
+      "after": "context.detail_error(BWErr::AssertionFailed, message, None, false)"
+    },
+    {
+      "id": "inspection-loses-caller-bindings",
+      "area": "builtins",
+      "file": "src/core/eval/execution.rs",
+      "before": "let inline = matches!(&body, NativeBody::Builtin(kind) if !matches!(kind, builtins::Builtin::Log));",
+      "after": "let inline = false;"
+    },
+    {
+      "id": "assertion-ignores-secondary-evidence",
+      "area": "builtins",
+      "file": "src/core/acceptance.rs",
+      "before": "            && error.causes.is_empty()\n",
+      "after": ""
+    },
+    {
+      "id": "sleep-returns-without-waiting",
+      "area": "builtins",
+      "file": "src/core/eval/builtins.rs",
+      "before": "tokio::time::sleep(Duration::from_millis(milliseconds)).await;",
+      "after": "let _ = milliseconds;"
+    },
+    {
+      "id": "variable-copy-before-admission",
+      "area": "builtins",
+      "file": "src/core/eval/builtins.rs",
+      "before": "context.copy_temporary(&context.get_variable_binding(name, None)?.value)",
+      "after": "context.temporary(context.get_variable_binding(name, None)?.value.clone())"
     }
   ]
 }

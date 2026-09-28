@@ -239,7 +239,7 @@ fn all_diagnostic_categories_preserve_exact_fields() {
             limit: u64::MAX,
         },
     ];
-    let categories: [fn(String) -> BWErr; 20] = [
+    let categories: [fn(String) -> BWErr; 22] = [
         BWErr::ParsingError,
         BWErr::ControlFlowError,
         BWErr::SignatureError,
@@ -260,6 +260,8 @@ fn all_diagnostic_categories_preserve_exact_fields() {
         BWErr::InputError,
         BWErr::RunConfiguration,
         BWErr::SourceRead,
+        BWErr::AssertionFailed,
+        BWErr::ExplicitFailure,
     ];
     errors.extend(categories.map(|category| category("detail é\0".into())));
     let protocol = WorkerProtocol::default();

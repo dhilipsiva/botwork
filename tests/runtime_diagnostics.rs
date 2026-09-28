@@ -305,7 +305,7 @@ fn pair_and_single_statement_errors_use_the_same_context_admission() {
 #[test]
 fn cli_default_diagnostic_growth_limit_stops_cause_amplification_and_recovers() {
     let harness = cli_harness::Harness::new();
-    let source = "Fail |n| { If |n > 0| { Try { Fail |n - 1| } Catch { Fail |n - 1| } } Else { Missing } }\nTry { Fail |10| } Catch { Log |\"unexpected\"| }";
+    let source = "Boom |n| { If |n > 0| { Try { Boom |n - 1| } Catch { Boom |n - 1| } } Else { Missing } }\nTry { Boom |10| } Catch { Log |\"unexpected\"| }";
     let result = harness
         .run("diagnostic-growth", source, Duration::from_secs(10))
         .unwrap();

@@ -1,8 +1,8 @@
-Fail |x| {
+Boom |x| {
     Return |x + missing|
 }
 Outer {
-    |result| = Fail |7|
+    |result| = Boom |7|
     Return |result|
 }
 Outer

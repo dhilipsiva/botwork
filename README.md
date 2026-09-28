@@ -126,7 +126,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] Syntax docs
   - [ ] Statement docs
 - [ ] More statements out-of-box (like the ones RobotFramework Offers)
-  - [ ] [Built-ins](http://robotframework.org/robotframework/latest/libraries/BuiltIn.html)
+  - [x] [Built-ins](docs/builtins.md)
   - [ ] [Collections](http://robotframework.org/robotframework/latest/libraries/Collections.html)
   - [ ] [Datetime](http://robotframework.org/robotframework/latest/libraries/DateTime.html)
   - [ ] [Operation System](http://robotframework.org/robotframework/latest/libraries/OperatingSystem.html)

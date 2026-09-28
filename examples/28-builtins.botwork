@@ -1,0 +1,17 @@
+|amount| = |42|
+Require Variable |name| {
+    Assert |@{ Variable Exists |name| }|
+    Return |@{ Get Variable |name| }|
+}
+|copied| = Require Variable |"amount"|
+Assert |copied| Equals |42.0|
+Assert |[1, {ok: true}]| Equals |[1.0, {ok: true}]|
+Log |copied|
+Log |@{ Type Of |copied| }|
+Try { Assert |false| } Catch |error| {
+    Log |error.code|
+} Finally { Log |"cleanup"| }
+Try { Fail |"demonstrate explicit failure"| } Catch |error| { Log |error.code| }
+Sleep |1|
+No Operation
+Log |"finished"|

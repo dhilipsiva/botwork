@@ -15,7 +15,7 @@ impl<'a> WireError<'a> {
         let count = match code {
             1003 | 2003 | 3004 | 6003 => 3,
             1001 | 1002 | 1004 | 2001 | 2002 | 2004 | 3001 | 3002 | 3003 | 4001 | 4002 | 4003
-            | 5001 | 5002 | 5003 | 6001 | 6002 | 7001 | 7002 | 7003 | 8001 => 1,
+            | 5001 | 5002 | 5003 | 6001 | 6002 | 7001 | 7002 | 7003 | 8001 | 9001 | 9002 => 1,
             _ => return Err(invalid("Unknown worker diagnostic code")),
         };
         let mut fields = [""; 3];
@@ -76,6 +76,8 @@ impl<'a> WireError<'a> {
             7001 => BWErr::InputError(self.fields[0].into()),
             7002 => BWErr::RunConfiguration(self.fields[0].into()),
             7003 => BWErr::SourceRead(self.fields[0].into()),
+            9001 => BWErr::AssertionFailed(self.fields[0].into()),
+            9002 => BWErr::ExplicitFailure(self.fields[0].into()),
             1003 => BWErr::DuplicateParameter {
                 name: self.fields[0].into(),
                 original: self.fields[1].into(),
@@ -134,6 +136,8 @@ pub(super) fn encode(
         | BWErr::ImportCycle(text)
         | BWErr::InputError(text)
         | BWErr::RunConfiguration(text)
+        | BWErr::AssertionFailed(text)
+        | BWErr::ExplicitFailure(text)
         | BWErr::SourceRead(text) => output.string(text),
         BWErr::DuplicateParameter {
             name,

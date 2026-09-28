@@ -188,15 +188,15 @@ fn native_errors_record_the_call_site_without_a_dsl_definition() {
     assert!(error.call_stack.is_empty());
     assert_eq!(error.span.as_ref().unwrap().text(), "missing");
     context
-        .register_native("Fail |value|", |_| {
+        .register_native("Boom |value|", |_| {
             Err(BWErr::NativeError("offline".into()))
         })
         .unwrap();
-    let error = execute("Fail |1|", &mut context).unwrap_err();
+    let error = execute("Boom |1|", &mut context).unwrap_err();
     assert_eq!(error.call_stack.len(), 1);
-    assert_eq!(error.call_stack[0].signature, "fail|param|");
+    assert_eq!(error.call_stack[0].signature, "boom|param|");
     assert!(error.call_stack[0].definition_site.is_none());
-    assert_eq!(error.span.as_ref().unwrap().text(), "Fail |1|");
+    assert_eq!(error.span.as_ref().unwrap().text(), "Boom |1|");
 }
 
 #[test]

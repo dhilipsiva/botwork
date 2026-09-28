@@ -1,6 +1,7 @@
-# Version 10: retain earlier semantics and add the shared acceptance verdict policy.
+# Version 11: retain earlier semantics and add standard built-ins.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/builtins.rs",
     "src/core/acceptance.rs",
     "src/core/acceptance/totals.rs",
     "src/core/acceptance/view.rs",
@@ -28,6 +29,8 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/eval/builtins.rs:',
+    ' (validate_result|Context::find_variable_binding)( ->|$)',
     '^src/core/acceptance(\.rs|/)',
     '^src/core/ast/suite/fixtures.rs:',
     '^src/core/eval/fixtures.rs:',
@@ -58,6 +61,8 @@ additional_cargo_args = [
     "--test", "fixture_ownership",
     "--test", "setup_failure",
     "--test", "acceptance_policy",
+    "--test", "builtins",
+    "--test", "value_preallocation",
     "--test", "suite_fixtures",
     "--test", "value_contract",
     "--test", "generated_properties",

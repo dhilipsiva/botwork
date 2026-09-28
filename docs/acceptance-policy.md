@@ -91,8 +91,8 @@ aggregates exit 1. CLI argument usage errors continue to exit 2.
 
 ## Executable host example and current boundary
 
-This example supplies a typed body observation from a host assertion adapter,
-then uses one verdict for the three presentations and aggregate exit decision.
+This example classifies a real built-in assertion from a body-only script, then
+uses one verdict for the three presentations and aggregate exit decision.
 
 ```rust
 use botwork::core::acceptance::{
@@ -101,9 +101,13 @@ use botwork::core::acceptance::{
 };
 
 let expectation = CaseExpectation::failure("BUG-42: upstream value mismatch")?;
+let body = botwork::core::run::Engine::default().run_source(
+    "body.botwork", "Assert |1| Equals |2|", Default::default(),
+);
+let error = body.result.unwrap_err();
 let observed = CaseCompletion::executed(
     PhaseOutcome::Succeeded,
-    Some(PhaseOutcome::Failed(FailureKind::Assertion)),
+    Some(PhaseOutcome::Failed(FailureKind::from_diagnostic(&error))),
     PhaseOutcome::Succeeded,
     None, // no later parent stop
 )?;
@@ -134,8 +138,8 @@ The existing CLI console error labels and completed batch/suite exit decisions
 use this policy; embedded `RunResult::outcome` shares diagnostic classification.
 Current generic runtime errors do **not** identify assertions and never become
 expected failures. The suite grammar has no expected-failure declaration yet.
-Standard assertion statements and their typed diagnostic adapter remain the
-separate built-ins task. Full JSON/HTML report files, statement events, artifact
+[Standard assertions](builtins.md) now provide BW9001 and the conservative
+`FailureKind::from_diagnostic` classifier. Full JSON/HTML report files, statement events, artifact
 links, and expected-failure rerun selection remain the separate reporting work.
 These JSON projections and HTML fragments establish verdict consistency, not a
 complete report schema or report-delivery CLI option.

@@ -119,6 +119,7 @@ Run [example 27](../examples/27-setup-failure.suite.botwork) with
 It intentionally exits with status 1. The example, documentation output, T4 corpus
 cases, ownership matrix, and CLI selection/rerun tests are executable checks of
 this policy. [Validation evidence](setup-failure-evidence.json) records the checks
-and targeted failure mutations. Built-in assertions, expected failures, collected
-failures, and JSON/HTML report delivery remain separate tasks; they must preserve
-these owner and admission distinctions.
+and targeted failure mutations. [Built-in assertions](builtins.md) preserve these
+owner and admission distinctions. The [acceptance policy](acceptance-policy.md)
+defines strict expected failures and rejects implicit collection; expected-failure
+DSL declarations and full JSON/HTML report delivery remain subsequent tasks.

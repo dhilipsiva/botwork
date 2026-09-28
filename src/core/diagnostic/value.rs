@@ -246,6 +246,8 @@ impl<'a> Node<'a> {
                 | BWErr::NativePanic(reason)
                 | BWErr::InputError(reason)
                 | BWErr::RunConfiguration(reason)
+                | BWErr::AssertionFailed(reason)
+                | BWErr::ExplicitFailure(reason)
                 | BWErr::SourceRead(reason) => vec![("reason", text(reason))],
             }),
         }

@@ -12,6 +12,9 @@ Context entry points continue to invoke callbacks on the calling thread. Hosts
 must account for this thread change when using thread-local data or foreign
 runtimes. A foreign runtime that requires a particular thread needs an adapter
 with its own explicit scheduling contract; do not assume a stable worker thread.
+Pure fixed built-ins (assertions, failure, and inspection) execute on the evaluator
+so inspection sees its lexical bindings. They perform bounded in-memory work.
+Sleep uses the cancellable async operation path; Log still uses a worker.
 
 ```rust
 use botwork::core::{grammar::Literal, run::{Engine, RunOptions, RunOutcome}};

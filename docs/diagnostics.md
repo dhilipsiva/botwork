@@ -35,6 +35,8 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW7002 | Run configuration | Use an existing working directory, valid environment names/values, a representable timeout, and supported syntax/AST/value/evaluation/import ceilings |
 | BW7003 | Entry source loading through Engine | Supply a readable UTF-8 file relative to the run directory |
 | BW8001 | Source/runtime resource limit | Reduce the workload or adjust configurable budgets within documented ceilings |
+| BW9001 | Assertion failure | Inspect the condition or compared values and repair the behavior or expectation |
+| BW9002 | Explicit failure | Inspect the reason and the path that reached Fail |
 
 Ordinary source calls with the wrong arity normally fail signature resolution as BW2002; BW2004 represents a resolved signature/count mismatch. Numeric conversion remains a runtime error despite the legacy `ParsingIntegerError` name. CLI argument parsing and entry-script file-loading errors are outside this language-error catalog. Variable-file loading/conversion uses BW7001 before execution, with origin/path/JSON position in `details.reason` and no DSL source span or call stack. Hints describe repairs without changing or automatically rerunning the script.
 

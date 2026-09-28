@@ -1864,6 +1864,37 @@ fn builtin_log_temporary_rejection_avoids_its_output_copy() {
 }
 
 #[test]
+fn builtin_variable_lookup_admits_its_copy_before_cloning_the_payload() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    for (allowance, copies) in [(length - 1, 0), (length + 5, 1)] {
+        let mut context = Context::with_limits(RunLimits {
+            temporaries: TemporaryLimits {
+                payload_bytes: allowance,
+                ..TemporaryLimits::default()
+            },
+            ..RunLimits::default()
+        })
+        .unwrap();
+        context.init_statements();
+        context
+            .set_input_variables(BTreeMap::from([(
+                "value".into(),
+                Literal::String("x".repeat(length)),
+            )]))
+            .unwrap();
+        let program = Program::parse("get", "Get Variable |\"value\"|").unwrap();
+        let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+        assert_eq!(result.is_ok(), copies == 1);
+        assert_eq!(large, copies, "no payload clone before temporary admission");
+    }
+}
+
+#[test]
 fn container_construction_transfers_child_payload_without_copying_it() {
     use botwork::core::{
         ast::Program,

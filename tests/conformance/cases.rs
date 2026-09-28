@@ -181,6 +181,9 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("builtins-success", "|v| = No Operation\nAssert |@{ Variable Exists |\"v\"| }|\nAssert |@{ Type Of |@{ Get Variable |\"v\"| }| }| Equals |\"None\"|\nAssert |{a: [1]}| Equals |{a: [1.0]}|\nSleep |0|\nLog |\"ready\"|", "ready\n", &["B1"], &["B1"]),
+        failure("builtins-assertion", "Try { Assert |false| } Finally { Log |\"cleaned\"| }\nLog |\"unreachable\"|", "cleaned\n", "BW9001", "Expected true, got false", &["B1"]),
+        failure("builtins-invalid", "Assert |1|", "", "BW3003", "Bool", &["B1"]),
         success("cleanup-return", "Work { Try { Return |42| } Finally { Log |\"released\"| } }\nLog |@{ Work }|", "released\n42\n", &["F10"], &["F10"]),
         success("cleanup-empty-and-catch", "Try {} Finally {}\nTry { Missing } Catch { Log |1| } Finally { Log |2| }", "1\n2\n", &["F10"], &["F10"]),
         failure("cleanup-control", "Log |0|\nWork { Try {} Finally { Return |1| } }", "", "BW1002", "Return requires", &["F10"]),

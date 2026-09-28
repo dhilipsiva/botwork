@@ -64,8 +64,21 @@ pub enum FailureKind {
 }
 
 impl FailureKind {
-    /// Existing generic diagnostics do not identify assertions. Never infer an
-    /// assertion from an error message, native statement name, or user tag.
+    /// Classify retained evidence, not a message or category alone. Secondary
+    /// failures and explicit omission summaries disqualify expected assertions.
+    pub fn from_diagnostic(error: &Diagnostic) -> Self {
+        if error.code() == DiagnosticCode::Assertion
+            && error.causes.is_empty()
+            && error.omissions.is_none()
+        {
+            Self::Assertion
+        } else {
+            Self::from_diagnostic_code(error.code())
+        }
+    }
+
+    /// A category alone does not establish clean assertion evidence. Never infer
+    /// an assertion from an error message, native statement name, or user tag.
     pub fn from_diagnostic_code(code: DiagnosticCode) -> Self {
         match code {
             DiagnosticCode::Cancelled => Self::Cancelled,

@@ -8,6 +8,7 @@ use std::{
 };
 
 mod blocking;
+mod builtins;
 mod cleanup;
 mod fixtures;
 pub use fixtures::{evaluate_suite_fixture_async, FixtureInputs, FixtureResult};
@@ -65,11 +66,11 @@ type TemporaryResult = EvaluationResult<TemporaryValue>;
 enum StmtType {
     Operation {
         operation: NativeOperation,
+        builtin: bool,
         _registry: Option<Arc<RegistryReservation>>,
     },
     Native {
-        callback: Callback,
-        builtin_log: bool,
+        body: NativeBody,
         metadata: Arc<StatementSignature>,
         _registry: Option<Arc<RegistryReservation>>,
     },
@@ -198,7 +199,7 @@ impl Context {
             frame
                 .statements
                 .values()
-                .any(|statement| matches!(statement, StmtType::Operation { .. }))
+                .any(|statement| matches!(statement, StmtType::Operation { builtin: false, .. }))
         }) {
             Some("This context contains NativeOperation registrations; use asynchronous program execution")
         } else {
@@ -232,6 +233,7 @@ impl Context {
             &header,
             StmtType::Operation {
                 operation,
+                builtin: false,
                 _registry: registry,
             },
         )
@@ -575,15 +577,20 @@ impl Context {
         name: &str,
         span: Option<&Span>,
     ) -> EvaluationResult<&Arc<StoredValue>> {
+        self.find_variable_binding(name)
+            .ok_or_else(|| self.detail_error(BWErr::VariableNotDefined, name, span, true))
+    }
+
+    fn find_variable_binding(&self, name: &str) -> Option<&Arc<StoredValue>> {
         let mut index = Some(self.current);
         while let Some(frame_index) = index {
             let frame = &self.frames[frame_index];
             if let Some(value) = frame.variables.get(name) {
-                return Ok(value);
+                return Some(value);
             }
             index = frame.parent;
         }
-        Err(self.detail_error(BWErr::VariableNotDefined, name, span, true))
+        None
     }
 
     fn set_variable(
@@ -774,8 +781,7 @@ impl Context {
             metadata.normalized(),
             metadata.header(),
             StmtType::Native {
-                callback,
-                builtin_log: false,
+                body: NativeBody::Callback(callback),
                 metadata: Arc::clone(&metadata),
                 _registry: registry,
             },
@@ -834,33 +840,7 @@ impl Context {
 
     /// Fill vacant built-in slots, preserving existing registrations.
     pub fn init_statements(&mut self) {
-        if !self.frames[self.current]
-            .statements
-            .contains_key("log|param|")
-        {
-            let signature = StatementSignature::native_at("<builtin Log>", "Log |value|")
-                .expect("valid built-in header")
-                .description("Write the value to stdout followed by a newline; return that value.")
-                .documents_error(
-                    super::diagnostic::DiagnosticCode::Output,
-                    "The destination rejected output; some bytes may already be written.",
-                )
-                .expect("valid built-in error documentation");
-            // The single fixed builtin is outside user registry admission. This
-            // keeps infallible initialization usable with zero registry budgets.
-            let metadata = Arc::new(signature);
-            self.insert_statement(
-                metadata.normalized(),
-                metadata.header(),
-                StmtType::Native {
-                    callback: Arc::new(log_param),
-                    builtin_log: true,
-                    metadata: Arc::clone(&metadata),
-                    _registry: None,
-                },
-            )
-            .expect("the built-in Log signature is valid and vacant");
-        }
+        builtins::initialize(self);
     }
 
     fn with_call(
@@ -882,10 +862,10 @@ impl Context {
 
 type Callback = Arc<dyn Fn(&[Literal], &mut Context) -> EvaluationResult<Literal> + Send + Sync>;
 
-fn log_param(values: &[Literal], context: &mut Context) -> EvaluationResult<Literal> {
-    let value = &values[0]; // Arity was checked before entering the callback.
-    write_log(value, &mut io::stdout().lock(), context)?;
-    Ok(value.clone())
+#[derive(Clone)]
+enum NativeBody {
+    Callback(Callback),
+    Builtin(builtins::Builtin),
 }
 
 fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> EvaluationResult<()> {

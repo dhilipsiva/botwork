@@ -63,12 +63,14 @@ retain their module globals and original import/call/definition locations.
 ## Compatibility and ownership
 
 Synchronous APIs still require no Tokio runtime. They use the same interpreter
-through a synchronous adapter. If an Engine or Context contains any
+through a synchronous adapter. If an Engine or Context contains any user-supplied
 `NativeOperation` registration, synchronous program entry returns BW5003 before
 executing any statement, even when the operation is unused. This makes unsupported
 mixed execution explicit. Ordinary `register_native` callbacks remain supported
 by both execution modes. Synchronous entry invokes them inline; async entry awaits
-a bounded blocking worker. See [I/O and callback isolation](nonblocking-io.md).
+a bounded blocking worker. The fixed Sleep built-in is an exception to the registry
+check: synchronous programs may leave it unused, but calling it returns BW5003
+before its arguments run. See [I/O and callback isolation](nonblocking-io.md).
 
 `eval::evaluate_program_async(&program, context)` consumes a Context for callers
 that do not need an Engine result snapshot. The future owns that context; no

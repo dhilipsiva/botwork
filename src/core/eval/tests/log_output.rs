@@ -38,15 +38,14 @@ impl Write for PartialWriter {
 
 fn install_writer(context: &mut Context, writer: Arc<Mutex<PartialWriter>>) {
     context.init_statements();
-    let StmtType::Native { callback, .. } =
-        context.frames[0].statements.get_mut("log|param|").unwrap()
+    let StmtType::Native { body, .. } = context.frames[0].statements.get_mut("log|param|").unwrap()
     else {
         panic!("builtin Log")
     };
-    *callback = Arc::new(move |values, context| {
+    *body = NativeBody::Callback(Arc::new(move |values, context| {
         write_log(&values[0], &mut *writer.lock().unwrap(), context)?;
         Ok(values[0].clone())
-    });
+    }));
 }
 
 #[test]

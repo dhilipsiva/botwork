@@ -54,6 +54,8 @@ pub enum DiagnosticCode {
     RunConfiguration,
     SourceRead,
     ResourceLimit,
+    Assertion,
+    ExplicitFailure,
 }
 
 impl DiagnosticCode {
@@ -84,6 +86,8 @@ impl DiagnosticCode {
             Self::RunConfiguration => "BW7002",
             Self::SourceRead => "BW7003",
             Self::ResourceLimit => "BW8001",
+            Self::Assertion => "BW9001",
+            Self::ExplicitFailure => "BW9002",
         }
     }
 }
@@ -121,6 +125,8 @@ impl BWErr {
             Self::InputError(_) => DiagnosticCode::Input,
             Self::RunConfiguration(_) => DiagnosticCode::RunConfiguration,
             Self::SourceRead(_) => DiagnosticCode::SourceRead,
+            Self::AssertionFailed(_) => DiagnosticCode::Assertion,
+            Self::ExplicitFailure(_) => DiagnosticCode::ExplicitFailure,
             Self::ResourceLimit { .. } => DiagnosticCode::ResourceLimit,
         }
     }
@@ -161,6 +167,8 @@ impl fmt::Display for Help<'_> {
             BWErr::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.",
             BWErr::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/AST/value/evaluation/import limits within documented ceilings.",
             BWErr::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.",
+            BWErr::AssertionFailed(_) => "Inspect the condition or compared values; fix the behavior or update the expectation deliberately.",
+            BWErr::ExplicitFailure(_) => "Inspect the explicit failure reason and the path that reached Fail.",
             BWErr::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.",
             BWErr::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.",
             BWErr::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.",

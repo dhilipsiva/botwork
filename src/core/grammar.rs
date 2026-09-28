@@ -155,6 +155,10 @@ pub enum BWErr {
     },
     #[error("Writing output failed: {0}")]
     OutputError(String),
+    #[error("Assertion failed: {0}")]
+    AssertionFailed(String),
+    #[error("Explicit failure: {0}")]
+    ExplicitFailure(String),
     #[error("Native operation failed: {0}")]
     NativeError(String),
     #[error("Native callback panicked: {0}")]
@@ -361,7 +365,7 @@ pub(super) fn validate_numeric_values(value: &Literal) -> Result<(), ArithmeticF
     Ok(())
 }
 
-fn values_equal(left: &Literal, right: &Literal) -> Result<bool, ArithmeticFailure> {
+pub(super) fn values_equal(left: &Literal, right: &Literal) -> Result<bool, ArithmeticFailure> {
     // Validate complete operands before any shape/value mismatch can return false.
     validate_numeric_values(left)?;
     validate_numeric_values(right)?;

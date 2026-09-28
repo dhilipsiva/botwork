@@ -140,12 +140,14 @@ pub(super) fn invoke_resolved<'a>(
                     .await
             }
             StmtType::Native {
-                callback,
+                body,
                 metadata,
-                builtin_log,
                 _registry,
             } => {
-                if context.asynchronous {
+                // Pure built-ins need the caller's lexical bindings. Log and
+                // arbitrary host callbacks retain the blocking-worker boundary.
+                let inline = matches!(&body, NativeBody::Builtin(kind) if !matches!(kind, builtins::Builtin::Log));
+                if context.asynchronous && !inline {
                     context.check_call_depth()?;
                     let frame = context.retain_call(&call.signature, &call.span, None)?;
                     context.calls.push(frame);
@@ -153,14 +155,7 @@ pub(super) fn invoke_resolved<'a>(
                     let result = context
                         .blocking(move |worker| {
                             let _registry = _registry;
-                            blocking::native_body(
-                                worker,
-                                callback,
-                                &metadata,
-                                builtin_log,
-                                arguments,
-                                &span,
-                            )
+                            blocking::native_body(worker, body, &metadata, arguments, &span)
                         })
                         .await
                         .map_err(|error| {
@@ -170,14 +165,7 @@ pub(super) fn invoke_resolved<'a>(
                     result
                 } else {
                     context.with_call(&call.signature, &call.span, None, |context| {
-                        blocking::native_body(
-                            context,
-                            callback,
-                            &metadata,
-                            builtin_log,
-                            arguments,
-                            &call.span,
-                        )
+                        blocking::native_body(context, body, &metadata, arguments, &call.span)
                     })
                 }
             }

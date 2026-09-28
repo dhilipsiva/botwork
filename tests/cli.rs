@@ -19,7 +19,7 @@ fn statement_listing_and_help_use_registered_metadata_without_a_file() {
     use botwork::core::eval::Context;
     let output = run(&["--list-statements"]);
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stdout, b"Log |value|\n");
+    assert_eq!(output.stdout, b"Assert |condition|\nAssert |actual| Equals |expected|\nFail |message|\nGet Variable |name|\nLog |value|\nNo Operation\nSleep |milliseconds|\nType Of |value|\nVariable Exists |name|\n");
     assert!(output.stderr.is_empty());
     let output = run(&["--statement-help", "l O g |input|"]);
     assert_eq!(output.status.code(), Some(0));

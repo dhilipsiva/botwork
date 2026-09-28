@@ -104,6 +104,8 @@ fn error_text(error: &BWErr) -> [&str; 3] {
         | BWErr::NativePanic(text)
         | BWErr::InputError(text)
         | BWErr::RunConfiguration(text)
+        | BWErr::AssertionFailed(text)
+        | BWErr::ExplicitFailure(text)
         | BWErr::SourceRead(text) => [text, "", ""],
     }
 }

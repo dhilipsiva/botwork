@@ -12,7 +12,8 @@ fn frame_clones_rebuild_live_entries_without_spare_capacity() {
     let copy = frame.clone();
     assert_eq!(copy.variables.len(), 1);
     assert!(copy.variables.capacity() <= 7);
-    assert!(copy.statements.capacity() <= 7);
+    assert_eq!(copy.statements.len(), 9);
+    assert!(copy.statements.capacity() <= 18);
     assert_eq!(copy.namespaces.capacity(), 0);
     assert!(Arc::ptr_eq(&copy.variables["x"], &frame.variables["x"]));
 }

@@ -430,3 +430,11 @@ fn setup_failure_example_reports_both_errors_and_skips_unentered_cases() {
         "[cases] 2 selected: 0 succeeded, 0 failed, 2 skipped; 1 suite fixtures failed\n"
     ));
 }
+
+#[test]
+fn builtins_example_demonstrates_checks_inspection_recovery_and_waiting() {
+    assert_example(
+        "28-builtins.botwork",
+        &["42", "Int", "BW9001", "cleanup", "BW9002", "finished"],
+    );
+}

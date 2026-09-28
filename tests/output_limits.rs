@@ -134,21 +134,36 @@ fn debug_traces_share_the_log_budget_and_failure_reporting_has_separate_capacity
 
 #[test]
 fn statement_listing_and_streamed_help_obey_exact_output_limits() {
-    for args in [
-        vec!["--list-statements"],
-        vec!["--statement-help", "Log |x|"],
+    for (args, total) in [
+        (vec!["--list-statements"], true),
+        (vec!["--list-statements"], false),
+        (vec!["--statement-help", "Log |x|"], false),
     ] {
         let baseline = Command::new(env!("CARGO_BIN_EXE_botwork"))
             .args(&args)
             .output()
             .unwrap();
         assert!(baseline.status.success());
+        let maximum = if !total && args[0] == "--list-statements" {
+            baseline
+                .stdout
+                .split_inclusive(|byte| *byte == b'\n')
+                .map(<[u8]>::len)
+                .max()
+                .unwrap()
+        } else {
+            baseline.stdout.len()
+        };
         for deficit in [0, 1] {
             let result = Command::new(env!("CARGO_BIN_EXE_botwork"))
                 .args(&args)
                 .args([
-                    "--max-output-record-bytes",
-                    &(baseline.stdout.len() - deficit).to_string(),
+                    if total {
+                        "--max-output-bytes"
+                    } else {
+                        "--max-output-record-bytes"
+                    },
+                    &(maximum - deficit).to_string(),
                 ])
                 .output()
                 .unwrap();
@@ -157,10 +172,17 @@ fn statement_listing_and_streamed_help_obey_exact_output_limits() {
                 assert_eq!(result.stdout, baseline.stdout);
             } else {
                 assert_eq!(result.status.code(), Some(1));
-                assert!(result.stdout.is_empty());
+                assert!(baseline.stdout.starts_with(&result.stdout));
+                if args[0] != "--list-statements" {
+                    assert!(result.stdout.is_empty());
+                }
                 assert!(String::from_utf8(result.stderr)
                     .unwrap()
-                    .contains("output record bytes"));
+                    .contains(if total {
+                        "output total bytes"
+                    } else {
+                        "output record bytes"
+                    }));
             }
         }
     }

@@ -122,6 +122,8 @@ fn error_summary(error: &BWErr, shortened: &mut usize) -> BWErr {
         BWErr::NativePanic(value) => BWErr::NativePanic(detail(value)),
         BWErr::InputError(value) => BWErr::InputError(detail(value)),
         BWErr::RunConfiguration(value) => BWErr::RunConfiguration(detail(value)),
+        BWErr::AssertionFailed(value) => BWErr::AssertionFailed(detail(value)),
+        BWErr::ExplicitFailure(value) => BWErr::ExplicitFailure(detail(value)),
         BWErr::SourceRead(value) => BWErr::SourceRead(detail(value)),
     }
 }
