@@ -44,8 +44,32 @@ impl Drop for Fixture {
 
 fn check(facility: &str, mode: &str, errno: i32) {
     let workspace = Workspace::new();
+    let executable = std::env::current_exe().unwrap();
+    let mut command = if facility.starts_with("proc-") {
+        // unshare configures the user namespace while still single-threaded,
+        // before the Rust test harness starts its fixture thread.
+        let mut command = Command::new("/usr/bin/unshare");
+        command
+            .args([
+                "--user",
+                "--map-current-user",
+                "--keep-caps",
+                "--mount",
+                "--propagation",
+                "private",
+                "--",
+            ])
+            .arg(executable);
+        command.env(
+            "BOTWORK_PARENT_MOUNT",
+            fs::read_link("/proc/self/ns/mnt").unwrap(),
+        );
+        command
+    } else {
+        Command::new(executable)
+    };
     let mut fixture = Fixture(
-        Command::new(std::env::current_exe().unwrap())
+        command
             .args(["--exact", "subprocess_facility", "--nocapture"])
             .env("BOTWORK_FACILITY", facility)
             .env("BOTWORK_FACILITY_MODE", mode)
@@ -109,12 +133,126 @@ fn enabled_facilities_run_in_every_mode() {
     }
 }
 
+#[test]
+fn hidden_procfs_refuses_tree_modes_before_entry() {
+    for mode in MODES {
+        check("proc-hidden", mode, libc::ENOENT);
+    }
+}
+
+#[test]
+fn read_only_procfs_refuses_namespace_mapping_before_entry() {
+    for mode in MODES {
+        check("proc-read-only", mode, libc::EROFS);
+    }
+}
+
+#[test]
+fn exhausted_descriptors_refuse_all_modes_without_leaking_ownership() {
+    for mode in MODES {
+        check("descriptors", mode, libc::EMFILE);
+    }
+}
+
 fn required(facility: &str, mode: &str) -> bool {
     match facility {
         "none" => false,
-        "execve" => true,
-        "pidfd" | "socketpair" | "subreaper" => mode != "group",
+        "execve" | "descriptors" => true,
+        "pidfd" | "socketpair" | "subreaper" | "proc-hidden" => mode != "group",
         _ => mode == "namespace",
+    }
+}
+
+struct DescriptorLimit(libc::rlimit);
+impl DescriptorLimit {
+    fn exhaust() -> Self {
+        let mut previous = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        assert_eq!(
+            unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut previous) },
+            0
+        );
+        let limited = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: previous.rlim_max,
+        };
+        assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limited) }, 0);
+        Self(previous)
+    }
+}
+impl Drop for DescriptorLimit {
+    fn drop(&mut self) {
+        // Restore this process's soft limit before writing its verification file.
+        assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &self.0) }, 0);
+    }
+}
+
+fn restrict_proc(facility: &str) {
+    let parent_mount = PathBuf::from(std::env::var_os("BOTWORK_PARENT_MOUNT").unwrap());
+    assert_ne!(fs::read_link("/proc/self/ns/mnt").unwrap(), parent_mount);
+    // The executable was started by unshare with private propagation. Bind
+    // remount flags affect only this mount, never the proc superblock globally.
+    let result = if facility == "proc-hidden" {
+        unsafe {
+            libc::mount(
+                c"tmpfs".as_ptr(),
+                c"/proc".as_ptr(),
+                c"tmpfs".as_ptr(),
+                libc::MS_RDONLY | libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
+                c"size=4096".as_ptr().cast(),
+            )
+        }
+    } else {
+        assert_eq!(
+            unsafe {
+                libc::mount(
+                    c"/proc".as_ptr(),
+                    c"/proc".as_ptr(),
+                    std::ptr::null(),
+                    libc::MS_BIND | libc::MS_REC,
+                    std::ptr::null(),
+                )
+            },
+            0,
+            "{}",
+            io::Error::last_os_error()
+        );
+        unsafe {
+            libc::mount(
+                std::ptr::null(),
+                c"/proc".as_ptr(),
+                std::ptr::null(),
+                libc::MS_REMOUNT
+                    | libc::MS_BIND
+                    | libc::MS_RDONLY
+                    | libc::MS_NOSUID
+                    | libc::MS_NODEV
+                    | libc::MS_NOEXEC,
+                std::ptr::null(),
+            )
+        }
+    };
+    assert_eq!(result, 0, "{}", io::Error::last_os_error());
+    if facility == "proc-hidden" {
+        assert_eq!(
+            fs::read("/proc/thread-self/children")
+                .unwrap_err()
+                .raw_os_error(),
+            Some(libc::ENOENT)
+        );
+    } else {
+        // Open only: do not attempt to alter the already installed identity map.
+        assert_eq!(
+            fs::OpenOptions::new()
+                .write(true)
+                .open("/proc/self/uid_map")
+                .unwrap_err()
+                .raw_os_error(),
+            Some(libc::EROFS)
+        );
+        assert!(fs::read("/proc/thread-self/children").unwrap().is_empty());
     }
 }
 
@@ -248,9 +386,16 @@ fn subprocess_facility() {
         .enable_time()
         .build()
         .unwrap();
-    if facility != "none" {
-        deny(&facility, errno);
-    }
+    let descriptor_limit = if facility == "descriptors" {
+        Some(DescriptorLimit::exhaust())
+    } else {
+        if facility.starts_with("proc-") {
+            restrict_proc(&facility);
+        } else if facility != "none" {
+            deny(&facility, errno);
+        }
+        None
+    };
     let refuses = required(&facility, &mode);
     for attempt in 0..2 {
         let marker = directory.join(format!("entered-{attempt}"));
@@ -342,5 +487,6 @@ fn subprocess_facility() {
         .unwrap()
         .active
         .is_empty());
+    drop(descriptor_limit);
     fs::write(directory.join("verified"), b"2").unwrap();
 }

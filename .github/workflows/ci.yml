@@ -19,7 +19,7 @@ env:
 
 jobs:
   rust:
-    name: Rust (${{ matrix.profile }})
+    name: Rust (${{ matrix.profile }}, ${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -28,25 +28,33 @@ jobs:
         include:
           - profile: debug
             flags: ""
+            target: x86_64-unknown-linux-gnu
           - profile: release
             flags: --release
+            target: x86_64-unknown-linux-gnu
+          - profile: debug
+            flags: ""
+            target: x86_64-unknown-linux-musl
+          - profile: release
+            flags: --release
+            target: x86_64-unknown-linux-musl
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install Rust and checking tools
-        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy --target ${{ matrix.target }}
       - name: Check formatting
-        if: matrix.profile == 'debug'
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: cargo +stable fmt --all -- --check
       - name: Check Clippy warnings
         if: matrix.profile == 'debug'
-        run: cargo +stable clippy --locked --all-targets -- -D warnings
+        run: cargo +stable clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
       - name: Check coverage reporting helper
-        if: matrix.profile == 'debug'
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: python3 tests/coverage_tools.py
       - name: Build all targets
-        run: cargo +stable build --locked --all-targets ${{ matrix.flags }}
+        run: cargo +stable build --locked --all-targets --target ${{ matrix.target }} ${{ matrix.flags }}
       - name: Run tests and examples
-        run: cargo +stable test --locked ${{ matrix.flags }}
+        run: cargo +stable test --locked --target ${{ matrix.target }} ${{ matrix.flags }}

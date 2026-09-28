@@ -1,10 +1,13 @@
 {
   "schema": 1,
-  "captured_at": "2026-09-28T05:13:26.540541+00:00",
-  "base_revision": "4de145a8ac73b2676b5770971e00682788246f89",
+  "captured_at": "2026-09-28T05:25:16.662661+00:00",
+  "base_revision": "acb5f70e07b3bcbf962bb4c26fd073ba279e76c2",
   "input_sha256": {
+    ".github/workflows/ci.yml": "d8318078180e327039dc6e63387a33bd25fb956cbd0452f407b714036eb9a450",
     "Cargo.lock": "ee5ce661ccea792322e70e11e062ec4d69e7cd7427dd17f3c2a076e0f48b1edc",
     "Cargo.toml": "0e724e0e7c3ad6bb368a399613341dfe937920c744a7225736535ac26649e3b4",
+    "TODO.md": "7491ab612072624f94c16640cd927575dda96ef5dc6e5cefcb81dbdc6a38c427",
+    "docs/worker-platforms.md": "90c2a2fd842ef3f916b92e1ea0ded8d2f5a6358d21da580fdf486c483deed850",
     "src/core/ast.rs": "a96306edb393bcab9c46f35b122467ab6dc9a5e16748a546f6091b984aa8cef4",
     "src/core/ast/parse_diagnostic.rs": "51533c035d772cf971fdc08b880b3f8d542d676ec10fc9d88097990e1febf477",
     "src/core/ast/parse_diagnostic/tests.rs": "ead9bdeaab98e5995a57892ca64239b4d5358a5a051be3d45d66ac4b06c97a4a",
@@ -108,7 +111,7 @@
     "src/core/worker/tests.rs": "200e39f6c684d3840715de1c2f18903fc4f3c473b0e8605deae9f80fd7a9a072",
     "src/lib.rs": "2bc24fda6ac2f40522f4b3a5deecc59a48176ad113172287d6e4ebb54b8eacfb",
     "src/main.rs": "97d4c7af1d759906f81b07344d0d036b20e6aba01d628e59d094c936ba01dfd6",
-    "tests/worker_facilities.rs": "9629ed9e4f8bcd4d6d5a64d39d06f97016a27560256ba16fff88703926f91012"
+    "tests/worker_facilities.rs": "92e9293a59e09ff1388f821f8a496c5ae034cf8bd2f69911f114a21682d220dc"
   },
   "environment": {
     "kernel": "6.18.33.2-microsoft-standard-WSL2",
@@ -134,13 +137,21 @@
       "NoNewPrivs": "0",
       "Seccomp": "2",
       "Seccomp_filters": "1"
-    }
+    },
+    "musl_standard_library": {
+      "manifest_date": "2026-07-16",
+      "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6",
+      "component_url": "https://static.rust-lang.org/dist/2026-07-16/rust-std-1.97.1-x86_64-unknown-linux-musl.tar.xz",
+      "component_sha256": "51d83178680556f73a5fa8ad865b76a1ff541867445c00fc65dc67246bc2de66",
+      "linkage": "static PIE; system fixture tools retain their installed libc"
+    },
+    "unshare": "unshare from util-linux 2.41.3"
   },
   "campaign": {
     "randomization": "none; deterministic facility/mode/errno enumeration",
     "harness": "tests/worker_facilities.rs; input hash above",
     "worker": "/usr/bin/touch with a literal temporary marker path",
-    "dependencies": "matching Botwork helper; no external adapter",
+    "dependencies": "matching Botwork helper; /usr/bin/touch; util-linux unshare with user/mount namespaces and keep-caps; no external adapter",
     "limits": {
       "max_in_flight": 1,
       "timeout_seconds": 3,
@@ -159,7 +170,14 @@
       "excluded_combinations": [
         "group/clone3/EPERM",
         "guardian/clone3/EPERM"
-      ]
+      ],
+      "environment_combinations": 9,
+      "environment_conditions": [
+        "empty read-only tmpfs on /proc in a private mount namespace",
+        "read-only proc bind mount in a private mount namespace",
+        "RLIMIT_NOFILE soft limit zero"
+      ],
+      "total_combinations": 70
     },
     "expected": "each required refusal prevents effects and retains unsuccessful status; unrelated modes succeed; both attempts free capacity and leave ECHILD"
   },
@@ -185,26 +203,6 @@
         "cargo",
         "test",
         "--locked",
-        "--test",
-        "worker_facilities"
-      ],
-      "source_revision": "input_sha256",
-      "result": "passed",
-      "test_binaries_and_doctest_summaries": 1,
-      "tests": {
-        "passed": 12,
-        "failed": 0,
-        "ignored": 0
-      },
-      "log_sha256": "29c80586c6794266d5f1b55f5cea7bdee4438c84369e3811fc661630af91aa4c",
-      "facility_combinations": 61,
-      "invocation_attempts": 122
-    },
-    {
-      "command": [
-        "cargo",
-        "test",
-        "--locked",
         "--release"
       ],
       "source_revision": "4de145a8ac73b2676b5770971e00682788246f89",
@@ -222,6 +220,48 @@
         "cargo",
         "test",
         "--locked",
+        "--test",
+        "worker_facilities"
+      ],
+      "source_revision": "input_sha256",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 1,
+      "tests": {
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "046e7c05843bcc4721b78ba626381da9f6045919c525cfc249a761ecc525923d",
+      "target": "x86_64-unknown-linux-gnu",
+      "facility_combinations": 70,
+      "invocation_attempts": 140
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl"
+      ],
+      "source_revision": "input_sha256",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 60,
+      "tests": {
+        "passed": 1294,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "8ed7f7673edefb8096b18bd19f7279e96aed7cedf35f1e01f770e91211901aab",
+      "target": "x86_64-unknown-linux-musl",
+      "facility_combinations": 70,
+      "invocation_attempts": 140
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
         "--release",
         "--test",
         "worker_facilities"
@@ -230,20 +270,84 @@
       "result": "passed",
       "test_binaries_and_doctest_summaries": 1,
       "tests": {
-        "passed": 12,
+        "passed": 15,
         "failed": 0,
         "ignored": 0
       },
-      "log_sha256": "bb7b81bf378b095e60805bd0748e3eacea1867c1a039bb623ab2b9f1b3b26ff1",
-      "facility_combinations": 61,
-      "invocation_attempts": 122
+      "log_sha256": "475a4f55c549757b6ac6792273c37b5dff5b92c586cef5ad8a0b911c60e9af80",
+      "target": "x86_64-unknown-linux-gnu",
+      "facility_combinations": 70,
+      "invocation_attempts": 140
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--release"
+      ],
+      "source_revision": "input_sha256",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 60,
+      "tests": {
+        "passed": 1294,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "f74508b977bc855d172301e22ea08b30ede81733d875a49770aae6129f29af88",
+      "target": "x86_64-unknown-linux-musl",
+      "facility_combinations": 70,
+      "invocation_attempts": 140
     }
   ],
   "remaining": [
-    "musl runtime validation",
-    "other architectures, older kernels, distribution policy and proc/quota configurations",
+    "other architectures, older kernels, distribution policy, other proc/quota configurations",
     "hosted CI observation",
     "filesystem durability configurations",
     "whole-run shutdown and durable typed/case/run outcomes"
-  ]
+  ],
+  "builds": [
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--all-targets"
+      ],
+      "result": "passed",
+      "log_sha256": "21dc96add8b291ea3dc15bb6a42686b4267d29b4e25fed1409426c7f387b2024",
+      "cli_file": "target/x86_64-unknown-linux-musl/debug/botwork: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=c73ee3a98d3cc90ad5c05cebe88d8149dd4903ec, with debug_info, not stripped",
+      "cli_sha256": "ab40a892cafcb3e961abd1cf9aa9688733f09df052ad173bbe07463ef5121394"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--release",
+        "--all-targets"
+      ],
+      "result": "passed",
+      "log_sha256": "7b79d5b5d0261715049ab48babd3758e74f37f10f840daf40600fa658a016c45",
+      "cli_file": "target/x86_64-unknown-linux-musl/release/botwork: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=bb2b8f82520a23c211a083dd9f2942d376bda077, not stripped",
+      "cli_sha256": "411db9eb5e6285c01b31b7e98ec7ef9843b15fbdc758b12434aed38a2a7d34fa"
+    }
+  ],
+  "ci": {
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ],
+    "profiles": [
+      "debug",
+      "release"
+    ],
+    "hosted_execution": "not observed"
+  }
 }

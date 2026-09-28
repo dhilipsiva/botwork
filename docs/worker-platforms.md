@@ -35,13 +35,25 @@ Each row runs with both `ENOSYS` (unavailable interface) and `EPERM` (policy ref
 | `setsid` | Runs | Runs | Refuses |
 | `execve` | Refuses | Refuses | Refuses |
 
-The table covers **58 denied-facility combinations and three enabled controls**, each exercised twice: **122 invocation attempts per build profile**. Ten matrix tests, one enabled-control test, and one subprocess fixture appear in Cargo's 12-test summary. No unsupported facility is silently skipped. Missing baseline facilities fail the controls.
+The syscall table covers **58 denied-facility combinations and three enabled controls**. Each combination is exercised twice. No unsupported facility is silently skipped. Missing baseline facilities fail the controls.
 
 Global `clone3` refusal with `EPERM` can also stop libc from creating a host thread. A synchronous BW5003 rejection is valid in that configuration; it must leave no capacity or worker effects. The matrix does not promise that unrelated modes work under that policy. `ENOSYS` permits libc's ordinary process/thread fallback, while the explicitly selected namespace mode still refuses entry.
 
 Most refused entries report `NotStarted` and the injected OS error. Parent-death setup happens before the namespace mapping gate: early child exit can race the parent's map writes or socket release. The diagnostic can therefore describe that later mapping/socket failure. If the acknowledgment is lost, `NamespaceReaped` is valid only after the owned kernel wait; it still reports failure with no inferred worker exit status. The matrix checks both permitted cleanup outcomes and verifies no surviving child or worker effect.
 
-This matrix tests actual syscall failure paths on the executing kernel. It does not emulate every older kernel, distribution policy, proc visibility restriction, namespace quota, filesystem durability model, lost signal permission, or uninterruptible kernel failure. The existing worker, guardian, namespace, and recovery suites separately exercise live ownership, cancellation, host loss, protocol handoff, and journal behavior. Gated unit tests provide evidence for stalled observation; they do not simulate kernel termination.
+Three further tests run nine environment combinations, again with two invocation attempts each:
+
+| Environment | Group | Guardian | Namespace |
+| --- | --- | --- | --- |
+| Empty read-only tmpfs hides `/proc` | Runs | Refuses with `ENOENT` | Refuses with `ENOENT` |
+| Read-only proc bind mount | Runs | Runs | Refuses mapping with `EROFS` |
+| `RLIMIT_NOFILE` soft limit zero | Refuses with `EMFILE` | Refuses with `EMFILE` | Refuses with `EMFILE` |
+
+Proc fixtures execute in fresh user/mount namespaces via `unshare --map-current-user --keep-caps --mount --propagation private`. They check that their mount namespace differs from the parent before changing mounts. [Bind-remount flags](https://man7.org/linux/man-pages/man2/mount.2.html) restrict that mount rather than making the shared proc filesystem read-only. Namespace capabilities are retained only in these fixture processes so they can configure the test mounts after exec. The fixture proves that proc is missing or read-only before launching workers. Descriptor exhaustion changes only the fixture's soft limit and restores it before writing its verification record. These cases report `NotStarted`, create no marker, release their single slot, and leave no child to reap.
+
+Together these are **70 combinations and 140 invocation attempts per build profile**. Ten syscall matrix tests, three environment tests, one enabled-control test, and one subprocess fixture appear in Cargo's 15-test summary.
+
+This matrix tests actual syscall and environment failure paths on the executing kernel. It does not emulate every older kernel, distribution policy, proc visibility restriction, namespace quota, filesystem durability model, lost signal permission, or uninterruptible kernel failure. The existing worker, guardian, namespace, and recovery suites separately exercise live ownership, cancellation, host loss, protocol handoff, and journal behavior. Gated unit tests provide evidence for stalled observation; they do not simulate kernel termination.
 
 ## Reproduction and Platform Coverage
 
@@ -58,8 +70,22 @@ For lifecycle coverage on a selected Linux Rust target:
 cargo test --locked --target x86_64-unknown-linux-gnu --test isolated_workers --test typed_workers --test worker_trees --test worker_recovery --test worker_namespaces --test worker_facilities
 ```
 
-Repeat with `--release`. GNU and musl builds require separate execution; compiling a target alone is not runtime evidence. Test prerequisites include matching Botwork library/CLI builds, a writable temporary directory, `/usr/bin/touch`, the shell/core utilities and Python used by the existing fixtures, and all facilities listed above. Fault injection additionally requires seccomp filter installation; this is a test dependency, not a production worker requirement.
+Repeat with `--release`. GNU and musl builds require separate execution; compiling a target alone is not runtime evidence. Test prerequisites include matching Botwork library/CLI builds, a writable temporary directory, `/usr/bin/touch`, `/usr/bin/unshare` with `--keep-caps` and namespace mapping support, the shell/core utilities and Python used by the existing fixtures, and all facilities listed above. Fault injection additionally requires seccomp filter installation, private tmpfs/bind mounts, and changing the process's descriptor soft limit; these are test dependencies, not additional production worker requirements.
 
-The [checked-in evidence](worker-platform-evidence.json) records source/lockfile hashes, commands, counts, kernel/libc/toolchain, process policy, identity, namespace quotas, and fixed campaign limits. The initial GNU capture ran on x86_64 Ubuntu 26.04 with glibc 2.43 and WSL2 kernel 6.18.33.2. Both profiles passed the prior 1,279-test full suite at revision `4de145a`, then the new 12-test facility suite against the recorded source hashes. This is one observed kernel/environment, not evidence for every Linux installation.
+The [checked-in evidence](worker-platform-evidence.json) records source/lockfile hashes, commands, counts, kernel/libc/toolchain, process policy, identity, namespace quotas, and fixed campaign limits. The initial GNU capture ran on x86_64 Ubuntu 26.04 with glibc 2.43 and WSL2 kernel 6.18.33.2. Both profiles passed the prior 1,279-test full suite at revision `4de145a`; subsequent facility/environment checks are recorded against their source hashes. This is one observed kernel/environment, not evidence for every Linux installation.
+
+The same host also executed static musl builds, using the Rust 1.97.1 `x86_64-unknown-linux-musl` standard-library component identified in the evidence file. Both debug and release passed **1,294 tests**, including **41 doctests**, with no failures or ignored tests. The CLI and Rust test hosts/helpers were built for musl; system fixture tools such as Python and touch retained their installed libc. The GNU environment suite passed all **15 tests** in both profiles. No production change was needed for this libc boundary.
+
+To reproduce the musl build and full suite:
+
+```sh
+rustup target add x86_64-unknown-linux-musl
+cargo build --locked --target x86_64-unknown-linux-musl --all-targets
+cargo test --locked --target x86_64-unknown-linux-musl
+cargo build --locked --target x86_64-unknown-linux-musl --release --all-targets
+cargo test --locked --target x86_64-unknown-linux-musl --release
+```
+
+CI defines separate debug/release jobs for GNU and musl, with Clippy checked for both targets. These jobs require the documented facilities on the runner; local execution does not establish that hosted jobs have run successfully.
 
 Broader kernel/distribution/architecture coverage, hosted CI observation, durable typed/case/run outcomes, and the full shutdown coordinator remain roadmap work.
