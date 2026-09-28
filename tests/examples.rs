@@ -24,6 +24,21 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
 }
 
 #[test]
+fn string_example_transforms_unicode_and_extracts_regex_values() {
+    assert_example(
+        "30-strings.botwork",
+        &[
+            "Items: tea / coffee /  / water",
+            "tea, coffee, , water",
+            "STRASSE",
+            "🙂é",
+            r#"["42", "3"]"#,
+            r#"["order=42", "42"]"#,
+        ],
+    );
+}
+
+#[test]
 fn collection_example_keeps_original_values_and_iterates_deterministically() {
     assert_example(
         "29-collections.botwork",

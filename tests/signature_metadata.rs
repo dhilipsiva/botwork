@@ -448,6 +448,7 @@ fn listing_completion_and_hover_reuse_registered_metadata_and_normalization() {
             "removefrom|param|at|param|",
             "render|param|",
             "repeat|param|times|param|",
+            "replacestring|param|find|param|with|param|",
         ]
     );
     assert_eq!(context.complete_statements("வண").len(), 1);

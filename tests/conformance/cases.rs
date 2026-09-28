@@ -181,6 +181,10 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("string-statements", include_str!("../../examples/30-strings.botwork"), "Items: tea / coffee /  / water\ntea, coffee, , water\nSTRASSE\n🙂é\n[\"42\", \"3\"]\n[\"order=42\", \"42\"]\n", &["B3"], &[]),
+        success("string-boundaries", "Assert |@{ Slice String |\"🙂\"| From |1| To |1| }| Equals |\"\"|\nAssert |@{ Find Matches In |\"é\"| Regex |\"\"| }| Equals |[\"\", \"\"]|\nAssert |@{ Join Strings |[]| With |\"\"| }| Equals |\"\"|", "", &["B3"], &["B3"]),
+        failure("string-missing-field", "Format String |\"{absent}\"| With |{}|", "", "BW3003", "format field", &["B3"]),
+        failure("string-invalid-regex", "String Matches |\"a\"| Regex |\"[\"|", "", "BW3003", "Invalid regex", &["B3"]),
         success("collection-statements", include_str!("../../examples/29-collections.botwork"), "[\"coffee\", 1]\n[\"tea\", 4]\n[20, 30]\n[[0, \"a\"], [1, \"b\"]]\n2\n", &["B2"], &[]),
         success("collection-boundaries", "Assert |@{ Repeat |1| Times |0| }| Equals |[]|\nAssert |@{ Slice |[]| From |0| To |0| }| Equals |[]|\nAssert |@{ Collection Contains |[16777216.0]| Item |16777217| }| Equals |false|", "", &["B2"], &["B2"]),
         failure("collection-missing-index", "Set In |[]| At |0| To |1|", "", "BW3004", "within range", &["B2"]),

@@ -113,6 +113,12 @@ admission before copies. The `collections` integration suite joins the existing
 allocation oracle. [Collection evidence](collections-evidence.json) records this
 focused campaign separately; it does not claim a new full generated score.
 
+Version 13 retains earlier areas and adds Unicode string transformations, format
+parsing, bounded result construction, and regex execution. Its targeted catalogue
+has 106 entries, including fourteen new string faults. The `strings` integration
+suite joins the allocation oracle; [string evidence](strings-evidence.json) records
+the focused campaign without claiming a new complete generated score.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

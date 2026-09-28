@@ -19,16 +19,53 @@ fn statement_listing_and_help_use_registered_metadata_without_a_file() {
     use botwork::core::eval::Context;
     let output = run(&["--list-statements"]);
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stdout, concat!(
-        "Append To |array| Value |value|\nAssert |condition|\nAssert |actual| Equals |expected|\n",
-        "Collection Contains |collection| Item |item|\nCollections Equal |left| And |right|\n",
-        "Create Array\nCreate Map\nCreate Map From |entries|\nEnumerate |array|\nFail |message|\n",
-        "Get From |collection| At |key|\nGet Variable |name|\nLength Of |collection|\nLog |value|\n",
-        "Map Entries |map|\nMap Keys |map|\nMap Values |map|\nNo Operation\n",
-        "Remove From |collection| At |key|\nRepeat |value| Times |count|\n",
-        "Set In |collection| At |key| To |value|\nSleep |milliseconds|\n",
-        "Slice |array| From |start| To |end|\nType Of |value|\nVariable Exists |name|\n"
-    ).as_bytes());
+    assert_eq!(
+        output.stdout,
+        concat!(
+            "Append To |array| Value |value|\n",
+            "Assert |condition|\n",
+            "Assert |actual| Equals |expected|\n",
+            "Capture From |text| Regex |pattern|\n",
+            "Collection Contains |collection| Item |item|\n",
+            "Collections Equal |left| And |right|\n",
+            "Create Array\n",
+            "Create Map\n",
+            "Create Map From |entries|\n",
+            "Enumerate |array|\n",
+            "Fail |message|\n",
+            "Find Matches In |text| Regex |pattern|\n",
+            "Format String |template| With |values|\n",
+            "Get From |collection| At |key|\n",
+            "Get Variable |name|\n",
+            "Join Strings |strings| With |separator|\n",
+            "Length Of |collection|\n",
+            "Log |value|\n",
+            "Lowercase String |text|\n",
+            "Map Entries |map|\n",
+            "Map Keys |map|\n",
+            "Map Values |map|\n",
+            "No Operation\n",
+            "Remove From |collection| At |key|\n",
+            "Repeat |value| Times |count|\n",
+            "Replace String |text| Find |needle| With |replacement|\n",
+            "Set In |collection| At |key| To |value|\n",
+            "Sleep |milliseconds|\n",
+            "Slice String |text| From |start| To |end|\n",
+            "Slice |array| From |start| To |end|\n",
+            "Split Lines |text|\n",
+            "Split String |text| On |separator|\n",
+            "String Contains |text| Text |needle|\n",
+            "String Ends With |text| Suffix |suffix|\n",
+            "String Length |text|\n",
+            "String Matches |text| Regex |pattern|\n",
+            "String Starts With |text| Prefix |prefix|\n",
+            "Trim String |text|\n",
+            "Type Of |value|\n",
+            "Uppercase String |text|\n",
+            "Variable Exists |name|\n",
+        )
+        .as_bytes()
+    );
     assert!(output.stderr.is_empty());
     let output = run(&["--statement-help", "l O g |input|"]);
     assert_eq!(output.status.code(), Some(0));

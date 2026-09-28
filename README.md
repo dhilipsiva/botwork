@@ -131,7 +131,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] [Datetime](http://robotframework.org/robotframework/latest/libraries/DateTime.html)
   - [ ] [Operation System](http://robotframework.org/robotframework/latest/libraries/OperatingSystem.html)
   - [ ] [Process](http://robotframework.org/robotframework/latest/libraries/Process.html)
-  - [ ] [String](http://robotframework.org/robotframework/latest/libraries/String.html)
+  - [x] [Strings](docs/strings.md)
   - [ ] Making HTTP Requests
 - [ ] integrations
   - [ ] Selenium/Webdriver

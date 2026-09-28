@@ -1,7 +1,8 @@
 # Standard built-in statements
 
 The default Engine and CLI provide these nine basic signatures plus sixteen
-[collection statements](collections.md), for 25 fixed signatures in total. Statement names are
+[collection statements](collections.md) and sixteen [string statements](strings.md),
+for 41 fixed signatures in total. Statement names are
 case insensitive and ignore spaces/tabs as usual; variable names are exact and
 case sensitive. Arguments evaluate left to right once. Parameter validation,
 call/source diagnostics, cleanup, and execution/resource limits use the normal

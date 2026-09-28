@@ -949,7 +949,9 @@ fn import_cycle_rejection_formats_no_large_joined_path_chain() {
     let mut directory = cleanup.0.clone();
     // Keep each filesystem path below typical Unix path limits while the
     // complete 13-member diagnostic chain still exceeds the observed threshold.
-    for _ in 0..5 {
+    // The 41-entry fixed statement table now exceeds 8 KiB; use longer paths
+    // and a 16 KiB threshold to keep measuring diagnostic payload allocations.
+    for _ in 0..12 {
         directory.push("x".repeat(120));
     }
     std::fs::create_dir_all(&directory).unwrap();
@@ -974,7 +976,7 @@ fn import_cycle_rejection_formats_no_large_joined_path_chain() {
             },
             ..RunOptions::default()
         };
-        let (run, large) = observe(8 * 1024, || {
+        let (run, large) = observe(16 * 1024, || {
             engine.run_source("entry", "Import |\"module0.botwork\"| As |lib|", options)
         });
         let error = run.result.unwrap_err();
@@ -1892,6 +1894,167 @@ fn builtin_variable_lookup_admits_its_copy_before_cloning_the_payload() {
         assert_eq!(result.is_ok(), copies == 1);
         assert_eq!(large, copies, "no payload clone before temporary admission");
     }
+}
+
+#[test]
+fn format_measurement_does_not_sort_maps_before_output_admission() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+    };
+    for allowed in [false, true] {
+        let mut context = Context::with_limits(RunLimits {
+            values: ValueLimits {
+                string_bytes: if allowed { 1024 * 1024 } else { 16 },
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context.init_statements();
+        context
+            .set_input_variables(BTreeMap::from([(
+                "value".into(),
+                Literal::Map(
+                    (0..4096)
+                        .map(|index| (format!("key{index:05}"), Literal::None))
+                        .collect(),
+                ),
+            )]))
+            .unwrap();
+        let program =
+            Program::parse("map-format", "Format String |\"{0}\"| With |[value]|").unwrap();
+        let (result, copies) = observe(64 * 1024, || {
+            evaluate_program_detailed(&program, &mut context)
+        });
+        assert_eq!(result.is_ok(), allowed, "{result:?}");
+        assert_eq!(
+            copies,
+            if allowed { 3 } else { 1 },
+            "input map table, then admitted output buffer and sorting slots"
+        );
+    }
+}
+
+#[test]
+fn missing_format_fields_admit_diagnostic_text_before_copying_the_field_name() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticLimits,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 128,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    context.init_statements();
+    context
+        .set_input_variables(BTreeMap::from([(
+            "template".into(),
+            Literal::String(format!("{{{}}}", "x".repeat(length))),
+        )]))
+        .unwrap();
+    let program = Program::parse("field", "Format String |template| With |{}|").unwrap();
+    let (result, copies) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("diagnostic text bytes"));
+    assert_eq!(copies, 1, "only the evaluated template argument is copied");
+}
+
+#[test]
+fn string_outputs_are_admitted_before_format_join_replace_and_regex_payload_copies() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    for (source, allowance, accepted_copies) in [
+        (
+            "Format String |\"{0}{0}\"| With |[value]|",
+            3 * length + 6,
+            2,
+        ),
+        (
+            "Join Strings |[value, \"z\"]| With |\",\"|",
+            2 * length + 4,
+            2,
+        ),
+        (
+            "Replace String |value| Find |\"x\"| With |\"yy\"|",
+            3 * length + 3,
+            2,
+        ),
+        ("Split String |value| On |\",\"|", 2 * length + 1, 2),
+        ("Find Matches In |value| Regex |\"x+\"|", 2 * length + 2, 2),
+        ("Capture From |value| Regex |\"(x+)\"|", 3 * length + 4, 3),
+    ] {
+        for allowed in [false, true] {
+            let mut context = Context::with_limits(RunLimits {
+                temporaries: TemporaryLimits {
+                    payload_bytes: allowance - usize::from(!allowed),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+            context.init_statements();
+            context
+                .set_input_variables(BTreeMap::from([(
+                    "value".into(),
+                    Literal::String("x".repeat(length)),
+                )]))
+                .unwrap();
+            let program = Program::parse("string-allocation", source).unwrap();
+            let (result, copies) =
+                observe(length, || evaluate_program_detailed(&program, &mut context));
+            assert_eq!(result.is_ok(), allowed, "{source}: {result:?}");
+            assert_eq!(
+                copies,
+                if allowed { accepted_copies } else { 1 },
+                "{source}: rejected output copies no payload beyond its input"
+            );
+        }
+    }
+}
+
+#[test]
+fn expanding_unicode_case_conversion_checks_output_before_allocating() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        temporaries: TemporaryLimits {
+            payload_bytes: length * 5 / 2 - 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    context.init_statements();
+    context
+        .set_input_variables(BTreeMap::from([(
+            "value".into(),
+            Literal::String("İ".repeat(length / 2)),
+        )]))
+        .unwrap();
+    let program = Program::parse("case-allocation", "Lowercase String |value|").unwrap();
+    let (result, copies) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("temporary value payload bytes"));
+    assert_eq!(copies, 1, "only the evaluated argument is copied");
 }
 
 #[test]

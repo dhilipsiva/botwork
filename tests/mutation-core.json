@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "mutations": [
     {
       "id": "precedence-products",
@@ -537,7 +537,7 @@
       "id": "inspection-loses-caller-bindings",
       "area": "builtins",
       "file": "src/core/eval/execution.rs",
-      "before": "let inline = matches!(&body, NativeBody::Builtin(kind) if !matches!(kind, builtins::Builtin::Log));",
+      "before": "let inline = matches!(&body, NativeBody::Builtin(kind) if !kind.needs_worker());",
       "after": "let inline = false;"
     },
     {
@@ -644,6 +644,104 @@
       "file": "src/core/eval/builtins/collections.rs",
       "before": "Literal::Map(values) => values.contains_key(key(context, &arguments[1])?),",
       "after": "Literal::Map(values) => !values.contains_key(key(context, &arguments[1])?),"
+    },
+    {
+      "id": "string-length-counts-bytes",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings.rs",
+      "before": "let count = text(&arguments[0]).chars().count();",
+      "after": "let count = text(&arguments[0]).len();"
+    },
+    {
+      "id": "string-slice-end-inclusive",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings.rs",
+      "before": "if index == end {",
+      "after": "if index == end.saturating_add(1) {"
+    },
+    {
+      "id": "string-split-drops-final-field",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings.rs",
+      "before": "text(&arguments[0]).split(separator)",
+      "after": "text(&arguments[0]).split_terminator(separator)"
+    },
+    {
+      "id": "string-replace-first-only",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings.rs",
+      "before": "value.split(needle).enumerate()",
+      "after": "value.splitn(2, needle).enumerate()"
+    },
+    {
+      "id": "string-template-always-first-index",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/template.rs",
+      "before": ".and_then(|index| values.get(index))",
+      "after": ".and_then(|_index| values.first())"
+    },
+    {
+      "id": "string-template-folds-map-keys",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/template.rs",
+      "before": "Literal::Map(values) => values.get(name),",
+      "after": "Literal::Map(values) => values.get(&name.to_lowercase()),"
+    },
+    {
+      "id": "string-template-loses-brace-escape",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/template.rs",
+      "before": "rest = &rest[2..];",
+      "after": "rest = &rest[1..];"
+    },
+    {
+      "id": "string-measure-sorts-before-admission",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/build.rs",
+      "before": "let measured = render(&mut counter, false);",
+      "after": "let measured = render(&mut counter, true);"
+    },
+    {
+      "id": "string-copy-before-admission",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/build.rs",
+      "before": "    let reservation = context.temporary_reservation(size)?;\n    context.checkpoint()?;\n    Ok(TemporaryValue::new(build()?, reservation))",
+      "after": "    let value = build()?;\n    let reservation = context.temporary_reservation(size)?;\n    context.checkpoint()?;\n    Ok(TemporaryValue::new(value, reservation))"
+    },
+    {
+      "id": "string-lowercase-loses-word-context",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings.rs",
+      "before": "value.to_lowercase()",
+      "after": "value.chars().flat_map(char::to_lowercase).collect()"
+    },
+    {
+      "id": "string-regex-worker-bypassed",
+      "area": "strings",
+      "file": "src/core/eval/builtins.rs",
+      "before": "matches!(self, Self::Log) || matches!(self, Self::String(kind) if kind.is_regex())",
+      "after": "matches!(self, Self::Log)"
+    },
+    {
+      "id": "string-capture-none-becomes-empty",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/patterns.rs",
+      "before": "value.map_or(Literal::None, |value| {",
+      "after": "value.map_or(Literal::String(String::new()), |value| {"
+    },
+    {
+      "id": "string-regex-search-budget-ignored",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/patterns.rs",
+      "before": "Some(next) if next <= SEARCH_BYTES => {",
+      "after": "Some(next) => {"
+    },
+    {
+      "id": "string-regex-pattern-boundary-strict",
+      "area": "strings",
+      "file": "src/core/eval/builtins/strings/patterns.rs",
+      "before": "if pattern.len() > PATTERN_BYTES {",
+      "after": "if pattern.len() >= PATTERN_BYTES {"
     }
   ]
 }

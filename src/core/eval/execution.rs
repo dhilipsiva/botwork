@@ -144,9 +144,9 @@ pub(super) fn invoke_resolved<'a>(
                 metadata,
                 _registry,
             } => {
-                // Pure built-ins need the caller's lexical bindings. Log and
-                // arbitrary host callbacks retain the blocking-worker boundary.
-                let inline = matches!(&body, NativeBody::Builtin(kind) if !matches!(kind, builtins::Builtin::Log));
+                // Inspection needs caller bindings. Log, regex searches, and
+                // arbitrary host callbacks run on bounded blocking workers.
+                let inline = matches!(&body, NativeBody::Builtin(kind) if !kind.needs_worker());
                 if context.asynchronous && !inline {
                     context.check_call_depth()?;
                     let frame = context.retain_call(&call.signature, &call.span, None)?;

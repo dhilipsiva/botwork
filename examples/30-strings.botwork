@@ -1,0 +1,16 @@
+|input| = |" tea ,coffee,,water "|
+|parts| = Split String |input| On |","|
+|cleaned| = Create Array
+For |part| In |parts| {
+    |cleaned| = Append To |cleaned| Value |@{ Trim String |part| }|
+}
+|joined| = Join Strings |cleaned| With |" / "|
+Log |@{ Format String |"Items: {items}"| With |{items: joined}| }|
+Assert |input| Equals |" tea ,coffee,,water "|
+Log |@{ Replace String |joined| Find |" / "| With |", "| }|
+Log |@{ Uppercase String |"Straße"| }|
+Log |@{ Slice String |"a🙂éz"| From |1| To |4| }|
+|text| = |"order=42; retry=3"|
+Assert |@{ String Matches |text| Regex |"order=[0-9]+"| }|
+Log |@{ Find Matches In |text| Regex |"[0-9]+"| }|
+Log |@{ Capture From |text| Regex |"order=([0-9]+)"| }|

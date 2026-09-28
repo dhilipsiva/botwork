@@ -50,6 +50,13 @@ fn documents() -> Vec<(String, Vec<markdown::Block>)> {
 fn every_documented_botwork_example_matches_its_cli_output() {
     let expected = BTreeMap::from([
         (
+            "string-statements",
+            (
+                "docs/strings.md",
+                include_bytes!("doc-examples/string-statements.stdout").as_slice(),
+            ),
+        ),
+        (
             "collection-statements",
             (
                 "docs/collections.md",

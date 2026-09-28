@@ -3,6 +3,7 @@ use super::*;
 use crate::core::{diagnostic::DiagnosticCode as Code, signature::ValueKind as Kind};
 use std::time::Duration;
 mod collections;
+mod strings;
 
 #[derive(Clone, Copy)]
 pub(super) enum Builtin {
@@ -15,12 +16,14 @@ pub(super) enum Builtin {
     TypeOf,
     NoOperation,
     Collection(collections::Collection),
+    String(strings::StringOp),
 }
 
 impl Builtin {
     fn signature(self) -> StatementSignature {
         let (header, description, parameters, returns, error) = match self {
             Self::Collection(kind) => return kind.signature(),
+            Self::String(kind) => return kind.signature(),
             Self::Log => ("Log |value|", "Write the value to stdout followed by a newline; return that value.", vec![], None, Some((Code::Output, "The destination rejected output; some bytes may already be written."))),
             Self::Assert => ("Assert |condition|", "Require a Bool condition to be true; otherwise fail immediately. Return None.", vec![("condition", Kind::Bool)], Some(Kind::None), Some((Code::Assertion, "The condition was false."))),
             Self::AssertEqual => ("Assert |actual| Equals |expected|", "Require deep equality using the language's exact numeric comparison rules. Return None.", vec![], Some(Kind::None), Some((Code::Assertion, "Actual and expected values differ."))),
@@ -60,6 +63,7 @@ impl Builtin {
         context.checkpoint()?;
         match self {
             Self::Collection(kind) => kind.invoke(values, context),
+            Self::String(kind) => kind.invoke(values, context),
             Self::Log => {
                 let result = context.copy_temporary(&values[0])?;
                 write_log(&values[0], &mut io::stdout().lock(), context)?;
@@ -128,6 +132,10 @@ impl Builtin {
             Self::NoOperation => context.temporary(Literal::None),
         }
     }
+
+    pub(super) fn needs_worker(self) -> bool {
+        matches!(self, Self::Log) || matches!(self, Self::String(kind) if kind.is_regex())
+    }
 }
 
 lazy_static::lazy_static! {
@@ -147,7 +155,11 @@ pub(super) fn initialize(context: &mut Context) {
     // This finite fixed catalogue is outside user registry admission, preserving
     // infallible initialization under zero registry budgets. Never replace a host
     // registration already occupying a slot in this frame.
-    for (kind, metadata) in FIXED.iter().chain(collections::FIXED.iter()) {
+    for (kind, metadata) in FIXED
+        .iter()
+        .chain(collections::FIXED.iter())
+        .chain(strings::FIXED.iter())
+    {
         if !context.frames[context.current]
             .statements
             .contains_key(metadata.normalized())
