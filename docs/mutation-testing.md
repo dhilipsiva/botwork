@@ -150,6 +150,16 @@ before its cancellation wakeup. [Guardian completion evidence](guardian-completi
 records the focused campaign. Generated discovery retains the earlier scope;
 no new complete generated mutation score is claimed.
 
+Version 17 adds process command/input admission, environment/directory overlays,
+result construction, strict completion, blocking wait, observation, and CLI host
+snapshot preparation. Its 170-entry targeted catalogue adds 22 process faults;
+the `processes` integration suite joins the existing allocation and library oracles.
+Version 18 adds one further fault after final review: an ordinary nonzero exit
+must not hide subsequent incomplete I/O or cleanup. The final catalogue has 171
+entries and the final focused process campaign covers all 23 process faults.
+[Process evidence](processes-evidence.json) records both review stages separately;
+generated discovery is not a new complete generated score.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

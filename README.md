@@ -130,7 +130,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Collections](docs/collections.md)
   - [x] [Datetime](docs/datetime.md)
   - [x] [Operating system](docs/operating-system.md)
-  - [ ] [Process](http://robotframework.org/robotframework/latest/libraries/Process.html)
+  - [x] [Process](docs/processes.md)
   - [x] [Strings](docs/strings.md)
   - [ ] Making HTTP Requests
 - [ ] integrations

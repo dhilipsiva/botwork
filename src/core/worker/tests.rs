@@ -10,6 +10,45 @@ fn command() -> WorkerCommand {
 }
 
 #[test]
+fn private_per_call_limits_keep_public_path_rules_and_pool_capacity_separate() {
+    let pool = WorkerPool::new(WorkerLimits {
+        stdout_bytes: 0,
+        stderr_bytes: 0,
+        request_bytes: 0,
+        ..Default::default()
+    })
+    .unwrap();
+    let mut specification = command();
+    specification.executable = "cat".into();
+    assert!(pool
+        .start(specification.clone(), vec![], OperationControl::default())
+        .is_err());
+    specification
+        .environment
+        .insert("PATH".into(), "/bin".into());
+    for limit in [2, 3] {
+        let report = pool
+            .start_configured_retained(
+                specification.clone(),
+                b"abc".to_vec(),
+                OperationControl::default(),
+                None,
+                WorkerLimits {
+                    stdout_bytes: limit,
+                    request_bytes: 3,
+                    ..Default::default()
+                },
+                true,
+            )
+            .unwrap()
+            .wait_blocking_retained()
+            .report;
+        assert_eq!(report.outcome == WorkerOutcome::Succeeded, limit == 3);
+        assert_eq!(report.stdout, &b"abc"[..limit]);
+    }
+}
+
+#[test]
 fn unverified_cleanup_stays_visible_and_keeps_capacity_even_without_history() {
     let pool = WorkerPool::new(WorkerLimits {
         max_in_flight: NonZeroUsize::new(1).unwrap(),
@@ -21,6 +60,7 @@ fn unverified_cleanup_stays_visible_and_keeps_capacity_even_without_history() {
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
+        limits: WorkerLimits::default(),
     });
     let retained = Arc::new(());
     let weak = Arc::downgrade(&retained);

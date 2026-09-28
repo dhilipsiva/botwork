@@ -177,7 +177,7 @@ async fn run_case(
         .child(deadline);
     control.checkpoint()?;
     let (program, context) = tokio::task::spawn_blocking(move || {
-        let mut context = Context::with_control(configuration.limits.clone(), control)?;
+        let mut context = Context::with_host_environment(configuration.limits.clone(), control)?;
         let variables = match &fixture {
             Some(_) => std::collections::BTreeMap::new(),
             None => load_variables(&configuration.files, &configuration.settings)?,
@@ -211,7 +211,7 @@ fn prepare(
     limits: RunLimits,
     control: OperationControl,
 ) -> Result<(Program, Context), CliError> {
-    let mut context = Context::with_control(limits, control)?;
+    let mut context = Context::with_host_environment(limits, control)?;
     let variables = load_variables(files, settings)?;
     let mut bytes = Vec::new();
     let read_error = |source| CliError::Read {

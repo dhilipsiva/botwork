@@ -5,6 +5,7 @@ use std::time::Duration;
 mod collections;
 mod datetime;
 mod operating_system;
+mod processes;
 mod strings;
 
 #[derive(Clone, Copy)]
@@ -21,6 +22,7 @@ pub(super) enum Builtin {
     String(strings::StringOp),
     DateTime(datetime::DateTimeOp),
     OperatingSystem(operating_system::OsOp),
+    Process(processes::ProcessOp),
 }
 
 impl Builtin {
@@ -30,6 +32,7 @@ impl Builtin {
             Self::String(kind) => return kind.signature(),
             Self::DateTime(kind) => return kind.signature(),
             Self::OperatingSystem(kind) => return kind.signature(),
+            Self::Process(kind) => return kind.signature(),
             Self::Log => ("Log |value|", "Write the value to stdout followed by a newline; return that value.", vec![], None, Some((Code::Output, "The destination rejected output; some bytes may already be written."))),
             Self::Assert => ("Assert |condition|", "Require a Bool condition to be true; otherwise fail immediately. Return None.", vec![("condition", Kind::Bool)], Some(Kind::None), Some((Code::Assertion, "The condition was false."))),
             Self::AssertEqual => ("Assert |actual| Equals |expected|", "Require deep equality using the language's exact numeric comparison rules. Return None.", vec![], Some(Kind::None), Some((Code::Assertion, "Actual and expected values differ."))),
@@ -72,6 +75,7 @@ impl Builtin {
             Self::String(kind) => kind.invoke(values, context),
             Self::DateTime(kind) => kind.invoke(values, context),
             Self::OperatingSystem(kind) => kind.invoke(values, context),
+            Self::Process(kind) => kind.invoke(&values, context),
             Self::Log => {
                 let result = context.copy_temporary(&values[0])?;
                 write_log(&values[0], &mut io::stdout().lock(), context)?;
@@ -142,7 +146,7 @@ impl Builtin {
     }
 
     pub(super) fn needs_worker(self) -> bool {
-        matches!(self, Self::Log)
+        matches!(self, Self::Log | Self::Process(_))
             || matches!(self, Self::String(kind) if kind.is_regex())
             || matches!(self, Self::OperatingSystem(kind) if kind.needs_worker())
     }
@@ -175,6 +179,7 @@ pub(super) fn initialize(context: &mut Context) {
         .chain(strings::FIXED.iter())
         .chain(datetime::FIXED.iter())
         .chain(operating_system::FIXED.iter())
+        .chain(processes::FIXED.iter())
     {
         if !context.frames[context.current]
             .statements

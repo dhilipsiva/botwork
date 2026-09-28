@@ -1,6 +1,10 @@
-# Version 16: retain earlier semantics and add worker completion/stop observation.
+# Version 18: retain earlier semantics and add process execution/admission.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/builtins/processes.rs",
+    "src/core/eval/builtins/processes/{config,output}.rs",
+    "src/core/worker/waiting.rs",
+    "src/core/worker/linux/observation.rs",
     "src/core/worker/linux/guardian.rs",
     "src/core/worker/linux.rs",
     "src/core/eval/builtins/operating_system.rs",
@@ -44,6 +48,10 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/eval/builtins/processes(\.rs|/(config|output)\.rs):',
+    '^src/core/worker/waiting.rs:',
+    '^src/core/worker/linux/observation.rs:',
+    ' Context::with_host_environment( ->|$)',
     '^src/core/worker/linux/guardian.rs:.* (acknowledge|completion)( ->|$)',
     '^src/core/worker/linux.rs:.* (stop|observe_stop)( ->|$)',
     '^src/core/eval/builtins/operating_system(\.rs|/(environment|files|paths|values)\.rs|/files/read\.rs):',
@@ -88,6 +96,7 @@ additional_cargo_args = [
     "--test", "strings",
     "--test", "datetime",
     "--test", "operating_system",
+    "--test", "processes",
     "--test", "worker_trees",
     "--test", "worker_recovery",
     "--test", "worker_namespaces",

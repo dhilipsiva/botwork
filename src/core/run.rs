@@ -189,6 +189,29 @@ pub struct RunEnvironment {
     control: OperationControl,
 }
 
+impl Context {
+    /// A fresh, controlled context with a canonical current directory and an
+    /// immutable snapshot of the host environment. Capture performs blocking OS
+    /// work; async hosts should call this during worker-based preparation.
+    /// Unlike Engine, this does not initialize statements or copy a template.
+    pub fn with_host_environment(
+        limits: RunLimits,
+        control: OperationControl,
+    ) -> DiagnosticResult<Self> {
+        control.checkpoint()?;
+        limits.validate()?;
+        let environment = Arc::new(RunEnvironment::prepare_with_control(
+            &RunOptions::default(),
+            control.clone(),
+        )?);
+        let mut context =
+            Self::with_directory_snapshot(Ok(environment.working_directory().to_owned()));
+        context.budget = Some(RunBudget::new(limits, control));
+        context.environment = Some(environment);
+        Ok(context)
+    }
+}
+
 impl RunEnvironment {
     pub(crate) fn with_control(&self, control: OperationControl) -> Self {
         Self {
@@ -556,7 +579,7 @@ impl RunBudget {
                 self.0.used.load(Ordering::Relaxed)
             })
     }
-    fn stop(&self, error: BWErr) -> Diagnostic {
+    pub(crate) fn stop(&self, error: BWErr) -> Diagnostic {
         let mut stopped = self.0.stopped.lock().unwrap_or_else(|e| e.into_inner());
         Diagnostic::new(stopped.get_or_insert(error).clone())
     }

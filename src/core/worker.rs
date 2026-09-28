@@ -29,6 +29,7 @@ mod linux;
 pub mod protocol;
 #[cfg(all(test, target_os = "linux"))]
 mod tests;
+mod waiting;
 
 /// Trusted host configuration; the supervisor never constructs a shell command.
 /// Environment inheritance is disabled. Executable and cwd must be absolute.
@@ -136,6 +137,7 @@ pub struct WorkerSnapshot {
 struct Request {
     control: OperationControl,
     abandoned: AtomicBool,
+    limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     journal: Option<Arc<journal::Ticket>>,
 }
@@ -289,6 +291,27 @@ impl WorkerPool {
         control: OperationControl,
         retention: Option<Arc<dyn Send + Sync>>,
     ) -> DiagnosticResult<WorkerHandle> {
+        self.start_configured_retained(
+            command,
+            input,
+            control,
+            retention,
+            self.limits().clone(),
+            false,
+        )
+    }
+
+    // DSL processes share pool capacity/history, while pipe and time limits are
+    // local to each invocation. Public worker entry retains absolute-path rules.
+    pub(crate) fn start_configured_retained(
+        &self,
+        command: WorkerCommand,
+        input: Vec<u8>,
+        control: OperationControl,
+        retention: Option<Arc<dyn Send + Sync>>,
+        limits: WorkerLimits,
+        search_path: bool,
+    ) -> DiagnosticResult<WorkerHandle> {
         let input = RetainedInput {
             bytes: input,
             _retention: retention.clone(),
@@ -297,18 +320,30 @@ impl WorkerPool {
         if !cfg!(target_os = "linux") {
             return Err(configuration("Isolated workers currently require Linux"));
         }
-        if !command.executable.is_absolute() || !command.directory.is_absolute() {
+        let bare_name = command.executable.components().count() == 1
+            && matches!(
+                command.executable.components().next(),
+                Some(std::path::Component::Normal(_))
+            );
+        if (!command.executable.is_absolute() && !(search_path && bare_name))
+            || !command.directory.is_absolute()
+        {
             return Err(configuration(
                 "Worker executable and directory must be absolute",
             ));
         }
         let shared = &self.0 .0;
-        if input.len() > shared.limits.request_bytes {
-            return Err(limit("worker request bytes", shared.limits.request_bytes));
+        if input.len() > limits.request_bytes {
+            return Err(limit("worker request bytes", limits.request_bytes));
         }
         let deadline = Instant::now()
-            .checked_add(shared.limits.timeout)
+            .checked_add(limits.timeout)
             .ok_or_else(|| configuration("Worker timeout exceeds the monotonic clock range"))?;
+        deadline
+            .checked_add(limits.cleanup_timeout)
+            .ok_or_else(|| {
+                configuration("Worker cleanup timeout exceeds the monotonic clock range")
+            })?;
         let (id, request) = {
             let mut state = shared.state.lock().unwrap_or_else(|e| e.into_inner());
             if state.closed {
@@ -324,6 +359,7 @@ impl WorkerPool {
             let request = Arc::new(Request {
                 control: control.child(None),
                 abandoned: AtomicBool::new(false),
+                limits,
                 #[cfg(target_os = "linux")]
                 journal: shared
                     .journal

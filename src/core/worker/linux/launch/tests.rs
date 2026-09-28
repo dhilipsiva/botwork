@@ -84,6 +84,49 @@ fn pool() -> WorkerPool {
     })
     .unwrap()
 }
+
+#[test]
+fn configured_blocking_wait_retains_pending_ownership_and_uses_local_cleanup_allowance() {
+    let pool = WorkerPool::new(WorkerLimits {
+        max_in_flight: NonZeroUsize::new(1).unwrap(),
+        cleanup_timeout: Duration::from_secs(30),
+        ..Default::default()
+    })
+    .unwrap();
+    let mut held = Held::new(&pool, Completion::Failure);
+    let retained = Arc::new(());
+    let weak = Arc::downgrade(&retained);
+    let handle = pool
+        .start_configured_retained(
+            command(),
+            vec![],
+            OperationControl::default(),
+            Some(retained),
+            WorkerLimits {
+                cleanup_timeout: Duration::from_millis(20),
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap();
+    held.entered();
+    handle.cancel();
+    let completed = handle.wait_blocking_retained();
+    assert_eq!(completed.report.cleanup, WorkerCleanup::Pending);
+    assert_eq!(completed.report.outcome, WorkerOutcome::Cancelled);
+    drop(completed);
+    assert!(weak.upgrade().is_some());
+    assert!(pool
+        .start(command(), vec![], OperationControl::default())
+        .is_err());
+    held.release();
+    pool.shutdown_wait(Duration::from_secs(2)).unwrap();
+    let end = Instant::now() + Duration::from_secs(2);
+    while weak.upgrade().is_some() {
+        assert!(Instant::now() < end);
+        std::thread::yield_now();
+    }
+}
 fn command() -> WorkerCommand {
     WorkerCommand {
         executable: "/bin/cat".into(),

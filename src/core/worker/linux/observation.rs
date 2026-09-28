@@ -54,7 +54,7 @@ impl Observation {
             stopped: flight.report.outcome != WorkerOutcome::Succeeded,
             expired: flight
                 .cleanup_started
-                .is_some_and(|start| start.elapsed() >= self.shared.limits.cleanup_timeout),
+                .is_some_and(|start| start.elapsed() >= self.request.limits.cleanup_timeout),
             published: flight.published,
         }
     }
@@ -97,8 +97,8 @@ impl Observation {
     pub fn remaining(&self, stream: Stream) -> usize {
         let flight = self.lock();
         match stream {
-            Stream::Stdout => self.shared.limits.stdout_bytes - flight.report.stdout.len(),
-            Stream::Stderr => self.shared.limits.stderr_bytes - flight.report.stderr.len(),
+            Stream::Stdout => self.request.limits.stdout_bytes - flight.report.stdout.len(),
+            Stream::Stderr => self.request.limits.stderr_bytes - flight.report.stderr.len(),
         }
     }
     pub fn capture(&self, stream: Stream, bytes: &[u8]) -> DiagnosticResult<()> {
@@ -109,12 +109,12 @@ impl Observation {
         let (output, maximum, resource) = match stream {
             Stream::Stdout => (
                 &mut flight.report.stdout,
-                self.shared.limits.stdout_bytes,
+                self.request.limits.stdout_bytes,
                 "worker stdout bytes",
             ),
             Stream::Stderr => (
                 &mut flight.report.stderr,
-                self.shared.limits.stderr_bytes,
+                self.request.limits.stderr_bytes,
                 "worker stderr bytes",
             ),
         };
@@ -194,7 +194,7 @@ impl Observation {
                 } else if !flight.published
                     && flight
                         .cleanup_started
-                        .is_some_and(|start| start.elapsed() >= self.shared.limits.cleanup_timeout)
+                        .is_some_and(|start| start.elapsed() >= self.request.limits.cleanup_timeout)
                 {
                     if flight.report.outcome == WorkerOutcome::Succeeded {
                         append_cause(

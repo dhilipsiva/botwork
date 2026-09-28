@@ -1,0 +1,11 @@
+|result| = Run Process |"/bin/printf"| With Arguments |["Hello, %s!", "world"]|
+Assert |result.success|
+Log |result.stdout|
+
+|result| = Run Process |"/bin/sh"| With Arguments |["-c", "printf diagnostic >&2; exit 7"]|
+Assert |result.success| Equals |false|
+Log |result.exit_code|
+Log |result.stderr|
+
+|result| = Run Binary Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": [0, 255, 10]}|
+Log |result.stdout|

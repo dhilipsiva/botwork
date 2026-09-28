@@ -1,5 +1,5 @@
 {
-  "version": 16,
+  "version": 18,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1036,6 +1036,167 @@
       "file": "src/core/worker/linux.rs",
       "before": "    let stopped = checkpoint();\n    if request.abandoned.load(Ordering::Acquire) {\n        return Some((\n            WorkerOutcome::Interrupted,\n            Diagnostic::formatted(\n                BWErr::Cancelled,\n                format_args!(\"Worker invocation abandoned; completed effects are not rolled back\"),\n            ),\n        ));\n    }\n",
       "after": "    if request.abandoned.load(Ordering::Acquire) {\n        return Some((\n            WorkerOutcome::Interrupted,\n            Diagnostic::formatted(\n                BWErr::Cancelled,\n                format_args!(\"Worker invocation abandoned; completed effects are not rolled back\"),\n            ),\n        ));\n    }\n    let stopped = checkpoint();\n"
+    },
+    {
+      "id": "process-environment-always-inherited",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "if self.inherit {",
+      "after": "if true {"
+    },
+    {
+      "id": "process-removed-environment-kept",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": ".is_some_and(|name| self.overlay.is_some_and(|map| map.contains_key(name)))",
+      "after": ".is_some_and(|name| self.overlay.is_some_and(|map| matches!(map.get(name), Some(Literal::String(_)))))"
+    },
+    {
+      "id": "process-directory-override-ignored",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "|path| join(base, path, self.directory_bytes),",
+      "after": "|_path| base.to_owned(),"
+    },
+    {
+      "id": "process-arguments-reversed",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "for value in self.arguments {",
+      "after": "for value in self.arguments.iter().rev() {"
+    },
+    {
+      "id": "process-unknown-option-accepted",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "_ => {\n                        return Err(context.formatted_error(",
+      "after": "_ => {\n                        continue;\n                        return Err(context.formatted_error("
+    },
+    {
+      "id": "process-input-limit-bypassed",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "if plan.input_bytes() > MAX_INPUT_BYTES {",
+      "after": "if false && plan.input_bytes() > MAX_INPUT_BYTES {"
+    },
+    {
+      "id": "process-command-entries-unbounded",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "if entries > MAX_COMMAND_ENTRIES {",
+      "after": "if false && entries > MAX_COMMAND_ENTRIES {"
+    },
+    {
+      "id": "process-binary-input-range-unchecked",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "if !matches!(byte, Literal::Int(value) if (0..=255).contains(value)) {",
+      "after": "if !matches!(byte, Literal::Int(_)) {"
+    },
+    {
+      "id": "process-command-budget-bypassed",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": "        .filter(|n| *n <= MAX_COMMAND_BYTES)\n        .ok_or_else(|| limit(context, \"process command bytes\", MAX_COMMAND_BYTES))?;",
+      "after": "        .ok_or_else(|| limit(context, \"process command bytes\", MAX_COMMAND_BYTES))?;"
+    },
+    {
+      "id": "process-native-command-overlap-omitted",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/config.rs",
+      "before": ".checked_mul(3)",
+      "after": ".checked_mul(1)"
+    },
+    {
+      "id": "process-output-reservation-omitted",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "let output = context.temporary_reservation(size)?;",
+      "after": "let output = None;"
+    },
+    {
+      "id": "process-workspace-reservation-omitted",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "let workspace = context.temporary_reservation(ValueSize {\n            nodes: 1,\n            depth: 1,\n            payload_bytes: workspace,\n        })?;",
+      "after": "let workspace = None;"
+    },
+    {
+      "id": "process-global-admission-unbounded",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": ".filter(|next| *next <= MAX_IN_FLIGHT_BYTES)",
+      "after": ".filter(|_next| true)"
+    },
+    {
+      "id": "process-local-timeout-unlatched",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "budget.stop((*error.error).clone());",
+      "after": "let _ = budget;"
+    },
+    {
+      "id": "process-complete-ignores-io",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "        && report.io_complete\n",
+      "after": ""
+    },
+    {
+      "id": "process-nonzero-exit-rejected",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "report.outcome == WorkerOutcome::Failed\n",
+      "after": "false && report.outcome == WorkerOutcome::Failed\n"
+    },
+    {
+      "id": "process-signal-discarded",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/output.rs",
+      "before": "status.signal()",
+      "after": "None::<i32>"
+    },
+    {
+      "id": "process-binary-payload-undercounted",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/output.rs",
+      "before": ".checked_mul(4)",
+      "after": ".checked_mul(1)"
+    },
+    {
+      "id": "process-unused-capture-credit-retained",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/output.rs",
+      "before": "reservation.release_child(ValueSize {\n            nodes: planned.nodes - actual.nodes,\n            depth: 0,\n            payload_bytes: planned.payload_bytes - actual.payload_bytes,\n        });",
+      "after": "let _ = (reservation, planned);"
+    },
+    {
+      "id": "process-text-decoding-lossy",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes/output.rs",
+      "before": "return String::from_utf8(bytes)\n            .map(Literal::String)\n            .map_err(|_| invalid(context, reason));",
+      "after": "return Ok(Literal::String(String::from_utf8_lossy(&bytes).into_owned()));"
+    },
+    {
+      "id": "process-cli-environment-omitted",
+      "area": "processes",
+      "file": "src/main.rs",
+      "before": "let mut context = Context::with_host_environment(limits, control)?;",
+      "after": "let mut context = Context::with_control(limits, control)?;"
+    },
+    {
+      "id": "process-cleanup-uses-pool-deadline",
+      "area": "processes",
+      "file": "src/core/worker/linux/observation.rs",
+      "before": "start.elapsed() >= self.request.limits.cleanup_timeout)\n                {",
+      "after": "start.elapsed() >= self.shared.limits.cleanup_timeout)\n                {"
+    },
+    {
+      "id": "process-exit-hides-incomplete-io",
+      "area": "processes",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "    if error.code() == Code::Native {\n",
+      "after": "    if false && error.code() == Code::Native {\n"
     }
   ]
 }

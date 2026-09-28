@@ -1969,6 +1969,51 @@ fn missing_format_fields_admit_diagnostic_text_before_copying_the_field_name() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn process_preflight_rejects_before_copying_large_environment_or_capture_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::default();
+    for (length, extra, expected) in [
+        (1024 * 1024, "", "process command bytes"),
+        (
+            128 * 1024,
+            " Options |{\"stdout_limit\": 1048577}|",
+            "value string bytes",
+        ),
+    ] {
+        let mut counts = Vec::new();
+        for launch in [false, true] {
+            let options = RunOptions {
+                working_directory: Some(dir.path().into()),
+                inherit_environment: false,
+                environment: BTreeMap::from([("BIG".into(), Some("x".repeat(length).into()))]),
+                ..Default::default()
+            };
+            let source = if launch {
+                format!("Run Process |\"/bin/touch\"| With Arguments |[\"marker\"]|{extra}")
+            } else {
+                "No Operation".into()
+            };
+            let (result, copies) = observe(length, || {
+                engine.run_source("process-admission", &source, options)
+            });
+            if launch {
+                assert_eq!(result.outcome(), RunOutcome::LimitExceeded);
+                assert!(result.result.unwrap_err().to_string().contains(expected));
+            } else {
+                assert!(result.result.is_ok());
+            }
+            counts.push(copies);
+        }
+        assert_eq!(
+            counts[0], counts[1],
+            "only the run's original environment snapshot is copied"
+        );
+        assert!(!dir.path().join("marker").exists());
+    }
+}
+
+#[test]
 fn filesystem_reads_reject_metadata_size_before_large_content_allocation() {
     let directory = tempfile::tempdir().unwrap();
     let length = 128 * 1024;

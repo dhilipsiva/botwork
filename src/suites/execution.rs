@@ -122,7 +122,7 @@ async fn owner(
 ) -> Result<(), CliError> {
     let control = crate::run_control(configuration.suite_timeout_ms)?;
     let context = tokio::task::spawn_blocking(move || {
-        let mut context = Context::with_control(configuration.limits.clone(), control)?;
+        let mut context = Context::with_host_environment(configuration.limits.clone(), control)?;
         let variables =
             botwork::core::input::load_variables(&configuration.files, &configuration.settings)?;
         context.init_statements();

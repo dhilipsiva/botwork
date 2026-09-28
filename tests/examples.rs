@@ -24,6 +24,14 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
 }
 
 #[test]
+fn process_example_captures_text_binary_and_nonzero_exit() {
+    assert_example(
+        "33-processes.botwork",
+        &["Hello, world!", "7", "diagnostic", "[0, 255, 10]"],
+    );
+}
+
+#[test]
 fn operating_system_example_copies_files_and_removes_its_temporary_directory() {
     assert_example(
         "32-operating-system.botwork",

@@ -327,26 +327,26 @@ fn temporary_limits_include_inputs_and_admitted_output_at_the_same_time() {
 #[tokio::test]
 async fn async_regex_uses_worker_snapshot_admission_while_literal_operations_stay_inline() {
     for (source, entries, expected) in [
-        ("String Contains |\"abc\"| Text |\"b\"|", 89, None),
+        ("String Contains |\"abc\"| Text |\"b\"|", 93, None),
         (
             "String Matches |\"abc\"| Regex |\"b\"|",
-            89,
+            93,
             Some(Code::ResourceLimit),
         ),
-        ("String Matches |\"abc\"| Regex |\"b\"|", 90, None),
+        ("String Matches |\"abc\"| Regex |\"b\"|", 94, None),
         (
             "Find Matches In |\"a\"| Regex |\"[\"|",
-            89,
+            93,
             Some(Code::ResourceLimit),
         ),
         (
             "Find Matches In |\"a\"| Regex |\"[\"|",
-            90,
+            94,
             Some(Code::IncompatibleType),
         ),
         (
             "Capture From |\"a\"| Regex |\"a\"|",
-            89,
+            93,
             Some(Code::ResourceLimit),
         ),
     ] {
@@ -426,7 +426,7 @@ fn string_metadata_registration_is_idempotent_and_preserves_overrides() {
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 89);
+    assert_eq!(context.statement_signatures().len(), 93);
     let result = evaluate_program_detailed(
         &Program::parse("override", "Trim String |\"x\"|").unwrap(),
         &mut context,

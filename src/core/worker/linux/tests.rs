@@ -6,6 +6,7 @@ fn dropping_a_handle_during_stop_observation_preserves_interruption() {
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
+        limits: WorkerLimits::default(),
     });
     let handle = WorkerHandle {
         id: 1,
@@ -26,6 +27,7 @@ fn dropping_a_handle_during_stop_observation_preserves_interruption() {
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
+        limits: WorkerLimits::default(),
     };
     let later = Instant::now() + Duration::from_secs(1);
     assert!(stop(&request, later).is_none());
