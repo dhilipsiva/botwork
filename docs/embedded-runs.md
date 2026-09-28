@@ -58,7 +58,7 @@ Each run gets a child control: parent cancellation and earlier deadlines propaga
 
 Check stop requests before execution/expressions/calls/iterations, around module file reads, and after native callbacks. A run stop bypasses Catch and unwinds temporary iterator/handler bindings and invocation frames. Completed assignments/effects remain. No rejected return value is published. If a callback fails while stopping, preserve its error as a cause with call context. An ordinary callback-reported error remains catchable when the actual run control/budget is still active.
 
-Synchronous callbacks, parsing, filesystem calls, and value operators cannot be preempted inside Rust. Deadlines are observed at checkpoints; a callback must cooperate with `environment.control().checkpoint()` or return. Check again after return before publishing a result. [Async DSL dispatch](async-execution.md) propagates run control through suspended operations; hard termination and guaranteed whole-run cleanup deadlines retain their separate runtime/worker tasks.
+[Async I/O isolation](nonblocking-io.md) dispatches filesystem/environment work, ordinary native callbacks, and output to bounded workers. Synchronous callbacks, parsing, filesystem calls, and value operators still cannot be preempted inside Rust. Deadlines are observed at checkpoints; a callback must cooperate with `environment.control().checkpoint()` or return. Check again after return before publishing a result. [Async DSL dispatch](async-execution.md) propagates run control through suspended operations; hard termination and guaranteed whole-run cleanup deadlines retain their separate runtime/worker tasks.
 
 ## Structured Results
 

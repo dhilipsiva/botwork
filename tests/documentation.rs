@@ -143,6 +143,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
     assert!(include_str!("../src/lib.rs").contains(inclusion));
     assert!(include_str!("../src/lib.rs")
         .contains("#![doc = include_str!(\"../docs/async-execution.md\")]"));
+    assert!(include_str!("../src/lib.rs")
+        .contains("#![doc = include_str!(\"../docs/nonblocking-io.md\")]"));
     assert!(include_str!("../src/core/worker.rs")
         .contains("#![doc = include_str!(\"../../docs/isolated-workers.md\")]"));
     assert!(include_str!("../src/core/worker/protocol.rs")
@@ -157,6 +159,7 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
         BTreeSet::from([
             "docs/interpreter-architecture.md".to_owned(),
             "docs/async-execution.md".to_owned(),
+            "docs/nonblocking-io.md".to_owned(),
             "docs/isolated-workers.md".to_owned(),
             "docs/worker-protocol.md".to_owned()
         ]),

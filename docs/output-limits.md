@@ -36,6 +36,11 @@ Blocking `Write::write`, `flush`, and arbitrary host formatters cannot be forcib
 
 ## Host and CLI Boundaries
 
+Async DSL Log and debug records execute on [bounded blocking workers](nonblocking-io.md).
+Each run awaits its record before continuing; sibling runs remain schedulable
+while a destination blocks. The low-level Context writer APIs below remain
+synchronous, and worker dispatch does not make a blocked write interruptible.
+
 `Context::write_value(&value, &mut writer)` admits borrowed values before recursive formatting; the caller retains ownership, including ownership of rejected deep values. It preserves existing readable output, sorted map keys, escapes, and combining marks. This is not JSON or a round-trip serialization format. Future serializers must apply the same admission contract to their own encoded representation.
 
 `Context::write_output(&mut writer, format_args!(...))` checks generic formatted text with two passes. Custom Display implementations must be deterministic and cooperative, and remain responsible for any allocations or effects they perform internally. If emitted length changes, emission cannot exceed the admitted size and returns an error instead of success. Equal-length content changes cannot be detected. Use `write_value` for arbitrary Literal inputs because generic Display does not perform value-shape admission.

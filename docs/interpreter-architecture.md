@@ -142,7 +142,7 @@ Return a suitable `BWErr` for expected failures, including `NativeError(reason)`
 
 Unwinding callback panics become BW4003 and unwind language frames/bindings through normal error handling. The Rust panic hook still runs; Botwork does not alter process-global hooks. Process aborts, fatal signals, blocking callbacks, and corrupted or poisoned captured state are outside this recovery guarantee. Callbacks must restore their own host resources/state and return errors for expected failures. These are trusted in-process extensions with the host process's capabilities.
 
-Cloning a context copies DSL bindings/registries and shares callback closures through Arc. Synchronize intentionally shared captured state, or register separate closures in fresh contexts for independent host state. `Send + Sync` bounds permit that sharing; these callbacks execute synchronously even inside an async run. Register `NativeOperation` for waiting work through [async execution](async-execution.md). Adapter conversion/cause contracts retain separate roadmap tasks.
+Cloning a context copies DSL bindings/registries and shares callback closures through Arc. Synchronize intentionally shared captured state, or register separate closures in fresh contexts for independent host state. `Send + Sync` bounds permit that sharing. Synchronous entry invokes callbacks inline; [async execution](async-execution.md) awaits [bounded workers](nonblocking-io.md), including for Log/debug output. NativeOperation provides explicit async/blocking/isolated adapter contracts. Adapter conversion/cause contracts retain separate roadmap tasks.
 
 ## Shared Signature Metadata
 

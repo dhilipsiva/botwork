@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mutations": [
     {
       "id": "precedence-products",
@@ -89,8 +89,8 @@
       "id": "async-call-frame-lost",
       "area": "errors",
       "file": "src/core/eval/execution.rs",
-      "before": "                context.calls.push(frame);",
-      "after": "                drop(frame);"
+      "before": "context.calls.push(frame);\n                let (values, reservations)",
+      "after": "drop(frame);\n                let (values, reservations)"
     },
     {
       "id": "async-parent-control-lost",
@@ -105,6 +105,48 @@
       "file": "src/core/eval/execution.rs",
       "before": "        tokio::task::yield_now().await;",
       "after": "        // Deliberately omit the cooperative scheduler yield."
+    },
+    {
+      "id": "native-worker-runs-inline",
+      "area": "isolation",
+      "file": "src/core/eval/execution.rs",
+      "before": "if context.asynchronous {\n                    context.check_call_depth()?;",
+      "after": "if false {\n                    context.check_call_depth()?;"
+    },
+    {
+      "id": "filesystem-read-runs-inline",
+      "area": "isolation",
+      "file": "src/core/eval/filesystem.rs",
+      "before": "let result = if self.asynchronous {",
+      "after": "let result = if false {"
+    },
+    {
+      "id": "worker-capacity-released-before-work",
+      "area": "ownership",
+      "file": "src/core/run/blocking_io.rs",
+      "before": "let worker_control = child.clone();",
+      "after": "drop(permit);\n    let permit = Arc::new(Semaphore::new(1)).try_acquire_owned().unwrap();\n    let worker_control = child.clone();"
+    },
+    {
+      "id": "worker-stop-skips-draining",
+      "area": "cleanup",
+      "file": "src/core/run/blocking_io.rs",
+      "before": "((&mut pending.worker).await, Some(stop))",
+      "after": "return Err(stop)"
+    },
+    {
+      "id": "worker-environment-loses-control",
+      "area": "isolation",
+      "file": "src/core/eval/blocking.rs",
+      "before": "environment.with_control(control.clone())",
+      "after": "environment.with_control(OperationControl::default())"
+    },
+    {
+      "id": "worker-stop-discards-cleanup-cause",
+      "area": "errors",
+      "file": "src/core/eval/blocking.rs",
+      "before": "Err(error) if error.code() == stop.code() => Err(error),",
+      "after": "Err(error) if error.code() == stop.code() => Err(stop.into()),"
     }
   ]
 }

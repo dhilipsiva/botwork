@@ -238,6 +238,7 @@ fn cancellation_and_abandonment_reap_children_and_publish_distinct_records() {
 
 #[test]
 fn dropping_a_wait_future_also_interrupts_and_supervision_survives_runtime_shutdown() {
+    use std::{future::Future, task::Poll};
     let pool = WorkerPool::new(limits()).unwrap();
     let handle = pool
         .start(
@@ -247,6 +248,14 @@ fn dropping_a_wait_future_also_interrupts_and_supervision_survives_runtime_shutd
         )
         .unwrap();
     let id = handle.id();
+    // A delay does not prove launch under load. Require an owned child before
+    // testing destruction of its wait future and the Reaped cleanup outcome.
+    until(|| {
+        pool.snapshot()
+            .active
+            .iter()
+            .any(|active| active.id == id && active.pid.is_some())
+    });
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
@@ -254,7 +263,14 @@ fn dropping_a_wait_future_also_interrupts_and_supervision_survives_runtime_shutd
     runtime.block_on(async {
         let future = handle.wait();
         tokio::pin!(future);
-        tokio::select! { _ = &mut future => panic!("worker must still run"), _ = tokio::time::sleep(Duration::from_millis(20)) => {} }
+        std::future::poll_fn(|context| {
+            assert!(
+                future.as_mut().poll(context).is_pending(),
+                "worker must still run"
+            );
+            Poll::Ready(())
+        })
+        .await;
     });
     drop(runtime);
     until(|| pool.snapshot().active.is_empty());

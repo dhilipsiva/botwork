@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::run::{ImportResource, SnapshotSize};
-use std::{fs, path::Path};
+use std::path::Path;
 
 struct ImportChain<'a> {
     loading: &'a [PathBuf],
@@ -242,9 +242,9 @@ fn admit_namespace(
     Ok(())
 }
 
-fn read_module_source(path: &Path, context: &Context) -> Result<String, SourceFailure> {
-    let Some(budget) = &context.budget else {
-        return context.read_source(path);
+async fn read_module_source(path: &Path, context: &mut Context) -> Result<String, SourceFailure> {
+    let Some(budget) = context.budget.as_ref().map(RunBudget::shared) else {
+        return context.read_source_async(path).await;
     };
     budget
         .charge_imports(&[
@@ -253,8 +253,9 @@ fn read_module_source(path: &Path, context: &Context) -> Result<String, SourceFa
         ])
         .map_err(SourceFailure::Diagnostic)?;
     let remaining = budget.import_remaining(ImportResource::SourceBytes);
-    let bytes =
-        crate::core::run::read_source(path, Some(remaining.min(budget.limits().source_bytes)))?;
+    let bytes = context
+        .read_source_bytes(path, remaining.min(budget.limits().source_bytes))
+        .await?;
     context
         .check_source_size(bytes.len())
         .map_err(SourceFailure::Diagnostic)?;
@@ -313,8 +314,15 @@ async fn load_module(
     {
         return Ok(Arc::clone(module));
     }
-    let canonical = fs::canonicalize(&requested)
-        .map_err(|error| failure(context, format_args!("{}: {error}", requested.display())))?;
+    let canonical = context
+        .canonicalize_source(&requested)
+        .await
+        .map_err(|error| match error {
+            SourceFailure::Io(error) => {
+                failure(context, format_args!("{}: {error}", requested.display()))
+            }
+            SourceFailure::Diagnostic(error) => related(context, error),
+        })?;
     if let Some(start) = context
         .loading
         .iter()
@@ -359,12 +367,14 @@ async fn load_module(
         .check_import_depth()
         .map_err(|error| related(context, error))?;
     check_dependency_depth(context, 0).map_err(|error| related(context, error))?;
-    let source = read_module_source(&canonical, context).map_err(|error| match error {
-        SourceFailure::Io(error) => {
-            failure(context, format_args!("{}: {error}", canonical.display()))
-        }
-        SourceFailure::Diagnostic(error) => related(context, error),
-    })?;
+    let source = read_module_source(&canonical, context)
+        .await
+        .map_err(|error| match error {
+            SourceFailure::Io(error) => {
+                failure(context, format_args!("{}: {error}", canonical.display()))
+            }
+            SourceFailure::Diagnostic(error) => related(context, error),
+        })?;
     let source_name = canonical
         .to_str()
         .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
@@ -439,6 +449,7 @@ fn isolated(frame: Frame, context: &Context) -> Context {
         environment: context.environment.clone(),
         budget: context.budget.as_ref().map(RunBudget::shared),
         asynchronous: context.asynchronous,
+        worker_control: None,
         trace_statements: false,
         #[cfg(test)]
         expression_visits: Default::default(),

@@ -11,6 +11,7 @@ Path bytes include copied loaded-module keys, requested/canonical resolution key
 Admission covers:
 
 - Engine native-template table copying, after configuration/environment validation and before native registry admission, inputs, or script effects.
+- Async native/output workers: all entered call handles before copying their limited context. Environment and source owners remain shared; mutable DSL tables are not copied. See [worker admission](nonblocking-io.md#admission-and-state).
 - Module initialization: the complete caller cache, loading/directory paths, and visible native registry entries. Caller variables and DSL definitions are not inherited. File resolution, reading, and parsing occur before this check.
 - Imported invocation: the module's root frame, the caller cache, and loading/directory paths, before entering the exported body. Required argument effects have already happened.
 - `Context::try_clone()`: all current frame tables, cache tables, call/handler handles, and loading/directory paths before making a host copy. Module snapshots count inherited call handles; caller handlers are not inherited.

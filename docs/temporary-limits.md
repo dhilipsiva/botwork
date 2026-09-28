@@ -1,6 +1,6 @@
 # Live Evaluation Temporaries
 
-`RunLimits::temporaries` (`core::run::TemporaryLimits`) bounds live Literal temporaries across synchronous DSL expressions, calls, statements, and modules. Defaults allow 65,536 temporary roots, 262,144 recursive nodes, and 32 MiB of payload. All fields permit zero or explicit increases. Payload uses the existing value metrics: UTF-8 strings/map keys, four bytes per integer/float, one per boolean, and no bytes for containers or None.
+`RunLimits::temporaries` (`core::run::TemporaryLimits`) bounds live Literal temporaries across synchronous and asynchronous DSL expressions, calls, statements, and modules. Defaults allow 65,536 temporary roots, 262,144 recursive nodes, and 32 MiB of payload. All fields permit zero or explicit increases. Payload uses the existing value metrics: UTF-8 strings/map keys, four bytes per integer/float, one per boolean, and no bytes for containers or None.
 
 ## Ownership and Admission
 
@@ -21,6 +21,10 @@ Map/array construction and partially evaluated calls release completed values an
 BW8001 latches the requesting Context and bypasses Catch. Modules share the caller's complete budget/stop state. Context clones share live temporary accounting but have independent stop latches/work counters; concurrent admission is synchronized. Engine runs start fresh trackers. Internal imported calls preserve argument/result ownership across isolated contexts.
 
 ## Boundaries and Overlap
+
+Ordinary native callbacks in async runs retain arguments and result reservations
+through their [blocking worker](nonblocking-io.md), including after the run future
+is dropped. Worker contexts share the run's live trackers and stop state.
 
 Temporary and retained-variable budgets are independent. Assignment reserves stored copies while the evaluated result is still charged. Parameter/iterator/handler transfers can briefly charge both allowances conservatively. Owned Engine exports use the separate [result budget](result-limits.md); public Context/Pair return values transfer to host ownership and release temporary allowance. Keeping or cloning many host-returned values is the host's responsibility.
 

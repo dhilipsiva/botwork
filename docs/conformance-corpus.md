@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 147 cases against the 62 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 149 cases against the 63 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -37,6 +37,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | F6 | signature-valid | signature-invalid | signature-valid |
 | F7 | async-success | async-expired | async-success |
 | F8 | async-program | async-program-sync-rejected | async-program |
+| F9 | blocking-worker-boundary | blocking-worker-limit | blocking-worker-boundary |
 | M1 | import-success | import-cycle | import-success |
 | I1 | variables-success | variables-invalid | variables-success |
 | R1 | embedded-success | embedded-limit | embedded-success |
@@ -154,3 +155,6 @@ Two shutdown host cases close and drain an owned Linux worker while preserving i
 Two R30 host cases persist a complete worker transport result at the exact journal record limit and reject another invocation with BW8001 before entry. Crash, corruption, and delayed receipt evidence lives in the dedicated journal and worker recovery matrices.
 
 Two R31 host cases require complete namespace-worker transport and verified tree cleanup for success, or preserve failure while releasing kernel-confirmed namespace capacity after a mismatched helper exits. Dedicated subprocess tests cover guardian/host death and unavailable facilities.
+
+Two blocking-worker cases verify native callback execution off the async executor
+with exact call-frame snapshot admission and rejection before callback effects.

@@ -8,6 +8,7 @@ pub(super) struct PendingRun {
     variables: Owned<BTreeMap<String, Literal>>,
     start: Instant,
     control_start: tokio::time::Instant,
+    environment: Option<RunEnvironment>,
 }
 
 impl PendingRun {
@@ -18,6 +19,7 @@ impl PendingRun {
             variables,
             start: Instant::now(),
             control_start: tokio::time::Instant::now(),
+            environment: None,
         }
     }
 }
@@ -64,15 +66,21 @@ impl Engine {
             variables,
             start,
             control_start,
+            environment,
         } = pending;
         let result_limits = options.limits.results.clone();
-        let mut context = Context::default();
+        // Successful setup installs its canonical snapshot below. Failed setup
+        // never evaluates source and does not need another current_dir syscall.
+        let mut context = Context::with_directory_snapshot(Ok(PathBuf::new()));
         context.asynchronous = asynchronous;
         let result = (|| {
             options.control.checkpoint()?;
             options.limits.validate()?;
-            let environment = Arc::new(RunEnvironment::prepare(&options, control_start)?);
-            context.working_directory = Ok(environment.directory.clone());
+            let environment = Arc::new(match environment {
+                Some(environment) => environment,
+                None => RunEnvironment::prepare(&options, control_start)?,
+            });
+            context.working_directory = Ok(environment.working_directory().to_owned());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
             context.environment = Some(environment);
             context.copy_native_template(&self.template)?;
@@ -112,8 +120,8 @@ impl Engine {
         self.run_async(Input::Program(program), PendingRun::new(options))
     }
 
-    /// Read and run a local file. File loading remains synchronous and bounded;
-    /// waiting NativeOperation calls and CPU-loop yields are asynchronous.
+    /// Read and run a local file using bounded filesystem workers. Parsing remains
+    /// bounded synchronous CPU work; native calls and filesystem waits yield the executor.
     pub fn run_file_async(
         &self,
         path: impl AsRef<Path>,
@@ -126,7 +134,7 @@ impl Engine {
     }
 
     async fn run_async(&self, input: Input<'_>, pending: PendingRun) -> RunResult {
-        let (mut active, prepared) = self.prepare_run(pending, true);
+        let (mut active, prepared) = self.prepare_async(pending).await;
         let context = &mut active.context;
         let result = match prepared {
             Err(error) => Err(error),
@@ -158,8 +166,8 @@ impl Engine {
                                     false,
                                 )
                             })?;
-                            let source =
-                                context.read_source(&path).map_err(|error| match error {
+                            let source = context.read_source_async(&path).await.map_err(
+                                |error| match error {
                                     SourceFailure::Io(error) => context.formatted_error(
                                         BWErr::SourceRead,
                                         format_args!("{name}: {error}"),
@@ -167,7 +175,8 @@ impl Engine {
                                         false,
                                     ),
                                     SourceFailure::Diagnostic(error) => error.into(),
-                                })?;
+                                },
+                            )?;
                             let program = context.parse_source(name, &source)?;
                             execution::evaluate_program_runtime(&program, context).await
                         }
@@ -177,5 +186,48 @@ impl Engine {
             }
         };
         active.finish(result)
+    }
+
+    async fn prepare_async(&self, pending: PendingRun) -> (ActiveRun, EvaluationResult<()>) {
+        let start = pending.start;
+        let result_limits = pending.options.limits.results.clone();
+        let prepared = async {
+            pending.options.control.checkpoint()?;
+            pending.options.limits.validate()?;
+            let control = RunEnvironment::control_at(&pending.options, pending.control_start)?;
+            let (mut pending, mut environment) =
+                blocking_io::run(control.clone(), move |worker_control| {
+                    let environment = RunEnvironment::prepare_with_control(
+                        &pending.options,
+                        worker_control.clone(),
+                    )
+                    .map_err(SourceFailure::Diagnostic)?;
+                    Ok((pending, environment))
+                })
+                .await
+                .map_err(|error| match error {
+                    SourceFailure::Diagnostic(error) => error,
+                    SourceFailure::Io(_) => {
+                        unreachable!("environment preparation returns structured diagnostics")
+                    }
+                })?;
+            // The worker's child is cancelled on handoff/drop; execution uses
+            // the independently retained run child, with the same deadline.
+            environment.control = control;
+            pending.environment = Some(environment);
+            Ok::<_, Diagnostic>(pending)
+        }
+        .await;
+        match prepared {
+            Ok(pending) => self.prepare_run(pending, true),
+            Err(error) => (
+                ActiveRun {
+                    context: Context::with_directory_snapshot(Ok(PathBuf::new())),
+                    result_limits,
+                    start,
+                },
+                Err(error.into()),
+            ),
+        }
     }
 }

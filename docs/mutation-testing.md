@@ -39,7 +39,7 @@ Eleven Python checks protect these reporting and process-timeout boundaries in C
 To replay one generated mutation by its exact recorded name:
 
 ```sh
-python3 scripts/mutation_core.py generated --name 'src/core/eval/execution.rs:365:20: delete ! in evaluate_expression_inner'
+python3 scripts/mutation_core.py generated --name 'src/core/eval/execution.rs:13:49: replace % with / in tick'
 ```
 
 The runner discovers the complete inventory and uses a single-item shard after
@@ -73,8 +73,15 @@ also include `Context::with_control` and `Engine::with_registry_limits` despite
 the name filters. Both remain in the inventory, denominator, and review. Record
 the actual inventory instead of assuming the regex names are the entire scope.
 
+Version 3 adds bounded filesystem/native dispatch, environment preparation,
+worker stop handling, and bounded reads: 260 generated mutations. Version 4
+extracts the read loop for deterministic interrupted/error-read tests and includes
+both `read` and `read_from`: 263 mutations. All 260 preceding semantic identities
+remain, with three additional return-value replacements for the extracted helper.
+No survivor is removed from the scope or executable denominator.
+
 Macro bodies and many semantic changes are not generated automatically. The
-[15-entry targeted catalogue](../tests/mutation-core.json) therefore swaps
+[21-entry targeted catalogue](../tests/mutation-core.json) therefore swaps
 precedence levels, changes subtraction associativity, terminates While early,
 discards For returns, loses the caller frame, uses dynamic parents, skips parent
 variable lookup, discards handled causes, forces environment inheritance, ignores
@@ -82,6 +89,9 @@ environment removal, drops input bindings, and ignores the local deadline. Catal
 version 2 also drops the async call frame, loses parent control, and omits the
 CPU scheduler yield. Exact substitutions must match once; stale or ambiguous entries fail before
 testing. Each catalogue version was frozen before its first execution.
+Catalogue version 3 adds inline native/file work, premature worker permit release,
+skipped drain, lost callback control, and discarded cleanup causes. The selected
+suites now include `async_filesystem` and `async_blocking`.
 
 All library unit tests and the named integration suites in the Cargo config run
 for generated and targeted mutations. The initial suite omitted the existing
@@ -153,3 +163,35 @@ Controlled-clock deadlines now bound both operation entry and cancellation
 completion. A complete catalogue rerun caught all 15 through failed assertions.
 The original timeout outcomes remain recorded; they are not counted as kills.
 This local core campaign still does not complete the release mutation gate.
+
+## Blocking I/O campaign — 2026-09-28
+
+The [I/O evidence record](nonblocking-io-evidence.json) preserves the version 3
+initial inventory: 182 caught, 9 survived, 67 did not compile, and 2 timed out.
+Both original timeouts retried permanent file errors forever. Tests now place a
+deadline on real file errors and bound the fault-injected reader by cancelling
+after excess attempts. Compiler failures remain separate from test kills.
+
+Survivor review adds deterministic coverage for sustained CPU batching, stop/error
+handoff with a latched resource failure, worker panic versus queued-task abortion,
+and interrupted reads versus permanent failures. The extracted read helper also
+verifies that reaching the size bound performs no extra I/O. A smaller read buffer
+changes batching cost without changing the tested output or admission contract;
+it remains in the executable denominator, with no equivalence exclusion. Runtime
+performance acceptance remains a separate roadmap gate.
+
+| Stage | Caught by tests | Survived | Did not compile | Timed out |
+| --- | ---: | ---: | ---: | ---: |
+| Initial generated inventory (260) | 182 | 9 | 67 | 2 |
+| Expanded inventory after repairs (263) | 194 | 1 | 67 | 1 |
+| Exact replay with bounded fault-reader retries | 1 | 0 | 0 | 0 |
+| Targeted catalogue, initial and final runs | 21 | 0 | 0 | 0 |
+
+The expanded campaign captured its source before the fault-reader watchdog was
+added, so its always-retry mutation still timed out. The exact replay catches it
+through a failed assertion. Consolidating that identity once gives **216/217
+compilable mutations caught (99.54%)**, including all 21 targeted changes, with
+one reviewed buffer-size survivor, 67 compiler failures, and no equivalence
+exclusions. The original and intermediate timeouts are preserved, not counted as
+kills. All four GNU/musl debug/release profiles have a passing 1,350-test run;
+the evidence also retains the observed failures and repairs.

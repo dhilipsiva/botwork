@@ -365,6 +365,53 @@ fn check_async_program_case(case: &Case) {
     }
 }
 
+fn check_blocking_worker_case(case: &Case) {
+    use botwork::core::run::{Engine, RunLimits, RunOptions, SnapshotLimits};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let caller = std::thread::current().id();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut engine = Engine::default();
+    engine
+        .register_native("Host", move |_, _| {
+            assert_ne!(std::thread::current().id(), caller);
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(Literal::Int(7))
+        })
+        .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    let result = runtime.block_on(engine.run_source_async(
+        "worker",
+        "Host",
+        RunOptions {
+            inherit_environment: false,
+            limits: RunLimits {
+                snapshots: SnapshotLimits {
+                    entries: if case.error.is_some() { 2 } else { 3 },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    ));
+    if let Some(expected) = case.error {
+        let error = result.result.unwrap_err();
+        assert_eq!(error.code().as_str(), case.code.unwrap());
+        assert!(error.to_string().contains(expected));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    } else {
+        assert!(matches!(result.result, Ok(Literal::Int(7))));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+}
+
 #[test]
 fn conformance_inputs_match_status_stdout_and_error_contracts() {
     let cases = cases();
@@ -427,6 +474,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             }
             Input::AsyncProgram | Input::AsyncProgramSyncRejected => {
                 check_async_program_case(&case);
+                continue;
+            }
+            Input::BlockingWorkerBoundary | Input::BlockingWorkerLimit => {
+                check_blocking_worker_case(&case);
                 continue;
             }
             Input::DiagnosticRenderingBoundary | Input::DiagnosticRenderingLimit => {

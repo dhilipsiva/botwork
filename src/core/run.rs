@@ -31,6 +31,7 @@ use super::{
 mod tests;
 
 mod asynchronous;
+pub(crate) mod blocking_io;
 mod import_limits;
 mod output_limits;
 pub(crate) use import_limits::ImportResource;
@@ -177,12 +178,19 @@ impl Default for RunOptions {
 /// An immutable snapshot. Native operations must use these values explicitly.
 #[derive(Clone, Debug)]
 pub struct RunEnvironment {
-    directory: PathBuf,
-    variables: BTreeMap<OsString, OsString>,
+    directory: Arc<PathBuf>,
+    variables: Arc<BTreeMap<OsString, OsString>>,
     control: OperationControl,
 }
 
 impl RunEnvironment {
+    pub(crate) fn with_control(&self, control: OperationControl) -> Self {
+        Self {
+            directory: Arc::clone(&self.directory),
+            variables: Arc::clone(&self.variables),
+            control,
+        }
+    }
     pub fn working_directory(&self) -> &Path {
         &self.directory
     }
@@ -200,7 +208,10 @@ impl RunEnvironment {
         Diagnostic::formatted(BWErr::RunConfiguration, reason)
     }
 
-    fn prepare(options: &RunOptions, start: tokio::time::Instant) -> DiagnosticResult<Self> {
+    fn control_at(
+        options: &RunOptions,
+        start: tokio::time::Instant,
+    ) -> DiagnosticResult<OperationControl> {
         options.control.checkpoint()?;
         let failure = Self::configuration_error;
         let deadline = options
@@ -213,6 +224,19 @@ impl RunEnvironment {
             .transpose()?;
         let control = options.control.child(deadline);
         control.checkpoint()?;
+        Ok(control)
+    }
+
+    fn prepare(options: &RunOptions, start: tokio::time::Instant) -> DiagnosticResult<Self> {
+        Self::prepare_with_control(options, Self::control_at(options, start)?)
+    }
+
+    fn prepare_with_control(
+        options: &RunOptions,
+        control: OperationControl,
+    ) -> DiagnosticResult<Self> {
+        control.checkpoint()?;
+        let failure = Self::configuration_error;
         let directory = options
             .working_directory
             .clone()
@@ -221,11 +245,13 @@ impl RunEnvironment {
             .map_err(|error| failure(format_args!("{error}")))?;
         let directory = fs::canonicalize(&directory)
             .map_err(|error| failure(format_args!("{}: {error}", directory.display())))?;
+        control.checkpoint()?;
         if !directory.is_dir() {
             return Err(failure(format_args!(
                 "Working directory must be a directory"
             )));
         }
+        control.checkpoint()?;
         let mut variables: BTreeMap<OsString, OsString> = if options.inherit_environment {
             std::env::vars_os().collect()
         } else {
@@ -259,8 +285,8 @@ impl RunEnvironment {
         }
         control.checkpoint()?;
         Ok(Self {
-            directory,
-            variables,
+            directory: Arc::new(directory),
+            variables: Arc::new(variables),
             control,
         })
     }
@@ -339,6 +365,7 @@ impl Engine {
         Self { template }
     }
 
+    /// Callbacks use workers in async runs and the calling thread in synchronous runs.
     pub fn register_native(
         &mut self,
         header: &str,
@@ -347,6 +374,7 @@ impl Engine {
         self.register_native_with_signature(StatementSignature::native(header)?, callback)
     }
 
+    /// Register a typed callback with the same worker/thread contract as `register_native`.
     pub fn register_native_with_signature(
         &mut self,
         signature: StatementSignature,

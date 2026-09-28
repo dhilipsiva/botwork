@@ -143,56 +143,44 @@ pub(super) fn invoke_resolved<'a>(
                 callback,
                 metadata,
                 builtin_log,
-                ..
-            } => context.with_call(&call.signature, &call.span, None, |context| {
-                let arguments = TemporaryArguments::new(arguments);
-                let known_result = if builtin_log {
-                    let size = context
-                        .limits()
-                        .values
-                        .check(&arguments[0])
-                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                    Some(context.temporary_reservation(size)?)
+                _registry,
+            } => {
+                if context.asynchronous {
+                    context.check_call_depth()?;
+                    let frame = context.retain_call(&call.signature, &call.span, None)?;
+                    context.calls.push(frame);
+                    let span = call.span.clone();
+                    let result = context
+                        .blocking(move |worker| {
+                            let _registry = _registry;
+                            blocking::native_body(
+                                worker,
+                                callback,
+                                &metadata,
+                                builtin_log,
+                                arguments,
+                                &span,
+                            )
+                        })
+                        .await
+                        .map_err(|error| {
+                            context.runtime_diagnostic(error, Some(&call.span), false)
+                        });
+                    context.calls.pop();
+                    result
                 } else {
-                    None
-                };
-                let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
-                    .map_err(|_| {
-                        context.detail_error(
-                            BWErr::NativePanic,
-                            &call.signature,
-                            Some(&call.span),
-                            false,
+                    context.with_call(&call.signature, &call.span, None, |context| {
+                        blocking::native_body(
+                            context,
+                            callback,
+                            &metadata,
+                            builtin_log,
+                            arguments,
+                            &call.span,
                         )
                     })
-                    .and_then(|result| {
-                        result.map_err(|error| {
-                            context.runtime_diagnostic(error, Some(&call.span), false)
-                        })
-                    });
-                let result = context.after_evaluation(result.map(Owned::new))?;
-                context.check_value(&result)?;
-                validate_numeric_values(&result).map_err(|error| {
-                    context.formatted_error(
-                        BWErr::ArithmeticError,
-                        format_args!("{error}"),
-                        Some(&call.span),
-                        false,
-                    )
-                })?;
-                metadata.validate_return(&result, |message| {
-                    context.formatted_error(
-                        BWErr::OperationIncompatibleError,
-                        message,
-                        Some(&call.span),
-                        false,
-                    )
-                })?;
-                match known_result {
-                    Some(reservation) => Ok(TemporaryValue::new(result.into_inner(), reservation)),
-                    None => context.temporary(result.into_inner()),
                 }
-            }),
+            }
             StmtType::UserDefined {
                 definition,
                 metadata,
@@ -915,17 +903,7 @@ pub(crate) async fn evaluate_program_runtime(
         for statement in &program.statements {
             // A replaced script result is unobservable once the next statement starts.
             drop(result.take());
-            if context.trace_statements {
-                let (line, column) = statement.span.line_column();
-                context.write_output(
-                    &mut io::stderr().lock(),
-                    format_args!(
-                        "debug: {}:{line}:{column}: {}\n",
-                        program.source.name(),
-                        statement.kind_name()
-                    ),
-                )?;
-            }
+            context.trace_statement(statement, &program.source).await?;
             result = Some(finish_script(
                 evaluate_statement(statement, context).await?,
                 context,

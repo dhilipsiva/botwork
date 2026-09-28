@@ -94,7 +94,35 @@ async fn run(
                 })
         })
         .transpose()?;
-    let mut context = Context::with_control(limits, OperationControl::default().child(deadline))?;
+    let control = OperationControl::default().child(deadline);
+    control.checkpoint()?;
+    let file = file.to_owned();
+    let files = files.to_vec();
+    let settings = settings.to_vec();
+    // The CLI admits one preparation job. File/variable loading and parsing
+    // finish off the executor before the owned program/context are handed back.
+    let (program, context) = tokio::task::spawn_blocking(move || {
+        prepare(&file, debug, &files, &settings, limits, control)
+    })
+    .await
+    .map_err(|_| {
+        Diagnostic::new(BWErr::AsyncRuntime(
+            "CLI preparation worker failed before completing".into(),
+        ))
+    })??;
+    evaluate_program_async(&program, context).await?;
+    Ok(())
+}
+
+fn prepare(
+    file: &Path,
+    debug: bool,
+    files: &[PathBuf],
+    settings: &[String],
+    limits: RunLimits,
+    control: OperationControl,
+) -> Result<(Program, Context), CliError> {
+    let mut context = Context::with_control(limits, control)?;
     let variables = load_variables(files, settings)?;
     let mut bytes = Vec::new();
     let read_error = |source| CliError::Read {
@@ -122,8 +150,7 @@ async fn run(
     context.set_input_variables(variables)?;
     context.checkpoint()?;
     context.set_statement_tracing(debug);
-    evaluate_program_async(&program, context).await?;
-    Ok(())
+    Ok((program, context))
 }
 
 fn main() -> ExitCode {

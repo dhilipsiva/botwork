@@ -125,7 +125,7 @@ enum Implementation {
     },
 }
 
-/// Host-callable operation contract. DSL async dispatch is a separate runtime integration.
+/// Host-callable operation contract, also dispatched by asynchronous DSL execution.
 #[derive(Clone)]
 pub struct NativeOperation {
     signature: Arc<StatementSignature>,

@@ -7,8 +7,10 @@ use std::{
     sync::Arc,
 };
 
+mod blocking;
 mod diagnostics;
 pub(crate) mod execution;
+mod filesystem;
 mod imports;
 mod output;
 mod results;
@@ -139,6 +141,7 @@ pub struct Context {
     pub(crate) environment: Option<Arc<RunEnvironment>>,
     pub(crate) budget: Option<RunBudget>,
     pub(crate) asynchronous: bool,
+    worker_control: Option<OperationControl>,
     trace_statements: bool,
     #[cfg(test)]
     expression_visits: std::cell::RefCell<Vec<String>>,
@@ -146,6 +149,14 @@ pub struct Context {
 
 impl Default for Context {
     fn default() -> Self {
+        Self::with_directory_snapshot(std::env::current_dir().map_err(Arc::new))
+    }
+}
+
+impl Context {
+    pub(crate) fn with_directory_snapshot(
+        working_directory: Result<PathBuf, Arc<io::Error>>,
+    ) -> Self {
         Self {
             frames: vec![Frame::default()],
             current: 0,
@@ -153,13 +164,14 @@ impl Default for Context {
             handlers: vec![],
             modules: ModuleCache::default(),
             loading: vec![],
-            working_directory: std::env::current_dir().map_err(Arc::new),
+            working_directory,
             environment: None,
             budget: Some(RunBudget::new(
                 RunLimits::default(),
                 OperationControl::default(),
             )),
             asynchronous: false,
+            worker_control: None,
             trace_statements: false,
             #[cfg(test)]
             expression_visits: Default::default(),
@@ -243,7 +255,10 @@ impl Context {
 
     /// Observe cancellation/deadline/latched limit failures without consuming a step.
     pub fn checkpoint(&self) -> DiagnosticResult<()> {
-        self.budget.as_ref().map_or(Ok(()), RunBudget::checkpoint)
+        self.budget.as_ref().map_or(Ok(()), RunBudget::checkpoint)?;
+        self.worker_control
+            .as_ref()
+            .map_or(Ok(()), OperationControl::checkpoint)
     }
 
     fn tick(&self) -> DiagnosticResult<()> {
@@ -619,7 +634,7 @@ impl Context {
 
     /// Register a native sentence header such as `Read |path|` in this scope.
     /// Arguments are evaluated once in caller order before the callback runs.
-    /// Callbacks return an owned finite value (including None) or a typed error.
+    /// Async runs use workers; callbacks return owned finite values or typed errors.
     /// Invalid headers and collisions leave the existing registry unchanged.
     /// Cloning a context shares callback captures but copies DSL bindings.
     pub fn register_native(
@@ -947,7 +962,8 @@ pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> Ru
 }
 
 /// Execute using an owned context so dropping the future drops all suspended DSL state.
-/// Existing synchronous callbacks must finish promptly; register NativeOperation for waiting work.
+/// Ordinary native callbacks and output run on bounded workers. Blocking work must
+/// cooperate with cancellation; NativeOperation additionally supports explicit adapters.
 pub fn evaluate_program_async(
     program: &Program,
     mut context: Context,

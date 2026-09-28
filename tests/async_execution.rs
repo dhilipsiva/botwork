@@ -442,18 +442,34 @@ Try {
 #[tokio::test(start_paused = true)]
 async fn dropping_a_suspended_run_releases_async_resources_and_operation_ownership() {
     let drops = Arc::new(AtomicUsize::new(0));
-    let operation = waiting(Arc::clone(&drops));
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let ready = Arc::clone(&entered);
+    let observed = Arc::clone(&drops);
+    let operation = NativeOperation::asynchronous(
+        StatementSignature::native("Wait forever").unwrap(),
+        move |_, _| {
+            let guard = Dropped(Arc::clone(&observed));
+            entered.notify_one();
+            async move {
+                let _guard = guard;
+                pending().await
+            }
+        },
+    )
+    .unwrap();
     let budget = operation.ownership_budget().clone();
     let mut engine = Engine::default();
     engine.register_operation(operation).unwrap();
     let mut future =
         Box::pin(engine.run_source_async("abandon", "Outer { Wait forever }\nOuter", options()));
-    assert!(matches!(
-        future
-            .as_mut()
-            .poll(&mut TaskContext::from_waker(Waker::noop())),
-        Poll::Pending
-    ));
+    tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::select! {
+            result = &mut future => panic!("waiting operation unexpectedly completed: {result:?}"),
+            _ = ready.notified() => {}
+        }
+    })
+    .await
+    .expect("operation entered before dropping the suspended run");
     assert_eq!(budget.usage().invocations, 1);
     drop(future);
     assert_eq!(drops.load(Ordering::SeqCst), 1);
@@ -473,10 +489,16 @@ async fn cpu_loops_yield_so_a_sibling_can_cancel_them() {
     let (entered, mut ready) = tokio::sync::mpsc::channel(1);
     let mut engine = Engine::default();
     engine
-        .register_native("Entered", move |_, _| {
-            entered.try_send(()).unwrap();
-            Ok(Literal::None)
-        })
+        .register_operation(
+            NativeOperation::asynchronous(
+                StatementSignature::native("Entered").unwrap(),
+                move |_, _| {
+                    entered.try_send(()).unwrap();
+                    async { Ok(Literal::None) }
+                },
+            )
+            .unwrap(),
+        )
         .unwrap();
     let engine = Arc::new(engine);
     let parent = OperationControl::default();
@@ -551,6 +573,49 @@ fn synchronous_entry_points_reject_async_registries_before_any_effects() {
             .code(),
         DiagnosticCode::UndefinedVariable
     );
+}
+
+#[tokio::test]
+async fn sustained_cpu_work_yields_in_bounded_batches() {
+    let progress = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&progress);
+    let mut context = Context::default();
+    context
+        .register_operation(
+            NativeOperation::asynchronous(
+                StatementSignature::native("Observe").unwrap(),
+                move |_, _| {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    std::future::ready(Ok(Literal::None))
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let program = Program::parse(
+        "cpu-batches",
+        "|i| = |0|\nWhile |i < 2048| { Observe\n|i| = |i + 1| }\n|done| = |i|",
+    )
+    .unwrap();
+    let mut future = Box::pin(evaluate_program_async(&program, context));
+    let mut polls = 0;
+    loop {
+        let before = progress.load(Ordering::SeqCst);
+        let result = future
+            .as_mut()
+            .poll(&mut TaskContext::from_waker(Waker::noop()));
+        polls += 1;
+        assert!(
+            progress.load(Ordering::SeqCst) - before <= 256,
+            "one poll monopolized the executor for too many loop iterations"
+        );
+        assert!(polls < 512, "CPU dispatch stopped batching useful work");
+        if let Poll::Ready(result) = result {
+            assert_eq!(result.unwrap().to_string(), "2048");
+            break;
+        }
+    }
+    assert_eq!(progress.load(Ordering::SeqCst), 2048);
 }
 
 #[test]

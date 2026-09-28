@@ -67,7 +67,8 @@ through a synchronous adapter. If an Engine or Context contains any
 `NativeOperation` registration, synchronous program entry returns BW5003 before
 executing any statement, even when the operation is unused. This makes unsupported
 mixed execution explicit. Ordinary `register_native` callbacks remain supported
-by both execution modes, and their behavior remains synchronous.
+by both execution modes. Synchronous entry invokes them inline; async entry awaits
+a bounded blocking worker. See [I/O and callback isolation](nonblocking-io.md).
 
 `eval::evaluate_program_async(&program, context)` consumes a Context for callers
 that do not need an Engine result snapshot. The future owns that context; no
@@ -76,8 +77,8 @@ Engine's async methods to obtain completed root bindings. Context initialization
 input installation, and operation registration remain available before the
 handoff. `Context::set_statement_tracing(true)` enables bounded top-level tracing.
 
-The CLI now uses this owned-context async entry point on a current-thread Tokio
-runtime. Syntax, output, `--debug`, limits, and exit statuses are unchanged.
+The CLI uses this owned-context async entry point on a current-thread Tokio
+runtime, after preparing source/input data on a blocking worker. Syntax, output, `--debug`, limits, and exit statuses are unchanged.
 Worker-guardian startup is handled before constructing that runtime. CLI statement
 listing/help still uses the existing native metadata and does not execute source.
 This change does not add process, HTTP, or other I/O statement libraries.
@@ -118,10 +119,11 @@ then checks cancellation again. This lets other tasks request cancellation of a
 CPU-only loop; step budgets and their counting rules do not change.
 
 This is cooperative execution. Async callback factories and polls must return
-promptly. Synchronous callbacks, Log output, source reads, module resolution, and
-parsing remain synchronous and can occupy the calling thread. The next I/O work
-must address those boundaries separately; this API does not promise a hard
-wall-clock bound for them. Use an isolated operation when a hard host-operation
+promptly. [Bounded workers](nonblocking-io.md) now isolate ordinary native
+callbacks, Log/debug output, source reads, module resolution, and environment
+preparation. Engine/module parsing remains synchronous CPU work. Blocking syscalls
+and callbacks must still return before normal stop handling completes; this API
+does not promise a hard wall-clock bound for them. Use an isolated operation when a hard host-operation
 deadline is required. Existing [worker containment limits](isolated-workers.md)
 and [operation ownership rules](operation-ownership.md) still apply.
 

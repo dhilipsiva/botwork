@@ -138,3 +138,6 @@ Call composition is covered in `tests/call_composition.rs`: nested effects, argu
 `tests/output_limits.rs`, the output writer/budget unit tests, allocation observations, and R24 corpus cases check byte admission, complete flush semantics, partial writes, cancellation, and CLI/module accounting; see [output limits](output-limits.md).
 
 `tests/isolated_workers.rs` exercises real Linux process supervision, pipe backpressure, forced stop, reaping, cancellation/abandonment, bounded history, and pool shutdown. Other platforms reject this worker API before process entry; see [isolated workers](isolated-workers.md).
+
+[Nonblocking I/O validation](nonblocking-io.md) adds worker admission/draining tests,
+real stalled-file and output-pipe probes, native thread/control checks, and F9 corpus cases.
