@@ -26,7 +26,7 @@ Include these fields with a new reproduction or campaign artifact:
 | Adapters | Names, versions, configuration, and controlled service fixtures; `none` for interpreter-only cases |
 | Resources | Configured timeout, source/nesting/step/collection limits, worker count, and measurement environment |
 
-Current core cases are deterministic and use no external adapters. The interpreter has no configurable resource limits yet; record that explicitly. The documentation CLI harness imposes a five-second process timeout and reports toolchain, platform, build profile, document location, and source on failure. Randomized campaigns, adapter matrices, and runtime limits retain their own roadmap tasks; this procedure does not claim those measurements already exist.
+Current core cases are deterministic and use no external adapters. Runtime-limit and worker fixtures record their configured budgets beside the assertions. The [worker facility campaign](worker-platforms.md) supplies a persistent record of deterministic combinations, source/lockfile hashes, environment, commands, and limits. The documentation CLI harness imposes a five-second process timeout and reports toolchain, platform, build profile, document location, and source on failure. Randomized campaigns and broader adapter/platform matrices retain their own roadmap tasks; this procedure does not claim those measurements already exist.
 
 ## Documentation Regressions
 

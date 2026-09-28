@@ -100,6 +100,8 @@ This is not a security sandbox or an absolute real-time kernel guarantee. A work
 
 Other platforms reject worker entry before effects. Only Linux is currently advertised for this boundary; the language's existing synchronous/async host APIs retain their prior platform scope.
 
+The [platform and facility matrix](worker-platforms.md) lists each mode's prerequisites and executable refusal checks. Unavailable baseline facilities fail validation rather than silently skipping worker tests.
+
 ## Process-tree Guardians
 
 Use `WorkerPool::with_process_tree(limits, absolute_botwork_path)` when an operation can fork detached descendants or must clean up after its host exits. The path names the matching installed Botwork CLI executable, which enters a private guardian mode before normal CLI parsing. The existing `WorkerCommand` still selects the actual worker with literal arguments and its explicit environment/cwd. No shell wrapper, additional package, or elevated privilege is required. Pool clones and `NativeOperation::isolated` share the same guardian mode and quotas.

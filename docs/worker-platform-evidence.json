@@ -1,0 +1,249 @@
+{
+  "schema": 1,
+  "captured_at": "2026-09-28T05:13:26.540541+00:00",
+  "base_revision": "4de145a8ac73b2676b5770971e00682788246f89",
+  "input_sha256": {
+    "Cargo.lock": "ee5ce661ccea792322e70e11e062ec4d69e7cd7427dd17f3c2a076e0f48b1edc",
+    "Cargo.toml": "0e724e0e7c3ad6bb368a399613341dfe937920c744a7225736535ac26649e3b4",
+    "src/core/ast.rs": "a96306edb393bcab9c46f35b122467ab6dc9a5e16748a546f6091b984aa8cef4",
+    "src/core/ast/parse_diagnostic.rs": "51533c035d772cf971fdc08b880b3f8d542d676ec10fc9d88097990e1febf477",
+    "src/core/ast/parse_diagnostic/tests.rs": "ead9bdeaab98e5995a57892ca64239b4d5358a5a051be3d45d66ac4b06c97a4a",
+    "src/core/ast/tests.rs": "7bb80bd80f0d1dad7085ca15872400ef5d00608edc9bd8abffc09dba2419ce65",
+    "src/core/ast_limits.rs": "0dd323623174c0e21987a2d795c6aa5b5927200937392d1eea24199956e4b2dd",
+    "src/core/ast_limits/tests.rs": "71cb2c0d124c2c4790ef9af9dee559f3b6230b2e9aa17db318eaaba5a12c7272",
+    "src/core/diagnostic.rs": "5648e6c139352a82c69e48025bceb05cda2d57665b99c01efc30da9be237055b",
+    "src/core/diagnostic/construction.rs": "47ccf7575b5cdb9d45a38ecb7de822daacf198b7e519e1edc4a3c65168887b16",
+    "src/core/diagnostic/construction/tests.rs": "5d7ea9e6c06b76127516d40710480254fb624506956e3e456e65f53bc0f890e3",
+    "src/core/diagnostic/ownership.rs": "820fee489530398fa8bcc2a46ebf98f78e254500f75aa6d9e703afbc3c0f5202",
+    "src/core/diagnostic/ownership/tests.rs": "768a1f0cb19baf15185a26ab0dcbdab40c398f0700b3525997258e4fff538461",
+    "src/core/diagnostic/rejection.rs": "2ea457b4f19ca029d66a91038c4b46e047b17e25eaefa8ad8e877abfcb9e02e8",
+    "src/core/diagnostic/rejection/tests.rs": "bb7789bb1805dfa05c717157787a34d38934e7c3b53dc0153e5f598ede3882d8",
+    "src/core/diagnostic/render.rs": "40c628f1bfe99d95dcb27a4c3f6981deb5d988b499acf3f65a3be810872ed7ed",
+    "src/core/diagnostic/render/tests.rs": "9c4d2a80adefe161e33718d541666a87d361598c89e8fb5bd794a29e94b19918",
+    "src/core/diagnostic/value.rs": "9d7ecdf47d0d1efe6efd0a67d70faeecb27cf7b6e81a9d862533de4d9411fa0c",
+    "src/core/diagnostic/value/tests.rs": "56ddd1aadcfd71b1b77ba217c9a486e7863b87b0cf57bcb48227520de8de322d",
+    "src/core/eval.rs": "d1819eb287e82147d124293afd99b0da9294ffff804e9380072b0883207b9989",
+    "src/core/eval/diagnostics.rs": "3f9d428e60244c8500c1c7ff2abb9627fb3a5a9fb58ab0f6c522599aa38c26a2",
+    "src/core/eval/diagnostics/tests.rs": "49590c20fd16395bd29d67fbaefb39f417852987c4d710fdf6fb225736ac71a2",
+    "src/core/eval/execution_contract.rs": "a489d2a9e3d7ee814bf7f05f3d4dc4a9aafb07d2e7e36d85202c4a7fddc27900",
+    "src/core/eval/imports.rs": "88a60be25bb70111d1c14ea54994c81cec246929b9cf37cb2f4110805acd1f84",
+    "src/core/eval/imports/tests.rs": "0ad46aabf44399421166bc518a226a6eb217c1bf43b04d04e181d96d2f29c900",
+    "src/core/eval/native_contract.rs": "3afba6ecd98fd74ab7ec90b0679131ccab6c427e2ecf6c316b26bd80d1f2e0ec",
+    "src/core/eval/output.rs": "5726457078ca24ad95c245461819cc96da937c985c4c7810cf6800414ed69086",
+    "src/core/eval/output/tests.rs": "6251c99bdadcad1d3b6576d56163f01bd52c7fbd2d0f6d7bb6308aaba4c95764",
+    "src/core/eval/results.rs": "e84c96f51911482e772e4666e8f1f39443979d0c783c85072da993339880b41e",
+    "src/core/eval/results/tests.rs": "0e0f0bfd864be9215efdc434d6e18c641f31deaa8a9cd09206dbd00866f776a4",
+    "src/core/eval/snapshots.rs": "06cca2348dc541db3e41a772d2bf863240775ef6efa27871adb669c2d8cafab5",
+    "src/core/eval/snapshots/tests.rs": "1abbf3363d7b22a9090d66299d042aa6ccb088eb0e35e98b2a9ce6994b7565c7",
+    "src/core/eval/temporaries.rs": "3c1c9b2047f4bde309a49de1e2e269809f3ea6b559b164747969c4815bd11677",
+    "src/core/eval/tests.rs": "f224d0b50304f38c73a6f391d0a092e60e45a89f38fd13d193e713e789788b3d",
+    "src/core/eval/tests/guards.rs": "4143d446461397ab148fa87e11b690cd756806d4e86aaa6f3793e697d21a7e2f",
+    "src/core/eval/tests/log_output.rs": "e5fe921f16edc6f4eff88083705d9c67a296fb2802d38596152ff7d616be86eb",
+    "src/core/grammar.pest": "013bab9fe4706f765e8031dcd1da897ec66357c2b0f997d8e9b3c9bb71848412",
+    "src/core/grammar.rs": "08507e49b359bd1e0050c9b39dc95c65ca9c8663c86a4630dcea5ef01e84b677",
+    "src/core/grammar/tests.rs": "e1a28d5d9732cfebd15882bc0b8dcedd9d79e9e9a1e7b8fe3adf2a18dc8023b8",
+    "src/core/input.rs": "37e3397d0cf5df7455a0d710c91cc66c2a35ad0583a2b65bc73d982797699508",
+    "src/core/input/limits.rs": "089f16a0bec875afeb6cc5b87c6200031258c0032e197c02a0d31859d79e83f2",
+    "src/core/input/limits/tests.rs": "7b4b0c3ddd8eb1485c7a0aa7b45a8a1a09d030431a1bf4ae89e56d8b469d2045",
+    "src/core/input/raw.rs": "5140ae528e534c19f5db8f3bb1f7a9ba818d8d61f199d79df731501957dee08a",
+    "src/core/input/tests.rs": "8e03089c608291a106027d3e90b09cd0bb05c8ab090fbc407ae95d084d6ba6ca",
+    "src/core/mod.rs": "1ce1de71762b47470ed35e01ae237171493cc1aeab29bf3aab6a62aa366884d9",
+    "src/core/operation.rs": "f0884d38e82c9c42235add91f22d89fbe65442629046e43a9f6d3c19aa2d51df",
+    "src/core/operation/diagnostics.rs": "64bf9c019fcb7ca88285ea9bbf5b786b8af53db4d680eaff931b5578757623d7",
+    "src/core/operation/diagnostics/tests.rs": "c583ee261ee1da3b60c6a166febb158c56e0f57d2b79ee8b30a156a7dbe42989",
+    "src/core/operation/isolated.rs": "7218125de5769f0d60784f50b148cb1e73c4e3a1f24fded72cbc690ea8923e8d",
+    "src/core/operation/ownership.rs": "f2bdb2e72ad8fda9769c9a511fbf20452a457d2d1db102f135bfcc703ac8fdde",
+    "src/core/operation/ownership/tests.rs": "bb7d68e140f3aef642072bfe9a83cab3dc951b244441c2d47015e19708fc2238",
+    "src/core/operation/tests.rs": "1aa0dd0f4271b1f5a6cc238f3bb290616d7e9d524ad11143202565ea13f78ef2",
+    "src/core/parser.rs": "a3cedaef0d733a66f59213c81b85a17f03f2ed63f74340987685ac1decc0dec1",
+    "src/core/run.rs": "3a4888c55fe92a734d662b7b51ccbad8bb8c183d48381bd83a889d10e1106a32",
+    "src/core/run/import_limits.rs": "c5539b63a9a1e692dc7613be862fad7e1852ec80b1ec7ef4277a6284f1ed4d2b",
+    "src/core/run/import_limits/tests.rs": "1afb0d9caf2392c872eb2147ed0871be303ebe01ce5a9fa27c82b3de33dbca35",
+    "src/core/run/output_limits.rs": "d1e554c23fd50fb38f64f12b57c0760bbc33f025f17f6fc370a725f8454c32dd",
+    "src/core/run/output_limits/tests.rs": "38ce993931ad6eadfe6902cff7224624001c6f69d3073d8e9fb9dfd89e7fce96",
+    "src/core/run/result_limits.rs": "f142871ff05823f61d823d2888074713eeaea1598e488da69c65c21a32c21a9a",
+    "src/core/run/result_limits/tests.rs": "c7d871f219c0efd0f16d0ae4afd10ae8031e4b47517f95e2b18c5f64fcfc1c44",
+    "src/core/run/retained_definitions.rs": "72059becef0825e7d70f6031932b4f688c820eae10b28132e4f689a4130184a9",
+    "src/core/run/retained_definitions/tests.rs": "05fa88fde73c69edf6cdf25fd217c42e925e368b4725a8702f69568ea7f6a53c",
+    "src/core/run/retained_diagnostics.rs": "e1a491ff87cccaf2e4c963ae97eb708b76a216e4fdedfa3e7cfebcbb759d0bb8",
+    "src/core/run/retained_diagnostics/tests.rs": "d4184fb0de55ab56243a5a4f3310bed4e4eda594e46b945505970cbb5f793523",
+    "src/core/run/retained_names.rs": "a9d0d85aa4454e128ac753d4e01fc4217ebe3e2a9ad4c79d61dcfe94f30c9f46",
+    "src/core/run/retained_names/tests.rs": "89936d242ad9ed60a6df977faacde61da9d2a136f220ed3b06d1a853e4100264",
+    "src/core/run/retained_registry.rs": "6cae6906e92043ce9fcdf34cb9e0ef2c0533edb31fd35a7eb8b8b5062d95c9ed",
+    "src/core/run/retained_registry/tests.rs": "8064b7318da131628ee2138dc21eeaceb20a608ba70352a5dbdb512b86e36eea",
+    "src/core/run/retained_values.rs": "809a0eff1a110fc70e00781fdf7cecb3ec2a0cf719c76271928ffeaf27691a02",
+    "src/core/run/retained_values/tests.rs": "29ecfb24917c140ae509db0b4d097bfe68b9d6a956f82da0ba62fb4ac5557560",
+    "src/core/run/snapshot_limits.rs": "648a4499e3f1ec64c9c51f9b8d28b569c2e350bd3916101542d6ecb2e03d54e5",
+    "src/core/run/snapshot_limits/tests.rs": "b869a64b06ef1f7eb968efcc968c7f708a375633fc63bfe7fafd9a49afc7f635",
+    "src/core/run/temporary_values.rs": "6ec8b6c61a30f8d3c15d61fc2c064ae9995e933bd4474bb2d1ad347d54abcc30",
+    "src/core/run/temporary_values/tests.rs": "884e515c659e5dfcc4b8c91cfc872e395d9af2bbda8dfd21d0f1a1b438506cfb",
+    "src/core/run/tests.rs": "10250f49754ac6d75de807b598c3fe48dbbbcfac2140ce4462327913b607ddde",
+    "src/core/signature.rs": "ff4bc1d0f5814f4bbe62f4a1516c590ad7f2e925b4e7e5797438aa3b1e054837",
+    "src/core/signature/tests.rs": "812039d751d7506bd072fcc2b4168de2252137a3c1f07138d6184624143a0fc2",
+    "src/core/syntax_limits.rs": "596cfec4b9a6cae49ad66f0ab7704d8869aa03ee9bbea858af5c21ee8e666ecf",
+    "src/core/value_limits.rs": "0d75c3812f61774dba211a7c16a7a285e3c87c117905262f6e76f36d2ec03141",
+    "src/core/value_limits/tests.rs": "4c4d01813fab233958432b3727a2aa554959d2e6fa78e4c2aac4c34ffcd1c745",
+    "src/core/worker.rs": "ae25c3922884b08601e209d52f8dbb732fca8d76c96f062fc2ae1d8db374e7fc",
+    "src/core/worker/journal.rs": "c879d298d0e0d6a2c40aae6bdeac1d3fcac15c14b299c77b1d0abbee79f7e695",
+    "src/core/worker/journal/format.rs": "ca9cbbe493f1bc4d84f0be8d89afca3571ce10c03848bdbd94fe9672f371d637",
+    "src/core/worker/journal/storage.rs": "3b4b25407087f1872330034a84d5255f8ce57d57dc557b8319410c65c7814ba1",
+    "src/core/worker/journal/tests.rs": "a4903ea6bbeb3ed995b56df80458f910c5b3dab79a7d59804f809065f4e3e443",
+    "src/core/worker/linux.rs": "c484038f749fee824f684ead9c0a0b4be6598eac574737c6d13d9afc274a5054",
+    "src/core/worker/linux/guardian.rs": "48ff29534f037f01a7ed3f793ba68bb0e1a401e89269222287bb55af807dfbe0",
+    "src/core/worker/linux/guardian/tests.rs": "775bffae4e5dd2c1723f51abd84eedd57adcbf29a5800fc2505775131c061659",
+    "src/core/worker/linux/launch.rs": "f6fbb9f66fc3c8e5e73af056e5e3deb397ad323d3ca12a9ef9b97c5c3d76267e",
+    "src/core/worker/linux/launch/tests.rs": "31cfb08d480d7bf15a60be7d80c878bf7b3e3d95817671207b1cda19ae0fb2d7",
+    "src/core/worker/linux/namespace.rs": "83eaa8bd8da166684ecedaade5d745b019b8be1d76282b72c12170c7c8895cb9",
+    "src/core/worker/linux/observation.rs": "828108b49ce59ebffdd887f059322a5a14307099100f1224802db7b2fb525b38",
+    "src/core/worker/linux/observation/tests.rs": "0342cd1162ca4e5c3e456ffae744d5d3f5da5e30582f79ed594a0b9fd022c119",
+    "src/core/worker/linux/owner.rs": "842440cea37613ab0b18166fee437026aec8b78e2c25b414a8c62257fe1603bb",
+    "src/core/worker/linux/process.rs": "2d8c48590afa2c4a10e33f21e413dafbf53d03e0243e7f700b1383d2e6435ca9",
+    "src/core/worker/linux/tests.rs": "b1e142b2ead7030f17422092bf5d99571962bcb3d970941c628090e20fdd1305",
+    "src/core/worker/protocol.rs": "15506e8d24eeb006c2489f3f62ec1b03d5241f123c15b6809ae22c7fcbf681c9",
+    "src/core/worker/protocol/catalog.rs": "cba2b1852fa459b929b8e644e6b566c97c02163f5c91febe9d8dcf4c2461d135",
+    "src/core/worker/protocol/diagnostics.rs": "369e4abb90318299e825800e6d79497de3122780f7700fdf7e56bfee16193339",
+    "src/core/worker/protocol/diagnostics/errors.rs": "efd4de03283206b5a1db570756fb17ebf2bc7a062671cdeb66fd10a77a46fd68",
+    "src/core/worker/protocol/tests.rs": "c1b8e3b309c97ea1c8d77ae4d70efddbf99a7b504de5f51f2cf65de9a2be43c7",
+    "src/core/worker/protocol/values.rs": "25d47e2e241ecaca3d92bf6b8e3b9898238e74824f4a2bf9f34c0a4900081642",
+    "src/core/worker/tests.rs": "200e39f6c684d3840715de1c2f18903fc4f3c473b0e8605deae9f80fd7a9a072",
+    "src/lib.rs": "2bc24fda6ac2f40522f4b3a5deecc59a48176ad113172287d6e4ebb54b8eacfb",
+    "src/main.rs": "97d4c7af1d759906f81b07344d0d036b20e6aba01d628e59d094c936ba01dfd6",
+    "tests/worker_facilities.rs": "9629ed9e4f8bcd4d6d5a64d39d06f97016a27560256ba16fff88703926f91012"
+  },
+  "environment": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "architecture": "x86_64",
+    "os_release": "PRETTY_NAME=\"Ubuntu 26.04 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"26.04\"\nVERSION=\"26.04 (Resolute Raccoon)\"\nVERSION_CODENAME=resolute\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=resolute\nLOGO=ubuntu-logo\n",
+    "libc": "glibc 2.43",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "identity": {
+      "euid": 1000,
+      "egid": 1000
+    },
+    "sysctl": {
+      "kernel/unprivileged_userns_clone": null,
+      "kernel/apparmor_restrict_unprivileged_userns": null,
+      "user/max_user_namespaces": "187731",
+      "user/max_pid_namespaces": "187731",
+      "user/max_mnt_namespaces": "187731"
+    },
+    "process_status": {
+      "CapEff": "0000000000000000",
+      "CapBnd": "000001ffffffffff",
+      "NoNewPrivs": "0",
+      "Seccomp": "2",
+      "Seccomp_filters": "1"
+    }
+  },
+  "campaign": {
+    "randomization": "none; deterministic facility/mode/errno enumeration",
+    "harness": "tests/worker_facilities.rs; input hash above",
+    "worker": "/usr/bin/touch with a literal temporary marker path",
+    "dependencies": "matching Botwork helper; no external adapter",
+    "limits": {
+      "max_in_flight": 1,
+      "timeout_seconds": 3,
+      "cleanup_timeout_seconds": 1,
+      "report_observation_seconds": 5,
+      "fixture_process_seconds": 12
+    },
+    "cases": {
+      "denied_combinations": 58,
+      "enabled_controls": 3,
+      "attempts_per_combination": 2,
+      "errnos": [
+        "ENOSYS",
+        "EPERM"
+      ],
+      "excluded_combinations": [
+        "group/clone3/EPERM",
+        "guardian/clone3/EPERM"
+      ]
+    },
+    "expected": "each required refusal prevents effects and retains unsuccessful status; unrelated modes succeed; both attempts free capacity and leave ECHILD"
+  },
+  "verification": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "source_revision": "4de145a8ac73b2676b5770971e00682788246f89",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 59,
+      "tests": {
+        "passed": 1279,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "66571d67d378d94aa42db82ae58779e792a90b9876a22d5d1c28673505be6434"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--test",
+        "worker_facilities"
+      ],
+      "source_revision": "input_sha256",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 1,
+      "tests": {
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "29c80586c6794266d5f1b55f5cea7bdee4438c84369e3811fc661630af91aa4c",
+      "facility_combinations": 61,
+      "invocation_attempts": 122
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--release"
+      ],
+      "source_revision": "4de145a8ac73b2676b5770971e00682788246f89",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 59,
+      "tests": {
+        "passed": 1279,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "2a3a19873a7ff98127b3ff09be2f4158e5b608377483ccafbfe8d92ef6e42ea1"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--release",
+        "--test",
+        "worker_facilities"
+      ],
+      "source_revision": "input_sha256",
+      "result": "passed",
+      "test_binaries_and_doctest_summaries": 1,
+      "tests": {
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0
+      },
+      "log_sha256": "bb7b81bf378b095e60805bd0748e3eacea1867c1a039bb623ab2b9f1b3b26ff1",
+      "facility_combinations": 61,
+      "invocation_attempts": 122
+    }
+  ],
+  "remaining": [
+    "musl runtime validation",
+    "other architectures, older kernels, distribution policy and proc/quota configurations",
+    "hosted CI observation",
+    "filesystem durability configurations",
+    "whole-run shutdown and durable typed/case/run outcomes"
+  ]
+}
