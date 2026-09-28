@@ -65,6 +65,33 @@ fn named_suite_example_discovers_and_executes_imported_helpers() {
 }
 
 #[test]
+fn parameterized_example_executes_inline_and_shared_rows() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/24-parameterized-cases.suite.botwork");
+    let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .arg("--suite")
+        .arg(path)
+        .args(["--jobs", "1"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert_eq!(output.stdout, b"42\n8\n0\nhello\n");
+    for id in [
+        "parameters/double/answer",
+        "parameters/double/small",
+        "parameters/double/zero",
+        "parameters/greet/hello",
+    ] {
+        assert_eq!(
+            stderr.matches(&format!("[case {id}] succeeded:")).count(),
+            1
+        );
+    }
+    assert!(stderr.ends_with("[cases] 4 selected: 4 succeeded, 0 failed\n"));
+}
+
+#[test]
 fn parallel_examples_also_run_independently_with_their_own_bindings() {
     assert_example(
         "21-parallel-first.botwork",

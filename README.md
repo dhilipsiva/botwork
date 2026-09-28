@@ -37,7 +37,8 @@ for run IDs, ordering, per-run limits, and failure behavior.
 
 Use `--suite examples/23-named-cases.suite.botwork` for named acceptance cases.
 Add `--list-cases`, select with `--case` or `--tag`, and save `--failures failed.json`
-for a later `--rerun-failed failed.json`. See [named suites](docs/suites.md) for
+for a later `--rerun-failed failed.json`. See [parameterized cases and reusable datasets](docs/parameterized-cases.md)
+for independent row execution, and [named suites](docs/suites.md) for
 stable IDs, library declarations, discovery order, and case isolation.
 
 Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.

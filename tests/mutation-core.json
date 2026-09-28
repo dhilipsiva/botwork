@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "mutations": [
     {
       "id": "precedence-products",
@@ -238,6 +238,62 @@
       "file": "src/core/ast/suite.rs",
       "before": "format!(\"{}/{}\", self.suite.metadata.id, self.case().metadata.id)",
       "after": "format!(\"{}/{}\", self.suite.metadata.id, self.case().metadata.name)"
+    },
+    {
+      "id": "dataset-row-binding-discarded",
+      "area": "isolation",
+      "file": "src/main.rs",
+      "before": "let variables = case.bind_inputs(variables, &configuration.limits.values)?;",
+      "after": "let variables = variables;"
+    },
+    {
+      "id": "dataset-row-input-does-not-override",
+      "area": "isolation",
+      "file": "src/core/ast/suite.rs",
+      "before": "inputs.insert(parameters.binding.text.clone(), row.value().clone());",
+      "after": "inputs.entry(parameters.binding.text.clone()).or_insert_with(|| row.value().clone());"
+    },
+    {
+      "id": "dataset-rows-share-first-value",
+      "area": "isolation",
+      "file": "src/core/ast/suite.rs",
+      "before": ".rows()[index]",
+      "after": ".rows()[0]"
+    },
+    {
+      "id": "dataset-rerun-parent-accepted",
+      "area": "selection",
+      "file": "src/core/ast/suite.rs",
+      "before": "(values, false)))",
+      "after": "(values, true)))"
+    },
+    {
+      "id": "dataset-tags-discarded",
+      "area": "selection",
+      "file": "src/core/ast/suite.rs",
+      "before": "if let Some(dataset) = self.dataset() {",
+      "after": "if let Some(dataset) = None::<&DatasetDefinition> {"
+    },
+    {
+      "id": "dataset-canonical-cache-bypassed",
+      "area": "isolation",
+      "file": "src/suites/datasets.rs",
+      "before": "if let Some(data) = self.cache.get(&canonical) {",
+      "after": "if let Some(data) = None::<&Arc<Dataset>> {"
+    },
+    {
+      "id": "dataset-overwritten-nodes-uncounted",
+      "area": "admission",
+      "file": "src/core/ast/suite/dataset.rs",
+      "before": "values.insert(key, value);",
+      "after": "if values.insert(key, value).is_some() { budget.nodes -= 1; }"
+    },
+    {
+      "id": "dataset-file-validation-skipped-for-unused",
+      "area": "admission",
+      "file": "src/core/ast/suite.rs",
+      "before": "for definition in &mut self.datasets {",
+      "after": "for definition in &mut self.datasets[..0] {"
     }
   ]
 }

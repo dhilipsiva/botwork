@@ -163,3 +163,11 @@ The [performance protocol](performance.md) separates correctness smoke checks
 from full measurements. CI runs reduced workloads and native memory calibration
 in each GNU/musl profile; the Python helper checks prevent incomplete or incorrect
 samples from becoming successful measurement evidence.
+
+[Suite and dataset validation](parameterized-cases.md) covers stable case/row IDs,
+literal-only inline and external data, tag/ID selection, isolated row execution,
+discovery limits, per-row output/deadlines, and exact failed-row reruns.
+Run `cargo test --locked --test suite_cli --test parameterized_cases` for CLI
+checks, or `cargo test --locked --lib core::ast::suite` for model boundaries.
+Linux FIFO tests verify sibling progress and immutable discovered data while
+rows are queued; history tests cover version migration and maximum-length IDs.

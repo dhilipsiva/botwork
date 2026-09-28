@@ -211,7 +211,7 @@ async fn run_inputs(
                 Input::File(path) => (path.clone(), None),
                 Input::Case(case) => (
                     PathBuf::from(case.suite().source().name()),
-                    Some((case.id(), case.case().metadata().name().into())),
+                    Some((case.id(), case.display_name())),
                 ),
             };
             let identity = Identity {

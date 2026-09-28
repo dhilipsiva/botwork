@@ -28,7 +28,7 @@ fn failures<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D
     impl<'de> serde::de::Visitor<'de> for Visitor {
         type Value = Vec<String>;
         fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("a bounded list of distinct suite/case IDs")
+            formatter.write_str("a bounded list of distinct suite/case IDs or suite/case/row IDs")
         }
         fn visit_seq<A: serde::de::SeqAccess<'de>>(
             self,
@@ -38,7 +38,7 @@ fn failures<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D
             let mut seen = HashSet::new();
             while let Some(id) = sequence.next_element::<String>()? {
                 if failed.len() == suite::MAX_SELECTED_CASES
-                    || !suite::valid_case_id(&id)
+                    || !suite::valid_run_id(&id)
                     || !seen.insert(id.clone())
                 {
                     return Err(serde::de::Error::custom(
@@ -88,7 +88,8 @@ fn read(path: &Path) -> Result<Record, CliError> {
         ))
     })?;
     if record.format != FORMAT
-        || record.version != 1
+        || !matches!(record.version, 1 | 2)
+        || (record.version == 1 && record.failed.iter().any(|id| !suite::valid_case_id(id)))
         || (!record.complete && !record.failed.is_empty())
     {
         return Err(suite::configuration("Unsupported or inconsistent failed-case record").into());
@@ -180,13 +181,13 @@ impl History {
         if failed.len() > suite::MAX_SELECTED_CASES
             || failed
                 .iter()
-                .any(|id| !suite::valid_case_id(id) || !seen.insert(id))
+                .any(|id| !suite::valid_run_id(id) || !seen.insert(id))
         {
             return Err(suite::configuration("Invalid failed-case result IDs").into());
         }
         let record = Record {
             format: FORMAT.into(),
-            version: 1,
+            version: 2,
             complete,
             failed,
         };

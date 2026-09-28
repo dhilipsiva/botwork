@@ -155,7 +155,7 @@ fn failed_case_reruns_follow_stable_ids_across_renames_and_reordering() {
     );
     assert_eq!(
         state(&harness),
-        json!({"format":"botwork-failed-cases","version":1,"complete":true,"failed":["stable/b","stable/c"]})
+        json!({"format":"botwork-failed-cases","version":2,"complete":true,"failed":["stable/b","stable/c"]})
     );
     source(&harness, "Suite |\"stable\"| Named |\"Renamed suite\"| { Case |\"c\"| { Log |30| } Case |\"b\"| Named |\"New\"| { Log |20| } Case |\"a\"| { Log |10| } }");
     let output = command(
@@ -228,7 +228,7 @@ fn malformed_incomplete_or_stale_failure_records_never_select_work() {
         json!({"format":"botwork-failed-cases","version":1,"complete":true,"failed":["s/a"]});
     let mut invalid = vec![json!({}), json!([])];
     for (key, value) in [
-        ("version", json!(2)),
+        ("version", json!(3)),
         ("format", json!("other")),
         ("complete", json!(false)),
         ("failed", json!(["s/removed"])),
@@ -328,7 +328,7 @@ fn output_records_are_validated_before_overwrite_including_inconsistent_incomple
     source(&harness, "Suite |\"s\"| { Case |\"a\"| { Log |1| } }");
     for record in [
         json!({"format":"botwork-failed-cases","version":1,"complete":false,"failed":["s/a"]}),
-        json!({"format":"botwork-failed-cases","version":2,"complete":true,"failed":[]}),
+        json!({"format":"botwork-failed-cases","version":3,"complete":true,"failed":[]}),
         json!({"format":"unrelated","version":1,"complete":true,"failed":[]}),
         json!({"format":"botwork-failed-cases","version":1,"complete":true,"failed":["s/a","s/a"]}),
         json!({"format":"botwork-failed-cases","version":1,"complete":true,"failed":["bad"]}),

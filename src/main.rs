@@ -33,7 +33,7 @@ struct Args {
     /// Discover cases from an explicit suite file (repeatable; paths keep their order)
     #[arg(long, conflicts_with_all = ["file", "list_statements", "statement_help"])]
     suite: Vec<PathBuf>,
-    /// Select an exact, stable suite/case ID (repeatable)
+    /// Select a stable suite/case or suite/case/row ID (repeatable)
     #[arg(long, requires = "suite")]
     case: Vec<String>,
     /// Include cases with any of these inherited or local tags (repeatable)
@@ -156,6 +156,7 @@ async fn run_case(
     let (program, context) = tokio::task::spawn_blocking(move || {
         let mut context = Context::with_control(configuration.limits.clone(), control)?;
         let variables = load_variables(&configuration.files, &configuration.settings)?;
+        let variables = case.bind_inputs(variables, &configuration.limits.values)?;
         let program = case.program();
         context.init_statements();
         context.set_input_variables(variables)?;

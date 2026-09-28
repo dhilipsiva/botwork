@@ -1,7 +1,7 @@
 use super::*;
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    os::unix::fs::OpenOptionsExt,
+    os::unix::{fs::OpenOptionsExt, process::CommandExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc,
@@ -13,10 +13,16 @@ struct Running {
     child: Child,
     stdout: PathBuf,
     stderr: PathBuf,
+    kill_group: bool,
 }
 
 impl Drop for Running {
     fn drop(&mut self) {
+        if self.kill_group && matches!(self.child.try_wait(), Ok(None)) {
+            // The child is still ours and unreaped, so its process-group ID
+            // cannot be recycled. The isolated test's CLI shares this group.
+            unsafe { libc::kill(-(self.child.id() as i32), libc::SIGKILL) };
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -42,11 +48,16 @@ impl Running {
             child,
             stdout: stdout_path,
             stderr: stderr_path,
+            kill_group: false,
         }
     }
 
     fn finish(&mut self) -> Output {
-        let end = Instant::now() + Duration::from_secs(10);
+        self.finish_with_timeout(Duration::from_secs(10))
+    }
+
+    fn finish_with_timeout(&mut self, timeout: Duration) -> Output {
+        let end = Instant::now() + timeout;
         let status = loop {
             if let Some(status) = self.child.try_wait().unwrap() {
                 break status;
@@ -236,6 +247,43 @@ fn queued_runs_receive_a_fresh_timeout_after_an_expired_read_drains() {
 
 #[test]
 fn reporting_failure_stops_admission_but_drains_already_started_runs() {
+    // Other tests fork CLI/rustc children. Even CLOEXEC pipe readers can remain
+    // open between their fork and exec, defeating this fixture's deliberate
+    // BrokenPipe. Create the pipe in a process running only this test.
+    const ISOLATED: &str = "BOTWORK_TEST_ISOLATED_REPORT_FAILURE";
+    if std::env::var_os(ISOLATED).is_none() {
+        let harness = Harness::new();
+        let stdout = harness.workspace.join("isolated.stdout");
+        let stderr = harness.workspace.join("isolated.stderr");
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "linux::reporting_failure_stops_admission_but_drains_already_started_runs",
+                "--nocapture",
+            ])
+            .env(ISOLATED, "1")
+            .process_group(0)
+            .stdin(Stdio::null())
+            .stdout(fs::File::create(&stdout).unwrap())
+            .stderr(fs::File::create(&stderr).unwrap())
+            .spawn()
+            .unwrap();
+        let mut isolated = Running {
+            child,
+            stdout,
+            stderr,
+            kill_group: true,
+        };
+        let output = isolated.finish_with_timeout(Duration::from_secs(30));
+        assert!(
+            output.status.success(),
+            "isolated report fixture:\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed; 0 failed;"));
+        return;
+    }
     let harness = Harness::new();
     let first = fifo(&harness, "first.botwork");
     let second = fifo(&harness, "second.botwork");

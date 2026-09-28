@@ -30,7 +30,7 @@ fn writer_admits_exact_id_capacity_and_rejections_preserve_the_previous_record()
     let history = History::begin(path.clone()).unwrap();
     assert!(load(&path).is_err());
     let exact = (0..suite::MAX_SELECTED_CASES)
-        .map(|i| format!("suite/c{i}"))
+        .map(|i| format!("{}/{:0>128}/{}", "s".repeat(128), i, "r".repeat(128)))
         .collect::<Vec<_>>();
     history.finish(exact.clone()).unwrap();
     assert_eq!(load(&path).unwrap(), exact);
@@ -40,7 +40,7 @@ fn writer_admits_exact_id_capacity_and_rejections_preserve_the_previous_record()
         over,
         vec!["suite/a".into(), "suite/a".into()],
         vec!["suite/".into()],
-        vec!["suite/case/extra".into()],
+        vec!["suite/case/row/extra".into()],
     ] {
         assert!(history.finish(invalid).is_err());
         assert_eq!(load(&path).unwrap(), exact);

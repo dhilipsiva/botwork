@@ -1,0 +1,5 @@
+Dataset |"shared-numbers"| Tags |["math"]| {
+    Row |"answer"| Values |{number: 21}|
+    Row |"small"| Values |{number: 4}|
+    Row |"zero"| Tags |["edge"]| Values |{number: 0}|
+}

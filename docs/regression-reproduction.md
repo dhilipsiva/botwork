@@ -41,3 +41,11 @@ Rust API examples are included into crate documentation and run by `cargo test -
 Suite examples use `botwork-suite` fences with the same required markers. Register
 their expected stdout in `every_documented_suite_matches_its_cli_output`; it runs
 `--suite` with one job and checks case status records as well as successful output.
+
+Dataset reproductions must retain the suite, every referenced data file, their
+relative directory layout, selection flags, and any prior failure record.
+Record exact suite/case/row IDs and expected terminal outcomes. Use
+`cargo test --locked --test parameterized_cases` for typed data and rerun cases
+and `cargo test --locked --test suite_cli linux::rows` for queued-row deadlines.
+Keep the initial discovery snapshot when reproducing a later file edit; queued
+rows intentionally retain their admitted discovery data.

@@ -17,7 +17,8 @@ no imports, custom definitions, inputs, or case bodies.
 
 ## Declaration and identity
 
-Each file declares one suite. Its optional `Library` block comes before the cases
+Each file declares one suite. Optional [datasets](parameterized-cases.md) precede its
+Library and cases. Its optional `Library` block comes before the cases
 and accepts custom definitions and imports only. A case contains ordinary Botwork
 statements. This self-contained example prints `42` and `8`:
 
@@ -39,7 +40,7 @@ Suite |"arithmetic"| Named |"Arithmetic checks"| Tags |["math"]| {
 The strings immediately after `Suite` and `Case` are required, explicit IDs.
 Each ID is 1–128 ASCII bytes, starts with a letter or digit, and otherwise uses
 letters, digits, `.`, `_`, or `-`. IDs are case-sensitive. The qualified case ID
-is `suite-id/case-id`. It does not depend on paths, display names, declaration
+is `suite-id/case-id`; parameterized rows append `/row-id`. It does not depend on paths, display names, declaration
 positions, tags, or completion order. Keep IDs unchanged when renaming or moving
 a test. Duplicate suite IDs across supplied files and duplicate case IDs within
 a suite are errors before any case starts.
@@ -61,8 +62,7 @@ suite syntax has a separate parser entry point. Use `--file` for scripts and
 
 ## Discovery and selection
 
-Pass `--suite` repeatedly to discover several files. Discovery reads only those
-explicit paths; it does not scan directories, expand globs, or execute imported
+Pass `--suite` repeatedly to discover several files. Discovery reads those explicit paths and declared dataset files; it does not scan directories, expand globs, or execute imported
 libraries. Suite order follows the command line, and case order follows each
 declaration. The `.suite.botwork` suffix is a convention, not an implicit scan.
 All supplied files and every case body are parsed and validated before effects,
@@ -70,7 +70,8 @@ including bodies later excluded by filters. Syntax/control errors or duplicate
 IDs prevent the entire selected run from starting.
 
 The default selection includes all discovered cases. Repeat `--case suite/id`
-to choose exact IDs; repeat `--tag value` to include cases matching **any** listed
+to choose cases (including all their rows), or `--case suite/id/row`
+to choose an exact row; repeat `--tag value` to include cases matching **any** listed
 tag. Case and tag filters intersect. Any `--exclude-tag` match removes the case.
 Filters do not reorder or duplicate cases. Unknown case IDs and empty selections
 are errors. An empty completed failed-case list is the explicit exception below.
@@ -102,8 +103,10 @@ cargo run -- --suite examples/23-named-cases.suite.botwork --rerun-failed failed
 ```
 
 `--failures PATH` writes a small versioned selection record, not a full execution
-report. Version 1 contains exactly `format` (`botwork-failed-cases`), `version`
-(`1`), `complete` (boolean), and `failed` (distinct qualified case IDs). Failed
+report. Version 2 contains exactly `format` (`botwork-failed-cases`), `version`
+(`2`), `complete` (boolean), and `failed` (distinct qualified case or row IDs). Readers also accept version 1
+records containing ordinary case IDs. Reruns never expand a saved parent ID
+into rows; each saved ID must identify one runnable case or row. Failed
 IDs follow discovery order, regardless of completion order. Runtime errors,
 timeouts, and resource-limit stops count as failures. Earlier successful effects
 are not rolled back. To update the same record after a rerun, supply both flags
@@ -141,7 +144,8 @@ files are never treated as completed records.
 Each suite retains the existing 1 MiB source and syntax guards and a cumulative
 65,536-node AST allowance across Library and all case bodies. It contains at most
 1,024 cases. One discovery accepts at most 64 suites, 8 MiB of combined source,
-and 4,096 cases. Filters are bounded to 4,096 case IDs and 32 included/excluded
+and 4,096 expanded case/row executions. Dataset files share the discovery
+source allowance and have their own [data bounds](parameterized-cases.md#bounds-and-embedding). Filters are bounded to 4,096 case IDs and 32 included/excluded
 tags each. Failed-case files are limited to 2 MiB and 4,096 valid IDs; malformed,
 duplicate, unknown-field, unsupported-version, and incomplete records fail.
 Only admitted case programs are composed; immutable definition/source ownership
@@ -152,7 +156,7 @@ separate bounded reporting allowance. Discovery/storage and preparation execute
 off the async executor. These byte/count limits do not supply a hard deadline
 for blocked filesystem calls or cleanup. Discovery is outside per-case timeouts.
 
-Parameterized rows, fixtures, awaited teardown, assertion policy, rich shared
+Fixtures, awaited teardown, assertion policy, rich shared
 events/reports, and coordinated signal handling retain their own roadmap tasks.
 They can build on these stable IDs without treating a library import as a case.
 

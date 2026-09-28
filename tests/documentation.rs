@@ -139,7 +139,13 @@ fn every_documented_botwork_example_matches_its_cli_output() {
 
 #[test]
 fn every_documented_suite_matches_its_cli_output() {
-    let expected = BTreeMap::from([("named-suite", ("docs/suites.md", "42\n8\n"))]);
+    let expected = BTreeMap::from([
+        ("named-suite", ("docs/suites.md", "42\n8\n", 2)),
+        (
+            "parameterized-suite",
+            ("docs/parameterized-cases.md", "42\n8\n0\n", 3),
+        ),
+    ]);
     let mut seen = BTreeSet::new();
     let harness = Harness::new();
     for (document, blocks) in documents() {
@@ -149,7 +155,7 @@ fn every_documented_suite_matches_its_cli_output() {
         {
             let id = block.id.as_deref().unwrap();
             assert!(seen.insert(id.to_owned()), "duplicate suite example: {id}");
-            let (expected_document, stdout) = expected.get(id).unwrap_or_else(|| {
+            let (expected_document, stdout, count) = expected.get(id).unwrap_or_else(|| {
                 panic!("{document}:{}: register suite output for {id}", block.line)
             });
             assert_eq!(&document, expected_document);
@@ -169,8 +175,10 @@ fn every_documented_suite_matches_its_cli_output() {
                 block.line
             );
             assert_eq!(output.stdout, stdout.as_bytes());
-            assert_eq!(stderr.lines().count(), 5);
-            assert!(stderr.ends_with("[cases] 2 selected: 2 succeeded, 0 failed\n"));
+            assert_eq!(stderr.lines().count(), count * 2 + 1);
+            assert!(stderr.ends_with(&format!(
+                "[cases] {count} selected: {count} succeeded, 0 failed\n"
+            )));
         }
     }
     assert_eq!(
@@ -182,6 +190,8 @@ fn every_documented_suite_matches_its_cli_output() {
 
 #[test]
 fn every_rust_documentation_example_is_included_in_crate_doctests() {
+    assert!(include_str!("../src/lib.rs")
+        .contains("#![doc = include_str!(\"../docs/parameterized-cases.md\")]"));
     let inclusion = "#![doc = include_str!(\"../docs/interpreter-architecture.md\")]";
     assert!(include_str!("../src/lib.rs").contains(inclusion));
     assert!(include_str!("../src/lib.rs")
@@ -203,6 +213,7 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/interpreter-architecture.md".to_owned(),
             "docs/async-execution.md".to_owned(),
             "docs/nonblocking-io.md".to_owned(),
+            "docs/parameterized-cases.md".to_owned(),
             "docs/isolated-workers.md".to_owned(),
             "docs/worker-protocol.md".to_owned()
         ]),

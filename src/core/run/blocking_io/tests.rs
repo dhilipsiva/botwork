@@ -185,10 +185,14 @@ async fn completed_payload_keeps_its_permit_until_handoff_or_disposal() {
     let drops = Arc::new(AtomicUsize::new(0));
     let owned = Arc::clone(&drops);
     let (done, ready) = tokio::sync::oneshot::channel();
+    let (release, wait) = mpsc::channel();
     let mut future = Box::pin(execute(
         Arc::clone(&capacity),
         OperationControl::default(),
         move |_| {
+            // A blocking worker may complete before the initial future poll
+            // returns. Hold it explicitly while asserting that pending phase.
+            wait.recv_timeout(Duration::from_secs(5)).unwrap();
             done.send(()).unwrap();
             Payload(owned)
         },
@@ -197,6 +201,7 @@ async fn completed_payload_keeps_its_permit_until_handoff_or_disposal() {
         .as_mut()
         .poll(&mut Context::from_waker(Waker::noop()))
         .is_pending());
+    release.send(()).unwrap();
     ready.await.unwrap();
     assert_eq!(capacity.available_permits(), 0);
     let outcome = future.await.unwrap();

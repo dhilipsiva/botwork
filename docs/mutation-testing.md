@@ -262,3 +262,56 @@ tested target; it is recorded as a survivor without an equivalence exclusion.
 Compiler failures and the initial timeout are not kills. The evidence contains
 the final GNU/musl profile results and retains earlier timing observations; this
 feature campaign does not complete the release mutation gate.
+
+## Parameterized-case expansion
+
+Version 7 adds 155 generated mutations for dataset admission, literal lowering,
+row expansion, binding, and selection, retaining all 476 preceding identities
+after explicit mapping. Twelve source-read mutations moved from suite discovery
+to `Discovery::read`; the supported-version inversion now covers versions 1
+and 2. Catalogue version 6 retains the earlier 34 targeted changes and adds
+eight for row binding/identity, exact reruns, tags, canonical caching, duplicate
+literal accounting, and complete data resolution. Both campaigns include
+`parameterized_cases`.
+
+[Dataset evidence](parameterized-cases-evidence.json) retains the 631-entry
+inventory, replacements, commands, source/test hashes, logs, and reviews.
+
+| Stage | Caught by tests | Survived | Did not compile | Timed out |
+| --- | ---: | ---: | ---: | ---: |
+| Initial generated campaign | 445 | 29 | 157 | 0 |
+| Exact replay of 32 identities | 24 | 8 | 0 | 0 |
+| Additional exact generated replays (2) | 2 | 0 | 0 | 0 |
+| Targeted catalogue, using latest replay results | 42 | 0 | 0 | 0 |
+
+The grouped replay covers all initial survivors and three apparent catches
+caused by an unrelated pipe-reporting fixture. One additional replay verifies a
+fourth such catch; the other rechecks a case-count boundary after repairing a
+separate worker-test race. A targeted replay similarly verifies unbounded
+admission after the race repair. Count each original identity once.
+
+New assertions cover early discovery stops before later files, exact
+dataset/row/node/source capacities, binding-byte and expansion ceilings, mixed
+valid/stale selectors, per-dataset node accounting, nested maps, and container
+rejection before lowering an excess value.
+
+The pipe fixture now creates its intentionally closed reader in an isolated test
+process, preventing other test forks from temporarily retaining that descriptor
+before exec. Its draining/admission assertions are unchanged. A blocking-worker
+fixture now uses an explicit release handshake before asserting a pending poll,
+since fast completion is valid. One hundred full parallel CLI runs and one
+hundred focused worker-fixture runs pass after these repairs. Original failures
+remain in the evidence; unrelated failures are not credited as mutation kills.
+
+Latest results catch **508/516 compiled mutations (98.45%)**. The eight survivors
+remain in the denominator: the defensive CLI cancellation label, smaller read
+buffer, disjoint Linux flag XOR, unexercised non-NotFound metadata error branch,
+and four depth-check changes unreachable behind the stricter syntax guard.
+The metadata-guard mutation had previously been reported caught by an unrelated
+pipe failure; this campaign corrects that interpretation. There are no
+equivalence exclusions, and compiler failures do not count as kills.
+
+The evidence also retains a repeated worker-startup observation (`Unverified`
+instead of `NotStarted`, with OS error 11), 100 successful focused replays,
+and the final GNU/musl matrix. Passing replays do not resolve that older cause.
+The release mutation and reliability gates remain open.

@@ -2,12 +2,12 @@
 use super::{batch, Args, BWErr, CliError, Context, Diagnostic};
 use botwork::core::suite::{self, SelectedCase, Selection, Suite};
 use std::{
-    fs::File,
     io::{self, Read},
     path::PathBuf,
     sync::Arc,
 };
 
+mod datasets;
 mod history;
 
 pub(super) struct Request {
@@ -49,35 +49,20 @@ fn discover(mut request: Request) -> Result<Discovered, CliError> {
         return Err(suite::resource("suites", suite::MAX_SUITES).into());
     }
     let mut suites = Vec::new();
-    let mut source_bytes = 0;
+    let mut discovery = datasets::Discovery::default();
     let mut case_count = 0;
     for path in request.paths {
-        let mut bytes = Vec::new();
-        let maximum = super::DEFAULT_SOURCE_BYTES.min(suite::MAX_SUITE_SOURCE_BYTES - source_bytes);
-        File::open(&path)
-            .and_then(|file| file.take(maximum as u64 + 1).read_to_end(&mut bytes))
-            .map_err(|source| CliError::Read {
-                file: path.clone(),
-                source,
-            })?;
-        if bytes.len() > maximum {
-            return Err(if maximum < super::DEFAULT_SOURCE_BYTES {
-                suite::resource(
-                    "suite discovery source bytes",
-                    suite::MAX_SUITE_SOURCE_BYTES,
-                )
-            } else {
-                suite::resource("suite source bytes", super::DEFAULT_SOURCE_BYTES)
-            }
-            .into());
-        }
-        source_bytes += bytes.len();
-        let source = String::from_utf8(bytes).map_err(|error| CliError::Read {
-            file: path.clone(),
-            source: io::Error::new(io::ErrorKind::InvalidData, error),
-        })?;
+        let source = discovery.read(&path, false)?;
         let parsed = Suite::parse(&path.display().to_string(), &source)?;
-        case_count += parsed.cases().len();
+        for definition in parsed.datasets() {
+            if let Some(data) = definition.data() {
+                discovery.admit(data)?;
+            }
+        }
+        let directory = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let parsed = parsed
+            .resolve_datasets(|reference, span| discovery.load(&directory.join(reference), span))?;
+        case_count += parsed.run_count()?;
         if case_count > suite::MAX_SELECTED_CASES {
             return Err(suite::resource("discovered cases", suite::MAX_SELECTED_CASES).into());
         }
@@ -103,7 +88,12 @@ pub(super) async fn run(
             let context = Context::with_limits(configuration.limits)?;
             let mut stdout = io::stdout().lock();
             for case in discovered.cases {
-                let record = serde_json::json!({"id": case.id(), "suite": case.suite().metadata().name(), "name": case.case().metadata().name(), "tags": case.tags()});
+                let mut record = serde_json::json!({"id": case.id(), "suite": case.suite().metadata().name(), "name": case.display_name(), "tags": case.tags()});
+                if let Some(row) = case.row() {
+                    record["case"] = case.case_id().into();
+                    record["dataset"] = case.dataset().expect("row dataset").id().into();
+                    record["row"] = serde_json::json!({"id": row.metadata().id(), "name": row.metadata().name()});
+                }
                 context.write_output(&mut stdout, format_args!("{record}\n"))?;
             }
             Ok(())

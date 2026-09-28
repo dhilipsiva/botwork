@@ -1,8 +1,10 @@
-# Version 6: retain core/worker/batch mutations and add suite discovery and failure selection.
+# Version 7: retain earlier semantics and add dataset admission, row expansion and binding.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/batch.rs",
     "src/core/ast/suite.rs",
+    "src/core/ast/suite/dataset.rs",
+    "src/suites/datasets.rs",
     "src/core/ast_limits.rs",
     "src/suites.rs",
     "src/suites/history.rs",
@@ -19,6 +21,8 @@ examine_globs = [
 examine_re = [
     '^src/batch.rs:',
     '^src/core/ast/suite.rs:',
+    '^src/core/ast/suite/dataset.rs:',
+    '^src/suites/datasets.rs:',
     '^src/suites.rs:',
     '^src/suites/history.rs:',
     ' check_suite( ->|$)',
@@ -52,6 +56,7 @@ additional_cargo_args = [
     "--test", "async_blocking",
     "--test", "parallel_cli",
     "--test", "suite_cli",
+    "--test", "parameterized_cases",
 ]
 test_tool = "cargo"
 minimum_test_timeout = 60

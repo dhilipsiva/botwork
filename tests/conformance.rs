@@ -421,6 +421,59 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::DatasetRows | Input::DatasetDuplicateRow | Input::DatasetRowRerun => {
+                let second = if matches!(case.input, Input::DatasetDuplicateRow) {
+                    "answer"
+                } else {
+                    "small"
+                };
+                fs::write(harness.workspace.join("data.dataset.botwork"), format!(
+                    "Dataset |\"data\"| {{ Row |\"answer\"| Values |21| Row |\"{second}\"| Values |4| }}"
+                )).unwrap();
+                fs::write(
+                    harness.workspace.join("rows.suite.botwork"),
+                    r#"Suite |"rows"| {
+Dataset |"shared"| From |"data.dataset.botwork"|
+Case |"double"| Using |"shared"| As |n| { Log |n * 2| }
+}"#,
+                )
+                .unwrap();
+                let mut args = vec!["--suite", "rows.suite.botwork", "--jobs", "1"];
+                if matches!(case.input, Input::DatasetRowRerun) {
+                    fs::write(harness.workspace.join("prior.json"), r#"{"format":"botwork-failed-cases","version":2,"complete":true,"failed":["rows/double/small"]}"#).unwrap();
+                    args.extend(["--rerun-failed", "prior.json", "--failures", "prior.json"]);
+                }
+                let output = harness
+                    .command(case.id, &args, Duration::from_secs(10))
+                    .unwrap();
+                assert_eq!(output.stdout, case.stdout.as_bytes());
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                if let Some(error) = case.error {
+                    assert_eq!(output.status.code(), Some(1));
+                    assert!(
+                        stderr.contains(error) && stderr.contains(case.code.unwrap()),
+                        "{stderr}"
+                    );
+                    assert!(!stderr.contains("started:"));
+                } else {
+                    assert!(output.status.success(), "{stderr}");
+                    assert!(stderr.contains("[case rows/double/small] succeeded:"));
+                    if matches!(case.input, Input::DatasetRows) {
+                        assert!(stderr.contains("[case rows/double/answer] succeeded:"));
+                        assert_eq!(stderr.lines().count(), 5);
+                    } else {
+                        assert_eq!(stderr.lines().count(), 3);
+                        let record: serde_json::Value = serde_json::from_slice(
+                            &fs::read(harness.workspace.join("prior.json")).unwrap(),
+                        )
+                        .unwrap();
+                        assert_eq!(record["version"], 2);
+                        assert_eq!(record["complete"], true);
+                        assert_eq!(record["failed"], serde_json::json!([]));
+                    }
+                }
+                continue;
+            }
             Input::SuiteCliSuccess | Input::SuiteCliInvalid | Input::SuiteCliRerun => {
                 let filename = format!("{}.suite.botwork", case.id);
                 fs::write(

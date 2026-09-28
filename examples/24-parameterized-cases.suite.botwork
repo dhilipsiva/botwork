@@ -1,0 +1,15 @@
+Suite |"parameters"| Named |"Parameterized examples"| {
+    Dataset |"numbers"| From |"datasets/numbers.dataset.botwork"|
+    Dataset |"greetings"| {
+        Row |"hello"| Values |"hello"|
+    }
+    Library {
+        Import |"modules/arithmetic.botwork"| As |math|
+    }
+    Case |"double"| Using |"numbers"| As |data| {
+        Log |@{ math::Double |data.number| }|
+    }
+    Case |"greet"| Using |"greetings"| As |message| {
+        Log |message|
+    }
+}

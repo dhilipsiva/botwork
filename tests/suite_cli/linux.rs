@@ -88,6 +88,137 @@ fn try_writer(path: &Path) -> io::Result<fs::File> {
         .open(path)
 }
 
+#[test]
+fn row_failure_allows_queued_rows_while_a_sibling_is_blocked_and_data_stays_frozen() {
+    let harness = Harness::new();
+    let held = fifo(&harness, "held.botwork");
+    fs::write(
+        harness.workspace.join("data"),
+        r#"Dataset |"d"| {
+Row |"held"| Values |1|
+Row |"failure"| Values |0|
+Row |"queued"| Values |2|
+}"#,
+    )
+    .unwrap();
+    source(
+        &harness,
+        r#"Suite |"s"| {
+Dataset |"d"| From |"data"|
+Case |"c"| Using |"d"| As |n| {
+If |n == 1| { Import |"held.botwork"| As |m| }
+Log |8 / n|
+}
+}"#,
+    );
+    let mut running = Running::start(
+        &harness,
+        &[
+            "--suite",
+            "suite.botwork",
+            "--jobs",
+            "2",
+            "--failures",
+            "failed.json",
+        ],
+        None,
+    );
+    let mut pipe = writer(&held, &mut running);
+    running.wait_for("[case s/c/queued] succeeded:");
+    let progress = fs::read_to_string(&running.stderr).unwrap();
+    assert!(
+        progress.find("[case s/c/failure] failed:").unwrap()
+            < progress.find("[case s/c/queued] started:").unwrap()
+    );
+    assert!(!progress.contains("[case s/c/held] succeeded:"));
+    assert_eq!(state(&harness)["complete"], false);
+    fs::write(harness.workspace.join("data"), "invalid now").unwrap();
+    writeln!(pipe, "Log |11|").unwrap();
+    drop(pipe);
+    let output = running.finish();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"4\n11\n8\n");
+    assert_eq!(state(&harness)["complete"], true);
+    assert_eq!(state(&harness)["failed"], json!(["s/c/failure"]));
+}
+
+#[test]
+fn rows_wait_for_admission_and_receive_fresh_deadlines_and_the_discovered_values() {
+    let harness = Harness::new();
+    let held = fifo(&harness, "held.botwork");
+    fs::write(
+        harness.workspace.join("data"),
+        r#"Dataset |"d"| { Row |"held"| Values |1| Row |"queued"| Values |2| }"#,
+    )
+    .unwrap();
+    source(
+        &harness,
+        r#"Suite |"s"| {
+Dataset |"d"| From |"data"|
+Case |"c"| Using |"d"| As |n| {
+If |n == 1| { Try { Import |"held.botwork"| As |m| } Catch { Log |999| } }
+Log |n|
+}
+}"#,
+    );
+    let mut running = Running::start(
+        &harness,
+        &[
+            "--suite",
+            "suite.botwork",
+            "--jobs",
+            "1",
+            "--timeout-ms",
+            "250",
+            "--failures",
+            "failed.json",
+        ],
+        None,
+    );
+    let mut pipe = writer(&held, &mut running);
+    fs::write(
+        harness.workspace.join("data"),
+        r#"Dataset |"d"| { Row |"queued"| Values |99| }"#,
+    )
+    .unwrap();
+    thread::sleep(Duration::from_millis(400));
+    assert!(running.child.try_wait().unwrap().is_none());
+    assert!(!fs::read_to_string(&running.stderr)
+        .unwrap()
+        .contains("[case s/c/queued] started:"));
+    writeln!(pipe, "Log |11|").unwrap();
+    drop(pipe);
+    let output = running.finish();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"2\n");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("[case s/c/held] timed out:"), "{stderr}");
+    assert!(stderr.contains("[case s/c/queued] succeeded:"), "{stderr}");
+    assert_eq!(state(&harness)["failed"], json!(["s/c/held"]));
+}
+
+#[test]
+fn canonical_dataset_cache_admits_symlink_aliases_without_recounting_file_bytes() {
+    let harness = Harness::new();
+    let mut data = "Dataset |\"d\"| { Row |\"r\"| Values |42| }".to_owned();
+    data.push_str(&" ".repeat(1024 * 1024 - data.len()));
+    fs::write(harness.workspace.join("data"), data).unwrap();
+    symlink("data", harness.workspace.join("alias")).unwrap();
+    let files: Vec<_> = (0..9).map(|i| {
+        let name = format!("s{i}.botwork");
+        let path = if i % 2 == 0 { "data" } else { "./alias" };
+        fs::write(harness.workspace.join(&name), format!("Suite |\"s{i}\"| {{ Dataset |\"d\"| From |\"{path}\"| Case |\"c\"| Using |\"d\"| As |n| {{ Log |n| }} }}")).unwrap();
+        name
+    }).collect();
+    let mut args = vec!["--jobs", "1"];
+    for file in &files {
+        args.extend(["--suite", file]);
+    }
+    let output = command(&harness, &args);
+    let stderr = success(&output, &"42\n".repeat(9));
+    assert!(stderr.ends_with("[cases] 9 selected: 9 succeeded, 0 failed\n"));
+}
+
 fn writer(path: &Path, running: &mut Running) -> fs::File {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
