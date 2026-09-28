@@ -416,3 +416,13 @@ fn selector_bounds_are_checked_even_for_an_empty_rerun_and_errors_do_not_copy_hu
     .select(&suites)
     .is_err());
 }
+
+#[test]
+fn fixtures_share_the_whole_suite_ast_admission_allowance() {
+    // Log has three AST nodes; separate hooks cannot each reset the total.
+    let statements = "Log |1|\n".repeat(6000);
+    let source = format!("Suite |\"s\"| {{ SuiteSetup {{ {statements} }} SuiteTeardown {{ {statements} }} CaseSetup {{ {statements} }} CaseTeardown {{ {statements} }} Case |\"a\"| {{}} }}");
+    let error = rejected(Suite::parse("aggregate", &source));
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert!(error.to_string().contains("AST nodes"), "{error}");
+}

@@ -392,3 +392,21 @@ fn local_import_example_checks_namespaces_results_and_collision_recovery() {
         &["14", "[1, 2]", "BW6003", "10"],
     );
 }
+
+#[test]
+fn fixture_example_executes_both_owners_around_each_row() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/26-fixtures.suite.botwork");
+    let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .arg("--suite")
+        .arg(path)
+        .args(["--jobs", "1"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(output.status.success(), "{stderr}");
+    assert_eq!(
+        output.stdout,
+        b"suite opened\n41\ncase closed\n42\ncase closed\nsuite closed\n"
+    );
+    assert!(stderr.ends_with("[cases] 2 selected: 2 succeeded, 0 failed\n"));
+}

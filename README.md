@@ -116,6 +116,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] Basic arithmatic and logical operations
   - [x] Datatypes: int, float, string, bool, array, map
   - [x] Try/Catch and [awaited Finally cleanup](docs/cleanup.md)
+  - [x] [Suite and case setup/teardown](docs/fixtures.md)
   - [x] Custom statements
   - [ ] Map and Array access 
   - [ ] Imports (other botwork files, wasm files, packages; locally or from URL)

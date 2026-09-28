@@ -421,6 +421,40 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::FixtureOrder | Input::FixturePrimary | Input::FixtureInvalid => {
+                let body = match case.input {
+                    Input::FixtureOrder => "Log |3|",
+                    Input::FixturePrimary => "|x| = |missing|",
+                    _ => "Return |1|",
+                };
+                let cleanup = if matches!(case.input, Input::FixturePrimary) {
+                    "Other"
+                } else {
+                    ""
+                };
+                fs::write(harness.workspace.join("fixtures.botwork"), format!(
+                    "Suite |\"s\"| {{ SuiteSetup {{ Log |1| }} SuiteTeardown {{ Log |5| }} CaseSetup {{ Log |2| }} CaseTeardown {{ Log |4|\n{cleanup} }} Case |\"a\"| {{ {body} }} }}"
+                )).unwrap();
+                let output = harness
+                    .command(
+                        case.id,
+                        &["--suite", "fixtures.botwork", "--jobs", "1"],
+                        Duration::from_secs(5),
+                    )
+                    .unwrap();
+                assert_eq!(output.stdout, case.stdout.as_bytes());
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                if let Some(error) = case.error {
+                    assert_eq!(output.status.code(), Some(1));
+                    assert!(
+                        stderr.contains(case.code.unwrap()) && stderr.contains(error),
+                        "{stderr}"
+                    );
+                } else {
+                    assert!(output.status.success(), "{stderr}");
+                }
+                continue;
+            }
             Input::DatasetRows | Input::DatasetDuplicateRow | Input::DatasetRowRerun => {
                 let second = if matches!(case.input, Input::DatasetDuplicateRow) {
                     "answer"

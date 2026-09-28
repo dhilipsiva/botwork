@@ -8,6 +8,7 @@ use std::{
 };
 
 mod datasets;
+mod execution;
 mod history;
 
 pub(super) struct Request {
@@ -99,7 +100,21 @@ pub(super) async fn run(
             Ok(())
         }).await.map_err(|_| Diagnostic::new(BWErr::AsyncRuntime("Case listing worker failed".into())))?;
     }
-    let outcome = batch::run_cases(discovered.cases, jobs, configuration).await?;
+    let has_fixtures = discovered
+        .cases
+        .iter()
+        .any(|case| case.suite().has_suite_fixture());
+    if configuration.suite_timeout_ms.is_some() && !has_fixtures && !discovered.cases.is_empty() {
+        return Err(suite::configuration(
+            "--suite-timeout-ms requires a selected suite with SuiteSetup or SuiteTeardown",
+        )
+        .into());
+    }
+    let outcome = if has_fixtures {
+        execution::run(discovered.cases, jobs, configuration).await?
+    } else {
+        batch::run_cases(discovered.cases, jobs, configuration).await?
+    };
     if let Some(history) = discovered.history {
         let failed = outcome.failed_cases.clone();
         tokio::task::spawn_blocking(move || history.finish(failed))

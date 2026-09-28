@@ -1,0 +1,16 @@
+Suite |"sessions"| Named |"Owned sessions"| {
+    Dataset |"numbers"| {
+        Row |"first"| Values |1|
+        Row |"second"| Values |2|
+    }
+    SuiteSetup {
+        |shared| = |40|
+        Log |"suite opened"|
+    }
+    SuiteTeardown { Log |"suite closed"| }
+    CaseSetup { |local| = |shared + number| }
+    CaseTeardown { Log |"case closed"| }
+    Case |"increment"| Using |"numbers"| As |number| {
+        Log |local|
+    }
+}

@@ -14,14 +14,15 @@ pub(super) struct Configuration {
     pub(super) settings: Vec<String>,
     pub(super) limits: RunLimits,
     pub(super) timeout_ms: Option<u64>,
+    pub(super) suite_timeout_ms: Option<u64>,
 }
 
 #[derive(Clone)]
-struct Identity {
+pub(super) struct Identity {
     // Command-line position stays stable even when completion order changes.
-    number: usize,
-    path: Arc<PathBuf>,
-    case: Option<(String, String)>,
+    pub(super) number: usize,
+    pub(super) path: Arc<PathBuf>,
+    pub(super) case: Option<(String, String)>,
 }
 
 enum Input {
@@ -30,14 +31,22 @@ enum Input {
 }
 
 pub(super) struct Outcome {
-    total: usize,
-    failed: usize,
+    pub(super) total: usize,
+    pub(super) failed: usize,
+    pub(super) skipped: usize,
+    pub(super) fixtures_failed: usize,
     pub(super) failed_cases: Vec<String>,
 }
 
 impl Outcome {
     pub(super) fn result(self) -> Result<(), CliError> {
-        if self.failed == 0 {
+        if self.skipped != 0 || self.fixtures_failed != 0 {
+            Err(CliError::Suites {
+                failed: self.failed,
+                skipped: self.skipped,
+                fixtures_failed: self.fixtures_failed,
+            })
+        } else if self.failed == 0 {
             Ok(())
         } else {
             Err(CliError::Batch {
@@ -48,18 +57,24 @@ impl Outcome {
     }
 }
 
-enum Message {
+pub(super) enum Message {
     Started(Identity),
     Finished(Identity, Result<(), CliError>),
+    Skipped(Identity, &'static str),
+    SuiteStarted(String),
+    SuiteReady(String),
+    SuiteFinished(String, Result<(), CliError>),
     Summary {
         total: usize,
         succeeded: usize,
         failed: usize,
         cases: bool,
+        skipped: usize,
+        fixtures_failed: usize,
     },
 }
 
-fn task_failure() -> CliError {
+pub(super) fn task_failure() -> CliError {
     Diagnostic::new(BWErr::AsyncRuntime(
         "CLI task failed before completing".into(),
     ))
@@ -84,6 +99,12 @@ fn write_report(message: Message) -> Result<(), CliError> {
     let context = Context::default();
     let mut stderr = io::stderr().lock();
     match message {
+        Message::SuiteStarted(id) => context.write_output(&mut stderr, format_args!("[suite {id}] setup started\n")),
+        Message::SuiteReady(id) => context.write_output(&mut stderr, format_args!("[suite {id}] setup succeeded\n")),
+        Message::SuiteFinished(id, Ok(())) => context.write_output(&mut stderr, format_args!("[suite {id}] teardown succeeded\n")),
+        Message::SuiteFinished(id, Err(error)) => context.write_output(&mut stderr, format_args!("[suite {id}] fixture {}:\n{error}\n", outcome(&error))),
+        Message::Skipped(Identity { case: Some((id, name)), .. }, reason) => context.write_output(&mut stderr, format_args!("[case {id}] skipped: {name:?}: {reason}\n")),
+        Message::Skipped(_, _) => unreachable!("only cases are skipped by suite fixtures"),
         Message::Started(Identity {
             case: Some((id, name)),
             ..
@@ -121,11 +142,15 @@ fn write_report(message: Message) -> Result<(), CliError> {
                 run.path
             ),
         ),
+        Message::Summary { total, succeeded, failed, cases: true, skipped, fixtures_failed }
+            if skipped != 0 || fixtures_failed != 0 => context.write_output(&mut stderr,
+                format_args!("[cases] {total} selected: {succeeded} succeeded, {failed} failed, {skipped} skipped; {fixtures_failed} suite fixtures failed\n")),
         Message::Summary {
             total,
             succeeded,
             failed,
             cases: true,
+            ..
         } => context.write_output(
             &mut stderr,
             format_args!("[cases] {total} selected: {succeeded} succeeded, {failed} failed\n"),
@@ -135,6 +160,7 @@ fn write_report(message: Message) -> Result<(), CliError> {
             succeeded,
             failed,
             cases: false,
+            ..
         } => context.write_output(
             &mut stderr,
             format_args!("[batch] {total} runs: {succeeded} succeeded, {failed} failed\n"),
@@ -144,7 +170,7 @@ fn write_report(message: Message) -> Result<(), CliError> {
     .map_err(CliError::from)
 }
 
-async fn report(message: Message) -> Result<(), CliError> {
+pub(super) async fn report(message: Message) -> Result<(), CliError> {
     // One bounded record at a time, off the executor. A blocked reporter stops
     // admission while already-admitted runs continue to receive executor time.
     tokio::task::spawn_blocking(move || write_report(message))
@@ -226,7 +252,7 @@ async fn run_inputs(
             let configuration = Arc::clone(&configuration);
             let task = running.spawn(async move {
                 match input {
-                    Input::Case(case) => super::run_case(case, configuration).await,
+                    Input::Case(case) => super::run_case(case, configuration, None).await,
                     Input::File(path) => {
                         super::run(
                             &path,
@@ -272,12 +298,16 @@ async fn run_inputs(
         succeeded: total - failed,
         failed,
         cases,
+        skipped: 0,
+        fixtures_failed: 0,
     })
     .await?;
     failed_cases.sort_unstable_by_key(|(number, _)| *number);
     Ok(Outcome {
         total,
         failed,
+        skipped: 0,
+        fixtures_failed: 0,
         failed_cases: failed_cases.into_iter().map(|(_, id)| id).collect(),
     })
 }

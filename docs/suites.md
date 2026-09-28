@@ -18,7 +18,7 @@ no imports, custom definitions, inputs, or case bodies.
 ## Declaration and identity
 
 Each file declares one suite. Optional [datasets](parameterized-cases.md) precede its
-Library and cases. Its optional `Library` block comes before the cases
+Library, optional [fixture hooks](fixtures.md), and cases. Its optional `Library` block comes before the hooks/cases
 and accepts custom definitions and imports only. A case contains ordinary Botwork
 statements. This self-contained example prints `42` and `8`:
 
@@ -78,7 +78,9 @@ are errors. An empty completed failed-case list is the explicit exception below.
 Unknown tag names simply have no matches; if that leaves no cases, selection fails.
 
 With `--jobs 1`, cases execute in discovery order. With larger job counts,
-admission follows that order while completion and Log output may differ. The
+ready work follows that order while completion and Log output may differ.
+Suite fixtures introduce setup dependencies; a ready later suite may progress
+past another suite’s blocked setup. The
 [parallel policy](parallel-cli.md) applies: whole Log/status records, independent
 limits, finish-all execution after case failures, and stopped admission/draining
 after reporter failure. Status is 0 if selected cases and requested output
@@ -89,7 +91,8 @@ Every admitted case creates fresh variables, definitions, module initialization
 and cache state, execution counters, and output/retention budgets. Its Library
 imports and definitions are installed in that context before its body. Imports
 can run their ordinary module initialization once per case; they are not suite
-fixtures. Common `--var`/`--vars-file` settings are loaded for each admitted case.
+fixtures by themselves. Common `--var`/`--vars-file` settings are loaded for each
+admitted case without suite hooks; fixture suites snapshot those inputs once.
 Case timeouts start at admission, after discovery, and include input loading and
 case-program preparation. Original suite file coordinates and call frames are
 preserved in diagnostics and debug traces. Case bodies retain script control
@@ -142,7 +145,7 @@ files are never treated as completed records.
 ## Bounds and current scope
 
 Each suite retains the existing 1 MiB source and syntax guards and a cumulative
-65,536-node AST allowance across Library and all case bodies. It contains at most
+65,536-node AST allowance across Library, all fixture hooks, and all case bodies. It contains at most
 1,024 cases. One discovery accepts at most 64 suites, 8 MiB of combined source,
 and 4,096 expanded case/row executions. Dataset files share the discovery
 source allowance and have their own [data bounds](parameterized-cases.md#bounds-and-embedding). Filters are bounded to 4,096 case IDs and 32 included/excluded
@@ -156,8 +159,9 @@ separate bounded reporting allowance. Discovery/storage and preparation execute
 off the async executor. These byte/count limits do not supply a hard deadline
 for blocked filesystem calls or cleanup. Discovery is outside per-case timeouts.
 
-Fixtures, awaited teardown, assertion policy, rich shared
-events/reports, and coordinated signal handling retain their own roadmap tasks.
+[Fixtures and awaited teardown](fixtures.md) extend these case owners. Assertion
+policy, rich shared events/reports, and coordinated signal handling retain their
+own roadmap tasks.
 They can build on these stable IDs without treating a library import as a case.
 
 ## Validation

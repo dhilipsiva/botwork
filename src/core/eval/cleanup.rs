@@ -1,13 +1,13 @@
 use super::*;
 
-struct CleanupContext<'a> {
-    context: &'a mut Context,
+pub(super) struct CleanupContext<'a> {
+    pub(super) context: &'a mut Context,
     budget: Option<RunBudget>,
     environment: Option<Arc<RunEnvironment>>,
 }
 
 impl<'a> CleanupContext<'a> {
-    fn enter(context: &'a mut Context) -> EvaluationResult<Self> {
+    pub(super) fn enter(context: &'a mut Context) -> EvaluationResult<Self> {
         let budget = context
             .budget
             .as_ref()

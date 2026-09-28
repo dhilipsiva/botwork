@@ -74,6 +74,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R32 | parallel-cli-success | parallel-cli-failure | parallel-cli-success |
 | T1 | named-suite-selection | named-suite-unknown-id | named-suite-rerun |
 | T2 | dataset-rows | dataset-duplicate-row | dataset-row-rerun |
+| T3 | fixture-order | fixture-primary | fixture-order |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 

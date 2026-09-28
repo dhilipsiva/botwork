@@ -315,3 +315,23 @@ The evidence also retains a repeated worker-startup observation (`Unverified`
 instead of `NotStarted`, with OS error 11), 100 successful focused replays,
 and the final GNU/musl matrix. Passing replays do not resolve that older cause.
 The release mutation and reliability gates remain open.
+
+## Fixture ownership campaign
+
+Scope version 9 adds `ast/suite/fixtures.rs`, `eval/fixtures.rs`, and
+`suites/execution.rs`, while retaining all prior selections. Catalogue version 8
+adds twelve fixture mutations and relocates the existing library-discard mutation
+to the new case projection. The fixture campaign executes those thirteen targeted
+changes and all 66 generated changes in the three new files. The configured full
+suite remains available; this focused generated run uses library/binary unit tests
+plus fixture ownership, fixture CLI, named-suite, and dataset integration tests.
+
+[Fixture evidence](fixtures-evidence.json) records 13 targeted catches, 46 generated
+catches, 19 generated compilation failures, and one generated survivor. Thus
+59 of 60 compiled changes were caught; no survivor is excluded from that count.
+The surviving `identity` multiplication changes only the legacy numeric run field
+in an identity that always carries a qualified case ID. Every fixture reporting
+branch uses the case ID; failure selection also uses case IDs. This is an
+unobservable field change in the current callers, retained with its full outcome
+rather than adding an implementation-mirroring test. Earlier campaigns and their
+reviewed survivors remain separate evidence, not a newly measured aggregate.

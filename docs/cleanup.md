@@ -12,8 +12,8 @@ with this whole word must be renamed; `Finally!` and `FinallyDone` remain valid
 custom names. Variable names are unaffected.
 
 Cleanup is available in ordinary scripts, custom statements, imported modules,
-and suite Case bodies. Suite-wide and per-case fixture hooks remain separate
-roadmap work. This construct supplies their execution foundation.
+and suite Case bodies. [Suite and case fixtures](fixtures.md) use the same
+awaited cleanup semantics with explicit shared and per-case owners.
 
 ## Ownership and order
 

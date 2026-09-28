@@ -9,6 +9,8 @@ use std::{
 
 mod blocking;
 mod cleanup;
+mod fixtures;
+pub use fixtures::{evaluate_suite_fixture_async, FixtureInputs, FixtureResult};
 mod diagnostics;
 pub(crate) mod execution;
 mod filesystem;

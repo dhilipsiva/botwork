@@ -12,6 +12,7 @@ async fn invalid_admission_limits_fail_before_preparing_inputs_or_paths() {
                 settings: vec!["malformed input".into()],
                 limits: RunLimits::default(),
                 timeout_ms: None,
+                suite_timeout_ms: None,
             },
         )
         .await

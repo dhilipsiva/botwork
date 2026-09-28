@@ -5,11 +5,16 @@ botwork    = _{ SOI ~ statements* ~ EOI }
 // Suite declarations have their own entry point. These words remain available
 // as ordinary custom-statement names in scripts and imported libraries.
 test_suite = { SOI ~ line_end* ~ suite_definition ~ line_end* ~ EOI }
-suite_definition = { ^"suite" ~ line_end* ~ suite_id ~ (line_end* ~ suite_name)? ~ (line_end* ~ suite_tags)? ~ line_end* ~ "{" ~ line_end* ~ (suite_dataset ~ line_end*)* ~ (suite_library ~ line_end*)? ~ (suite_case ~ line_end*)+ ~ "}" }
+suite_definition = { ^"suite" ~ line_end* ~ suite_id ~ (line_end* ~ suite_name)? ~ (line_end* ~ suite_tags)? ~ line_end* ~ "{" ~ line_end* ~ (suite_dataset ~ line_end*)* ~ (suite_library ~ line_end*)? ~ (suite_fixture ~ line_end*)* ~ (suite_case ~ line_end*)+ ~ "}" }
 suite_id = { "|" ~ string ~ "|" }
 suite_name = { ^"named" ~ line_end* ~ suite_id }
 suite_tags = { ^"tags" ~ line_end* ~ "|" ~ "[" ~ line_end* ~ (string ~ (line_end* ~ "," ~ line_end* ~ string)* ~ line_end* ~ ","?)? ~ line_end* ~ "]" ~ "|" }
 suite_library = { ^"library" ~ line_end* ~ stmt_block }
+suite_fixture = { (suite_setup | suite_teardown | case_setup | case_teardown) ~ line_end* ~ stmt_block }
+suite_setup = { ^"suitesetup" }
+suite_teardown = { ^"suiteteardown" }
+case_setup = { ^"casesetup" }
+case_teardown = { ^"caseteardown" }
 suite_case = { ^"case" ~ line_end* ~ suite_id ~ (line_end* ~ suite_name)? ~ (line_end* ~ suite_tags)? ~ (line_end* ~ suite_using)? ~ line_end* ~ stmt_block }
 suite_using = { ^"using" ~ line_end* ~ suite_id ~ line_end* ~ AS ~ line_end* ~ "|" ~ ident ~ "|" }
 suite_dataset = { dataset_external | dataset_inline }

@@ -1,7 +1,7 @@
 use botwork::core::{
     ast::Program,
     diagnostic::Diagnostic,
-    eval::{evaluate_program_async, Context},
+    eval::{evaluate_program_async, Context, FixtureInputs},
     grammar::BWErr,
     input::load_variables,
     operation::OperationControl,
@@ -87,6 +87,9 @@ struct Args {
     /// Per-run cooperative timeout in milliseconds, including loading/parsing after admission
     #[arg(long)]
     timeout_ms: Option<u64>,
+    /// Whole lifetime timeout for each suite owning SuiteSetup/SuiteTeardown
+    #[arg(long, requires = "suite", conflicts_with = "list_cases")]
+    suite_timeout_ms: Option<u64>,
     /// Evaluation steps available to each independent Finally cleanup
     #[arg(long, default_value_t = 10_000, conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     max_cleanup_steps: u64,
@@ -97,6 +100,12 @@ struct Args {
 
 #[derive(Debug, thiserror::Error)]
 enum CliError {
+    #[error("Suite execution failed: {failed} cases failed, {skipped} skipped, {fixtures_failed} suite fixtures failed")]
+    Suites {
+        failed: usize,
+        skipped: usize,
+        fixtures_failed: usize,
+    },
     #[error("Batch failed: {failed} of {total} runs failed")]
     Batch { failed: usize, total: usize },
     #[error("{file}: {source}")]
@@ -157,15 +166,29 @@ fn run_control(timeout_ms: Option<u64>) -> Result<OperationControl, CliError> {
 async fn run_case(
     case: botwork::core::suite::SelectedCase,
     configuration: std::sync::Arc<batch::Configuration>,
+    fixture: Option<FixtureInputs>,
 ) -> Result<(), CliError> {
-    let control = run_control(configuration.timeout_ms)?;
+    let deadline = run_control(configuration.timeout_ms)?.deadline();
+    let control = fixture
+        .as_ref()
+        .map_or_else(OperationControl::default, |fixture| {
+            fixture.control().clone()
+        })
+        .child(deadline);
+    control.checkpoint()?;
     let (program, context) = tokio::task::spawn_blocking(move || {
         let mut context = Context::with_control(configuration.limits.clone(), control)?;
-        let variables = load_variables(&configuration.files, &configuration.settings)?;
+        let variables = match &fixture {
+            Some(_) => std::collections::BTreeMap::new(),
+            None => load_variables(&configuration.files, &configuration.settings)?,
+        };
         let variables = case.bind_inputs(variables, &configuration.limits.values)?;
         let program = case.program();
         context.init_statements();
         context.set_input_variables(variables)?;
+        if let Some(fixture) = fixture {
+            fixture.inherit_into(&mut context)?;
+        }
         context.checkpoint()?;
         context.set_statement_tracing(configuration.debug);
         Ok::<_, CliError>((program, context))
@@ -259,6 +282,7 @@ fn main() -> ExitCode {
                             settings: args.variables,
                             limits,
                             timeout_ms: args.timeout_ms,
+                            suite_timeout_ms: args.suite_timeout_ms,
                         },
                     ))
                 } else if args.file.len() == 1 {
@@ -280,6 +304,7 @@ fn main() -> ExitCode {
                             settings: args.variables,
                             limits,
                             timeout_ms: args.timeout_ms,
+                            suite_timeout_ms: args.suite_timeout_ms,
                         },
                     ))
                 }
@@ -287,7 +312,7 @@ fn main() -> ExitCode {
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
-        Err(CliError::Batch { .. }) => ExitCode::FAILURE,
+        Err(CliError::Batch { .. } | CliError::Suites { .. }) => ExitCode::FAILURE,
         Err(error) => {
             // Failure reporting has its own bounded allowance, so an exhausted
             // script output budget does not hide the reason for failure.

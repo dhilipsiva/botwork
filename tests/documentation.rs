@@ -149,6 +149,14 @@ fn every_documented_suite_matches_its_cli_output() {
     let expected = BTreeMap::from([
         ("named-suite", ("docs/suites.md", "42\n8\n", 2)),
         (
+            "fixture-suite",
+            (
+                "docs/fixtures.md",
+                "suite opened\n43\ncase closed\n42\ncase closed\nsuite closed\n",
+                2,
+            ),
+        ),
+        (
             "parameterized-suite",
             ("docs/parameterized-cases.md", "42\n8\n0\n", 3),
         ),
@@ -182,7 +190,10 @@ fn every_documented_suite_matches_its_cli_output() {
                 block.line
             );
             assert_eq!(output.stdout, stdout.as_bytes());
-            assert_eq!(stderr.lines().count(), count * 2 + 1);
+            assert_eq!(
+                stderr.lines().count(),
+                count * 2 + 1 + if id == "fixture-suite" { 3 } else { 0 }
+            );
             assert!(stderr.ends_with(&format!(
                 "[cases] {count} selected: {count} succeeded, 0 failed\n"
             )));
@@ -197,6 +208,9 @@ fn every_documented_suite_matches_its_cli_output() {
 
 #[test]
 fn every_rust_documentation_example_is_included_in_crate_doctests() {
+    assert!(
+        include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/fixtures.md\")]")
+    );
     assert!(include_str!("../src/lib.rs")
         .contains("#![doc = include_str!(\"../docs/parameterized-cases.md\")]"));
     let inclusion = "#![doc = include_str!(\"../docs/interpreter-architecture.md\")]";
@@ -222,6 +236,7 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/nonblocking-io.md".to_owned(),
             "docs/parameterized-cases.md".to_owned(),
             "docs/cleanup.md".to_owned(),
+            "docs/fixtures.md".to_owned(),
             "docs/isolated-workers.md".to_owned(),
             "docs/worker-protocol.md".to_owned()
         ]),

@@ -5,7 +5,7 @@ use crate::core::{run::ResultLimits, value_limits::ValueSize};
 mod tests;
 
 impl Context {
-    fn check_result_export(
+    pub(super) fn check_result_export(
         &self,
         result: Option<&Literal>,
         limits: &ResultLimits,

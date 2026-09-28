@@ -168,6 +168,6 @@ queued deadlines, history migration, and reruns after repair. The documentation
 examples and example 24 execute in the normal suite.
 [Validation evidence](parameterized-cases-evidence.json) records the profile
 matrix, frozen mutation campaigns, exact replays, fixture repairs, and remaining
-observations. Fixtures, teardown,
-assertions, tabular/JSON data conversion, and full structured reports retain
-their separate roadmap tasks.
+observations. [Fixtures](fixtures.md) wrap each selected row with case setup and
+teardown and can provide immutable shared suite inputs. Assertions, tabular/JSON
+data conversion, and full structured reports retain their separate roadmap tasks.

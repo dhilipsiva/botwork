@@ -4,10 +4,12 @@ use crate::core::{grammar::Literal, value_limits::ValueLimits};
 use std::collections::{BTreeSet, HashSet};
 
 mod dataset;
+mod fixtures;
 pub use dataset::{
     Dataset, DatasetDefinition, Row, MAX_DATASETS, MAX_DATASET_PATH_BYTES, MAX_DATASET_ROWS,
     MAX_DATA_NODES, MAX_DATA_ROWS,
 };
+pub use fixtures::FixturePrograms;
 
 #[cfg(test)]
 mod tests;
@@ -68,6 +70,7 @@ pub struct Suite {
     library: Vec<Statement>,
     datasets: Vec<DatasetDefinition>,
     cases: Vec<Case>,
+    fixtures: fixtures::Fixtures,
 }
 
 pub fn configuration(message: impl Into<String>) -> Diagnostic {
@@ -188,6 +191,7 @@ impl Suite {
         let mut datasets = Vec::new();
         let mut dataset_ids = HashMap::new();
         let mut data_budget = dataset::DataBudget::default();
+        let mut fixtures = fixtures::Fixtures::default();
         for pair in inner {
             let span = Span::of(&pair, &source);
             if pair.as_rule() == Rule::suite_dataset {
@@ -220,6 +224,8 @@ impl Suite {
                         .at(&statement.span));
                     }
                 }
+            } else if pair.as_rule() == Rule::suite_fixture {
+                fixtures.lower(pair, &source)?;
             } else {
                 if cases.len() == MAX_SUITE_CASES {
                     return Err(resource("suite cases", MAX_SUITE_CASES).at(&span));
@@ -271,6 +277,7 @@ impl Suite {
         }
         let groups = || {
             std::iter::once(library.as_slice())
+                .chain(fixtures.statements())
                 .chain(cases.iter().map(|case| case.body.statements.as_slice()))
         };
         ast_limits::check_suite(&source, groups()).map_err(AstFailure::default_diagnostic)?;
@@ -283,6 +290,7 @@ impl Suite {
             library,
             datasets,
             cases,
+            fixtures,
         })
     }
 
@@ -348,12 +356,7 @@ impl Suite {
     /// the Engine or Context still creates fresh mutable invocation/module state.
     pub fn program(&self, index: usize) -> Option<Program> {
         let case = self.cases.get(index)?;
-        let statements = self
-            .library
-            .iter()
-            .chain(&case.body.statements)
-            .cloned()
-            .collect();
+        let statements = self.fixtures.case_statements(&self.library, &case.body);
         Some(Program {
             source: Arc::clone(&self.source),
             statements,
@@ -369,6 +372,9 @@ pub struct SelectedCase {
 }
 
 impl SelectedCase {
+    pub fn shared_suite(&self) -> Arc<Suite> {
+        Arc::clone(&self.suite)
+    }
     pub fn suite(&self) -> &Suite {
         &self.suite
     }

@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "mutations": [
     {
       "id": "precedence-products",
@@ -194,8 +194,8 @@
       "id": "suite-library-discarded",
       "area": "scope",
       "file": "src/core/ast/suite.rs",
-      "before": "            .library\n            .iter()",
-      "after": "            .library[..0]\n            .iter()"
+      "before": "self.fixtures.case_statements(&self.library, &case.body)",
+      "after": "self.fixtures.case_statements(&[], &case.body)"
     },
     {
       "id": "suite-tag-filter-discarded",
@@ -364,6 +364,90 @@
       "file": "src/core/ast_limits.rs",
       "before": "self.push(Item::Block(cleanup), next);",
       "after": "let _ = cleanup;"
+    },
+    {
+      "id": "fixture-skips-case-setup",
+      "area": "fixtures",
+      "file": "src/core/ast/suite/fixtures.rs",
+      "before": ".chain(self.case_setup.iter().flat_map(|setup| &setup.statements))",
+      "after": ".chain(self.case_setup.iter().take(0).flat_map(|setup| &setup.statements))"
+    },
+    {
+      "id": "fixture-duplicate-allowed",
+      "area": "fixtures",
+      "file": "src/core/ast/suite/fixtures.rs",
+      "before": "if slot.is_some() {",
+      "after": "if false {"
+    },
+    {
+      "id": "fixture-skips-case-teardown",
+      "area": "fixtures",
+      "file": "src/core/ast/suite/fixtures.rs",
+      "before": "cleanup: cleanup.clone(),",
+      "after": "cleanup: Block { span: cleanup.span.clone(), statements: vec![] },"
+    },
+    {
+      "id": "fixture-no-shared-teardown",
+      "area": "fixtures",
+      "file": "src/core/eval/fixtures.rs",
+      "before": "execution::evaluate_program_runtime(&programs.teardown, guard.context).await",
+      "after": "Ok(Literal::None)"
+    },
+    {
+      "id": "fixture-cleanup-replaces-primary",
+      "area": "fixtures",
+      "file": "src/core/eval/fixtures.rs",
+      "before": "Err(primary.with_cleanup(cleanup, context.budget.as_ref()))",
+      "after": "Err(cleanup.with_cleanup(primary, context.budget.as_ref()))"
+    },
+    {
+      "id": "fixture-no-export-admission",
+      "area": "fixtures",
+      "file": "src/core/eval/fixtures.rs",
+      "before": "self.check_result_export(None, &self.limits().results)?;",
+      "after": ""
+    },
+    {
+      "id": "fixture-ignores-row-override",
+      "area": "fixtures",
+      "file": "src/core/eval/fixtures.rs",
+      "before": "if context.frames[0].variables.contains_key(name.as_str()) {",
+      "after": "if false {"
+    },
+    {
+      "id": "fixture-no-copy-admission",
+      "area": "fixtures",
+      "file": "src/core/eval/fixtures.rs",
+      "before": "context.charge_snapshot(size)?;",
+      "after": ""
+    },
+    {
+      "id": "fixture-drops-parent-control",
+      "area": "fixtures",
+      "file": "src/main.rs",
+      "before": ".map_or_else(OperationControl::default, |fixture| {\n            fixture.control().clone()\n        })",
+      "after": ".map_or_else(OperationControl::default, |_fixture| {\n            OperationControl::default()\n        })"
+    },
+    {
+      "id": "fixture-teardown-before-borrowers",
+      "area": "fixtures",
+      "file": "src/suites/execution.rs",
+      "before": "&& group.active == 0",
+      "after": "&& true"
+    },
+    {
+      "id": "fixture-does-not-retain-affected-ids",
+      "area": "fixtures",
+      "file": "src/suites/execution.rs",
+      "before": "for &index in &groups[group].indices { failed_ids[index] = true; }",
+      "after": "for &index in &groups[group].indices { failed_ids[index] = false; }"
+    },
+    {
+      "id": "fixture-ignores-case-hooks-ast",
+      "area": "fixtures",
+      "file": "src/core/ast/suite.rs",
+      "before": ".chain(fixtures.statements())",
+      "after": ".chain(fixtures.statements().take(0))"
     }
   ]
 }
