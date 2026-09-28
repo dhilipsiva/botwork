@@ -17,6 +17,10 @@ name = "botwork"
 [[bin]]
 name = "botwork"
 
+[[bench]]
+name = "runtime"
+harness = false
+
 [dependencies]
 clap = { version = "4.2.2", features = ["derive"] }
 lazy_static = "1.4.0"

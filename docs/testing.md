@@ -151,3 +151,8 @@ The [concurrency policy checks](concurrency-policy-evidence.json) additionally
 hold siblings active across a CLI failure and an embedded cancellation, verifying
 continued admission, aggregate failure, independent control, and shared-operation
 reservation release. These tests use explicit entry/release handshakes.
+
+The [performance protocol](performance.md) separates correctness smoke checks
+from full measurements. CI runs reduced workloads and native memory calibration
+in each GNU/musl profile; the Python helper checks prevent incomplete or incorrect
+samples from becoming successful measurement evidence.

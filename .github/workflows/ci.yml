@@ -62,6 +62,11 @@ jobs:
         run: python3 tests/mutation_tools.py
       - name: Build all targets
         run: cargo +stable build --locked --all-targets --target ${{ matrix.target }} ${{ matrix.flags }}
+      - name: Check performance measurement helper
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: python3 tests/performance_tools.py
+      - name: Check benchmark workload correctness (no performance threshold)
+        run: python3 scripts/performance.py --smoke --profile ${{ matrix.profile }} --target ${{ matrix.target }}
       - name: Run tests and examples
         run: cargo +stable test --locked --target ${{ matrix.target }} ${{ matrix.flags }}
 
