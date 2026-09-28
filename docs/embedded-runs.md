@@ -2,6 +2,8 @@
 
 `core::run::Engine` keeps reusable native registrations. `run_source(name, text, options)`, `run_program(&program, options)`, and `run_file(path, options)` synchronously execute in fresh contexts. Each run owns variables, custom definitions, namespace/module caches, handler state, and counters. Programs are immutable and reusable. Engine clones share native callback captures; hosts remain responsible for intentional shared state and callback synchronization.
 
+The corresponding `run_source_async`, `run_program_async`, and `run_file_async` methods await registered `NativeOperation` calls through the same evaluator. [Async execution](async-execution.md) describes registration, owned futures, scope/import preservation, cancellation, scheduler yields, and explicit rejection of operation registries by synchronous entry points.
+
 The executed [Rust example](interpreter-architecture.md#embedded-runs) demonstrates inputs, environment overlays, native registration, and structured results. Engine, CLI, and low-level Context execution share runtime budget defaults and stop behavior. Async-operation dispatch remains separate roadmap work.
 
 ## Configuration and Environment
@@ -56,7 +58,7 @@ Each run gets a child control: parent cancellation and earlier deadlines propaga
 
 Check stop requests before execution/expressions/calls/iterations, around module file reads, and after native callbacks. A run stop bypasses Catch and unwinds temporary iterator/handler bindings and invocation frames. Completed assignments/effects remain. No rejected return value is published. If a callback fails while stopping, preserve its error as a cause with call context. An ordinary callback-reported error remains catchable when the actual run control/budget is still active.
 
-Synchronous callbacks, parsing, filesystem calls, and value operators cannot be preempted inside Rust. Deadlines are observed at checkpoints; a callback must cooperate with `environment.control().checkpoint()` or return. Check again after return before publishing a result. Hard termination, async DSL dispatch, and guaranteed cleanup deadlines require the separate runtime/worker tasks.
+Synchronous callbacks, parsing, filesystem calls, and value operators cannot be preempted inside Rust. Deadlines are observed at checkpoints; a callback must cooperate with `environment.control().checkpoint()` or return. Check again after return before publishing a result. [Async DSL dispatch](async-execution.md) propagates run control through suspended operations; hard termination and guaranteed whole-run cleanup deadlines retain their separate runtime/worker tasks.
 
 ## Structured Results
 

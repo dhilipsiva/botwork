@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "mutations": [
     {
       "id": "precedence-products",
@@ -18,30 +18,30 @@
     {
       "id": "while-stops-after-one",
       "area": "control",
-      "file": "src/core/eval.rs",
+      "file": "src/core/eval/execution.rs",
       "before": "\n            Completion::Normal(_) | Completion::Continue => (),",
       "after": "\n            Completion::Normal(_) | Completion::Continue => break,"
     },
     {
       "id": "for-discards-return",
       "area": "control",
-      "file": "src/core/eval.rs",
+      "file": "src/core/eval/execution.rs",
       "before": "                returned @ Completion::Return(_) => return Ok(returned),",
       "after": "                Completion::Return(_) => break,"
     },
     {
       "id": "caller-frame-not-restored",
       "area": "scope",
-      "file": "src/core/eval.rs",
-      "before": "        self.frames.pop();\n        self.current = caller;",
-      "after": "        self.frames.pop();\n        let _ = caller;"
+      "file": "src/core/eval/execution.rs",
+      "before": "                context.frames.pop();\n                context.current = caller;",
+      "after": "                context.frames.pop();\n                let _ = caller;"
     },
     {
       "id": "dynamic-parent",
       "area": "scope",
-      "file": "src/core/eval.rs",
-      "before": "parent: Some(owner),\n                ..Frame::default()",
-      "after": "parent: Some(context.current),\n                ..Frame::default()"
+      "file": "src/core/eval/execution.rs",
+      "before": "parent: Some(owner),\n                    ..Frame::default()",
+      "after": "parent: Some(context.current),\n                    ..Frame::default()"
     },
     {
       "id": "variables-ignore-parent",
@@ -74,7 +74,7 @@
     {
       "id": "input-variables-discarded",
       "area": "isolation",
-      "file": "src/core/run.rs",
+      "file": "src/core/run/asynchronous.rs",
       "before": "context.set_input_variables_runtime(variables.into_inner())?;",
       "after": "drop(variables);"
     },
@@ -84,6 +84,27 @@
       "file": "src/core/run.rs",
       "before": "let control = options.control.child(deadline);",
       "after": "let control = options.control.child(None);\n        let _ = deadline;"
+    },
+    {
+      "id": "async-call-frame-lost",
+      "area": "errors",
+      "file": "src/core/eval/execution.rs",
+      "before": "                context.calls.push(frame);",
+      "after": "                drop(frame);"
+    },
+    {
+      "id": "async-parent-control-lost",
+      "area": "isolation",
+      "file": "src/core/eval/execution.rs",
+      "before": "let pending = operation.invoke(values, control);",
+      "after": "let pending = operation.invoke(values, OperationControl::default());\n                drop(control);"
+    },
+    {
+      "id": "async-loop-never-yields",
+      "area": "control",
+      "file": "src/core/eval/execution.rs",
+      "before": "        tokio::task::yield_now().await;",
+      "after": "        // Deliberately omit the cooperative scheduler yield."
     }
   ]
 }

@@ -88,7 +88,7 @@ pub(super) fn namespace_collision(
     )
 }
 
-pub(super) fn evaluate_import(
+pub(super) async fn evaluate_import(
     path: &str,
     path_span: &Span,
     namespace: &Name,
@@ -119,7 +119,7 @@ pub(super) fn evaluate_import(
             &namespace.span,
         ));
     }
-    let module = load_module(path, path_span, import_site, context)?;
+    let module = load_module(path, path_span, import_site, context).await?;
     publish_namespace(&module, namespace, &normalized, import_site, context)
 }
 
@@ -146,7 +146,10 @@ fn publish_namespace(
     let mut declarations: Vec<_> = module.frame.statements.iter().collect();
     declarations.sort_unstable_by_key(|(left, _)| *left);
     for (exported, statement) in declarations {
-        if matches!(statement, StmtType::Native { .. }) {
+        if matches!(
+            statement,
+            StmtType::Native { .. } | StmtType::Operation { .. }
+        ) {
             continue;
         }
         let registry = context
@@ -216,12 +219,12 @@ fn admit_namespace(
     if let Some(budget) = &context.budget {
         let mut bindings = 1usize;
         let mut bytes = normalized.len();
-        for statement in module
-            .frame
-            .statements
-            .values()
-            .filter(|statement| !matches!(statement, StmtType::Native { .. }))
-        {
+        for statement in module.frame.statements.values().filter(|statement| {
+            !matches!(
+                statement,
+                StmtType::Native { .. } | StmtType::Operation { .. }
+            )
+        }) {
             bindings = bindings
                 .checked_add(1)
                 .ok_or_else(|| budget.import_limit(ImportResource::Bindings))?;
@@ -263,7 +266,7 @@ fn read_module_source(path: &Path, context: &Context) -> Result<String, SourceFa
     })
 }
 
-fn load_module(
+async fn load_module(
     path: &str,
     span: &Span,
     import_site: &Span,
@@ -372,7 +375,7 @@ fn load_module(
         })?;
     let mut module_context =
         prepare_module_context(context, &canonical).map_err(|error| related(context, error))?;
-    let result = evaluate_program_runtime(&program, &mut module_context);
+    let result = execution::evaluate_program_runtime(&program, &mut module_context).await;
     merge_cache(context, &mut module_context);
     result.map_err(|error| {
         error.with_related("imported here", import_site, context.budget.as_ref())
@@ -397,7 +400,12 @@ fn prepare_module_context(context: &Context, canonical: &Path) -> DiagnosticResu
             context
                 .get_statement_ref(metadata.normalized())
                 .map(|(statement, _)| statement)
-                .filter(|statement| matches!(statement, StmtType::Native { .. }))
+                .filter(|statement| {
+                    matches!(
+                        statement,
+                        StmtType::Native { .. } | StmtType::Operation { .. }
+                    )
+                })
         })
         .collect();
     let mut size = context.isolated_snapshot_size();
@@ -430,6 +438,8 @@ fn isolated(frame: Frame, context: &Context) -> Context {
         working_directory: context.working_directory.clone(),
         environment: context.environment.clone(),
         budget: context.budget.as_ref().map(RunBudget::shared),
+        asynchronous: context.asynchronous,
+        trace_statements: false,
         #[cfg(test)]
         expression_visits: Default::default(),
     }
@@ -441,7 +451,7 @@ fn merge_cache(context: &mut Context, module_context: &mut Context) {
     context.modules = std::mem::take(&mut module_context.modules);
 }
 
-pub(super) fn invoke_imported(
+pub(super) async fn invoke_imported(
     call: &Call,
     module: &LoadedModule,
     exported: &str,
@@ -469,8 +479,12 @@ pub(super) fn invoke_imported(
             import_site,
         )
     })?;
-    let result = invoke_resolved(call, definition, owner, arguments, &mut module_context)
-        .map_err(|error| error.with_related("imported here", import_site, context.budget.as_ref()));
+    let result =
+        execution::invoke_resolved(call, definition, owner, arguments, &mut module_context)
+            .await
+            .map_err(|error| {
+                error.with_related("imported here", import_site, context.budget.as_ref())
+            });
     merge_cache(context, &mut module_context);
     result
 }

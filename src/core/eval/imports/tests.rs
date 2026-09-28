@@ -25,14 +25,14 @@ fn imported_rethrows_keep_record_ownership_after_module_context_unwinds() {
         arguments: vec![],
     };
     let import = Program::parse("import", "Import |\"library.botwork\"| As |lib|").unwrap();
-    let error = invoke_imported(
+    let error = sync_result(invoke_imported(
         &call,
         &module,
         "fail",
         vec![],
         &import.statements[0].span,
         &mut context,
-    )
+    ))
     .unwrap_err();
     assert_eq!(error.call_stack.len(), 1);
     assert!(error
@@ -122,8 +122,15 @@ fn missing_imported_exports_admit_name_and_complete_known_context() {
         let module = LoadedModule {
             frame: Frame::default(),
         };
-        let error =
-            invoke_imported(&call, &module, "absent-é", vec![], site, &mut context).unwrap_err();
+        let error = sync_result(invoke_imported(
+            &call,
+            &module,
+            "absent-é",
+            vec![],
+            site,
+            &mut context,
+        ))
+        .unwrap_err();
         if deficit.is_some() {
             assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
             assert_eq!(error.causes[0].code(), expected.code());
@@ -180,14 +187,14 @@ fn missing_imported_exports_bound_unicode_evidence_after_snapshot_admission() {
         let module = LoadedModule {
             frame: Frame::default(),
         };
-        let error = invoke_imported(
+        let error = sync_result(invoke_imported(
             &call,
             &module,
             &"é".repeat(64 * 1024),
             vec![],
             &call.span,
             &mut context,
-        )
+        ))
         .unwrap_err();
         assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
         if snapshot_entries == 0 {

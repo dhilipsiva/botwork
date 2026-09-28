@@ -6,6 +6,8 @@ Run `cargo test` from the repository root. Linux typed-worker interoperability t
 
 [Core mutation testing](mutation-testing.md) freezes generated and targeted mutations for precedence, scope, control flow, errors, and isolation. Run `python3 scripts/mutation_core.py generated` and `python3 scripts/mutation_core.py targeted`; the guide records tool versions, survivor repairs, scoring, and replay instructions.
 
+[Async execution](async-execution.md) adds suspended DSL/operation integration cases while keeping existing synchronous contract tests on the shared evaluator. Its evidence records debug/release checks, native and isolated operation cleanup, and the updated mutation scope.
+
 - `src/core/worker/protocol/tests.rs` checks the typed wire codec and worker SDK; `tests/typed_workers.rs` exercises an independent Python subprocess, signatures, budgets, cleanup ownership, and stop priority.
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
 - `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, original byte/line/column spans, and control-placement validation.

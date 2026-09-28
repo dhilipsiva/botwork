@@ -1,7 +1,7 @@
 use botwork::core::{
     ast::Program,
     diagnostic::Diagnostic,
-    eval::{execute_statement_detailed, Context},
+    eval::{evaluate_program_async, Context},
     grammar::BWErr,
     input::load_variables,
     operation::OperationControl,
@@ -75,7 +75,7 @@ enum CliError {
     },
 }
 
-fn run(
+async fn run(
     file: &Path,
     debug: bool,
     files: &[PathBuf],
@@ -121,19 +121,8 @@ fn run(
     context.init_statements();
     context.set_input_variables(variables)?;
     context.checkpoint()?;
-    for statement in &program.statements {
-        context.checkpoint()?;
-        if debug {
-            let (line, column) = statement.span.line_column();
-            let kind = statement.kind_name();
-            context.write_output(
-                &mut io::stderr().lock(),
-                format_args!("debug: {}:{line}:{column}: {kind}\n", file.display()),
-            )?;
-        }
-        execute_statement_detailed(statement, &mut context)?;
-    }
-    context.checkpoint()?;
+    context.set_statement_tracing(debug);
+    evaluate_program_async(&program, context).await?;
     Ok(())
 }
 
@@ -149,22 +138,30 @@ fn main() -> ExitCode {
     let result = if args.list_statements || args.statement_help.is_some() {
         statement_help(args.statement_help.as_deref(), output_limits)
     } else {
-        run(
-            args.file
-                .as_deref()
-                .expect("clap requires a file for execution"),
-            args.debug,
-            &args.variable_files,
-            &args.variables,
-            RunLimits {
-                output: output_limits,
-                steps: args.max_steps,
-                call_depth: args.max_call_depth,
-                evaluation_depth: args.max_evaluation_depth,
-                ..RunLimits::default()
-            },
-            args.timeout_ms,
-        )
+        tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .map_err(|error| {
+                CliError::Script(Diagnostic::new(BWErr::AsyncRuntime(error.to_string())))
+            })
+            .and_then(|runtime| {
+                runtime.block_on(run(
+                    args.file
+                        .as_deref()
+                        .expect("clap requires a file for execution"),
+                    args.debug,
+                    &args.variable_files,
+                    &args.variables,
+                    RunLimits {
+                        output: output_limits,
+                        steps: args.max_steps,
+                        call_depth: args.max_call_depth,
+                        evaluation_depth: args.max_evaluation_depth,
+                        ..RunLimits::default()
+                    },
+                    args.timeout_ms,
+                ))
+            })
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

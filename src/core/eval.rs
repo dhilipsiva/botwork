@@ -8,6 +8,7 @@ use std::{
 };
 
 mod diagnostics;
+pub(crate) mod execution;
 mod imports;
 mod output;
 mod results;
@@ -23,7 +24,7 @@ use super::{
     },
     diagnostic::{CallFrame, Diagnostic, DiagnosticResult},
     grammar::{finite_float, validate_numeric_values, BWErr, Literal, LiteralResult, Rule},
-    operation::OperationControl,
+    operation::{NativeOperation, OperationControl},
     run::{
         DefinitionReservation, EvaluationGuard, RegistryPlan, RegistryReservation, RetainedName,
         RunBudget, RunEnvironment, RunLimits, RuntimeDiagnostic, SourceFailure, StoredCallFrame,
@@ -57,6 +58,10 @@ type TemporaryResult = EvaluationResult<TemporaryValue>;
 
 #[derive(Clone)]
 enum StmtType {
+    Operation {
+        operation: NativeOperation,
+        _registry: Option<Arc<RegistryReservation>>,
+    },
     Native {
         callback: Callback,
         builtin_log: bool,
@@ -82,12 +87,14 @@ impl StmtType {
     fn registry(&self) -> Option<&Arc<RegistryReservation>> {
         match self {
             Self::Native { _registry, .. }
+            | Self::Operation { _registry, .. }
             | Self::UserDefined { _registry, .. }
             | Self::Imported { _registry, .. } => _registry.as_ref(),
         }
     }
     fn metadata(&self) -> &StatementSignature {
         match self {
+            Self::Operation { operation, .. } => operation.signature(),
             Self::Native { metadata, .. }
             | Self::UserDefined { metadata, .. }
             | Self::Imported { metadata, .. } => metadata,
@@ -131,6 +138,8 @@ pub struct Context {
     pub(crate) working_directory: Result<PathBuf, Arc<io::Error>>,
     pub(crate) environment: Option<Arc<RunEnvironment>>,
     pub(crate) budget: Option<RunBudget>,
+    pub(crate) asynchronous: bool,
+    trace_statements: bool,
     #[cfg(test)]
     expression_visits: std::cell::RefCell<Vec<String>>,
 }
@@ -150,6 +159,8 @@ impl Default for Context {
                 RunLimits::default(),
                 OperationControl::default(),
             )),
+            asynchronous: false,
+            trace_statements: false,
             #[cfg(test)]
             expression_visits: Default::default(),
         }
@@ -157,6 +168,60 @@ impl Default for Context {
 }
 
 impl Context {
+    /// Trace entry-script statements through the same bounded stderr output path as CLI --debug.
+    pub fn set_statement_tracing(&mut self, enabled: bool) {
+        self.trace_statements = enabled;
+    }
+
+    fn check_execution_mode(&self) -> EvaluationResult<()> {
+        self.checkpoint()?;
+        let reason = if self.asynchronous {
+            tokio::runtime::Handle::try_current()
+                .err()
+                .map(|_| "Evaluate asynchronous programs inside a Tokio runtime")
+        } else if self.frames.iter().any(|frame| {
+            frame
+                .statements
+                .values()
+                .any(|statement| matches!(statement, StmtType::Operation { .. }))
+        }) {
+            Some("This context contains NativeOperation registrations; use asynchronous program execution")
+        } else {
+            None
+        };
+        match reason {
+            Some(reason) => Err(self.detail_error(BWErr::AsyncRuntime, reason, None, false)),
+            None => Ok(()),
+        }
+    }
+
+    /// Install an async, cooperative blocking, or isolated native operation.
+    /// Synchronous program entry points reject contexts containing these registrations before effects.
+    pub fn register_operation(&mut self, operation: NativeOperation) -> DiagnosticResult<()> {
+        let metadata = operation.signature();
+        self.check_statement_collision(metadata.normalized(), metadata.header())
+            .map_err(RuntimeDiagnostic::into_diagnostic)?;
+        let registry = self
+            .reserve_registry(RegistryPlan::signature(metadata))
+            .map_err(|error| {
+                self.runtime_diagnostic(error.into(), Some(metadata.header()), false)
+                    .into_diagnostic()
+            })?;
+        let key = registry.as_ref().map_or_else(
+            || Arc::from(metadata.normalized()),
+            |reservation| Arc::clone(&reservation.key),
+        );
+        let header = metadata.header().clone();
+        self.insert_statement(
+            &key,
+            &header,
+            StmtType::Operation {
+                operation,
+                _registry: registry,
+            },
+        )
+        .map_err(RuntimeDiagnostic::into_diagnostic)
+    }
     /// A fresh context with local runtime budgets and an externally cancellable control.
     /// Counters persist across evaluations; use a fresh context after budget exhaustion.
     pub fn with_control(limits: RunLimits, control: OperationControl) -> DiagnosticResult<Self> {
@@ -304,12 +369,13 @@ impl Context {
         let mut entries: Vec<_> = self.frames[0].statements.iter().collect();
         entries.sort_unstable_by_key(|(left, _)| *left);
         for (name, statement) in entries {
-            if let StmtType::Native {
-                metadata,
-                _registry: Some(_),
-                ..
-            } = statement
+            if statement.registry().is_some()
+                && matches!(
+                    statement,
+                    StmtType::Native { .. } | StmtType::Operation { .. }
+                )
             {
+                let metadata = statement.metadata();
                 let reservation = self
                     .reserve_registry(RegistryPlan::signature(metadata).with_key(Arc::clone(name)))
                     .map_err(|error| {
@@ -320,7 +386,8 @@ impl Context {
         }
         self.checkpoint()?;
         for (name, reservation) in admitted {
-            if let StmtType::Native { _registry, .. } = self.frames[0]
+            if let StmtType::Native { _registry, .. } | StmtType::Operation { _registry, .. } = self
+                .frames[0]
                 .statements
                 .get_mut(name.as_ref())
                 .expect("native template")
@@ -534,6 +601,7 @@ impl Context {
         None
     }
 
+    #[cfg(test)]
     fn with_invocation(
         &mut self,
         frame: Frame,
@@ -727,6 +795,7 @@ impl Context {
         if let Some(original) = statements.get(signature) {
             let origin = match original {
                 StmtType::Native { metadata, .. } => (metadata.header(), true),
+                StmtType::Operation { operation, .. } => (operation.signature().header(), true),
                 StmtType::UserDefined { definition, .. } => (&definition.span, false),
                 StmtType::Imported { metadata, .. } => (metadata.header(), false),
             };
@@ -805,786 +874,35 @@ fn write_log(value: &Literal, output: &mut impl Write, context: &Context) -> Eva
     context.write_value_record(value, output, true).map(|_| ())
 }
 
-fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {
-    invoke_inner(call, context)
-        .map_err(|error| context.runtime_diagnostic(error, Some(&call.span), false))
-}
-
-fn invoke_inner(call: &Call, context: &mut Context) -> TemporaryResult {
-    let (definition, owner) = context.get_statement(&call.signature).ok_or_else(|| {
-        context.detail_error(
-            BWErr::StatementNotDefined,
-            call.span.text(),
-            Some(&call.span),
-            false,
+// Synchronous entry points poll the same evaluator once. No runtime or blocking
+// executor is required; async-only dispatch is rejected before any effects.
+fn sync_result<T>(
+    future: impl std::future::Future<Output = EvaluationResult<T>>,
+) -> EvaluationResult<T> {
+    let mut future = std::pin::pin!(future);
+    let mut task = std::task::Context::from_waker(std::task::Waker::noop());
+    match std::future::Future::poll(future.as_mut(), &mut task) {
+        std::task::Poll::Ready(result) => result,
+        std::task::Poll::Pending => Err(BWErr::AsyncRuntime(
+            "Use the asynchronous execution API for this operation".into(),
         )
-    })?;
-    let metadata = definition.metadata();
-    let parameter_count = metadata.parameters().len();
-    if parameter_count != call.arguments.len() {
-        return Err(context.detail_error(
-            BWErr::ParameterMissingError,
-            "The call does not match the definition's parameter count",
-            Some(&call.span),
-            false,
-        ));
-    }
-    context.check_call_depth()?;
-    let mut argument_slots = context
-        .budget
-        .as_ref()
-        .map(|budget| budget.reserve_argument_slots(parameter_count))
-        .transpose()?;
-    let arguments = call
-        .arguments
-        .iter()
-        .enumerate()
-        .map(|(index, argument)| {
-            if let Some(reservation) = &mut argument_slots {
-                reservation.release_argument_slot();
-            }
-            let value = evaluate_expression(argument, context)?;
-            validate_numeric_values(&value).map_err(|error| {
-                context.formatted_error(
-                    BWErr::ArithmeticError,
-                    format_args!("{error}"),
-                    Some(&argument.span),
-                    true,
-                )
-            })?;
-            metadata.validate_argument(index, &value, |message| {
-                context.formatted_error(
-                    BWErr::OperationIncompatibleError,
-                    message,
-                    Some(&argument.span),
-                    true,
-                )
-            })?;
-            Ok(value)
-        })
-        .collect::<EvaluationResult<Vec<_>>>()?;
-    invoke_resolved(call, definition, owner, arguments, context)
-}
-
-fn invoke_resolved(
-    call: &Call,
-    definition: StmtType,
-    owner: usize,
-    arguments: Vec<TemporaryValue>,
-    context: &mut Context,
-) -> TemporaryResult {
-    let _depth = context
-        .enter_evaluation()
-        .map_err(|error| context.runtime_diagnostic(error.into(), Some(&call.span), false))?;
-    match definition {
-        StmtType::Imported {
-            module,
-            exported,
-            import_site,
-            ..
-        } => imports::invoke_imported(call, &module, &exported, arguments, &import_site, context),
-        StmtType::Native {
-            callback,
-            metadata,
-            builtin_log,
-            ..
-        } => context.with_call(&call.signature, &call.span, None, |context| {
-            let arguments = TemporaryArguments::new(arguments);
-            let known_result = if builtin_log {
-                let size = context
-                    .limits()
-                    .values
-                    .check(&arguments[0])
-                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                Some(context.temporary_reservation(size)?)
-            } else {
-                None
-            };
-            let result = catch_unwind(AssertUnwindSafe(|| callback(&arguments, context)))
-                .map_err(|_| {
-                    context.detail_error(
-                        BWErr::NativePanic,
-                        &call.signature,
-                        Some(&call.span),
-                        false,
-                    )
-                })
-                .and_then(|result| {
-                    result
-                        .map_err(|error| context.runtime_diagnostic(error, Some(&call.span), false))
-                });
-            let result = context.after_evaluation(result.map(Owned::new))?;
-            context.check_value(&result)?;
-            validate_numeric_values(&result).map_err(|error| {
-                context.formatted_error(
-                    BWErr::ArithmeticError,
-                    format_args!("{error}"),
-                    Some(&call.span),
-                    false,
-                )
-            })?;
-            metadata.validate_return(&result, |message| {
-                context.formatted_error(
-                    BWErr::OperationIncompatibleError,
-                    message,
-                    Some(&call.span),
-                    false,
-                )
-            })?;
-            match known_result {
-                Some(reservation) => Ok(TemporaryValue::new(result.into_inner(), reservation)),
-                None => context.temporary(result.into_inner()),
-            }
-        }),
-        StmtType::UserDefined {
-            definition,
-            metadata,
-            ..
-        } => {
-            let frame = Frame {
-                variables: definition
-                    .parameters
-                    .iter()
-                    .zip(arguments)
-                    .map(|(parameter, value)| {
-                        let (value, _reservation) = value.into_parts();
-                        let value = context.store_value(value)?;
-                        context
-                            .retain_name(&parameter.text)
-                            .map(|name| (name, value))
-                    })
-                    .collect::<DiagnosticResult<HashMap<_, _>>>()?,
-                parent: Some(owner),
-                ..Frame::default()
-            };
-            context.with_call(
-                &call.signature,
-                &call.span,
-                Some(&definition.span),
-                |context| {
-                    context
-                        .with_invocation(frame, |context| evaluate_block(&definition.body, context))
-                        .and_then(|completion| {
-                            let value = match completion {
-                                Completion::Return(value) => value,
-                                // Reject unconsumed controls at their invocation boundary.
-                                completion => finish_script(completion, context, &call.span)?,
-                            };
-                            metadata.validate_return(&value, |message| {
-                                context.formatted_error(
-                                    BWErr::OperationIncompatibleError,
-                                    message,
-                                    Some(&call.span),
-                                    false,
-                                )
-                            })?;
-                            Ok(value)
-                        })
-                },
-            )
-        }
+        .into()),
     }
 }
 
+#[cfg(test)]
+fn invoke(call: &Call, context: &mut Context) -> TemporaryResult {
+    sync_result(execution::invoke(call, context))
+}
 fn evaluate_expression(expression: &Expr, context: &mut Context) -> TemporaryResult {
-    let _depth = context
-        .enter_evaluation()
-        .map_err(|error| context.runtime_diagnostic(error.into(), Some(&expression.span), true))?;
-    evaluate_expression_inner(expression, context)
-        .and_then(|value| {
-            context.check_value(&value)?;
-            Ok(value)
-        })
-        .map_err(|error| context.runtime_diagnostic(error, Some(&expression.span), true))
+    sync_result(execution::evaluate_expression(expression, context))
 }
-
-fn evaluate_expression_inner(expression: &Expr, context: &mut Context) -> TemporaryResult {
-    context.tick()?;
-    #[cfg(test)]
-    context
-        .expression_visits
-        .borrow_mut()
-        .push(expression.span.text().to_owned());
-
-    match &expression.kind {
-        ExprKind::Integer(text) => text
-            .parse::<i32>()
-            .map(Literal::Int)
-            .map_err(|error| {
-                context.formatted_error(
-                    BWErr::ParsingIntegerError,
-                    format_args!("{error}"),
-                    Some(&expression.span),
-                    true,
-                )
-            })
-            .and_then(|value| context.temporary(value)),
-        ExprKind::Float(text) => {
-            let value = text.parse::<f32>().map_err(|error| {
-                context.formatted_error(
-                    BWErr::ParsingIntegerError,
-                    format_args!("{error}"),
-                    Some(&expression.span),
-                    true,
-                )
-            })?;
-            let value = finite_float(value, "Float literal").map_err(|error| {
-                context.formatted_error(
-                    BWErr::ArithmeticError,
-                    format_args!("{error}"),
-                    Some(&expression.span),
-                    true,
-                )
-            })?;
-            context.temporary(value)
-        }
-        ExprKind::Bool(value) => context.temporary(Literal::Bool(*value)),
-        ExprKind::String(value) => context.temporary_string(value),
-        ExprKind::Variable(name) => context.copy_temporary(
-            &context
-                .get_variable_binding(name, Some(&expression.span))?
-                .value,
-        ),
-        ExprKind::Call(call) => invoke(call, context),
-        ExprKind::Access { base, segments } => evaluate_access(base, segments, context),
-        ExprKind::Array(elements) => {
-            let limits = context.limits().values;
-            let admit = |error| context.retain_limit(Diagnostic::new(error));
-            let mut size = limits.container_header(elements.len()).map_err(admit)?;
-            let mut planned = size;
-            planned.nodes += elements.len();
-            let reservation = context.temporary_reservation(planned)?;
-            let mut result = TemporaryValue::new(
-                Literal::Array(Vec::with_capacity(elements.len())),
-                reservation,
-            );
-            for element in elements {
-                result.release_child(super::value_limits::ValueSize {
-                    nodes: 1,
-                    ..Default::default()
-                });
-                let value = evaluate_expression(element, context)?;
-                let child = limits
-                    .check(&value)
-                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                limits
-                    .add_child(&mut size, child)
-                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                let (value, reservation) = value.into_parts();
-                let Literal::Array(values) = &mut result.value else {
-                    unreachable!()
-                };
-                values.push(value);
-                result.absorb(reservation);
-            }
-            Ok(result)
-        }
-        ExprKind::Map(entries) => {
-            let limits = context.limits().values;
-            let mut size = limits
-                .container_header(0)
-                .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-            let mut keys = HashSet::new();
-            for (key, _) in entries {
-                limits
-                    .key_size(key.text.len())
-                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                if !keys.contains(key.text.as_str()) {
-                    limits
-                        .container_header(keys.len() + 1)
-                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                    limits
-                        .add_bytes(&mut size, key.text.len())
-                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                    keys.insert(key.text.as_str());
-                }
-            }
-            let mut planned = size;
-            planned.nodes += keys.len();
-            let reservation = context.temporary_reservation(planned)?;
-            let mut result = TemporaryValue::new(Literal::Map(HashMap::new()), reservation);
-            for (key, expression) in entries {
-                let Literal::Map(values) = &result.value else {
-                    unreachable!()
-                };
-                if !values.contains_key(&key.text) {
-                    result.release_child(super::value_limits::ValueSize {
-                        nodes: 1,
-                        ..Default::default()
-                    });
-                }
-                let value = evaluate_expression(expression, context)?;
-                let child = limits
-                    .check(&value)
-                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                let Literal::Map(values) = &result.value else {
-                    unreachable!()
-                };
-                let old_size = if let Some(previous) = values.get(&key.text) {
-                    let old = limits
-                        .check(previous)
-                        .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                    size.nodes -= old.nodes;
-                    size.payload_bytes -= old.payload_bytes;
-                    // Keeping a previous maximum depth is safe within this map;
-                    // the completed value is measured afresh by its caller.
-                    Some(old)
-                } else {
-                    None
-                };
-                limits
-                    .add_child(&mut size, child)
-                    .map_err(|error| context.retain_limit(Diagnostic::new(error)))?;
-                let (value, reservation) = value.into_parts();
-                let Literal::Map(values) = &mut result.value else {
-                    unreachable!()
-                };
-                if let Some(previous) = values.get_mut(&key.text) {
-                    let old = std::mem::replace(previous, value);
-                    drop(old);
-                    result.release_child(old_size.expect("existing map child"));
-                } else {
-                    values.insert(key.text.clone(), value);
-                }
-                result.absorb(reservation);
-            }
-            Ok(result)
-        }
-        ExprKind::Unary {
-            operator, operand, ..
-        } => match (operator, &operand.kind) {
-            (UnaryOp::Negate, ExprKind::Integer(text)) => {
-                context.tick()?;
-                // Convert the signed atom together: MIN's positive magnitude is not i32.
-                // Compound operands still evaluate normally before checked negation.
-                #[cfg(test)]
-                context
-                    .expression_visits
-                    .borrow_mut()
-                    .push(operand.span.text().to_owned());
-                format!("-{text}")
-                    .parse::<i32>()
-                    .map(Literal::Int)
-                    .map_err(|error| {
-                        context.formatted_error(
-                            BWErr::ParsingIntegerError,
-                            format_args!("{error}"),
-                            Some(&expression.span),
-                            true,
-                        )
-                    })
-                    .and_then(|value| context.temporary(value))
-            }
-            _ => {
-                let operand = evaluate_expression(operand, context)?;
-                context.temporary_unary(*operator, operand, &expression.span)
-            }
-        },
-        ExprKind::Binary {
-            operator,
-            left,
-            right,
-            ..
-        } => {
-            let left = evaluate_expression(left, context)?;
-            if matches!(operator, BinaryOp::And | BinaryOp::Or) {
-                let Literal::Bool(value) = &*left else {
-                    let name = if *operator == BinaryOp::And {
-                        "and"
-                    } else {
-                        "or"
-                    };
-                    return Err(context.formatted_error(
-                        BWErr::OperationIncompatibleError,
-                        format_args!("The left operand of `{name}` must be a boolean"),
-                        Some(&expression.span),
-                        true,
-                    ));
-                };
-                if (*operator == BinaryOp::And && !value) || (*operator == BinaryOp::Or && *value) {
-                    return Ok(left);
-                }
-            }
-            let right = evaluate_expression(right, context)?;
-            context.temporary_binary(*operator, left, right, &expression.span)
-        }
-    }
-}
-
-fn evaluate_access(
-    base: &Expr,
-    segments: &[AccessSegment],
-    context: &mut Context,
-) -> TemporaryResult {
-    // Retain an immutable snapshot across effectful index calls without copying
-    // the whole variable container. Only the selected result is copied.
-    let binding;
-    let temporary;
-    let mut value = if let ExprKind::Variable(name) = &base.kind {
-        #[cfg(test)]
-        context
-            .expression_visits
-            .borrow_mut()
-            .push(base.span.text().to_owned());
-        binding = Arc::clone(context.get_variable_binding(name, Some(&base.span))?);
-        &binding.value
-    } else {
-        temporary = evaluate_expression(base, context)?;
-        &temporary
-    };
-    let error = |context: &Context, segment: &AccessSegment, reason: std::fmt::Arguments<'_>| {
-        context.access_error(base, segments, segment, reason)
-    };
-    for segment in segments {
-        // Evaluate this key before checking its receiver/type; do not evaluate
-        // any later key until this lookup succeeds.
-        let key = match segment {
-            AccessSegment::Literal(_) => None,
-            AccessSegment::Computed { index, .. } => Some(evaluate_expression(index, context)?),
-        };
-        value = match value {
-            Literal::Map(values) => {
-                let name = match (segment, key.as_deref()) {
-                    (AccessSegment::Literal(name), _) => &name.text,
-                    (_, Some(Literal::String(name))) => name,
-                    _ => {
-                        return Err(error(
-                            context,
-                            segment,
-                            format_args!("map key must be a string"),
-                        ))
-                    }
-                };
-                values.get(name).ok_or_else(|| {
-                    error(context, segment, format_args!("map key does not exist"))
-                })?
-            }
-            Literal::Array(values) => {
-                let index = match (segment, key.as_deref()) {
-                    (AccessSegment::Literal(name), _) => {
-                        if name.text.is_empty()
-                            || !name.text.bytes().all(|byte| byte.is_ascii_digit())
-                        {
-                            return Err(error(
-                                context,
-                                segment,
-                                format_args!("array index must contain ASCII decimal digits"),
-                            ));
-                        }
-                        name.text.parse::<usize>().ok()
-                    }
-                    (_, Some(Literal::Int(index))) if *index >= 0 => usize::try_from(*index).ok(),
-                    _ => {
-                        return Err(error(
-                            context,
-                            segment,
-                            format_args!("array index must be a nonnegative integer"),
-                        ))
-                    }
-                };
-                index.and_then(|index| values.get(index)).ok_or_else(|| {
-                    error(
-                        context,
-                        segment,
-                        format_args!("array index is out of bounds for length {}", values.len()),
-                    )
-                })?
-            }
-            _ => {
-                return Err(error(
-                    context,
-                    segment,
-                    format_args!("value is neither a map nor an array"),
-                ))
-            }
-        };
-    }
-    context.copy_temporary(value)
-}
-
 fn evaluate_block(block: &Block, context: &mut Context) -> CompletionResult {
-    for statement in &block.statements {
-        match evaluate_statement(statement, context)? {
-            Completion::Normal(_) => (),
-            control => return Ok(control),
-        }
-    }
-    Ok(Completion::Normal(context.temporary(Literal::None)?))
+    sync_result(execution::evaluate_block(block, context))
 }
-
-fn evaluate_for(
-    binding: &str,
-    iterable: &Expr,
-    body: &Block,
-    context: &mut Context,
-) -> CompletionResult {
-    let iterable_value = evaluate_expression(iterable, context)?;
-    if !matches!(&*iterable_value, Literal::Array(_)) {
-        return Err(context.detail_error(
-            BWErr::OperationIncompatibleError,
-            "For requires an array to iterate over",
-            Some(&iterable.span),
-            true,
-        ));
-    }
-    let (iterable_value, _iterable_reservation) = iterable_value.into_parts();
-    let Literal::Array(values) = iterable_value else {
-        unreachable!()
-    };
-    let previous = context.frames[context.current]
-        .variables
-        .remove_entry(binding);
-    let mut iterator_name = previous.as_ref().map(|(name, _)| name.clone());
-    let result = (|| {
-        for value in values {
-            context.tick()?;
-            let stored = context.store_value(value)?;
-            if iterator_name.is_none() {
-                iterator_name = Some(context.retain_name(binding)?);
-            }
-            context.frames[context.current]
-                .variables
-                .insert(iterator_name.as_ref().unwrap().clone(), stored);
-            match evaluate_block(body, context)? {
-                Completion::Normal(_) | Completion::Continue => (),
-                Completion::Break => break,
-                returned @ Completion::Return(_) => return Ok(returned),
-            }
-        }
-        Ok(Completion::Normal(context.temporary(Literal::None)?))
-    })();
-    if let Some((name, value)) = previous {
-        context.frames[context.current]
-            .variables
-            .insert(name, value);
-    } else {
-        context.frames[context.current].variables.remove(binding);
-    }
-    result
-}
-
-fn evaluate_while(condition: &Expr, body: &Block, context: &mut Context) -> CompletionResult {
-    loop {
-        let value = evaluate_expression(condition, context)?;
-        let Literal::Bool(should_loop) = &*value else {
-            return Err(context.detail_error(
-                BWErr::OperationIncompatibleError,
-                "While requires a boolean condition",
-                Some(&condition.span),
-                true,
-            ));
-        };
-        let should_loop = *should_loop;
-        drop(value);
-        if !should_loop {
-            break;
-        }
-        match evaluate_block(body, context)? {
-            Completion::Normal(_) | Completion::Continue => (),
-            Completion::Break => break,
-            returned @ Completion::Return(_) => return Ok(returned),
-        }
-    }
-    Ok(Completion::Normal(context.temporary(Literal::None)?))
-}
-
-fn evaluate_handler(
-    binding: Option<&Name>,
-    handler: &Block,
-    original: RuntimeDiagnostic,
-    context: &mut Context,
-) -> CompletionResult {
-    let owner = context.current;
-    let original = context.retain_handler(original)?;
-    let previous = if let Some(name) = binding {
-        let installed = (|| {
-            context.checkpoint()?;
-            let limits = context.limits();
-            let limits = limits.diagnostic_values.intersect(&limits.values);
-            let size = original
-                .value
-                .value_size_with_limits(&limits)
-                .map_err(|error| context.retain_limit(error))?;
-            let reservation = context.temporary_reservation(size)?;
-            let value = TemporaryValue::new(original.value.to_value(), reservation);
-            let (value, _reservation) = value.into_parts();
-            context.set_variable(&name.text, value)
-        })();
-        match installed {
-            Ok(previous) => previous,
-            Err(error) => {
-                return Err(context.finish_handler_error(
-                    context.runtime_diagnostic(error.into(), Some(&name.span), false),
-                    original,
-                ))
-            }
-        }
-    } else {
-        None
-    };
-    let handler_name = binding.map(|name| {
-        context.frames[owner]
-            .variables
-            .get_key_value(name.text.as_str())
-            .expect("installed handler binding")
-            .0
-            .clone()
-    });
-    context.handlers.push(HandledError {
-        invocation: owner,
-        diagnostic: original.clone(),
-    });
-    let result = evaluate_block(handler, context);
-    context.handlers.pop();
-    let result = result.map_err(|error| context.finish_handler_error(error, original));
-    if let Some(name) = binding {
-        // Reservation counters never participate in key equality or hashing.
-        #[allow(clippy::mutable_key_type)]
-        let variables = &mut context.frames[owner].variables;
-        if let Some(value) = previous {
-            variables.insert(handler_name.expect("handler name"), value);
-        } else {
-            variables.remove(name.text.as_str());
-        }
-    }
-    result
-}
-
+#[cfg(test)]
 fn evaluate_statement(statement: &Statement, context: &mut Context) -> CompletionResult {
-    let _depth = context
-        .enter_evaluation()
-        .map_err(|error| context.runtime_diagnostic(error.into(), Some(&statement.span), false))?;
-    evaluate_statement_inner(statement, context)
-        .map_err(|error| context.runtime_diagnostic(error, Some(&statement.span), false))
-}
-
-// Declaration admission runs only for definitions; its scratch state must not
-// increase every active import/control frame's stack requirements.
-#[inline(never)]
-fn evaluate_definition(definition: &Arc<Definition>, context: &mut Context) -> CompletionResult {
-    context.check_statement_collision(&definition.signature, &definition.span)?;
-    let reservation = context
-        .budget
-        .as_ref()
-        .map(|budget| budget.reserve_definition(definition, |failure| context.ast_error(failure)))
-        .transpose()
-        .inspect_err(|error| context.latch_limit(error))?;
-    let registry = context.reserve_registry(RegistryPlan::definition(definition))?;
-    context.insert_statement(
-        &definition.signature,
-        &definition.span,
-        StmtType::UserDefined {
-            definition: Arc::clone(definition),
-            metadata: Arc::new(definition.signature_metadata()),
-            _reservation: reservation,
-            _registry: registry,
-        },
-    )?;
-    Ok(Completion::Normal(context.temporary(Literal::None)?))
-}
-
-fn evaluate_statement_inner(statement: &Statement, context: &mut Context) -> CompletionResult {
-    context.tick()?;
-    match &statement.kind {
-        StatementKind::Assign { name, value } => {
-            let value = match value {
-                AssignmentValue::Expression(expression) => {
-                    evaluate_expression(expression, context)?
-                }
-                AssignmentValue::Call(call) => invoke(call, context)?,
-            };
-            // Reserve the stored copy before cloning its potentially large payload.
-            let reservation = context.reserve_value(&value)?;
-            let name = context.variable_key(&name.text, context.current)?;
-            let stored = Arc::new(StoredValue::new(value.clone(), reservation));
-            context.frames[context.current]
-                .variables
-                .insert(name, stored);
-            Ok(Completion::Normal(value))
-        }
-        StatementKind::Define(definition) => evaluate_definition(definition, context),
-        StatementKind::Invoke(call) => invoke(call, context).map(Completion::Normal),
-        StatementKind::Import {
-            path,
-            path_span,
-            namespace,
-        } => imports::evaluate_import(path, path_span, namespace, &statement.span, context)
-            .and_then(|value| context.temporary(value))
-            .map(Completion::Normal),
-        StatementKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let value = evaluate_expression(condition, context)?;
-            let Literal::Bool(condition) = &*value else {
-                return Err(context.detail_error(
-                    BWErr::OperationIncompatibleError,
-                    "If requires a boolean condition",
-                    Some(&condition.span),
-                    true,
-                ));
-            };
-            let condition = *condition;
-            drop(value);
-            if condition {
-                evaluate_block(then_branch, context)
-            } else {
-                match else_branch {
-                    Some(ElseBranch::Block(block)) => evaluate_block(block, context),
-                    Some(ElseBranch::If(statement)) => evaluate_statement(statement, context),
-                    None => Ok(Completion::Normal(context.temporary(Literal::None)?)),
-                }
-            }
-        }
-        StatementKind::For {
-            binding,
-            iterable,
-            body,
-        } => evaluate_for(&binding.text, iterable, body, context),
-        StatementKind::While { condition, body } => evaluate_while(condition, body, context),
-        StatementKind::Try {
-            body,
-            binding,
-            handler,
-        } => match evaluate_block(body, context) {
-            Ok(value) => Ok(value),
-            Err(original) => {
-                let original = context
-                    .after_evaluation::<Literal>(Err(original))
-                    .unwrap_err();
-                if context.checkpoint().is_err() {
-                    Err(original)
-                } else {
-                    evaluate_handler(binding.as_ref(), handler, original, context)
-                }
-            }
-        },
-        StatementKind::Return(expression) => {
-            let value = match expression {
-                Some(expression) => evaluate_expression(expression, context)?,
-                None => context.temporary(Literal::None)?,
-            };
-            Ok(Completion::Return(value))
-        }
-        StatementKind::Break => Ok(Completion::Break),
-        StatementKind::Continue => Ok(Completion::Continue),
-        StatementKind::Rethrow => {
-            match context
-                .handlers
-                .last()
-                .filter(|handler| handler.invocation == context.current)
-            {
-                Some(handler) => Err(context.rethrow_handler(&handler.diagnostic, &statement.span)),
-                None => Err(context.detail_error(
-                    BWErr::ControlFlowError,
-                    "Rethrow requires an enclosing Catch in the same invocation",
-                    Some(&statement.span),
-                    false,
-                )),
-            }
-        }
-    }
+    sync_result(execution::evaluate_statement(statement, context))
 }
 
 // Retain runtime boundary guards even though public entry points validate placement.
@@ -1615,21 +933,7 @@ fn execute_statement_runtime(
     statement: &Statement,
     context: &mut Context,
 ) -> EvaluationResult<Literal> {
-    let result = (|| {
-        context.checkpoint()?;
-        let statements = std::slice::from_ref(statement);
-        let limits = context.limits();
-        super::ast_limits::check_statements(statements, &limits.ast, limits.source_bytes)
-            .map_err(|failure| context.ast_error(failure))?;
-        ast::validate_control_script(statements).map_err(|failure| context.ast_error(failure))?;
-        finish_script(
-            evaluate_statement(statement, context)?,
-            context,
-            &statement.span,
-        )
-        .map(TemporaryValue::into_inner)
-    })();
-    result.map_err(|error| context.runtime_diagnostic(error, None, false))
+    sync_result(execution::execute_statement_runtime(statement, context))
 }
 
 /// Validate the complete program, then execute without parsing or rebuilding it.
@@ -1642,33 +946,28 @@ pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> Ru
     evaluate_program_runtime(program, context).map_err(RuntimeDiagnostic::into_diagnostic)
 }
 
+/// Execute using an owned context so dropping the future drops all suspended DSL state.
+/// Existing synchronous callbacks must finish promptly; register NativeOperation for waiting work.
+pub fn evaluate_program_async(
+    program: &Program,
+    mut context: Context,
+) -> impl std::future::Future<Output = RuntimeResult> + '_ {
+    context.asynchronous = true;
+    async move {
+        let result = execution::evaluate_program_runtime(program, &mut context).await;
+        context.after_evaluation(result).map_err(|error| {
+            context
+                .runtime_diagnostic(error, None, false)
+                .into_diagnostic()
+        })
+    }
+}
+
 pub(crate) fn evaluate_program_runtime(
     program: &Program,
     context: &mut Context,
 ) -> EvaluationResult<Literal> {
-    let result = (|| {
-        context.checkpoint()?;
-        let limits = context.limits();
-        program
-            .validate_with_reporter(&limits.ast, limits.source_bytes, |failure| {
-                context.ast_error(failure)
-            })
-            .inspect_err(|error| context.latch_limit(error))?;
-        let mut result = None;
-        for statement in &program.statements {
-            // A replaced script result is unobservable once the next statement starts.
-            drop(result.take());
-            result = Some(finish_script(
-                evaluate_statement(statement, context)?,
-                context,
-                &statement.span,
-            )?);
-        }
-        result
-            .map_or_else(|| context.temporary(Literal::None), Ok)
-            .map(TemporaryValue::into_inner)
-    })();
-    result.map_err(|error| context.runtime_diagnostic(error, None, false))
+    sync_result(execution::evaluate_program_runtime(program, context))
 }
 
 /// Compatibility entry point for callers that already hold a Pest pair.
@@ -1682,7 +981,7 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
 /// Parser-pair compatibility with detailed execution errors.
 pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
     let result = (|| {
-        context.checkpoint()?;
+        context.check_execution_mode()?;
         let node = ast::from_pair_with_reporter(pair, |failure| context.ast_error(failure))?;
         let limits = context.limits();
         super::ast_limits::check_node(&node, &limits.ast, limits.source_bytes)

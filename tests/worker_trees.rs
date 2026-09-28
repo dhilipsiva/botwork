@@ -360,7 +360,10 @@ fn guard_configuration_and_failed_startup_never_claim_tree_completion() {
             )
             .unwrap(),
         );
-        assert_eq!(report.cleanup, expected);
+        assert_eq!(
+            report.cleanup, expected,
+            "helper={helper}, worker={worker}: {report:?}"
+        );
         if expected == WorkerCleanup::NotStarted {
             assert!(!report.io_complete);
         }

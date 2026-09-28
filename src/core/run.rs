@@ -1,4 +1,4 @@
-//! Fresh, synchronous runs with local configuration and structured outcomes.
+//! Fresh runs with local configuration and structured outcomes.
 
 use std::{
     collections::BTreeMap,
@@ -30,6 +30,7 @@ use super::{
 #[cfg(test)]
 mod tests;
 
+mod asynchronous;
 mod import_limits;
 mod output_limits;
 pub(crate) use import_limits::ImportResource;
@@ -318,6 +319,14 @@ impl Default for Engine {
 }
 
 impl Engine {
+    /// Register an operation for run_source_async, run_program_async, or run_file_async.
+    /// Synchronous runs reject an engine containing operations before executing statements.
+    pub fn register_operation(
+        &mut self,
+        operation: super::operation::NativeOperation,
+    ) -> DiagnosticResult<()> {
+        self.template.register_operation(operation)
+    }
     /// Configure reusable native registration storage. RunOptions still supplies
     /// each execution's independent registry budgets, checked before input/effects.
     pub fn with_registry_limits(retained_registry: RetainedRegistryLimits) -> Self {
@@ -394,37 +403,13 @@ impl Engine {
 
     fn run(
         &self,
-        mut options: RunOptions,
+        options: RunOptions,
         execute: impl FnOnce(&mut Context) -> EvaluationResult<Literal>,
     ) -> RunResult {
-        let start = Instant::now();
-        let control_start = tokio::time::Instant::now();
-        let mut context = Context::default();
-        let result_limits = options.limits.results.clone();
-        let variables = Owned::new(std::mem::take(&mut options.variables));
-        let result = (|| {
-            options.control.checkpoint()?;
-            options.limits.validate()?;
-            let environment = Arc::new(RunEnvironment::prepare(&options, control_start)?);
-            context.working_directory = Ok(environment.directory.clone());
-            context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
-            context.environment = Some(environment);
-            context.copy_native_template(&self.template)?;
-            context.set_input_variables_runtime(variables.into_inner())?;
-            context.checkpoint()?;
-            let result = execute(&mut context);
-            context.after_evaluation(result)
-        })()
-        .map_err(|error| context.runtime_diagnostic(error, None, false));
-        let steps = context.budget.as_ref().map_or(0, |budget| budget.used());
-        let (result, variables, snapshot_error) = context.finish_result(result, &result_limits);
-        RunResult {
-            result,
-            variables,
-            snapshot_error,
-            steps,
-            elapsed: start.elapsed(),
-        }
+        let (mut active, prepared) =
+            self.prepare_run(asynchronous::PendingRun::new(options), false);
+        let result = prepared.and_then(|()| execute(&mut active.context));
+        active.finish(result)
     }
 }
 
@@ -513,7 +498,11 @@ impl RunBudget {
     pub(crate) fn limits(&self) -> &RunLimits {
         &self.0.limits
     }
-    fn used(&self) -> u64 {
+    pub(crate) fn control(&self) -> &OperationControl {
+        &self.0.control
+    }
+
+    pub(crate) fn used(&self) -> u64 {
         self.0.used.load(Ordering::Relaxed)
     }
     fn stop(&self, error: BWErr) -> Diagnostic {

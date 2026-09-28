@@ -39,7 +39,7 @@ Eleven Python checks protect these reporting and process-timeout boundaries in C
 To replay one generated mutation by its exact recorded name:
 
 ```sh
-python3 scripts/mutation_core.py generated --name 'src/core/eval.rs:1110:20: delete ! in evaluate_expression_inner'
+python3 scripts/mutation_core.py generated --name 'src/core/eval/execution.rs:365:20: delete ! in evaluate_expression_inner'
 ```
 
 The runner discovers the complete inventory and uses a single-item shard after
@@ -64,20 +64,24 @@ For/While/handler/statement completion, post-evaluation stop priority, handler
 causes, run preparation/execution, and outcome classification. Selection was
 frozen before viewing the first results. No mutation was excluded afterward.
 
-The generated inventory contains 189 changes across `grammar.rs`, `eval.rs`,
-`eval/diagnostics.rs`, and `run.rs`. In this tool version, struct-field deletions
+Version 1 generated 189 changes across `grammar.rs`, `eval.rs`,
+`eval/diagnostics.rs`, and `run.rs`. Version 2 retains those semantic areas after
+the shared evaluator move and adds async setup/execution, mode checks, and
+scheduler yields. Its 209-entry inventory also includes `eval/execution.rs` and
+`run/asynchronous.rs`. In this tool version, struct-field deletions
 also include `Context::with_control` and `Engine::with_registry_limits` despite
 the name filters. Both remain in the inventory, denominator, and review. Record
 the actual inventory instead of assuming the regex names are the entire scope.
 
 Macro bodies and many semantic changes are not generated automatically. The
-[12-entry targeted catalogue](../tests/mutation-core.json) therefore swaps
+[15-entry targeted catalogue](../tests/mutation-core.json) therefore swaps
 precedence levels, changes subtraction associativity, terminates While early,
 discards For returns, loses the caller frame, uses dynamic parents, skips parent
 variable lookup, discards handled causes, forces environment inheritance, ignores
-environment removal, drops input bindings, and ignores the local deadline. Its
-exact substitutions must match once; stale or ambiguous entries fail before
-testing. The catalogue was frozen before its first execution.
+environment removal, drops input bindings, and ignores the local deadline. Catalogue
+version 2 also drops the async call frame, loses parent control, and omits the
+CPU scheduler yield. Exact substitutions must match once; stale or ambiguous entries fail before
+testing. Each catalogue version was frozen before its first execution.
 
 All library unit tests and the named integration suites in the Cargo config run
 for generated and targeted mutations. The initial suite omitted the existing
@@ -132,3 +136,20 @@ regressions and helper checks, not the full mutation campaign on every push.
 Tool references: [cargo-mutants configuration](https://mutants.rs/config-file.html),
 [mutation operators](https://mutants.rs/mutants.html), and
 [timeout handling](https://mutants.rs/timeouts.html).
+
+## Async integration campaign — 2026-09-28
+
+Version 2 adds `async_execution` to the selected test suites and follows the shared
+evaluator into its new files without removing earlier semantic mutations. The
+[async evidence record](async-execution-evidence.json) retains all outcomes and
+hashes: 167 generated mutations were caught and 42 did not compile; all 15 targeted
+mutations were caught. No generated mutation survived or timed out. The latest
+combined result is **182/182 compilable mutations caught**, from 224 distinct
+mutations, with no equivalence exclusions. Compiler failures are not test kills.
+
+The initial targeted run caught 13 changes and timed out on two: discarded inputs
+and lost parent control exposed unbounded waits in the new sibling-run test.
+Controlled-clock deadlines now bound both operation entry and cancellation
+completion. A complete catalogue rerun caught all 15 through failed assertions.
+The original timeout outcomes remain recorded; they are not counted as kills.
+This local core campaign still does not complete the release mutation gate.

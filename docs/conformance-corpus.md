@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 145 cases against the 61 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 147 cases against the 62 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -36,6 +36,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | F5 | native-return | native-invalid-return | native-return |
 | F6 | signature-valid | signature-invalid | signature-valid |
 | F7 | async-success | async-expired | async-success |
+| F8 | async-program | async-program-sync-rejected | async-program |
 | M1 | import-success | import-cycle | import-success |
 | I1 | variables-success | variables-invalid | variables-success |
 | R1 | embedded-success | embedded-limit | embedded-success |
@@ -76,7 +77,7 @@ Boundary expectations include empty programs/collections, absent and None values
 
 Run `cargo test --locked --test conformance --test cli_harness`, then repeat with `--release`. CI's normal test matrix executes both profiles. The 41 script cases run through Cargo's built CLI in isolated temporary working directories. Each checks exact stdout, status `0`/`1`, empty success stderr, or the expected failure message and source filename. A five-second timeout terminates and reaps a stuck process. Runner tests check timeout recovery, stream separation, and workspace cleanup. Two variable cases materialize JSON files and pass explicit flags, checking integer boundaries/None/precedence and failure before script output/debug traces.
 
-The structural host case exercises the public Rust equality API with NaN and both infinities, directly and nested in arrays/maps, on both operand sides. All 36 combinations across equality/inequality require an arithmetic error, even when the other value has a different kind. Valid DSL source cannot construct these non-finite host values. Two additional host cases register and invoke native callbacks, checking zero arguments, None and minimum-i32 returns, nested non-finite rejection, and native call context. Two signature cases verify shared metadata/help, accepted kind unions, return kinds, and rejection before callback effects. Two async operation cases check success and expired-deadline rejection before callback construction.
+The structural host case exercises the public Rust equality API with NaN and both infinities, directly and nested in arrays/maps, on both operand sides. All 36 combinations across equality/inequality require an arithmetic error, even when the other value has a different kind. Valid DSL source cannot construct these non-finite host values. Two additional host cases register and invoke native callbacks, checking zero arguments, None and minimum-i32 returns, nested non-finite rejection, and native call context. Two signature cases verify shared metadata/help, accepted kind unions, return kinds, and rejection before callback effects. Two async operation cases check success and expired-deadline rejection before callback construction. Two async DSL cases verify a suspending operation inside a custom Return expression and rejection of synchronous dispatch before statement effects.
 
 Successful scripts currently generate stdout only; filesystem/report artifacts must extend the case contract when those operations arrive. The corpus does not claim adapter, complete resource-limit, fuzz, or performance coverage. Failure labels report toolchain, OS/architecture, profile, timeout, deterministic seed status, and adapter absence.
 

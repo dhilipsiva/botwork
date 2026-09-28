@@ -316,6 +316,55 @@ fn check_async_case(case: &Case) {
     });
 }
 
+fn check_async_program_case(case: &Case) {
+    use botwork::core::{
+        operation::NativeOperation,
+        run::{Engine, RunOptions, RunOutcome},
+        signature::StatementSignature,
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let entered = Arc::clone(&calls);
+    let mut engine = Engine::default();
+    engine
+        .register_operation(
+            NativeOperation::asynchronous(
+                StatementSignature::native("Later |value|").unwrap(),
+                move |mut values, _| {
+                    entered.fetch_add(1, Ordering::SeqCst);
+                    async move {
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                        Ok(values.remove(0))
+                    }
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let source = "Double |n| { Return |@{ Later |n| } * 2| }\n|answer| = Double |21|";
+    if let Some(expected) = case.error {
+        let result = engine.run_source("sync", source, RunOptions::default());
+        let error = result.result.unwrap_err();
+        assert_eq!(error.code().as_str(), case.code.unwrap());
+        assert!(error.to_string().contains(expected));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(result.variables.is_empty());
+    } else {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let result =
+            runtime.block_on(engine.run_source_async("async", source, RunOptions::default()));
+        assert_eq!(result.outcome(), RunOutcome::Succeeded);
+        assert!(matches!(result.variables["answer"], Literal::Int(42)));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+}
+
 #[test]
 fn conformance_inputs_match_status_stdout_and_error_contracts() {
     let cases = cases();
@@ -374,6 +423,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
             }
             Input::AsyncSuccess | Input::AsyncExpired => {
                 check_async_case(&case);
+                continue;
+            }
+            Input::AsyncProgram | Input::AsyncProgramSyncRejected => {
+                check_async_program_case(&case);
                 continue;
             }
             Input::DiagnosticRenderingBoundary | Input::DiagnosticRenderingLimit => {
