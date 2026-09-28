@@ -4,12 +4,14 @@ use crate::core::{diagnostic::DiagnosticCode as Code, signature::ValueKind as Ki
 use std::time::Duration;
 mod collections;
 mod datetime;
+pub(super) mod http;
 mod operating_system;
 mod processes;
 mod strings;
 
 #[derive(Clone, Copy)]
 pub(super) enum Builtin {
+    Http(http::HttpOp),
     Log,
     Assert,
     AssertEqual,
@@ -28,6 +30,7 @@ pub(super) enum Builtin {
 impl Builtin {
     fn signature(self) -> StatementSignature {
         let (header, description, parameters, returns, error) = match self {
+            Self::Http(kind) => return kind.signature(),
             Self::Collection(kind) => return kind.signature(),
             Self::String(kind) => return kind.signature(),
             Self::DateTime(kind) => return kind.signature(),
@@ -71,6 +74,12 @@ impl Builtin {
     ) -> TemporaryResult {
         context.checkpoint()?;
         match self {
+            Self::Http(_) => Err(context.detail_error(
+                BWErr::AsyncRuntime,
+                "HTTP requires asynchronous execution",
+                None,
+                false,
+            )),
             Self::Collection(kind) => kind.invoke(values, context),
             Self::String(kind) => kind.invoke(values, context),
             Self::DateTime(kind) => kind.invoke(values, context),
@@ -180,6 +189,7 @@ pub(super) fn initialize(context: &mut Context) {
         .chain(datetime::FIXED.iter())
         .chain(operating_system::FIXED.iter())
         .chain(processes::FIXED.iter())
+        .chain(http::FIXED.iter())
     {
         if !context.frames[context.current]
             .statements

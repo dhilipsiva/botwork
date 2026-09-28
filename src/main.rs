@@ -255,7 +255,7 @@ fn main() -> ExitCode {
         statement_help(args.statement_help.as_deref(), output_limits)
     } else {
         tokio::runtime::Builder::new_current_thread()
-            .enable_time()
+            .enable_all()
             .build()
             .map_err(|error| {
                 CliError::Script(Diagnostic::new(BWErr::AsyncRuntime(error.to_string())))

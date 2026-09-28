@@ -132,7 +132,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Operating system](docs/operating-system.md)
   - [x] [Process](docs/processes.md)
   - [x] [Strings](docs/strings.md)
-  - [ ] Making HTTP Requests
+  - [x] [Making HTTP Requests](docs/http.md)
 - [ ] integrations
   - [ ] Selenium/Webdriver
   - [ ] Appium

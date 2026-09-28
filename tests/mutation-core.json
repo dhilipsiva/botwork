@@ -1,5 +1,5 @@
 {
-  "version": 18,
+  "version": 19,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1197,6 +1197,139 @@
       "file": "src/core/eval/builtins/processes.rs",
       "before": "    if error.code() == Code::Native {\n",
       "after": "    if false && error.code() == Code::Native {\n"
+    },
+    {
+      "id": "http-redirect-default",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/config.rs",
+      "before": "None => Redirects::None,",
+      "after": "None => Redirects::SameOrigin,"
+    },
+    {
+      "id": "http-retry-default",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/config.rs",
+      "before": "number(\"max_retries\", 0, 5)?",
+      "after": "number(\"max_retries\", 1, 5)?"
+    },
+    {
+      "id": "http-unsafe-retry",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/config.rs",
+      "before": "if max_retries > 0 && (!matches!(method, Method::GET | Method::HEAD) || !body.is_empty()) {",
+      "after": "if false && max_retries > 0 && (!matches!(method, Method::GET | Method::HEAD) || !body.is_empty()) {"
+    },
+    {
+      "id": "http-cross-origin-headers",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "plan.headers.clear();",
+      "after": "let _ = &plan.headers;"
+    },
+    {
+      "id": "http-downgrade",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "if plan.url.scheme() == \"https\" && next.scheme() != \"https\" {",
+      "after": "if false && plan.url.scheme() == \"https\" && next.scheme() != \"https\" {"
+    },
+    {
+      "id": "http-same-origin-policy",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "if cross && plan.redirects == Redirects::SameOrigin {",
+      "after": "if false && cross && plan.redirects == Redirects::SameOrigin {"
+    },
+    {
+      "id": "http-redirect-limit",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "if redirects >= plan.max_redirects {",
+      "after": "if redirects > plan.max_redirects {"
+    },
+    {
+      "id": "http-chunk-body-limit",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "if data.len() > plan.max_body.saturating_sub(bytes.len()) {",
+      "after": "if false && data.len() > plan.max_body.saturating_sub(bytes.len()) {"
+    },
+    {
+      "id": "http-header-byte-limit",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "|| bytes > plan.max_header_bytes",
+      "after": "|| false && bytes > plan.max_header_bytes"
+    },
+    {
+      "id": "http-status-success",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/output.rs",
+      "before": "(200..300).contains(&response.status)",
+      "after": "(200..500).contains(&response.status)"
+    },
+    {
+      "id": "http-timeout-latch",
+      "area": "http",
+      "file": "src/core/eval/builtins/http.rs",
+      "before": "budget.stop((*error.error).clone());",
+      "after": "let _ = budget;"
+    },
+    {
+      "id": "http-global-byte-admission",
+      "area": "http",
+      "file": "src/core/eval/builtins/http.rs",
+      "before": "used.checked_add(bytes).filter(|next| *next <= GLOBAL_BYTES)",
+      "after": "used.checked_add(bytes)"
+    },
+    {
+      "id": "http-workspace-admission",
+      "area": "http",
+      "file": "src/core/eval/builtins/http.rs",
+      "before": "payload_bytes: WORKSPACE,",
+      "after": "payload_bytes: 0,"
+    },
+    {
+      "id": "http-sync-before-arguments",
+      "area": "http",
+      "file": "src/core/eval/execution.rs",
+      "before": "\n            | StmtType::Native {\n                body: NativeBody::Builtin(builtins::Builtin::Http(_)),\n                ..\n            }",
+      "after": ""
+    },
+    {
+      "id": "http-tls-hostname",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "Host::Ipv4(ip) => rustls::pki_types::ServerName::IpAddress(IpAddr::V4(ip).into()),",
+      "after": "Host::Ipv4(_ip) => rustls::pki_types::ServerName::try_from(\"localhost\".to_owned()).unwrap(),"
+    },
+    {
+      "id": "http-strict-intermediate-utf8",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "if !plan.binary\n            &&",
+      "after": "if false && !plan.binary\n            &&"
+    },
+    {
+      "id": "http-post-redirect-rewrite",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "matches!(status, 301 | 302) && plan.method == Method::POST",
+      "after": "false && matches!(status, 301 | 302) && plan.method == Method::POST"
+    },
+    {
+      "id": "http-request-framing-headers",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/config.rs",
+      "before": "\"host\"\n                        | \"content-length\"",
+      "after": "\"unused-host\"\n                        | \"content-length\""
+    },
+    {
+      "id": "http-no-body-retry",
+      "area": "http",
+      "file": "src/core/eval/builtins/http/config.rs",
+      "before": "|| !body.is_empty())",
+      "after": "|| false && !body.is_empty())"
     }
   ]
 }

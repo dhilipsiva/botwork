@@ -34,11 +34,21 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["raw_value"] }
 thiserror = "1.0.40"
 tempfile = "3.27.0"
-tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros", "net", "io-util"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
+
+bytes = "1.12.1"
+http-body-util = "0.1.5"
+hyper = { version = "1.9.0", features = ["client", "http1", "server"] }
+hyper-util = { version = "0.1.20", features = ["tokio"] }
+rustls = { version = "0.23.45", default-features = false, features = ["std", "ring", "tls12"] }
+tokio-rustls = { version = "0.26.5", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1.0.9"
+url = "2.5.8"
+futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2.189"
 
 [dev-dependencies]
-tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros", "test-util"] }
+tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros", "net", "io-util", "test-util"] }

@@ -33,10 +33,18 @@ pub(super) async fn invoke_inner(call: &Call, context: &mut Context) -> Temporar
             false,
         )
     })?;
-    if matches!(definition, StmtType::Operation { .. }) && !context.asynchronous {
+    if matches!(
+        definition,
+        StmtType::Operation { .. }
+            | StmtType::Native {
+                body: NativeBody::Builtin(builtins::Builtin::Http(_)),
+                ..
+            }
+    ) && !context.asynchronous
+    {
         return Err(context.detail_error(
             BWErr::AsyncRuntime,
-            "Use asynchronous execution for NativeOperation calls",
+            "Use asynchronous execution for this statement",
             Some(&call.span),
             false,
         ));
@@ -144,6 +152,23 @@ pub(super) fn invoke_resolved<'a>(
                 metadata,
                 _registry,
             } => {
+                if let NativeBody::Builtin(builtins::Builtin::Http(kind)) = body {
+                    context.check_call_depth()?;
+                    let frame = context.retain_call(&call.signature, &call.span, None)?;
+                    context.calls.push(frame);
+                    let result = kind.invoke(&arguments, context).await;
+                    let result = context
+                        .after_evaluation(result)
+                        .and_then(|value| {
+                            blocking::validate_result(context, &metadata, &value, &call.span)?;
+                            Ok(value)
+                        })
+                        .map_err(|error| {
+                            context.runtime_diagnostic(error, Some(&call.span), false)
+                        });
+                    context.calls.pop();
+                    return result;
+                }
                 // Inspection needs caller bindings. Log, regex, filesystem work,
                 // and arbitrary host callbacks run on bounded blocking workers.
                 let inline = matches!(&body, NativeBody::Builtin(kind) if !kind.needs_worker());

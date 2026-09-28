@@ -181,6 +181,9 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("http-statements", include_str!("../../examples/34-http.botwork"), "200\n{\"message\":\"hello\"}\n", &["B7"], &[]),
+        Case { id: "http-zero-deadline", positive: &[], invalid: &["B7"], boundary: &["B7"], input: Input::Script(r#"HTTP Request |"GET"| To |"http://127.0.0.1:1/"| Options |{"timeout_ms": 0}|"#), stdout: "", code: Some("BW5002"), error: Some("expired") },
+        failure("http-invalid-method", r#"HTTP Request |"CONNECT"| To |"http://localhost"|"#, "", "BW3003", "CONNECT tunnels are unsupported", &["B7"]),
         success("process-statements", include_str!("../../examples/33-processes.botwork"), "Hello, world!\n7\ndiagnostic\n[0, 255, 10]\n", &["B6"], &[]),
         success("process-empty", r#"|p| = Run Binary Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": [], "stdout_limit": 0, "stderr_limit": 0}|
 Assert |p.stdout| Equals |[]|

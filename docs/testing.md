@@ -2,6 +2,13 @@
 
 Run `cargo test` from the repository root. Linux typed-worker interoperability tests also require `python3` on PATH (the same interpreter used by the coverage-helper checks). Worker tests require the enabled facilities and test tools in the [platform matrix](worker-platforms.md); missing facilities fail the tests rather than skip coverage. Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
 
+HTTP's Ring TLS backend requires a C compiler. GNU builds use the usual GCC/Clang
+toolchain. For `x86_64-unknown-linux-musl`, install the Rust target and a musl C
+toolchain (on Ubuntu, the `musl-tools` package), then set
+`CC_x86_64_unknown_linux_musl=musl-gcc` when running Cargo. The CI musl jobs install
+and select this compiler explicitly. The root and fuzz workspaces keep separate
+lockfiles; update both when library dependencies change.
+
 [Generated core validation](generated-validation.md) adds seeded expression/literal properties, parser mutations, and a separate fixed libFuzzer smoke campaign. The ordinary test suite runs the seeded checks; `python3 scripts/fuzz_smoke.py` records the sanitizer campaign with its pinned nightly and tools.
 
 [Core mutation testing](mutation-testing.md) freezes generated and targeted mutations for precedence, scope, control flow, errors, and isolation. Run `python3 scripts/mutation_core.py generated` and `python3 scripts/mutation_core.py targeted`; the guide records tool versions, survivor repairs, scoring, and replay instructions.

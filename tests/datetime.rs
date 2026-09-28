@@ -308,7 +308,7 @@ fn metadata_is_typed_idempotent_and_respects_host_overrides() {
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 93);
+    assert_eq!(context.statement_signatures().len(), 97);
     let signature = context
         .statement_signature("Create Duration |n| In |u|")
         .unwrap()

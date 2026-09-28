@@ -338,7 +338,7 @@ fn collection_initialization_is_idempotent_and_preserves_host_overrides() {
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 93);
+    assert_eq!(context.statement_signatures().len(), 97);
     let value = evaluate_program_detailed(
         &Program::parse("override", "Create Array").unwrap(),
         &mut context,

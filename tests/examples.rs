@@ -502,3 +502,25 @@ fn builtins_example_demonstrates_checks_inspection_recovery_and_waiting() {
         &["42", "Int", "BW9001", "cleanup", "BW9002", "finished"],
     );
 }
+
+#[path = "support/http_fixture.rs"]
+mod http_fixture;
+#[test]
+fn http_example_executes_against_loopback_endpoint() {
+    let fixture = http_fixture::Fixture::new();
+    let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .arg("--file")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/34-http.botwork"))
+        .env("BOTWORK_HTTP_URL", &fixture.url)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        include_bytes!("doc-examples/http-statements.stdout")
+    );
+}

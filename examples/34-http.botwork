@@ -1,0 +1,8 @@
+# Set BOTWORK_HTTP_URL to an HTTP endpoint returning {"message":"hello"}.
+|url| = Get Environment Variable |"BOTWORK_HTTP_URL"|
+|response| = HTTP Request |"GET"| To |url| Options |{"headers": {"accept": "application/json"}, "timeout_ms": 3000, "max_body_bytes": 4096}|
+Assert |response.status| Equals |200|
+Assert |response.headers["content-type"]| Equals |["application/json"]|
+Assert |response.body| Equals |"{\"message\":\"hello\"}"|
+Log |response.status|
+Log |response.body|

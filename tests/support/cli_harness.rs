@@ -1,3 +1,6 @@
+#[path = "http_fixture.rs"]
+mod http_fixture;
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -70,6 +73,10 @@ impl Harness {
         fs::write(&path, source).unwrap();
         let mut command = Command::new(env!("CARGO_BIN_EXE_botwork"));
         command.arg("--file").arg(path).args(arguments);
+        let fixture = (id == "http-statements").then(http_fixture::Fixture::new);
+        if let Some(fixture) = &fixture {
+            command.env("BOTWORK_HTTP_URL", &fixture.url);
+        }
         self.execute(id, command, timeout, source)
     }
 

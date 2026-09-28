@@ -141,7 +141,7 @@ pub(super) fn native_body(
     }
 }
 
-fn validate_result(
+pub(super) fn validate_result(
     context: &Context,
     metadata: &StatementSignature,
     value: &Literal,

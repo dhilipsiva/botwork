@@ -45,6 +45,12 @@ jobs:
           persist-credentials: false
       - name: Install Rust and checking tools
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy --target ${{ matrix.target }}
+      - name: Install musl C toolchain
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> "$GITHUB_ENV"
       - name: Check formatting
         if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: cargo +stable fmt --all -- --check
