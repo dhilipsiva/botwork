@@ -1,6 +1,8 @@
-# Version 15: retain earlier semantics and add bounded operating-system statements.
+# Version 16: retain earlier semantics and add worker completion/stop observation.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/worker/linux/guardian.rs",
+    "src/core/worker/linux.rs",
     "src/core/eval/builtins/operating_system.rs",
     "src/core/eval/builtins/operating_system/{environment,files,paths,values}.rs",
     "src/core/eval/builtins/operating_system/files/read.rs",
@@ -42,6 +44,8 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/worker/linux/guardian.rs:.* (acknowledge|completion)( ->|$)',
+    '^src/core/worker/linux.rs:.* (stop|observe_stop)( ->|$)',
     '^src/core/eval/builtins/operating_system(\.rs|/(environment|files|paths|values)\.rs|/files/read\.rs):',
     ' (Context::blocking_with_directory|TemporaryReservation::grow)( ->|$)',
     '^src/core/eval/builtins/datetime(\.rs|/(duration|moment)\.rs):',
@@ -84,6 +88,9 @@ additional_cargo_args = [
     "--test", "strings",
     "--test", "datetime",
     "--test", "operating_system",
+    "--test", "worker_trees",
+    "--test", "worker_recovery",
+    "--test", "worker_namespaces",
     "--test", "value_preallocation",
     "--test", "suite_fixtures",
     "--test", "value_contract",

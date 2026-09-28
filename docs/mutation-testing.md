@@ -140,6 +140,16 @@ records the focused campaign separately. Generated discovery is not a new full
 campaign score. Root/parent removal rejection is tested through a pure validator,
 so deliberately broken validation cannot make its test attempt a real root removal.
 
+Version 16 adds guardian acknowledgment publication, host completion parsing,
+and stop observation ordering,
+plus the `worker_trees`, `worker_recovery`, and `worker_namespaces` integration
+suites. The 148-entry targeted catalogue adds
+five faults: omitted write shutdown, accepted missing EOF, ignored guardian exit
+status, omitted acknowledgment at the entry point, and abandonment sampled
+before its cancellation wakeup. [Guardian completion evidence](guardian-completion-evidence.json)
+records the focused campaign. Generated discovery retains the earlier scope;
+no new complete generated mutation score is claimed.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

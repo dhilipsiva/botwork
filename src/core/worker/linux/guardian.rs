@@ -248,7 +248,9 @@ pub(crate) fn entry() -> Option<u8> {
                             return Some(1);
                         }
                     }
-                    let _ = control.write_all(&frame);
+                    // The host can be gone; its journal receipt above still
+                    // records cleanup. A live host independently validates EOF.
+                    let _ = acknowledge(&mut control, &frame);
                     0
                 }
                 Err(_) => 1, // Missing acknowledgment quarantines the host's slot.
@@ -256,6 +258,15 @@ pub(crate) fn entry() -> Option<u8> {
         }
         Err(_) => 2,
     })
+}
+
+fn acknowledge(control: &mut UnixStream, frame: &[u8; FRAME_BYTES]) -> io::Result<()> {
+    // A concurrent host fork can retain another copy of our sending endpoint
+    // until exec. Closing our descriptors on exit does not then deliver EOF.
+    // Shut down the shared socket direction after the complete frame instead.
+    control
+        .write_all(frame)
+        .and_then(|()| control.shutdown(std::net::Shutdown::Write))
 }
 
 pub(super) fn frame(kind: u8, status: i32, errno: i32) -> [u8; FRAME_BYTES] {

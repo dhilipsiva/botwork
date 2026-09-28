@@ -1,6 +1,72 @@
 use super::*;
 
 #[test]
+fn acknowledgment_delivers_complete_frames_and_reports_transport_failure() {
+    for frame in [
+        frame(0, 7 << 8, 0),
+        frame(1, 0, libc::ENOENT),
+        frame(2, 0, libc::EPERM),
+    ] {
+        let (mut control, mut peer) = UnixStream::pair().unwrap();
+        control.set_nonblocking(true).unwrap();
+        peer.set_nonblocking(true).unwrap();
+        let copy = peer.try_clone().unwrap();
+        acknowledge(&mut peer, &frame).unwrap();
+        let result = completion(&mut control, ExitStatus::from_raw(0)).unwrap();
+        let expected = decode(&frame).unwrap();
+        assert_eq!(result.cleanup, expected.cleanup);
+        assert_eq!(result.status, expected.status);
+        assert_eq!(result.error.is_some(), expected.error.is_some());
+        // The original and duplicate descriptors remain open until after EOF.
+        drop((peer, copy));
+    }
+    let (control, mut peer) = UnixStream::pair().unwrap();
+    drop(control);
+    assert!(acknowledge(&mut peer, &frame(1, 0, libc::ENOENT)).is_err());
+}
+
+#[test]
+fn completion_requires_exact_framing_eof_and_successful_guardian_exit() {
+    let frame = frame(1, 0, libc::ENOENT);
+    for length in 0..FRAME_BYTES {
+        let (mut control, mut peer) = UnixStream::pair().unwrap();
+        control.set_nonblocking(true).unwrap();
+        peer.write_all(&frame[..length]).unwrap();
+        peer.shutdown(std::net::Shutdown::Write).unwrap();
+        assert_eq!(
+            completion(&mut control, ExitStatus::from_raw(0))
+                .err()
+                .unwrap()
+                .kind(),
+            io::ErrorKind::UnexpectedEof
+        );
+    }
+    for (extra, eof, status, expected) in [
+        (false, false, 0, io::ErrorKind::WouldBlock),
+        (true, true, 0, io::ErrorKind::InvalidData),
+        (false, true, 1 << 8, io::ErrorKind::Other),
+        (false, true, libc::SIGKILL, io::ErrorKind::Other),
+    ] {
+        let (mut control, mut peer) = UnixStream::pair().unwrap();
+        control.set_nonblocking(true).unwrap();
+        peer.write_all(&frame).unwrap();
+        if extra {
+            peer.write_all(b"x").unwrap();
+        }
+        if eof {
+            peer.shutdown(std::net::Shutdown::Write).unwrap();
+        }
+        assert_eq!(
+            completion(&mut control, ExitStatus::from_raw(status))
+                .err()
+                .unwrap()
+                .kind(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn completion_frames_preserve_worker_status_and_reject_inconsistent_evidence() {
     let done = decode(&frame(0, 7 << 8, 0)).unwrap();
     assert_eq!(done.status.unwrap().code(), Some(7));

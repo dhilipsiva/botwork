@@ -380,6 +380,86 @@ fn guard_configuration_and_failed_startup_never_claim_tree_completion() {
     assert_eq!(output.status.code(), Some(2));
 }
 
+#[test]
+fn guardian_acknowledgment_finishes_while_an_inherited_peer_copy_remains_open() {
+    use std::{
+        io::Read,
+        os::{
+            fd::{AsRawFd, FromRawFd, OwnedFd},
+            unix::{net::UnixStream, process::CommandExt},
+        },
+    };
+
+    fn duplicate(fd: i32) -> OwnedFd {
+        // Keep pre_exec sources above its reserved targets and standard streams.
+        let copy = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 6) };
+        assert!(copy >= 6, "{}", std::io::Error::last_os_error());
+        unsafe { OwnedFd::from_raw_fd(copy) }
+    }
+
+    for (worker, kind, status, errno, disconnected) in [
+        ("/botwork-missing-worker", 1, 0i32, libc::ENOENT, false),
+        ("/bin/true", 0, 0, 0, false),
+        ("/bin/false", 0, 1 << 8, 0, false),
+        ("/bin/true", 1, 0, libc::ECANCELED, true),
+    ] {
+        let (mut control, peer) = UnixStream::pair().unwrap();
+        control.set_nonblocking(true).unwrap();
+        let passed_peer = duplicate(peer.as_raw_fd());
+        let raw_host = unsafe { libc::syscall(libc::SYS_pidfd_open, libc::getpid(), 0) };
+        assert!(raw_host >= 0, "{}", std::io::Error::last_os_error());
+        let host = unsafe { OwnedFd::from_raw_fd(raw_host as i32) };
+        let passed_host = duplicate(host.as_raw_fd());
+        let remote_fd = passed_peer.as_raw_fd();
+        let host_fd = passed_host.as_raw_fd();
+        let mut command = Command::new(env!("CARGO_BIN_EXE_botwork"));
+        command
+            .args(["--botwork-worker-guardian-v1", worker])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: the child closure only duplicates live, independently owned FDs.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::dup2(remote_fd, 3) == -1 || libc::dup2(host_fd, 4) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        if disconnected {
+            control.shutdown(std::net::Shutdown::Both).unwrap();
+        }
+        let mut child = OwnedChild(command.spawn().unwrap());
+        let mut exit = None;
+        until(|| {
+            exit = child.0.try_wait().unwrap();
+            exit.is_some()
+        });
+        if disconnected {
+            // Losing the host does not turn finished cleanup into failure.
+            // Live receivers independently require frame + EOF + helper exit.
+            assert_eq!(exit.unwrap().code(), Some(0));
+            continue;
+        }
+        assert!(exit.unwrap().success());
+        // A sibling fork can retain this same endpoint until its own exec. Hold
+        // the copies explicitly so this regression never depends on scheduling.
+        let mut frame = [0; 13];
+        control.read_exact(&mut frame).unwrap();
+        assert_eq!(&frame[..4], b"BWG1");
+        assert_eq!(frame[4], kind);
+        assert_eq!(i32::from_le_bytes(frame[5..9].try_into().unwrap()), status);
+        assert_eq!(i32::from_le_bytes(frame[9..13].try_into().unwrap()), errno);
+        assert_eq!(
+            control.read(&mut [0]).unwrap(),
+            0,
+            "guardian completion must include EOF while peer copies remain open"
+        );
+        drop((peer, passed_peer, host, passed_host));
+    }
+}
+
 struct OwnedChild(Child);
 impl Drop for OwnedChild {
     fn drop(&mut self) {
@@ -462,8 +542,14 @@ fn subprocess_host() {
         fs::write(directory.join("copier"), copied.to_string()).unwrap();
     }
     fs::write(
-        directory.join("guardian"),
+        directory.join("guardian.pending"),
         pool.snapshot().active[0].pid.unwrap().to_string(),
+    )
+    .unwrap();
+    // Existence is the parent's handshake, so publish only a complete PID.
+    fs::rename(
+        directory.join("guardian.pending"),
+        directory.join("guardian"),
     )
     .unwrap();
     let _ = wait(handle);

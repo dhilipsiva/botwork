@@ -151,6 +151,17 @@ impl Drop for ChildOwner {
 }
 
 fn stop(request: &Request, deadline: Instant) -> Option<(WorkerOutcome, Diagnostic)> {
+    observe_stop(request, deadline, || request.control.checkpoint())
+}
+
+fn observe_stop(
+    request: &Request,
+    deadline: Instant,
+    checkpoint: impl FnOnce() -> DiagnosticResult<()>,
+) -> Option<(WorkerOutcome, Diagnostic)> {
+    // Drop publishes abandonment before cancelling control. Sample control
+    // first, then the flag, so Drop's wakeup cannot be mistaken for cancellation.
+    let stopped = checkpoint();
     if request.abandoned.load(Ordering::Acquire) {
         return Some((
             WorkerOutcome::Interrupted,
@@ -160,7 +171,7 @@ fn stop(request: &Request, deadline: Instant) -> Option<(WorkerOutcome, Diagnost
             ),
         ));
     }
-    if let Err(error) = request.control.checkpoint() {
+    if let Err(error) = stopped {
         let outcome = if error.code() == super::super::diagnostic::DiagnosticCode::Cancelled {
             WorkerOutcome::Cancelled
         } else {

@@ -57,6 +57,12 @@ The observer also runs independently of pipe setup, reads, writes, descriptor cl
 
 `progress_complete` distinguishes final I/O progress from an early snapshot. When false, `stdin_written` and captured output describe only the confirmed prefix: an in-flight call can transfer additional bytes before returning, or can have returned before its count is committed. These fields cannot establish that an external effect did not occur. `io_complete` additionally requires complete request transfer and both output EOFs. A normal finalized failure can have complete progress without complete I/O. Typed successful values require both flags, successful exit, and verified direct-child cleanup.
 
+Dropping a handle marks it abandoned before waking cancellation. Stop observation
+samples cancellation before re-reading abandonment, so a drop between the two
+observations is classified as `Interrupted`. Explicit cancellation remains
+`Cancelled`, deadlines remain `TimedOut`, and an already observed/published
+terminal outcome is preserved.
+
 Publishing a pending report moves the captured buffers once. Later reads cannot append another captured payload or change that report; any remaining in-flight read uses a fixed 4 KiB scratch buffer. The OS owner closes pipes and continues termination/reaping once its stalled call returns. It closes remaining pipe handles before reporting completion. The observer never signals a PID from a snapshot. Late completion changes cleanup metadata under the original outcome and releases ownership only after the OS owner settles.
 
 The child has a cleanup guard: Rust's [plain Child handle does not provide that drop behavior](https://doc.rust-lang.org/std/process/struct.Child.html). During an owner panic, the guard attempts termination and reaping on that same OS thread. The observer remains independent even if this fallback stalls. Once unwinding finishes, ownership is marked `Unverified` and its slot quarantined; no successful cleanup claim is inferred from a panic. Reservations outlive dropped handles, pools, and Tokio runtimes while OS work remains unresolved.
@@ -132,6 +138,18 @@ The host opens a [PID descriptor](https://man7.org/linux/man-pages/man2/pidfd_op
 After the worker exits, or a stop is observed, the guardian repeatedly signals its current direct children and reaps exited children, including newly adopted orphans. Child enumeration uses fixed 4 KiB scratch space; each reap batch is capped at 64 before checking control again. The [proc children list can omit changing children](https://man7.org/linux/man-pages/man5/proc_tid_children.5.html), so an empty list is never proof of cleanup. Before signalling each listed PID, a non-reaping wait validates current ownership. Only [waitpid with no remaining children](https://man7.org/linux/man-pages/man2/waitpid.2.html), using the Linux all-child option, establishes completion. PID values are never retained for later signalling after reaping.
 
 A fixed 13-byte private acknowledgment reports complete-tree cleanup, a pre-worker startup failure, or cleanup errors. The host requires the complete frame, EOF, and successful guardian exit. `TreeReaped` means the actual worker and its adopted descendants were reaped and the guardian also exited. It does not itself mean the operation succeeded. Missing, malformed, or unsuccessful guardian completion becomes `Unverified`, quarantining the slot. Startup failures with a valid acknowledgment become `NotStarted`. The typed bridge accepts successful values only after `TreeReaped` (or the default mode's `Reaped`), full I/O, final progress, successful worker status, and no stop.
+
+The guardian explicitly shuts down its socket's sending side after writing the
+complete acknowledgment. A concurrent host fork can inherit a copy of that
+endpoint before close-on-exec takes effect; merely exiting the guardian would
+then leave EOF dependent on the unrelated process closing its copy. Explicit
+[write shutdown](https://man7.org/linux/man-pages/man2/shutdown.2.html) finishes the
+shared socket direction even while descriptor copies remain open. If the host
+has gone, finished cleanup and its journal receipt remain valid even when socket
+delivery fails. A live host still requires exact framing, EOF, and successful
+exit, with no retries or relaxed completion checks. [Regression evidence](guardian-completion-evidence.json)
+records the deterministic GNU/musl reproduction, boundary tests, concurrent
+process-tree repetitions, and targeted fault checks.
 
 The overall execution timeout includes tree cleanup; the cleanup observation allowance starts when the host observes a stop or its direct guardian exits. All host handles, including the control socket, close before final publication. The guardian remains alive while cleanup is pending. The host never kills its guardian to meet the cleanup observation allowance, since doing so would discard descendant ownership. A stalled or stopped guardian therefore produces `Pending` while the slot and typed reservations remain held. Resuming it reconciles the original outcome with `TreeReaped`. Host death leaves the guardian running until its descendants settle; the host's eventual reaper owns the orphaned guardian itself. This cleanup does not create a durable run result or undo completed effects.
 
