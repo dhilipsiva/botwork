@@ -1,0 +1,2 @@
+Twice |value| { Return |value * 2| }
+|answer| = |@{ Twice |@{ Twice |3| }| } + 1|

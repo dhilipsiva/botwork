@@ -11,3 +11,8 @@
 # Added by cargo
 
 /target
+
+# Fuzz discoveries are generated; curated seeds and minimized regressions are tracked.
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/corpus/

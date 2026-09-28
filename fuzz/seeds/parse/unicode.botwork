@@ -1,0 +1,4 @@
+# Unicode names and combining marks
+|விலை| = |"தமிழ் é \"quote\" \\ slash"|
+காட்டு |மதிப்பு| { Return |மதிப்பு| }
+|answer| = காட்டு |விலை|

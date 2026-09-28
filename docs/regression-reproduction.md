@@ -28,6 +28,8 @@ Include these fields with a new reproduction or campaign artifact:
 
 Current core cases are deterministic and use no external adapters. Runtime-limit and worker fixtures record their configured budgets beside the assertions. The [worker facility campaign](worker-platforms.md) supplies a persistent record of deterministic combinations, source/lockfile hashes, environment, commands, and limits. The documentation CLI harness imposes a five-second process timeout and reports toolchain, platform, build profile, document location, and source on failure. Randomized campaigns and broader adapter/platform matrices retain their own roadmap tasks; this procedure does not claim those measurements already exist.
 
+The [generated core campaign](generated-validation.md) now records property seeds/case indexes and libFuzzer budgets, original inputs, failure artifacts, source hashes, and replay/minimization commands. Preserve both the original and minimized input when a future campaign finds a failure; distinguish oracle mistakes from production defects before changing expected behavior.
+
 ## Documentation Regressions
 
 Run `cargo test --locked --test documentation` to extract and execute registered Botwork fences from README and every Markdown file under `docs/`. Checked stdout lives in `tests/doc-examples/`; each snippet must be a self-contained successful script. The harness asserts exact stdout, empty stderr, and status `0`, and rejects missing, duplicate, stale, or unregistered example IDs.

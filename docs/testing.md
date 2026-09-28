@@ -2,6 +2,8 @@
 
 Run `cargo test` from the repository root. Linux typed-worker interoperability tests also require `python3` on PATH (the same interpreter used by the coverage-helper checks). Worker tests require the enabled facilities and test tools in the [platform matrix](worker-platforms.md); missing facilities fail the tests rather than skip coverage. Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
 
+[Generated core validation](generated-validation.md) adds seeded expression/literal properties, parser mutations, and a separate fixed libFuzzer smoke campaign. The ordinary test suite runs the seeded checks; `python3 scripts/fuzz_smoke.py` records the sanitizer campaign with its pinned nightly and tools.
+
 - `src/core/worker/protocol/tests.rs` checks the typed wire codec and worker SDK; `tests/typed_workers.rs` exercises an independent Python subprocess, signatures, budgets, cleanup ownership, and stop priority.
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
 - `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, original byte/line/column spans, and control-placement validation.

@@ -1,0 +1,2 @@
+|values| = |[0, -2147483648, 1.25, true, "escaped\n\"text", {"a": [1,2]}]|
+|answer| = |values[5]["a"][1] + 2 * 3|

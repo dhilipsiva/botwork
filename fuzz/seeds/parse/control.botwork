@@ -1,0 +1,4 @@
+For |item| In |[1,2,3]| {
+    If |item == 1| { Continue } Else { Break }
+}
+Try { While |false| {} } Catch |error| { Rethrow }

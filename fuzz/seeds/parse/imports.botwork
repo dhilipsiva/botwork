@@ -1,0 +1,2 @@
+Import |"local.botwork"| As |library|
+|answer| = library Get value
