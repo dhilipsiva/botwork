@@ -27,7 +27,7 @@ lazy_static = "1.4.0"
 log = "0.4.17"
 pest = "2.5.7"
 pest_derive = "2.5.7"
-serde = "1.0.229"
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["raw_value"] }
 thiserror = "1.0.40"
 tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros"] }

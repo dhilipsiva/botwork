@@ -34,6 +34,12 @@ Repeat `--file` and set `--jobs` to run scripts concurrently with independent
 state, for example `cargo run -- --file examples/21-parallel-first.botwork --file
 examples/22-parallel-second.botwork --jobs 2`. See [parallel CLI execution](docs/parallel-cli.md)
 for run IDs, ordering, per-run limits, and failure behavior.
+
+Use `--suite examples/23-named-cases.suite.botwork` for named acceptance cases.
+Add `--list-cases`, select with `--case` or `--tag`, and save `--failures failed.json`
+for a later `--rerun-failed failed.json`. See [named suites](docs/suites.md) for
+stable IDs, library declarations, discovery order, and case isolation.
+
 Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.
 [Runtime budgets](docs/embedded-runs.md#cli-and-low-level-contexts) stop excessive steps and recursion;
 configure `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and cooperative `--timeout-ms`.

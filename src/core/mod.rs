@@ -1,4 +1,5 @@
 pub mod ast;
+pub use ast::suite;
 pub mod ast_limits;
 pub mod diagnostic;
 pub mod eval;

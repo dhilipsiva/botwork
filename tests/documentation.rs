@@ -138,6 +138,49 @@ fn every_documented_botwork_example_matches_its_cli_output() {
 }
 
 #[test]
+fn every_documented_suite_matches_its_cli_output() {
+    let expected = BTreeMap::from([("named-suite", ("docs/suites.md", "42\n8\n"))]);
+    let mut seen = BTreeSet::new();
+    let harness = Harness::new();
+    for (document, blocks) in documents() {
+        for block in blocks
+            .into_iter()
+            .filter(|block| block.language == "botwork-suite")
+        {
+            let id = block.id.as_deref().unwrap();
+            assert!(seen.insert(id.to_owned()), "duplicate suite example: {id}");
+            let (expected_document, stdout) = expected.get(id).unwrap_or_else(|| {
+                panic!("{document}:{}: register suite output for {id}", block.line)
+            });
+            assert_eq!(&document, expected_document);
+            let filename = format!("{id}.suite.botwork");
+            fs::write(harness.workspace.join(&filename), &block.source).unwrap();
+            let output = harness
+                .command(
+                    id,
+                    &["--suite", &filename, "--jobs", "1"],
+                    Duration::from_secs(5),
+                )
+                .unwrap();
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                output.status.success(),
+                "{document}:{}: {stderr}",
+                block.line
+            );
+            assert_eq!(output.stdout, stdout.as_bytes());
+            assert_eq!(stderr.lines().count(), 5);
+            assert!(stderr.ends_with("[cases] 2 selected: 2 succeeded, 0 failed\n"));
+        }
+    }
+    assert_eq!(
+        seen,
+        expected.keys().map(|id| (*id).to_owned()).collect(),
+        "stale or missing suite documentation expectations"
+    );
+}
+
+#[test]
 fn every_rust_documentation_example_is_included_in_crate_doctests() {
     let inclusion = "#![doc = include_str!(\"../docs/interpreter-architecture.md\")]";
     assert!(include_str!("../src/lib.rs").contains(inclusion));

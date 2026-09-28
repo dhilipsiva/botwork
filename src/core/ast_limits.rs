@@ -326,6 +326,19 @@ pub(crate) fn check_statements<'a>(
     walk.run().map(|_| ())
 }
 
+pub(crate) fn check_suite<'a>(
+    source: &Arc<SourceFile>,
+    groups: impl IntoIterator<Item = &'a [Statement]>,
+) -> Result<(), AstFailure<'a>> {
+    let limits = AstLimits::default();
+    let mut walk = Walk::new(&limits, super::syntax_limits::DEFAULT_SOURCE_BYTES)?;
+    walk.source(source, None)?;
+    for group in groups {
+        walk.push(Item::Statements(group), 1);
+    }
+    walk.run().map(|_| ())
+}
+
 pub(crate) fn check_node<'a>(
     node: &'a Node,
     limits: &AstLimits,

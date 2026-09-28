@@ -68,13 +68,40 @@ impl Harness {
         );
         let path = self.workspace.join(format!("{id}.botwork"));
         fs::write(&path, source).unwrap();
+        let mut command = Command::new(env!("CARGO_BIN_EXE_botwork"));
+        command.arg("--file").arg(path).args(arguments);
+        self.execute(id, command, timeout, source)
+    }
+
+    #[allow(dead_code)] // Shared harness: most existing suites exercise --file only.
+    pub fn command(
+        &self,
+        id: &str,
+        arguments: &[&str],
+        timeout: Duration,
+    ) -> Result<Output, String> {
+        assert!(
+            !id.is_empty()
+                && id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        );
+        let mut command = Command::new(env!("CARGO_BIN_EXE_botwork"));
+        command.args(arguments);
+        self.execute(id, command, timeout, "")
+    }
+
+    fn execute(
+        &self,
+        id: &str,
+        mut command: Command,
+        timeout: Duration,
+        source: &str,
+    ) -> Result<Output, String> {
         let stdout = self.workspace.join(format!("{id}.stdout"));
         let stderr = self.workspace.join(format!("{id}.stderr"));
-        let mut child = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        let mut child = command
             .current_dir(&self.workspace)
-            .arg("--file")
-            .arg(path)
-            .args(arguments)
             .stdin(Stdio::null())
             .stdout(fs::File::create(&stdout).unwrap())
             .stderr(fs::File::create(&stderr).unwrap())

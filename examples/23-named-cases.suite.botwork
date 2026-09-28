@@ -1,0 +1,13 @@
+# Each case gets fresh inputs, definitions, module state, and execution limits.
+Suite |"arithmetic"| Named |"Arithmetic examples"| Tags |["example", "math"]| {
+    Library {
+        Import |"modules/arithmetic.botwork"| As |math|
+        Four times |value| { Return |@{ math::Double |@{ math::Double |value| }| }| }
+    }
+    Case |"double"| Named |"Double twenty-one"| Tags |["fast"]| {
+        Log |@{ math::Double |21| }|
+    }
+    Case |"composition"| Named |"Compose imported calls"| {
+        Log |@{ Four times |2| }|
+    }
+}

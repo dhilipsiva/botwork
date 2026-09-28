@@ -224,3 +224,41 @@ cancellation label with no supported CLI cancellation trigger yet. Signal/listen
 cancellation must extend that end-to-end coverage when implemented. Neither is
 excluded as equivalent; compiler failures are never test kills. All final GNU/musl
 debug/release profiles pass 1,365 tests, with no timeout relaxation.
+
+## Named-suite campaign — 2026-09-28
+
+Version 6 retains all 286 prior mutation identities and adds 190 across suite
+metadata/discovery/selection, aggregate AST admission, and failed-case storage.
+Batch scheduling moved into `run_inputs`; its final failure comparison moved
+into `Outcome::result`. Catalogue version 5 retains all 27 targeted changes and
+adds seven for library composition, tag/rerun selection, stable IDs, incomplete
+records, and failure ordering. Both campaigns include `suite_cli` alongside the
+previous test targets. [Suite evidence](suites-evidence.json) records the frozen
+inventories, source/test/config hashes, compiler failures, and individual reviews.
+
+| Stage | Caught by tests | Survived | Did not compile | Timed out |
+| --- | ---: | ---: | ---: | ---: |
+| Initial generated inventory (476) | 345 | 22 | 108 | 1 |
+| Exact replay of 24 original identities | 21 | 3 | 0 | 0 |
+| Targeted catalogue | 34 | 0 | 0 | 0 |
+
+The replay covers every initial survivor and timeout, plus one apparent catch
+whose actual failure was the existing default-loop-budget watchdog. New
+assertions exercise early discovery rejection, exact metadata/selector bounds,
+public case enumeration, storage capacity, rejected writes, valid-record
+symlinks, collision retry, and schema-error guidance. A bounded failure helper
+replaces an `unwrap_err` that tried to format a large unexpectedly accepted AST.
+The exact aggregate-admission replay now fails its intended assertion without
+relaxing the timeout. The timing-affected suite-run mutation now fails suite
+behavior assertions. An earlier replay failed its unmutated baseline and ran no
+mutations; it is retained separately and contributes no kills.
+
+Consolidating each original identity once gives **399/402 compiled mutations
+caught (99.25%)**, including all 34 targeted changes. Three reviewed survivors
+remain in this conservative denominator: the prior smaller read buffer, the
+defensive CLI cancellation label, and XOR replacing OR between disjoint Linux
+`O_NOFOLLOW`/`O_NONBLOCK` flag bits. The last produces identical flags on the
+tested target; it is recorded as a survivor without an equivalence exclusion.
+Compiler failures and the initial timeout are not kills. The evidence contains
+the final GNU/musl profile results and retains earlier timing observations; this
+feature campaign does not complete the release mutation gate.

@@ -37,3 +37,7 @@ Run `cargo test --locked --test documentation` to extract and execute registered
 Place an HTML comment of the form `<!-- botwork-test: example-id -->` immediately before each Botwork fence, using a unique lowercase/digit/hyphen ID. Register its document and stdout file in `tests/documentation.rs`. The reader supports backtick/tilde fences, up to three leading spaces, and CRLF; it preserves code bytes after fence indentation. Use standard unindented fences in project docs. Inline fragments remain explanatory and are covered by language contract tests where relevant.
 
 Rust API examples are included into crate documentation and run by `cargo test --doc`. New Rust examples must be added to rustdoc's inputs and the documentation inventory. Rust fence options that skip execution are rejected. Shell fences describe contributor commands and are not executed by this harness. CI's debug/release jobs run the complete suite, including documentation checks and doctests.
+
+Suite examples use `botwork-suite` fences with the same required markers. Register
+their expected stdout in `every_documented_suite_matches_its_cli_output`; it runs
+`--suite` with one job and checks case status records as well as successful output.

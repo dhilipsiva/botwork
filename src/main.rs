@@ -21,14 +21,36 @@ use std::{
 };
 
 mod batch;
+mod suites;
 
 /// Run Botwork automation scripts.
 #[derive(Clap, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Botwork file to run (repeatable; each occurrence starts a fresh run)
-    #[arg(short, long, required_unless_present_any = ["list_statements", "statement_help"])]
+    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help"])]
     file: Vec<PathBuf>,
+    /// Discover cases from an explicit suite file (repeatable; paths keep their order)
+    #[arg(long, conflicts_with_all = ["file", "list_statements", "statement_help"])]
+    suite: Vec<PathBuf>,
+    /// Select an exact, stable suite/case ID (repeatable)
+    #[arg(long, requires = "suite")]
+    case: Vec<String>,
+    /// Include cases with any of these inherited or local tags (repeatable)
+    #[arg(long, requires = "suite")]
+    tag: Vec<String>,
+    /// Exclude cases with any of these inherited or local tags (repeatable)
+    #[arg(long, requires = "suite")]
+    exclude_tag: Vec<String>,
+    /// List selected case metadata as JSON lines without executing libraries or cases
+    #[arg(long, requires = "suite", conflicts_with_all = ["jobs", "failures", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
+    list_cases: bool,
+    /// Restrict selection to IDs from a completed failed-case record
+    #[arg(long, requires = "suite", value_name = "PATH")]
+    rerun_failed: Option<PathBuf>,
+    /// Write a failed-case record; invalidate it before discovery/execution
+    #[arg(long, requires = "suite", value_name = "PATH")]
+    failures: Option<PathBuf>,
     /// Maximum simultaneous runs, including file/input preparation (1-64)
     #[arg(short = 'j', long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=64))]
     jobs: u8,
@@ -90,6 +112,26 @@ async fn run(
     limits: RunLimits,
     timeout_ms: Option<u64>,
 ) -> Result<(), CliError> {
+    let control = run_control(timeout_ms)?;
+    let file = file.to_owned();
+    let files = files.to_vec();
+    let settings = settings.to_vec();
+    // Each admitted run owns one preparation job. File/variable loading and parsing
+    // finish off the executor before the owned program/context are handed back.
+    let (program, context) = tokio::task::spawn_blocking(move || {
+        prepare(&file, debug, &files, &settings, limits, control)
+    })
+    .await
+    .map_err(|_| {
+        Diagnostic::new(BWErr::AsyncRuntime(
+            "CLI preparation worker failed before completing".into(),
+        ))
+    })??;
+    evaluate_program_async(&program, context).await?;
+    Ok(())
+}
+
+fn run_control(timeout_ms: Option<u64>) -> Result<OperationControl, CliError> {
     let deadline = timeout_ms
         .map(|milliseconds| {
             tokio::time::Instant::now()
@@ -103,18 +145,28 @@ async fn run(
         .transpose()?;
     let control = OperationControl::default().child(deadline);
     control.checkpoint()?;
-    let file = file.to_owned();
-    let files = files.to_vec();
-    let settings = settings.to_vec();
-    // Each admitted run owns one preparation job. File/variable loading and parsing
-    // finish off the executor before the owned program/context are handed back.
+    Ok(control)
+}
+
+async fn run_case(
+    case: botwork::core::suite::SelectedCase,
+    configuration: std::sync::Arc<batch::Configuration>,
+) -> Result<(), CliError> {
+    let control = run_control(configuration.timeout_ms)?;
     let (program, context) = tokio::task::spawn_blocking(move || {
-        prepare(&file, debug, &files, &settings, limits, control)
+        let mut context = Context::with_control(configuration.limits.clone(), control)?;
+        let variables = load_variables(&configuration.files, &configuration.settings)?;
+        let program = case.program();
+        context.init_statements();
+        context.set_input_variables(variables)?;
+        context.checkpoint()?;
+        context.set_statement_tracing(configuration.debug);
+        Ok::<_, CliError>((program, context))
     })
     .await
     .map_err(|_| {
         Diagnostic::new(BWErr::AsyncRuntime(
-            "CLI preparation worker failed before completing".into(),
+            "Case preparation worker failed before completing".into(),
         ))
     })??;
     evaluate_program_async(&program, context).await?;
@@ -186,7 +238,19 @@ fn main() -> ExitCode {
                     evaluation_depth: args.max_evaluation_depth,
                     ..RunLimits::default()
                 };
-                if args.file.len() == 1 {
+                if !args.suite.is_empty() {
+                    runtime.block_on(suites::run(
+                        suites::Request::from(&args),
+                        usize::from(args.jobs),
+                        batch::Configuration {
+                            debug: args.debug,
+                            files: args.variable_files,
+                            settings: args.variables,
+                            limits,
+                            timeout_ms: args.timeout_ms,
+                        },
+                    ))
+                } else if args.file.len() == 1 {
                     runtime.block_on(run(
                         &args.file[0],
                         args.debug,

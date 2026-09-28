@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "mutations": [
     {
       "id": "precedence-products",
@@ -189,6 +189,55 @@
       "file": "src/batch.rs",
       "before": "tokio::task::spawn_blocking(move || write_report(message))\n        .await\n        .map_err(|_| task_failure())?",
       "after": "write_report(message)"
+    },
+    {
+      "id": "suite-library-discarded",
+      "area": "scope",
+      "file": "src/core/ast/suite.rs",
+      "before": "            .library\n            .iter()",
+      "after": "            .library[..0]\n            .iter()"
+    },
+    {
+      "id": "suite-tag-filter-discarded",
+      "area": "selection",
+      "file": "src/core/ast/suite.rs",
+      "before": "&& (self.tags.is_empty() || self.tags.iter().any(|tag| tags.contains(tag.as_str())))",
+      "after": "&& true"
+    },
+    {
+      "id": "suite-rerun-filter-discarded",
+      "area": "selection",
+      "file": "src/suites.rs",
+      "before": "request.selection.failed = Some(history::load(path)?);",
+      "after": "let _ = history::load(path)?;"
+    },
+    {
+      "id": "suite-history-complete-before-effects",
+      "area": "errors",
+      "file": "src/suites/history.rs",
+      "before": "history.write(false, vec![])?;",
+      "after": "history.write(true, vec![])?;"
+    },
+    {
+      "id": "suite-incomplete-rerun-accepted",
+      "area": "selection",
+      "file": "src/suites/history.rs",
+      "before": "if !record.complete {",
+      "after": "if false {"
+    },
+    {
+      "id": "suite-history-completion-order",
+      "area": "selection",
+      "file": "src/batch.rs",
+      "before": "    failed_cases.sort_unstable_by_key(|(number, _)| *number);",
+      "after": "    // Deliberately retain completion order."
+    },
+    {
+      "id": "suite-case-id-becomes-display-name",
+      "area": "selection",
+      "file": "src/core/ast/suite.rs",
+      "before": "format!(\"{}/{}\", self.suite.metadata.id, self.case().metadata.id)",
+      "after": "format!(\"{}/{}\", self.suite.metadata.id, self.case().metadata.name)"
     }
   ]
 }

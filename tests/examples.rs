@@ -44,6 +44,27 @@ fn expressions_example_produces_expected_values() {
 }
 
 #[test]
+fn named_suite_example_discovers_and_executes_imported_helpers() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/23-named-cases.suite.botwork");
+    let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .arg("--suite")
+        .arg(path)
+        .args(["--jobs", "1"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"42\n8\n");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("[case arithmetic/double] succeeded:"));
+    assert!(stderr.contains("[case arithmetic/composition] succeeded:"));
+    assert!(stderr.ends_with("[cases] 2 selected: 2 succeeded, 0 failed\n"));
+}
+
+#[test]
 fn parallel_examples_also_run_independently_with_their_own_bindings() {
     assert_example(
         "21-parallel-first.botwork",

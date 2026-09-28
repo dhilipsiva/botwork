@@ -421,6 +421,55 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::SuiteCliSuccess | Input::SuiteCliInvalid | Input::SuiteCliRerun => {
+                let filename = format!("{}.suite.botwork", case.id);
+                fs::write(
+                    harness.workspace.join(&filename),
+                    r#"Suite |"stable"| Tags |["all"]| {
+Library { Next |n| { Return |n + 1| } }
+Case |"keep"| Named |"Renamed case"| Tags |["fast"]| { Log |@{ Next |6| }| }
+Case |"other"| { Log |8| }
+}"#,
+                )
+                .unwrap();
+                let mut args = vec!["--suite", &filename, "--jobs", "1"];
+                match case.input {
+                    Input::SuiteCliSuccess => args.extend(["--tag", "fast", "--tag", "absent"]),
+                    Input::SuiteCliInvalid => args.extend(["--case", "stable/missing"]),
+                    Input::SuiteCliRerun => {
+                        fs::write(harness.workspace.join("prior.json"), r#"{"format":"botwork-failed-cases","version":1,"complete":true,"failed":["stable/keep"]}"#).unwrap();
+                        args.extend(["--rerun-failed", "prior.json", "--failures", "prior.json"]);
+                    }
+                    _ => unreachable!(),
+                }
+                let output = harness
+                    .command(case.id, &args, Duration::from_secs(10))
+                    .unwrap();
+                assert_eq!(output.stdout, case.stdout.as_bytes());
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                if let Some(error) = case.error {
+                    assert_eq!(output.status.code(), Some(1));
+                    assert!(
+                        stderr.contains(error) && stderr.contains(case.code.unwrap()),
+                        "{stderr}"
+                    );
+                    assert!(!stderr.contains("started:"));
+                } else {
+                    assert!(output.status.success(), "{stderr}");
+                    assert!(stderr.contains("[case stable/keep] succeeded:"));
+                    assert!(!stderr.contains("stable/other"));
+                    assert_eq!(stderr.lines().count(), 3);
+                }
+                if matches!(case.input, Input::SuiteCliRerun) {
+                    let record: serde_json::Value = serde_json::from_slice(
+                        &fs::read(harness.workspace.join("prior.json")).unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(record["complete"], true);
+                    assert_eq!(record["failed"], serde_json::json!([]));
+                }
+                continue;
+            }
             Input::ParallelCliSuccess | Input::ParallelCliFailure => {
                 let second = format!("{}-second.botwork", case.id);
                 let source = "|counter| = |counter + 1|\nLog |counter|";

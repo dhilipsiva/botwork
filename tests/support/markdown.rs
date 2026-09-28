@@ -67,13 +67,14 @@ pub fn blocks(document: &str) -> Result<Vec<Block>, String> {
                     index + 1
                 ));
             }
-            if language == "botwork" && (info != "botwork" || pending_id.is_none()) {
+            let botwork = matches!(language, "botwork" | "botwork-suite");
+            if botwork && (info != language || pending_id.is_none()) {
                 return Err(format!(
                     "line {}: botwork block requires a test marker and no fence options",
                     index + 1
                 ));
             }
-            if language != "botwork" && pending_id.is_some() {
+            if !botwork && pending_id.is_some() {
                 return Err(format!(
                     "line {}: example marker must precede botwork code",
                     index + 1
@@ -137,6 +138,8 @@ mod tests {
             "```botwork\n```",
             "```botwork,ignore\n```",
             "<!-- botwork-test: sample -->\n```botwork ignore\n```",
+            "```botwork-suite\n```",
+            "<!-- botwork-test: sample -->\n```botwork-suite ignore\n```",
         ] {
             assert!(blocks(source).is_err(), "{source}");
         }

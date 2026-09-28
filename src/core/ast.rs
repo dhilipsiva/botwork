@@ -12,6 +12,7 @@ use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
 use super::syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES};
 
 mod parse_diagnostic;
+pub mod suite;
 pub(crate) use parse_diagnostic::ParseDisplay;
 
 #[cfg(test)]

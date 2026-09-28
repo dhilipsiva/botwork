@@ -8,6 +8,13 @@ Run `cargo test` from the repository root. Linux typed-worker interoperability t
 
 [Async execution](async-execution.md) adds suspended DSL/operation integration cases while keeping existing synchronous contract tests on the shared evaluator. Its evidence records debug/release checks, native and isolated operation cleanup, and the updated mutation scope.
 
+[Named suites](suites.md) add model tests in `src/core/ast/suite/tests.rs` and CLI
+tests in `tests/suite_cli.rs`. These cover bounded discovery/metadata, stable IDs,
+selection, independent case state, failed-case persistence, concurrent admission,
+interruption, locking, and reporter failure. T1 registers three conformance cases;
+example 23 and the `botwork-suite` documentation fence run with exact output and
+case status checks.
+
 - `src/core/worker/protocol/tests.rs` checks the typed wire codec and worker SDK; `tests/typed_workers.rs` exercises an independent Python subprocess, signatures, budgets, cleanup ownership, and stop priority.
 - `src/core/grammar/tests.rs` checks program parsing and typed operators.
 - `src/core/ast/tests.rs` checks owned syntax, expression grouping, shared sources, original byte/line/column spans, and control-placement validation.
@@ -15,8 +22,8 @@ Run `cargo test` from the repository root. Linux typed-worker interoperability t
 - `src/core/eval/execution_contract.rs` checks ordered argument/collection visits, branch selection, 56 nested-loop completion/restoration combinations, While condition timing, and recursive frame traces. [Execution evidence](execution-conformance.md) explains the test-only recorder and companion CLI fixtures.
 - `tests/ast_execution.rs` checks execution after source/program ownership ends, deferred numeric errors, parser-pair compatibility, and validation before effects for extracted/assembled syntax.
 - `tests/cli.rs` invokes Cargo's built CLI and checks exit status, stdout, and stderr independently. Inputs live under `tests/fixtures/`.
-- `tests/examples.rs` checks the exact expected stdout of the bundled examples, plus successful status and empty stderr. Expected results are derived from each script's operations; update them only after reviewing an intentional behavior change.
-- `tests/documentation.rs` inventories README/docs fences and runs every registered Botwork snippet through the CLI, checking exact stdout, empty stderr, and status. `src/lib.rs` includes the Rust API example for doctesting. The [reproduction guide](regression-reproduction.md) explains registration, timeouts, and failure metadata.
+- `tests/examples.rs` checks the exact expected stdout and successful status of bundled examples. Scripts require empty stderr; suite examples check case progress records. Expected results are derived from the examples' operations; update them only after reviewing an intentional behavior change.
+- `tests/documentation.rs` inventories README/docs fences and runs every registered Botwork snippet through the CLI, checking exact stdout and status, empty script stderr, and suite progress records. `src/lib.rs` includes Rust API examples for doctesting. The [reproduction guide](regression-reproduction.md) explains registration, timeouts, and failure metadata.
 - `tests/conformance.rs` checks the [rule-indexed corpus](conformance-corpus.md): 36 CLI scripts (including two module projects) plus seven host registration/value/signature cases, with positive/invalid/boundary evidence for every current rule. `tests/cli_harness.rs` verifies isolated workspaces, stream/status capture, timeout termination, and subsequent execution; documentation and conformance share this runner.
 - `tests/diagnostics.rs` checks detailed error categories, innermost spans, syntax/validation locations, related declarations, full call snapshots, source ownership, recursive cleanup, handler causes, native/Pair behavior, and legacy API compatibility. CLI fixtures check visible stacks and original causes; Rust API examples run as doctests.
 - `tests/diagnostic_codes.rs` pins all 21 core codes, uniqueness/catalog coverage, common-error repairs, range endpoints, and distinct cause codes/guidance. CLI and corpus cases check rendered codes and successful recovery remains silent.

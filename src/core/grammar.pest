@@ -1,6 +1,17 @@
 WHITESPACE = _{ (" " | "\t")+ }
 line_end   = _{ "\r\n" | "\n" }
 botwork    = _{ SOI ~ statements* ~ EOI }
+
+// Suite declarations have their own entry point. These words remain available
+// as ordinary custom-statement names in scripts and imported libraries.
+test_suite = { SOI ~ line_end* ~ suite_definition ~ line_end* ~ EOI }
+suite_definition = { ^"suite" ~ line_end* ~ suite_id ~ (line_end* ~ suite_name)? ~ (line_end* ~ suite_tags)? ~ line_end* ~ "{" ~ line_end* ~ (suite_library ~ line_end*)? ~ (suite_case ~ line_end*)+ ~ "}" }
+suite_id = { "|" ~ string ~ "|" }
+suite_name = { ^"named" ~ line_end* ~ suite_id }
+suite_tags = { ^"tags" ~ line_end* ~ "|" ~ "[" ~ line_end* ~ (string ~ (line_end* ~ "," ~ line_end* ~ string)* ~ line_end* ~ ","?)? ~ line_end* ~ "]" ~ "|" }
+suite_library = { ^"library" ~ line_end* ~ stmt_block }
+suite_case = { ^"case" ~ line_end* ~ suite_id ~ (line_end* ~ suite_name)? ~ (line_end* ~ suite_tags)? ~ line_end* ~ stmt_block }
+
 ident_start    = _{ XID_START | "_" }
 ident_continue = _{ XID_CONTINUE }
 reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
