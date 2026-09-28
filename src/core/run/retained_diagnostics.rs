@@ -393,6 +393,27 @@ impl RuntimeDiagnostic {
         self.while_handling_in(original, budget, None, std::iter::empty())
     }
 
+    /// Cleanup failure is secondary even when the combined metadata exceeds its quota.
+    pub(crate) fn with_cleanup(mut self, mut cleanup: Self, budget: Option<&RunBudget>) -> Self {
+        if self.is_emergency() {
+            drop(cleanup);
+            return self.map(Diagnostic::omit_handled_cause);
+        }
+        self.reservations.append(&mut cleanup.reservations);
+        if let Err(violation) =
+            self.admit_mutation(budget, None, std::iter::empty(), None, Some(&cleanup))
+        {
+            drop(cleanup);
+            // Use the fixed emergency allowance and retain the primary category.
+            // A secondary diagnostic admission failure does not stop the original run.
+            return self
+                .reject_context(violation, None, 0)
+                .preserve_control()
+                .map(Diagnostic::omit_handled_cause);
+        }
+        self.map(|error| error.while_handling((*cleanup.value).into_inner()))
+    }
+
     pub(crate) fn while_handling_in<'a>(
         mut self,
         mut original: Self,

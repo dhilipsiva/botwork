@@ -33,7 +33,7 @@ reserved       = @{ ("true" | "false" | "and" | "or") ~ !ident_continue }
 // The literal prechecks below retain contextual diagnostics for absent keywords.
 control_keyword = @{
     (^"if" | ^"in" | ^"else" | ^"for" | ^"break" | ^"return"
-        | ^"continue" | ^"while" | ^"try" | ^"catch" | ^"rethrow" | ^"import" | ^"as")
+        | ^"continue" | ^"while" | ^"try" | ^"catch" | ^"finally" | ^"rethrow" | ^"import" | ^"as")
     ~ &(" " | "\t" | "\r" | "\n" | "|" | "{" | "}" | "#" | "\\" | EOI)
 }
 IF       = _{ &^"if" ~ &control_keyword ~ ^"if" }
@@ -46,11 +46,12 @@ CONTINUE = _{ &^"continue" ~ &control_keyword ~ ^"continue" }
 WHILE    = _{ &^"while" ~ &control_keyword ~ ^"while" }
 TRY      = _{ &^"try" ~ &control_keyword ~ ^"try" }
 CATCH    = _{ &^"catch" ~ &control_keyword ~ ^"catch" }
+FINALLY  = _{ &^"finally" ~ &control_keyword ~ ^"finally" }
 RETHROW  = _{ &^"rethrow" ~ &control_keyword ~ ^"rethrow" }
 IMPORT   = _{ &^"import" ~ &control_keyword ~ ^"import" }
 AS       = _{ &^"as" ~ &control_keyword ~ ^"as" }
 
-reserved_parts = _{ IF | ELSE | FOR | BREAK | RETURN | CONTINUE | WHILE | TRY | CATCH | RETHROW | IMPORT }
+reserved_parts = _{ IF | ELSE | FOR | BREAK | RETURN | CONTINUE | WHILE | TRY | CATCH | FINALLY | RETHROW | IMPORT }
 
 COMMENT       = _{ comment_block | comment_line }
 comment_block = @{ "###" ~ (!"###" ~ ANY)* ~ "###" }
@@ -65,8 +66,9 @@ stmt_if       =  { IF ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block ~ (lin
 stmt_else     =  { ELSE ~ line_end* ~ (stmt_block | stmt_if) }
 stmt_for      =  { FOR ~ line_end* ~ param_define ~ line_end* ~ IN ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block }
 stmt_while    =  { WHILE ~ line_end* ~ param_invoke ~ line_end* ~ stmt_block }
-stmt_try      =  { TRY ~ line_end* ~ stmt_block ~ line_end* ~ stmt_catch }
+stmt_try      =  { TRY ~ line_end* ~ stmt_block ~ line_end* ~ (stmt_catch ~ (line_end* ~ stmt_finally)? | stmt_finally) }
 stmt_catch    =  { CATCH ~ line_end* ~ (param_define ~ line_end*)? ~ stmt_block }
+stmt_finally  =  { FINALLY ~ line_end* ~ stmt_block }
 stmt_define   =  { stmt_header ~ line_end* ~ stmt_block }
 stmt_header   =  { !reserved_parts ~ part ~ (continuation? ~ (param_define | part))* }
 native_signature = _{ SOI ~ stmt_header ~ EOI }

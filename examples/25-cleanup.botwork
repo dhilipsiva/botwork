@@ -1,0 +1,31 @@
+# Each owner releases only its own resources, in reverse acquisition order.
+Open |name| { Log |"open " + name|
+    Return |name|
+}
+Close |resource| { Log |"close " + resource| }
+
+Work {
+    |outer_open| = |false|
+    Try {
+        |outer| = Open |"outer"|
+        |outer_open| = |true|
+        |inner_open| = |false|
+        Try {
+            |inner| = Open |"inner"|
+            |inner_open| = |true|
+            Return |42|
+        } Finally {
+            If |inner_open| { Close |inner| }
+        }
+    } Finally {
+        If |outer_open| { Close |outer| }
+    }
+}
+Log |@{ Work }|
+Try {
+    |value| = |1 / 0|
+} Catch {
+    Log |"recovered"|
+} Finally {
+    Log |"finished"|
+}

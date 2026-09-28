@@ -1,0 +1,3 @@
+open session
+close session
+42

@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "mutations": [
     {
       "id": "precedence-products",
@@ -294,6 +294,76 @@
       "file": "src/core/ast/suite.rs",
       "before": "for definition in &mut self.datasets {",
       "after": "for definition in &mut self.datasets[..0] {"
+    },
+    {
+      "id": "cleanup-body-only",
+      "area": "cleanup",
+      "file": "src/core/eval/execution.rs",
+      "before": "super::cleanup::evaluate(body, cleanup, context).await",
+      "after": "evaluate_block(body, context).await"
+    },
+    {
+      "id": "cleanup-discard-secondary",
+      "area": "cleanup",
+      "file": "src/core/eval/cleanup.rs",
+      "before": "Err(primary.with_cleanup(cleanup, context.budget.as_ref()))",
+      "after": "Err(primary)"
+    },
+    {
+      "id": "cleanup-secondary-wins",
+      "area": "cleanup",
+      "file": "src/core/eval/cleanup.rs",
+      "before": "Err(primary.with_cleanup(cleanup, context.budget.as_ref()))",
+      "after": "Err(cleanup.with_cleanup(primary, context.budget.as_ref()))"
+    },
+    {
+      "id": "cleanup-inherits-stopped-control",
+      "area": "cleanup",
+      "file": "src/core/run/cleanup.rs",
+      "before": "OperationControl::default().child(Some(self.0.limits.cleanup.deadline()?))",
+      "after": "self.0.control.child(Some(self.0.limits.cleanup.deadline()?))"
+    },
+    {
+      "id": "cleanup-renews-nested-allowance",
+      "area": "cleanup",
+      "file": "src/core/run/cleanup.rs",
+      "before": "if self.0.cleaning {",
+      "after": "if false {"
+    },
+    {
+      "id": "cleanup-forgets-output-charges",
+      "area": "cleanup",
+      "file": "src/core/run/cleanup.rs",
+      "before": "output: Arc::clone(&self.0.output),",
+      "after": "output: Arc::new(AtomicUsize::new(0)),"
+    },
+    {
+      "id": "cleanup-loses-main-budget",
+      "area": "cleanup",
+      "file": "src/core/eval/cleanup.rs",
+      "before": "self.context.budget = self.budget.take();",
+      "after": "let _ = self.budget.take();"
+    },
+    {
+      "id": "cleanup-allows-escaping-control",
+      "area": "cleanup",
+      "file": "src/core/ast.rs",
+      "before": "validate_statements(&cleanup.statements, ControlScope::default())",
+      "after": "validate_statements(&cleanup.statements, scope)"
+    },
+    {
+      "id": "cleanup-truncation-replaces-primary",
+      "area": "cleanup",
+      "file": "src/core/run/retained_diagnostics.rs",
+      "before": ".reject_context(violation, None, 0)\n                .preserve_control()",
+      "after": ".reject_context(violation, None, 0)"
+    },
+    {
+      "id": "cleanup-skips-ast-admission",
+      "area": "cleanup",
+      "file": "src/core/ast_limits.rs",
+      "before": "self.push(Item::Block(cleanup), next);",
+      "after": "let _ = cleanup;"
     }
   ]
 }

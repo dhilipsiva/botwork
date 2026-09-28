@@ -31,6 +31,8 @@ use super::{
 mod tests;
 
 mod asynchronous;
+mod cleanup;
+pub use cleanup::CleanupLimits;
 pub(crate) mod blocking_io;
 mod import_limits;
 mod output_limits;
@@ -90,6 +92,7 @@ pub struct RunLimits {
     pub diagnostics: DiagnosticLimits,
     pub retained_diagnostics: RetainedDiagnosticLimits,
     pub output: OutputLimits,
+    pub cleanup: CleanupLimits,
 }
 
 impl Default for RunLimits {
@@ -115,6 +118,7 @@ impl Default for RunLimits {
             diagnostics: DiagnosticLimits::default(),
             retained_diagnostics: RetainedDiagnosticLimits::default(),
             output: OutputLimits::default(),
+            cleanup: CleanupLimits::default(),
         }
     }
 }
@@ -125,6 +129,7 @@ impl RunLimits {
         self.values.validate()?;
         self.diagnostic_values.values.validate()?;
         self.diagnostics.validate()?;
+        self.cleanup.validate()?;
         if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
             return Err(Diagnostic::formatted(
                 BWErr::RunConfiguration,
@@ -446,9 +451,11 @@ struct BudgetState {
     control: OperationControl,
     used: AtomicU64,
     active: AtomicUsize,
-    output: AtomicUsize,
-    imports: Mutex<[usize; 5]>,
-    snapshots: Mutex<[usize; 2]>,
+    output: Arc<AtomicUsize>,
+    imports: Arc<Mutex<[usize; 5]>>,
+    snapshots: Arc<Mutex<[usize; 2]>>,
+    cleanup_steps: Arc<AtomicU64>,
+    cleaning: bool,
     retained_values: Arc<retained_values::RetainedValues>,
     retained_definitions: Arc<retained_definitions::RetainedDefinitions>,
     retained_names: Arc<retained_names::RetainedNames>,
@@ -467,11 +474,17 @@ impl Clone for RunBudget {
         Self(Arc::new(BudgetState {
             limits: self.0.limits.clone(),
             control: self.0.control.clone(),
-            used: AtomicU64::new(self.used()),
+            used: AtomicU64::new(self.0.used.load(Ordering::Relaxed)),
             active: AtomicUsize::new(0),
-            output: AtomicUsize::new(self.0.output.load(Ordering::Relaxed)),
-            imports: Mutex::new(*self.0.imports.lock().unwrap_or_else(|e| e.into_inner())),
-            snapshots: Mutex::new(*self.0.snapshots.lock().unwrap_or_else(|e| e.into_inner())),
+            output: Arc::new(AtomicUsize::new(self.0.output.load(Ordering::Relaxed))),
+            imports: Arc::new(Mutex::new(
+                *self.0.imports.lock().unwrap_or_else(|e| e.into_inner()),
+            )),
+            snapshots: Arc::new(Mutex::new(
+                *self.0.snapshots.lock().unwrap_or_else(|e| e.into_inner()),
+            )),
+            cleanup_steps: Arc::new(AtomicU64::new(self.0.cleanup_steps.load(Ordering::Relaxed))),
+            cleaning: self.0.cleaning,
             retained_values: Arc::clone(&self.0.retained_values),
             retained_definitions: Arc::clone(&self.0.retained_definitions),
             retained_names: Arc::clone(&self.0.retained_names),
@@ -514,9 +527,11 @@ impl RunBudget {
             control,
             used: AtomicU64::new(0),
             active: AtomicUsize::new(0),
-            output: AtomicUsize::new(0),
-            imports: Mutex::new([0; 5]),
-            snapshots: Mutex::new([0; 2]),
+            output: Arc::new(AtomicUsize::new(0)),
+            imports: Arc::new(Mutex::new([0; 5])),
+            snapshots: Arc::new(Mutex::new([0; 2])),
+            cleanup_steps: Arc::new(AtomicU64::new(0)),
+            cleaning: false,
             stopped: Mutex::new(None),
         }))
     }
@@ -531,7 +546,14 @@ impl RunBudget {
     }
 
     pub(crate) fn used(&self) -> u64 {
-        self.0.used.load(Ordering::Relaxed)
+        self.0
+            .cleanup_steps
+            .load(Ordering::Relaxed)
+            .saturating_add(if self.0.cleaning {
+                0
+            } else {
+                self.0.used.load(Ordering::Relaxed)
+            })
     }
     fn stop(&self, error: BWErr) -> Diagnostic {
         let mut stopped = self.0.stopped.lock().unwrap_or_else(|e| e.into_inner());
@@ -562,8 +584,16 @@ impl RunBudget {
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
                 (used < self.0.limits.steps).then(|| used + 1)
             })
-            .map(|_| ())
-            .map_err(|_| self.limit("evaluation steps", self.0.limits.steps))
+            .map_err(|_| self.limit("evaluation steps", self.0.limits.steps))?;
+        if self.0.cleaning {
+            let _ =
+                self.0
+                    .cleanup_steps
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                        Some(used.saturating_add(1))
+                    });
+        }
+        Ok(())
     }
 
     pub(crate) fn enter(&self) -> DiagnosticResult<EvaluationGuard> {

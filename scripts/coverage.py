@@ -22,6 +22,7 @@ EXCLUSIONS = (r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
 # Review these lists whenever adding executable source files. Module declarations
 # have no executable lines; the generated Pest parser is excluded deliberately.
 LIBRARY_FILES = {
+    "src/core/run/cleanup.rs", "src/core/eval/cleanup.rs",
     "src/core/ast/suite.rs", "src/core/ast/suite/dataset.rs",
     "src/core/ast.rs", "src/core/ast/parse_diagnostic.rs", "src/core/ast_limits.rs", "src/core/diagnostic.rs", "src/core/diagnostic/value.rs", "src/core/diagnostic/ownership.rs", "src/core/diagnostic/rejection.rs", "src/core/diagnostic/construction.rs", "src/core/diagnostic/render.rs", "src/core/eval.rs", "src/core/eval/execution.rs", "src/core/eval/filesystem.rs", "src/core/eval/blocking.rs", "src/core/eval/diagnostics.rs",
     "src/core/eval/output.rs", "src/core/run/output_limits.rs", "src/core/eval/imports.rs", "src/core/eval/snapshots.rs", "src/core/eval/results.rs", "src/core/eval/temporaries.rs", "src/core/grammar.rs", "src/core/input.rs", "src/core/input/limits.rs", "src/core/input/raw.rs",

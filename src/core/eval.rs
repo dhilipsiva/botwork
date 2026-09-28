@@ -8,6 +8,7 @@ use std::{
 };
 
 mod blocking;
+mod cleanup;
 mod diagnostics;
 pub(crate) mod execution;
 mod filesystem;

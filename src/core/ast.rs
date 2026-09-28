@@ -301,6 +301,7 @@ impl Statement {
             StatementKind::For { .. } => "for",
             StatementKind::While { .. } => "while",
             StatementKind::Try { .. } => "try",
+            StatementKind::Finally { .. } => "finally",
             StatementKind::Return(_) => "return",
             StatementKind::Break => "break",
             StatementKind::Continue => "continue",
@@ -336,6 +337,10 @@ pub enum StatementKind {
         body: Block,
         binding: Option<Name>,
         handler: Block,
+    },
+    Finally {
+        body: Block,
+        cleanup: Block,
     },
     Return(Option<Expr>),
     Break,
@@ -426,6 +431,12 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), 
                     ..scope
                 },
             )
+        }
+        StatementKind::Finally { body, cleanup } => {
+            validate_statements(&body.statements, scope)?;
+            // Cleanup cannot replace an incoming return or loop completion.
+            // Local loops, definitions and Catch blocks establish their own scopes.
+            validate_statements(&cleanup.statements, ControlScope::default())
         }
         StatementKind::Assign { .. }
         | StatementKind::Import { .. }
@@ -776,6 +787,12 @@ pub(crate) fn from_pair_with_reporter<E>(
     let span = Span::of(&pair, &source);
     match pair.as_rule() {
         Rule::EOI | Rule::logical_not | Rule::seperator => Ok(Node::None),
+        Rule::stmt_finally => {
+            return Err(report(AstFailure::Control {
+                span: &span,
+                message: "Finally requires an enclosing Try",
+            }));
+        }
         Rule::stmt_catch
             if pair
                 .clone()
@@ -923,21 +940,42 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, Lo
         },
         Rule::stmt_try => {
             let body = block(required(&mut inner)?, source)?;
-            let mut handler = required(&mut inner)?.into_inner();
-            let first = required(&mut handler)?;
-            let (binding, handler_block) = if first.as_rule() == Rule::ident {
-                (
-                    Some(lower_name(first, source)),
-                    block(required(&mut handler)?, source)?,
-                )
+            let next = required(&mut inner)?;
+            if next.as_rule() == Rule::stmt_finally {
+                StatementKind::Finally {
+                    body,
+                    cleanup: block(next.into_inner().next().unwrap(), source)?,
+                }
             } else {
-                (None, block(first, source)?)
-            };
-            finish(handler)?;
-            StatementKind::Try {
-                body,
-                binding,
-                handler: handler_block,
+                let mut handler = next.into_inner();
+                let first = required(&mut handler)?;
+                let (binding, handler_block) = if first.as_rule() == Rule::ident {
+                    (
+                        Some(lower_name(first, source)),
+                        block(required(&mut handler)?, source)?,
+                    )
+                } else {
+                    (None, block(first, source)?)
+                };
+                finish(handler)?;
+                let caught = StatementKind::Try {
+                    body,
+                    binding,
+                    handler: handler_block,
+                };
+                match inner.next() {
+                    Some(cleanup) => StatementKind::Finally {
+                        body: Block {
+                            span: span.clone(),
+                            statements: vec![Statement {
+                                span: span.clone(),
+                                kind: caught,
+                            }],
+                        },
+                        cleanup: block(cleanup.into_inner().next().unwrap(), source)?,
+                    },
+                    None => caught,
+                }
             }
         }
         Rule::stmt_return => StatementKind::Return(

@@ -176,6 +176,10 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("cleanup-return", "Work { Try { Return |42| } Finally { Log |\"released\"| } }\nLog |@{ Work }|", "released\n42\n", &["F10"], &["F10"]),
+        success("cleanup-empty-and-catch", "Try {} Finally {}\nTry { Missing } Catch { Log |1| } Finally { Log |2| }", "1\n2\n", &["F10"], &["F10"]),
+        failure("cleanup-control", "Log |0|\nWork { Try {} Finally { Return |1| } }", "", "BW1002", "Return requires", &["F10"]),
+        failure("cleanup-secondary-failure", "Try { |x| = |missing| } Finally { Log |1|\nOther }", "1\n", "BW2001", "Other", &["F10"]),
         success("values", include_str!("values.botwork"), concat!(
             "[none, true, -1, 1.5, \"é\", [], {}]\n[1, 2]\n{\"a\": 2, \"z\": 3}\nfalse\n",
             "[none, none, [\"ok\"]]\n"), &["E2", "V1", "V7", "C2"], &["V7", "C2"]),

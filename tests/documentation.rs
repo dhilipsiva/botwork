@@ -64,6 +64,13 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "cleanup-example",
+            (
+                "docs/cleanup.md",
+                include_bytes!("doc-examples/cleanup-example.stdout").as_slice(),
+            ),
+        ),
+        (
             "readme-sample",
             (
                 "README.md",
@@ -214,6 +221,7 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/async-execution.md".to_owned(),
             "docs/nonblocking-io.md".to_owned(),
             "docs/parameterized-cases.md".to_owned(),
+            "docs/cleanup.md".to_owned(),
             "docs/isolated-workers.md".to_owned(),
             "docs/worker-protocol.md".to_owned()
         ]),

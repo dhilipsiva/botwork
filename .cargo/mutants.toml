@@ -1,6 +1,9 @@
-# Version 7: retain earlier semantics and add dataset admission, row expansion and binding.
+# Version 8: retain earlier semantics and add owned cleanup and its allowance.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/cleanup.rs",
+    "src/core/run/cleanup.rs",
+    "src/core/run/retained_diagnostics.rs",
     "src/batch.rs",
     "src/core/ast/suite.rs",
     "src/core/ast/suite/dataset.rs",
@@ -19,6 +22,8 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/(eval|run)/cleanup.rs:',
+    ' (RuntimeDiagnostic::with_cleanup|RunBudget::used)( ->|$)',
     '^src/batch.rs:',
     '^src/core/ast/suite.rs:',
     '^src/core/ast/suite/dataset.rs:',
@@ -39,6 +44,7 @@ additional_cargo_args = [
     "--test", "language_contract",
     "--test", "call_composition",
     "--test", "catch_contract",
+    "--test", "cleanup",
     "--test", "value_contract",
     "--test", "generated_properties",
     "--test", "embedded_runs",

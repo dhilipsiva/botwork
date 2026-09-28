@@ -24,6 +24,22 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
 }
 
 #[test]
+fn cleanup_example_releases_nested_resources_before_returning() {
+    assert_example(
+        "25-cleanup.botwork",
+        &[
+            "open outer",
+            "open inner",
+            "close inner",
+            "close outer",
+            "42",
+            "recovered",
+            "finished",
+        ],
+    );
+}
+
+#[test]
 fn expressions_example_produces_expected_values() {
     assert_example(
         "01-expressions.botwork",

@@ -58,6 +58,7 @@ impl pest::Parser<Rule> for BWParser {
                     | Rule::stmt_while
                     | Rule::stmt_try
                     | Rule::stmt_catch
+                    | Rule::stmt_finally
                     | Rule::stmt_define
                     | Rule::stmt_invoke
                     | Rule::stmt_block

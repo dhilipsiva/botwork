@@ -821,6 +821,9 @@ pub(super) async fn evaluate_statement_inner(
             body,
         } => evaluate_for(&binding.text, iterable, body, context).await,
         StatementKind::While { condition, body } => evaluate_while(condition, body, context).await,
+        StatementKind::Finally { body, cleanup } => {
+            super::cleanup::evaluate(body, cleanup, context).await
+        }
         StatementKind::Try {
             body,
             binding,

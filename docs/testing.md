@@ -171,3 +171,7 @@ Run `cargo test --locked --test suite_cli --test parameterized_cases` for CLI
 checks, or `cargo test --locked --lib core::ast::suite` for model boundaries.
 Linux FIFO tests verify sibling progress and immutable discovered data while
 rows are queued; history tests cover version migration and maximum-length IDs.
+
+[Owned cleanup](cleanup.md) is covered by `cargo test --locked --test cleanup`
+and `cargo test --locked --lib core::run::cleanup`. The documentation harness
+executes the DSL example; rustdoc executes the cleanup-limit example.

@@ -6,8 +6,8 @@ use botwork::core::{
     input::load_variables,
     operation::OperationControl,
     run::{
-        OutputLimits, RunLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES, DEFAULT_STEPS,
-        MAX_EVALUATION_DEPTH,
+        CleanupLimits, OutputLimits, RunLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES,
+        DEFAULT_STEPS, MAX_EVALUATION_DEPTH,
     },
     syntax_limits::DEFAULT_SOURCE_BYTES,
 };
@@ -87,6 +87,12 @@ struct Args {
     /// Per-run cooperative timeout in milliseconds, including loading/parsing after admission
     #[arg(long)]
     timeout_ms: Option<u64>,
+    /// Evaluation steps available to each independent Finally cleanup
+    #[arg(long, default_value_t = 10_000, conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    max_cleanup_steps: u64,
+    /// Cooperative timeout for each independent Finally cleanup, in milliseconds
+    #[arg(long, default_value_t = 5_000, conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    cleanup_timeout_ms: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -237,6 +243,10 @@ fn main() -> ExitCode {
                     steps: args.max_steps,
                     call_depth: args.max_call_depth,
                     evaluation_depth: args.max_evaluation_depth,
+                    cleanup: CleanupLimits {
+                        steps: args.max_cleanup_steps,
+                        timeout: Duration::from_millis(args.cleanup_timeout_ms),
+                    },
                     ..RunLimits::default()
                 };
                 if !args.suite.is_empty() {

@@ -59,7 +59,7 @@ Outside strings, `|` delimits parameters/expressions, braces delimit blocks or m
 
 Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation, including a combining mark. This prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
 
-Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, `Catch`, and `Rethrow`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
+Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, `Catch`, `Finally`, and `Rethrow`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
 
 `In` follows the same keyword rules within `For |item| In |items| { ... }`, but remains available in custom names such as `In order`. Comments may separate complete tokens. Parentheses can delimit boolean operators: `(true)and(false)` is valid. See [the keyword example](../examples/06-keywords.botwork).
 
@@ -257,7 +257,9 @@ Invalid placement produces `ControlFlowError` with the offending source file and
 
 ## Try/Catch
 
-`Try` requires exactly one `Catch` block. `Catch` can start on the same line as the try block's closing brace or after blank/comment lines. Both blocks may be empty; keywords are case-insensitive, and complete `Try/Catch` statements may nest.
+`Finally` provides awaited cleanup across completion paths; see [owned cleanup](cleanup.md) for resource ownership, failure precedence, independent cooperative allowances, and forced-termination limits.
+
+`Try` requires a `Catch`, a `Finally`, or one of each in that order. `Catch` can start on the same line as the try block's closing brace or after blank/comment lines. Both blocks may be empty; keywords are case-insensitive, and complete `Try/Catch` statements may nest.
 
 <!-- botwork-test: catch-recovery -->
 ```botwork

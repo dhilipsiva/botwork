@@ -225,10 +225,9 @@ impl Diagnostic {
                 | DiagnosticCode::Timeout
         ) && self.omissions.is_none()
             && cause.omissions.is_some())
-            || (matches!(
-                self.code(),
-                DiagnosticCode::Cancelled | DiagnosticCode::Timeout
-            ) && self.omissions.is_some()
+            // A stop or an earlier body failure can stay primary when attaching
+            // secondary cleanup evidence exceeds its quota.
+            || (self.omissions.is_some()
                 && cause.code() == DiagnosticCode::ResourceLimit
                 && cause.omissions.is_none())
     }

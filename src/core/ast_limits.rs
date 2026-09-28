@@ -246,6 +246,10 @@ impl<'a, 'limits> Walk<'a, 'limits> {
                             }
                             self.push(Item::Block(body), next);
                         }
+                        StatementKind::Finally { body, cleanup } => {
+                            self.push(Item::Block(cleanup), next);
+                            self.push(Item::Block(body), next);
+                        }
                         StatementKind::Return(Some(value)) => {
                             self.push(Item::Expression(value), next)
                         }
