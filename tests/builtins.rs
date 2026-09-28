@@ -200,7 +200,7 @@ fn initialization_is_idempotent_and_preserves_existing_host_and_local_overrides(
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 9);
+    assert_eq!(context.statement_signatures().len(), 25);
     let value = evaluate_program_detailed(
         &Program::parse("override", "Assert |false|").unwrap(),
         &mut context,

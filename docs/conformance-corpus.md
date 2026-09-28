@@ -163,3 +163,5 @@ Two R31 host cases require complete namespace-worker transport and verified tree
 
 Two blocking-worker cases verify native callback execution off the async executor
 with exact call-frame snapshot admission and rejection before callback effects.
+
+Four B2 CLI cases exercise collection replacement and sorted iteration, empty ranges and exact numeric membership, missing-index rejection, and duplicate dynamic-map keys. All existing V3/V4 immutable-read and indexed-assignment rejection cases remain active.

@@ -181,6 +181,10 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("collection-statements", include_str!("../../examples/29-collections.botwork"), "[\"coffee\", 1]\n[\"tea\", 4]\n[20, 30]\n[[0, \"a\"], [1, \"b\"]]\n2\n", &["B2"], &[]),
+        success("collection-boundaries", "Assert |@{ Repeat |1| Times |0| }| Equals |[]|\nAssert |@{ Slice |[]| From |0| To |0| }| Equals |[]|\nAssert |@{ Collection Contains |[16777216.0]| Item |16777217| }| Equals |false|", "", &["B2"], &["B2"]),
+        failure("collection-missing-index", "Set In |[]| At |0| To |1|", "", "BW3004", "within range", &["B2"]),
+        failure("collection-duplicate-key", "Create Map From |[[\"a\", 1], [\"a\", 2]]|", "", "BW3003", "Duplicate map key", &["B2"]),
         success("builtins-success", "|v| = No Operation\nAssert |@{ Variable Exists |\"v\"| }|\nAssert |@{ Type Of |@{ Get Variable |\"v\"| }| }| Equals |\"None\"|\nAssert |{a: [1]}| Equals |{a: [1.0]}|\nSleep |0|\nLog |\"ready\"|", "ready\n", &["B1"], &["B1"]),
         failure("builtins-assertion", "Try { Assert |false| } Finally { Log |\"cleaned\"| }\nLog |\"unreachable\"|", "cleaned\n", "BW9001", "Expected true, got false", &["B1"]),
         failure("builtins-invalid", "Assert |1|", "", "BW3003", "Bool", &["B1"]),

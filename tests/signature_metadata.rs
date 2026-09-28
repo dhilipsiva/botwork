@@ -443,7 +443,12 @@ fn listing_completion_and_hover_reuse_registered_metadata_and_normalization() {
             .iter()
             .map(|signature| signature.normalized())
             .collect::<Vec<_>>(),
-        ["read|param|", "render|param|"]
+        [
+            "read|param|",
+            "removefrom|param|at|param|",
+            "render|param|",
+            "repeat|param|times|param|",
+        ]
     );
     assert_eq!(context.complete_statements("வண").len(), 1);
     assert_eq!(context.complete_statements("ÅNG").len(), 1);

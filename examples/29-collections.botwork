@@ -1,0 +1,15 @@
+|items| = Create Array
+|items| = Append To |items| Value |{name: "tea", quantity: 2}|
+|replacement| = Set In |items| At |0| To |{name: "tea", quantity: 3}|
+Assert |items.0.quantity| Equals |2|
+Assert |replacement[0].quantity| Equals |3|
+|stock| = Create Map From |[["tea", 3], ["coffee", 1]]|
+|stock| = Set In |stock| At |"tea"| To |4|
+For |entry| In |@{ Map Entries |stock| }| {
+    Log |entry|
+}
+Assert |@{ Collection Contains |stock| Item |"tea"| }|
+Assert |@{ Collections Equal |@{ Map Keys |stock| }| And |["coffee", "tea"]| }|
+Log |@{ Slice |[10, 20, 30]| From |1| To |3| }|
+Log |@{ Enumerate |["a", "b"]| }|
+Log |@{ Length Of |stock| }|

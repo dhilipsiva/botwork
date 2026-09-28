@@ -1,7 +1,9 @@
-# Version 11: retain earlier semantics and add standard built-ins.
+# Version 12: retain earlier semantics and add immutable collection statements.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/core/eval/builtins.rs",
+    "src/core/eval/builtins/collections.rs",
+    "src/core/eval/builtins/collections/build.rs",
     "src/core/acceptance.rs",
     "src/core/acceptance/totals.rs",
     "src/core/acceptance/view.rs",
@@ -30,7 +32,8 @@ examine_globs = [
 ]
 examine_re = [
     '^src/core/eval/builtins.rs:',
-    ' (validate_result|Context::find_variable_binding)( ->|$)',
+    '^src/core/eval/builtins/collections(\.rs|/build\.rs):',
+    ' (validate_result|Context::find_variable_binding|Context::collection_error)( ->|$)',
     '^src/core/acceptance(\.rs|/)',
     '^src/core/ast/suite/fixtures.rs:',
     '^src/core/eval/fixtures.rs:',
@@ -62,6 +65,7 @@ additional_cargo_args = [
     "--test", "setup_failure",
     "--test", "acceptance_policy",
     "--test", "builtins",
+    "--test", "collections",
     "--test", "value_preallocation",
     "--test", "suite_fixtures",
     "--test", "value_contract",

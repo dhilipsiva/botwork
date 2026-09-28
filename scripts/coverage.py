@@ -23,6 +23,8 @@ EXCLUSIONS = (r"(^|[/\\])tests([/\\]|\.rs$)|[/\\]src[/\\]core[/\\]parser\.rs$"
 # have no executable lines; the generated Pest parser is excluded deliberately.
 LIBRARY_FILES = {
     "src/core/eval/builtins.rs",
+    "src/core/eval/builtins/collections.rs",
+    "src/core/eval/builtins/collections/build.rs",
     "src/core/acceptance.rs", "src/core/acceptance/totals.rs", "src/core/acceptance/view.rs",
     "src/core/run/cleanup.rs", "src/core/eval/cleanup.rs",
     "src/core/ast/suite.rs", "src/core/ast/suite/dataset.rs",

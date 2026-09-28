@@ -19,7 +19,16 @@ fn statement_listing_and_help_use_registered_metadata_without_a_file() {
     use botwork::core::eval::Context;
     let output = run(&["--list-statements"]);
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stdout, b"Assert |condition|\nAssert |actual| Equals |expected|\nFail |message|\nGet Variable |name|\nLog |value|\nNo Operation\nSleep |milliseconds|\nType Of |value|\nVariable Exists |name|\n");
+    assert_eq!(output.stdout, concat!(
+        "Append To |array| Value |value|\nAssert |condition|\nAssert |actual| Equals |expected|\n",
+        "Collection Contains |collection| Item |item|\nCollections Equal |left| And |right|\n",
+        "Create Array\nCreate Map\nCreate Map From |entries|\nEnumerate |array|\nFail |message|\n",
+        "Get From |collection| At |key|\nGet Variable |name|\nLength Of |collection|\nLog |value|\n",
+        "Map Entries |map|\nMap Keys |map|\nMap Values |map|\nNo Operation\n",
+        "Remove From |collection| At |key|\nRepeat |value| Times |count|\n",
+        "Set In |collection| At |key| To |value|\nSleep |milliseconds|\n",
+        "Slice |array| From |start| To |end|\nType Of |value|\nVariable Exists |name|\n"
+    ).as_bytes());
     assert!(output.stderr.is_empty());
     let output = run(&["--statement-help", "l O g |input|"]);
     assert_eq!(output.status.code(), Some(0));

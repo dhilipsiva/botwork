@@ -269,6 +269,36 @@ impl Context {
         )
     }
 
+    pub(super) fn collection_error(
+        &self,
+        operation: &str,
+        key: &Literal,
+        reason: &str,
+    ) -> RuntimeDiagnostic {
+        // Compound keys are invalid. Describe their kind without sorting or
+        // formatting an entire map while measuring diagnostic admission.
+        let kind = key.kind().as_str();
+        let segment: &dyn std::fmt::Display = match key {
+            Literal::Array(_) | Literal::Map(_) => &kind,
+            _ => key,
+        };
+        self.constructed_fields(
+            |[path, segment, reason]| BWErr::CollectionAccessError {
+                path,
+                segment,
+                reason,
+            },
+            [
+                format_args!("{operation}"),
+                format_args!("{segment}"),
+                format_args!("{reason}"),
+            ]
+            .map(FormattedDetail::exact),
+            None,
+            None,
+        )
+    }
+
     pub(super) fn access_error(
         &self,
         base: &Expr,

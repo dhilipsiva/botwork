@@ -105,6 +105,14 @@ survivor review added them. This expands the test oracle without shrinking the
 mutation population. No adapters or remote services are configured; native test
 callbacks and local module fixtures are included.
 
+Version 12 retains earlier semantics and adds immutable collection statements and
+their output planners. The targeted catalogue has 92 entries, including twelve
+collection faults covering replacement/removal, map order and membership, strict
+indexes and entry shapes, range endpoints, duplicate keys, size arithmetic, and
+admission before copies. The `collections` integration suite joins the existing
+allocation oracle. [Collection evidence](collections-evidence.json) records this
+focused campaign separately; it does not claim a new full generated score.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

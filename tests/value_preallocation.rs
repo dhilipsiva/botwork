@@ -1895,6 +1895,125 @@ fn builtin_variable_lookup_admits_its_copy_before_cloning_the_payload() {
 }
 
 #[test]
+fn collection_output_admission_precedes_payload_copies_and_count_sized_allocation() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let length = 64 * 1024;
+    for (source, allowance, copies, accepted) in [
+        ("Repeat |value| Times |2|", 3 * length + 3, 1, false),
+        ("Repeat |value| Times |2|", 3 * length + 4, 3, true),
+        ("Repeat |value| Times |2147483647|", usize::MAX, 1, false),
+        (
+            "Append To |[value]| Value |value|",
+            4 * length - 1,
+            2,
+            false,
+        ),
+        ("Append To |[value]| Value |value|", 4 * length, 4, true),
+        ("Get From |[value]| At |0|", 2 * length + 3, 1, false),
+        ("Get From |[value]| At |0|", 2 * length + 4, 2, true),
+    ] {
+        let mut context = Context::with_limits(RunLimits {
+            temporaries: TemporaryLimits {
+                payload_bytes: allowance,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .unwrap();
+        context.init_statements();
+        context
+            .set_input_variables(BTreeMap::from([(
+                "value".into(),
+                Literal::String("x".repeat(length)),
+            )]))
+            .unwrap();
+        let program = Program::parse("collection-allocation", source).unwrap();
+        let (result, large) = observe(length, || evaluate_program_detailed(&program, &mut context));
+        assert_eq!(result.is_ok(), accepted, "{source}: {result:?}");
+        assert_eq!(
+            large, copies,
+            "{source}: only admitted input/result payloads are copied"
+        );
+    }
+}
+
+#[test]
+fn collection_access_diagnostics_reject_large_key_details_before_copying_them() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticLimits,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    let mut context = Context::with_limits(RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 128,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    context.init_statements();
+    context
+        .set_input_variables(BTreeMap::from([(
+            "key".into(),
+            Literal::String("x".repeat(length)),
+        )]))
+        .unwrap();
+    let program = Program::parse("lookup", "Get From |{}| At |key|").unwrap();
+    let (result, copies) = observe(length, || evaluate_program_detailed(&program, &mut context));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("diagnostic text bytes"));
+    assert_eq!(copies, 1, "only the evaluated key argument is copied");
+}
+
+#[test]
+fn map_key_iteration_checks_string_limits_before_copying_keys_into_the_result() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    for allowed in [false, true] {
+        for statement in ["Map Keys |value|", "Map Entries |value|"] {
+            let mut context = Context::with_limits(RunLimits {
+                values: ValueLimits {
+                    string_bytes: length - usize::from(!allowed),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+            context.init_statements();
+            context
+                .set_input_variables(BTreeMap::from([(
+                    "value".into(),
+                    Literal::Map(std::collections::HashMap::from([(
+                        "x".repeat(length),
+                        Literal::None,
+                    )])),
+                )]))
+                .unwrap();
+            let program = Program::parse("key-allocation", statement).unwrap();
+            let (result, large) =
+                observe(length, || evaluate_program_detailed(&program, &mut context));
+            assert_eq!(result.is_ok(), allowed, "{statement}: {result:?}");
+            assert_eq!(
+                large,
+                1 + usize::from(allowed),
+                "input key plus admitted output key"
+            );
+        }
+    }
+}
+
+#[test]
 fn container_construction_transfers_child_payload_without_copying_it() {
     use botwork::core::{
         ast::Program,

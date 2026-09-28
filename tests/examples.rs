@@ -24,6 +24,20 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
 }
 
 #[test]
+fn collection_example_keeps_original_values_and_iterates_deterministically() {
+    assert_example(
+        "29-collections.botwork",
+        &[
+            r#"["coffee", 1]"#,
+            r#"["tea", 4]"#,
+            "[20, 30]",
+            r#"[[0, "a"], [1, "b"]]"#,
+            "2",
+        ],
+    );
+}
+
+#[test]
 fn cleanup_example_releases_nested_resources_before_returning() {
     assert_example(
         "25-cleanup.botwork",

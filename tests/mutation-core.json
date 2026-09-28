@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "mutations": [
     {
       "id": "precedence-products",
@@ -560,6 +560,90 @@
       "file": "src/core/eval/builtins.rs",
       "before": "context.copy_temporary(&context.get_variable_binding(name, None)?.value)",
       "after": "context.temporary(context.get_variable_binding(name, None)?.value.clone())"
+    },
+    {
+      "id": "collection-update-keeps-original",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "Some(&*arguments[2])",
+      "after": "Some(value)"
+    },
+    {
+      "id": "collection-remove-keeps-element",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "} else if remove {\n                                None",
+      "after": "} else if remove {\n                                Some(value)"
+    },
+    {
+      "id": "collection-map-filter-inverted",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": ".filter(|(name, _)| name.as_str() != key)",
+      "after": ".filter(|(name, _)| name.as_str() == key)"
+    },
+    {
+      "id": "collection-map-order-reversed",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "entries.sort_unstable_by_key(|(key, _)| *key);",
+      "after": "entries.sort_unstable_by_key(|(key, _)| std::cmp::Reverse(*key));"
+    },
+    {
+      "id": "collection-duplicate-keys-accepted",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections/build.rs",
+      "before": "if result.contains_key(key) {",
+      "after": "if false && result.contains_key(key) {"
+    },
+    {
+      "id": "collection-repeat-payload-undercounted",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections/build.rs",
+      "before": ".payload_bytes\n            .checked_mul(count)",
+      "after": ".payload_bytes\n            .checked_mul(1)"
+    },
+    {
+      "id": "collection-copy-before-admission",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections/build.rs",
+      "before": "    let reservation = context.temporary_reservation(size)?;\n    context.checkpoint()?;\n    let value = build()?;",
+      "after": "    context.checkpoint()?;\n    let value = build()?;\n    let reservation = context.temporary_reservation(size)?;"
+    },
+    {
+      "id": "collection-float-index-accepted",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "Literal::Int(index) => usize::try_from(*index).ok(),",
+      "after": "Literal::Int(index) => usize::try_from(*index).ok(),\n        Literal::Float(index) => Some(*index as usize),"
+    },
+    {
+      "id": "collection-slice-end-inclusive",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "let selected = &values[start..end];",
+      "after": "let selected = &values[start..values.len().min(end + 1)];"
+    },
+    {
+      "id": "collection-extra-entry-elements-accepted",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "if pair.len() == 2 {",
+      "after": "if pair.len() >= 2 {"
+    },
+    {
+      "id": "collection-key-output-admission-skipped",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "Self::Keys => limits.string_size(key.len()),",
+      "after": "Self::Keys => limits.check(&Literal::None),"
+    },
+    {
+      "id": "collection-map-membership-inverted",
+      "area": "collections",
+      "file": "src/core/eval/builtins/collections.rs",
+      "before": "Literal::Map(values) => values.contains_key(key(context, &arguments[1])?),",
+      "after": "Literal::Map(values) => !values.contains_key(key(context, &arguments[1])?),"
     }
   ]
 }
