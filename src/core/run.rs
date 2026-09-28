@@ -14,6 +14,7 @@ use std::{
 };
 
 use super::{
+    acceptance::CaseStatus,
     ast::Program,
     ast_limits::AstLimits,
     diagnostic::{
@@ -324,10 +325,10 @@ impl RunResult {
     pub fn outcome(&self) -> RunOutcome {
         match &self.result {
             Ok(_) => RunOutcome::Succeeded,
-            Err(error) => match error.code() {
-                DiagnosticCode::Cancelled => RunOutcome::Cancelled,
-                DiagnosticCode::Timeout => RunOutcome::TimedOut,
-                DiagnosticCode::ResourceLimit => RunOutcome::LimitExceeded,
+            Err(error) => match CaseStatus::from_diagnostic_code(error.code()) {
+                CaseStatus::Cancelled => RunOutcome::Cancelled,
+                CaseStatus::TimedOut => RunOutcome::TimedOut,
+                CaseStatus::LimitExceeded => RunOutcome::LimitExceeded,
                 _ => RunOutcome::Failed,
             },
         }

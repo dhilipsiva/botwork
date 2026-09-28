@@ -227,6 +227,8 @@ fn every_documented_suite_matches_its_cli_output() {
 
 #[test]
 fn every_rust_documentation_example_is_included_in_crate_doctests() {
+    assert!(include_str!("../src/lib.rs")
+        .contains("#![doc = include_str!(\"../docs/acceptance-policy.md\")]"));
     assert!(
         include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/fixtures.md\")]")
     );
@@ -250,6 +252,7 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
     assert_eq!(
         rust_documents,
         BTreeSet::from([
+            "docs/acceptance-policy.md".to_owned(),
             "docs/interpreter-architecture.md".to_owned(),
             "docs/async-execution.md".to_owned(),
             "docs/nonblocking-io.md".to_owned(),

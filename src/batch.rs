@@ -1,6 +1,6 @@
 //! CLI batch admission. Mutable interpreter state belongs to each admitted run.
 use super::{BWErr, CliError, Context, Diagnostic, RunLimits};
-use botwork::core::diagnostic::DiagnosticCode;
+use botwork::core::acceptance::{CaseStatus, CaseTotals, Delivery};
 use botwork::core::suite::SelectedCase;
 use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 use tokio::task::JoinSet;
@@ -40,14 +40,31 @@ pub(super) struct Outcome {
 
 impl Outcome {
     pub(super) fn result(self) -> Result<(), CliError> {
-        if self.skipped != 0 || self.fixtures_failed != 0 {
+        let succeeded = self
+            .total
+            .checked_sub(self.failed)
+            .and_then(|remaining| remaining.checked_sub(self.skipped))
+            .ok_or_else(|| {
+                Diagnostic::new(BWErr::RunConfiguration(
+                    "Inconsistent acceptance result counts".into(),
+                ))
+            })?;
+        let mut totals = CaseTotals::default();
+        totals.record_many(CaseStatus::Succeeded, succeeded)?;
+        totals.record_many(CaseStatus::Failed, self.failed)?;
+        totals.record_many(CaseStatus::Skipped, self.skipped)?;
+        // The scheduler returns Outcome only after owners and reports drain.
+        if !totals
+            .finish(self.fixtures_failed, Delivery::Complete)
+            .failed()
+        {
+            Ok(())
+        } else if self.skipped != 0 || self.fixtures_failed != 0 {
             Err(CliError::Suites {
                 failed: self.failed,
                 skipped: self.skipped,
                 fixtures_failed: self.fixtures_failed,
             })
-        } else if self.failed == 0 {
-            Ok(())
         } else {
             Err(CliError::Batch {
                 failed: self.failed,
@@ -85,14 +102,9 @@ fn outcome(error: &CliError) -> &'static str {
     let code = match error {
         CliError::Script(error) => error.code(),
         CliError::SourceLimit { source, .. } => source.code(),
-        _ => return "failed",
+        _ => return CaseStatus::Failed.label(),
     };
-    match code {
-        DiagnosticCode::Cancelled => "cancelled",
-        DiagnosticCode::Timeout => "timed out",
-        DiagnosticCode::ResourceLimit => "limit exceeded",
-        _ => "failed",
-    }
+    CaseStatus::from_diagnostic_code(code).label()
 }
 
 fn write_report(message: Message) -> Result<(), CliError> {

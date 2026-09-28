@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "mutations": [
     {
       "id": "precedence-products",
@@ -469,6 +469,48 @@
       "file": "src/suites/execution.rs",
       "before": "failed[index] = true;",
       "after": "failed[index] = false;"
+    },
+    {
+      "id": "expected-failure-accepts-cleanup-error",
+      "area": "acceptance_policy",
+      "file": "src/core/acceptance.rs",
+      "before": "if expectation.reason.is_some() && teardown == PhaseOutcome::Succeeded =>",
+      "after": "if expectation.reason.is_some() =>"
+    },
+    {
+      "id": "expected-failure-accepts-operational-error",
+      "area": "acceptance_policy",
+      "file": "src/core/acceptance.rs",
+      "before": "PhaseOutcome::Failed(FailureKind::Assertion)\n                if expectation.reason.is_some()",
+      "after": "PhaseOutcome::Failed(_)\n                if expectation.reason.is_some()"
+    },
+    {
+      "id": "expected-failure-passes-repaired-body",
+      "area": "acceptance_policy",
+      "file": "src/core/acceptance.rs",
+      "before": "                    CaseStatus::UnexpectedPass\n",
+      "after": "                    CaseStatus::Succeeded\n"
+    },
+    {
+      "id": "acceptance-loses-parent-stop",
+      "area": "acceptance_policy",
+      "file": "src/core/acceptance.rs",
+      "before": "            return stop.status();",
+      "after": "            let _ = stop;"
+    },
+    {
+      "id": "acceptance-passes-failed-delivery",
+      "area": "acceptance_policy",
+      "file": "src/core/acceptance/totals.rs",
+      "before": "} else if delivery != Delivery::Complete\n            || fixture_failures != 0",
+      "after": "} else if fixture_failures != 0"
+    },
+    {
+      "id": "acceptance-passes-skipped-selection",
+      "area": "acceptance_policy",
+      "file": "src/core/acceptance/totals.rs",
+      "before": "            || self.skipped != 0\n",
+      "after": ""
     }
   ]
 }
