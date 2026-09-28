@@ -68,14 +68,14 @@ before ownership entry do not run hooks. Setup failure stops the rest of setup.
 | Suite control stops | Drain admitted cases; skip queued cases; attempt SuiteTeardown | Suite fails; all selected IDs affected |
 | SuiteTeardown | Finish owner | Suite fails, including when all case bodies passed; all selected IDs affected |
 
-When setup/body and teardown both fail, keep the primary error and attach the
+Within one owner, when setup/body and teardown both fail, keep the primary error and attach the
 cleanup error as a cause, with original source locations and bounded diagnostic
 omissions. A later parent cancellation/deadline retains the existing stop
 priority. Successful cleanup cannot clear a failure. Suite fixture diagnostics
 are separate from case outcomes. The summary includes skipped-case and failed
 suite-fixture counts when either is nonzero; process status is unsuccessful if
 any case, fixture, reporting, or failure-record publication fails. This is the
-current console/failure-selection policy; collected assertions, expected failures,
+current [setup failure and skipped-case policy](setup-failure.md); collected assertions, expected failures,
 and the common JSON/HTML report model remain separate work.
 
 `--timeout-ms` covers each admitted case's preparation, setup, and body.

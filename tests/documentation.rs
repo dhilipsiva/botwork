@@ -146,20 +146,34 @@ fn every_documented_botwork_example_matches_its_cli_output() {
 
 #[test]
 fn every_documented_suite_matches_its_cli_output() {
+    struct Expected {
+        document: &'static str,
+        stdout: &'static str,
+        status: i32,
+        summary: &'static str,
+        lines: Option<usize>,
+        diagnostics: &'static [&'static str],
+    }
     let expected = BTreeMap::from([
-        ("named-suite", ("docs/suites.md", "42\n8\n", 2)),
-        (
-            "fixture-suite",
-            (
-                "docs/fixtures.md",
-                "suite opened\n43\ncase closed\n42\ncase closed\nsuite closed\n",
-                2,
-            ),
-        ),
-        (
-            "parameterized-suite",
-            ("docs/parameterized-cases.md", "42\n8\n0\n", 3),
-        ),
+        ("named-suite", Expected {
+            document: "docs/suites.md", stdout: "42\n8\n", status: 0,
+            summary: "[cases] 2 selected: 2 succeeded, 0 failed\n", lines: Some(5), diagnostics: &[],
+        }),
+        ("fixture-suite", Expected {
+            document: "docs/fixtures.md",
+            stdout: "suite opened\n43\ncase closed\n42\ncase closed\nsuite closed\n", status: 0,
+            summary: "[cases] 2 selected: 2 succeeded, 0 failed\n", lines: Some(8), diagnostics: &[],
+        }),
+        ("parameterized-suite", Expected {
+            document: "docs/parameterized-cases.md", stdout: "42\n8\n0\n", status: 0,
+            summary: "[cases] 3 selected: 3 succeeded, 0 failed\n", lines: Some(7), diagnostics: &[],
+        }),
+        ("setup-failure-suite", Expected {
+            document: "docs/setup-failure.md", stdout: "open demo\nclose demo\n", status: 1,
+            summary: "[cases] 2 selected: 0 succeeded, 0 failed, 2 skipped; 1 suite fixtures failed\n",
+            lines: None,
+            diagnostics: &["BW2001", "BW2002", "[case environment/first] skipped:", "[case environment/second] skipped:"],
+        }),
     ]);
     let mut seen = BTreeSet::new();
     let harness = Harness::new();
@@ -170,10 +184,10 @@ fn every_documented_suite_matches_its_cli_output() {
         {
             let id = block.id.as_deref().unwrap();
             assert!(seen.insert(id.to_owned()), "duplicate suite example: {id}");
-            let (expected_document, stdout, count) = expected.get(id).unwrap_or_else(|| {
+            let expected = expected.get(id).unwrap_or_else(|| {
                 panic!("{document}:{}: register suite output for {id}", block.line)
             });
-            assert_eq!(&document, expected_document);
+            assert_eq!(document, expected.document);
             let filename = format!("{id}.suite.botwork");
             fs::write(harness.workspace.join(&filename), &block.source).unwrap();
             let output = harness
@@ -184,19 +198,24 @@ fn every_documented_suite_matches_its_cli_output() {
                 )
                 .unwrap();
             let stderr = String::from_utf8(output.stderr).unwrap();
-            assert!(
-                output.status.success(),
+            assert_eq!(
+                output.status.code(),
+                Some(expected.status),
                 "{document}:{}: {stderr}",
                 block.line
             );
-            assert_eq!(output.stdout, stdout.as_bytes());
-            assert_eq!(
-                stderr.lines().count(),
-                count * 2 + 1 + if id == "fixture-suite" { 3 } else { 0 }
-            );
-            assert!(stderr.ends_with(&format!(
-                "[cases] {count} selected: {count} succeeded, 0 failed\n"
-            )));
+            assert_eq!(output.stdout, expected.stdout.as_bytes());
+            if let Some(lines) = expected.lines {
+                assert_eq!(stderr.lines().count(), lines);
+            }
+            assert!(stderr.ends_with(expected.summary), "{stderr}");
+            let mut remainder = stderr.as_str();
+            for evidence in expected.diagnostics {
+                let position = remainder
+                    .find(evidence)
+                    .unwrap_or_else(|| panic!("missing ordered {evidence}: {stderr}"));
+                remainder = &remainder[position + evidence.len()..];
+            }
         }
     }
     assert_eq!(

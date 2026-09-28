@@ -410,3 +410,23 @@ fn fixture_example_executes_both_owners_around_each_row() {
     );
     assert!(stderr.ends_with("[cases] 2 selected: 2 succeeded, 0 failed\n"));
 }
+
+#[test]
+fn setup_failure_example_reports_both_errors_and_skips_unentered_cases() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/27-setup-failure.suite.botwork");
+    let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .arg("--suite")
+        .arg(path)
+        .args(["--jobs", "1"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert_eq!(output.stdout, b"open demo\nclose demo\n");
+    assert!(stderr.find("BW2001").unwrap() < stderr.find("BW2002").unwrap());
+    assert!(!stderr.contains("[case environment/first] started:"));
+    assert!(stderr.ends_with(
+        "[cases] 2 selected: 0 succeeded, 0 failed, 2 skipped; 1 suite fixtures failed\n"
+    ));
+}

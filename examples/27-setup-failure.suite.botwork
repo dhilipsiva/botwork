@@ -1,0 +1,15 @@
+Suite |"environment"| {
+    SuiteSetup {
+        |session| = |"demo"|
+        Log |"open " + session|
+        |ready| = |missing|
+    }
+    SuiteTeardown {
+        Log |"close " + session|
+        CleanupFailed
+    }
+    CaseSetup { Log |"case setup must not run"| }
+    CaseTeardown { Log |"case cleanup must not run"| }
+    Case |"first"| { Log |"body must not run"| }
+    Case |"second"| { Log |"body must not run"| }
+}

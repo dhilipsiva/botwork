@@ -98,6 +98,10 @@ case-program preparation. Original suite file coordinates and call frames are
 preserved in diagnostics and debug traces. Case bodies retain script control
 rules, including Return requiring a custom-statement body.
 
+Setup failures follow the [admission and skip policy](setup-failure.md): an admitted
+case with failed setup fails, while cases blocked before admission by their suite
+are skipped. Filtered-out cases have no outcomes.
+
 ## Rerun failed cases
 
 ```sh

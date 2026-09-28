@@ -421,6 +421,40 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::SetupPolicyHandled | Input::SetupPolicySkipped => {
+                let source = if matches!(case.input, Input::SetupPolicyHandled) {
+                    "Suite |\"p\"| { CaseSetup { Try { Missing } Catch {} } CaseTeardown { Try { Other } Catch {} } Case |\"a\"| { Log |42| } }"
+                } else {
+                    "Suite |\"p\"| { SuiteSetup { |x| = |missing| } SuiteTeardown { Log |\"released\"|\nCleanupFailed } CaseSetup { Log |999| } CaseTeardown { Log |999| } Case |\"a\"| { Log |999| } }"
+                };
+                fs::write(harness.workspace.join("setup-policy.botwork"), source).unwrap();
+                let output = harness
+                    .command(
+                        case.id,
+                        &["--suite", "setup-policy.botwork", "--jobs", "1"],
+                        Duration::from_secs(5),
+                    )
+                    .unwrap();
+                assert_eq!(output.stdout, case.stdout.as_bytes());
+                let stderr = String::from_utf8(output.stderr).unwrap();
+                if let Some(error) = case.error {
+                    assert_eq!(output.status.code(), Some(1));
+                    assert!(
+                        stderr.contains(case.code.unwrap()) && stderr.contains(error),
+                        "{stderr}"
+                    );
+                    assert!(
+                        stderr.contains("[case p/a] skipped:")
+                            && !stderr.contains("[case p/a] started:"),
+                        "{stderr}"
+                    );
+                    assert!(stderr.ends_with("[cases] 1 selected: 0 succeeded, 0 failed, 1 skipped; 1 suite fixtures failed\n"));
+                } else {
+                    assert!(output.status.success(), "{stderr}");
+                    assert!(stderr.contains("[case p/a] succeeded:"));
+                }
+                continue;
+            }
             Input::FixtureOrder | Input::FixturePrimary | Input::FixtureInvalid => {
                 let body = match case.input {
                     Input::FixtureOrder => "Log |3|",

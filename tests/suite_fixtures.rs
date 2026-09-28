@@ -1,5 +1,7 @@
 #[path = "support/cli_harness.rs"]
 mod cli_harness;
+#[path = "suite_fixtures/failures.rs"]
+mod failures;
 use cli_harness::Harness;
 use serde_json::{json, Value};
 use std::{fs, process::Output, time::Duration};

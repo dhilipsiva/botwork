@@ -52,6 +52,7 @@ additional_cargo_args = [
     "--test", "catch_contract",
     "--test", "cleanup",
     "--test", "fixture_ownership",
+    "--test", "setup_failure",
     "--test", "suite_fixtures",
     "--test", "value_contract",
     "--test", "generated_properties",

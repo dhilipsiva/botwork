@@ -335,3 +335,16 @@ branch uses the case ID; failure selection also uses case IDs. This is an
 unobservable field change in the current callers, retained with its full outcome
 rather than adding an implementation-mirroring test. Earlier campaigns and their
 reviewed survivors remain separate evidence, not a newly measured aggregate.
+
+## Setup-failure policy checks
+
+Catalogue version 9 adds three mutations: accepting a failed case after successful
+cleanup, accepting failed suite setup after successful cleanup, and forgetting
+skipped IDs in rerun selection. A focused run also repeats the existing mutations
+that discard a case cleanup cause or replace the suite setup primary with its
+cleanup error. All five were caught by `setup_failure` and `suite_fixtures`.
+[Policy evidence](setup-failure-evidence.json) retains the baseline, exact patches,
+commands, hashes, and failed-test names. The configured integration oracle now
+includes `setup_failure`; no prior mutation selection was removed. This specifies
+and strengthens coverage of the existing runtime behavior; it is not a new full
+generated-mutation campaign.

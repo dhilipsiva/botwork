@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "mutations": [
     {
       "id": "precedence-products",
@@ -448,6 +448,27 @@
       "file": "src/core/ast/suite.rs",
       "before": ".chain(fixtures.statements())",
       "after": ".chain(fixtures.statements().take(0))"
+    },
+    {
+      "id": "cleanup-passes-failed-case",
+      "area": "setup_failure",
+      "file": "src/core/eval/cleanup.rs",
+      "before": "(primary, Ok(Completion::Normal(_))) => primary,",
+      "after": "(_, Ok(completion @ Completion::Normal(_))) => Ok(completion),"
+    },
+    {
+      "id": "fixture-passes-failed-setup",
+      "area": "setup_failure",
+      "file": "src/core/eval/fixtures.rs",
+      "before": "(primary, Ok(())) => primary,",
+      "after": "(_, Ok(())) => Ok(()),"
+    },
+    {
+      "id": "skipped-cases-forgotten-by-rerun",
+      "area": "setup_failure",
+      "file": "src/suites/execution.rs",
+      "before": "failed[index] = true;",
+      "after": "failed[index] = false;"
     }
   ]
 }
