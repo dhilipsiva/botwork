@@ -142,6 +142,67 @@ fn blocked_reads_overlap_only_up_to_the_job_limit_and_completion_keeps_its_origi
 }
 
 #[test]
+fn script_failure_keeps_admitted_and_queued_siblings_running() {
+    let harness = Harness::new();
+    let failing = fifo(&harness, "failing.botwork");
+    let admitted = fifo(&harness, "admitted.botwork");
+    let queued = fifo(&harness, "queued.botwork");
+    let mut running = Running::start(
+        &harness,
+        &["failing.botwork", "admitted.botwork", "queued.botwork"],
+        &["--jobs", "2"],
+        None,
+    );
+    let mut a = writer(&failing, &mut running);
+    let b = writer(&admitted, &mut running);
+    assert_eq!(
+        try_writer(&queued).unwrap_err().raw_os_error(),
+        Some(libc::ENXIO),
+        "third run must still be queued while both slots are occupied"
+    );
+    writeln!(a, "Log |10|\nLog |missing|\nLog |999|").unwrap();
+    drop(a);
+    // Opening the third writer proves admission after the first run failed,
+    // while the second run is still blocked in its original source read.
+    let mut c = writer(&queued, &mut running);
+    let progress = fs::read_to_string(&running.stderr).unwrap();
+    writeln!(c, "Try {{ Log |missing| }} Catch {{}}\nLog |3|").unwrap();
+    drop(c);
+    release(b, 2);
+    let output = running.finish();
+    assert!(
+        progress.find("[run 1] failed:").unwrap() < progress.find("[run 3] started:").unwrap(),
+        "{progress}"
+    );
+    assert!(!progress.contains("[run 2] succeeded:"), "{progress}");
+    assert!(!progress.contains("[batch]"), "{progress}");
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.starts_with("10\n"),
+        "earlier effects remain: {stdout}"
+    );
+    let mut lines: Vec<_> = stdout.lines().collect();
+    lines.sort_unstable();
+    assert_eq!(lines, ["10", "2", "3"], "failed script must skip its tail");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    for (id, outcome) in [(1, "failed"), (2, "succeeded"), (3, "succeeded")] {
+        for label in ["started", outcome] {
+            assert_eq!(
+                stderr.matches(&format!("[run {id}] {label}:")).count(),
+                1,
+                "{stderr}"
+            );
+        }
+    }
+    assert!(stderr.contains("BW2001"), "{stderr}");
+    assert!(
+        stderr.ends_with("[batch] 3 runs: 2 succeeded, 1 failed\n"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn queued_runs_receive_a_fresh_timeout_after_an_expired_read_drains() {
     let harness = Harness::new();
     let first = fifo(&harness, "slow.botwork");

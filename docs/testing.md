@@ -147,3 +147,7 @@ variables/module caches/quotas, queued deadlines, stable run IDs, sibling failur
 whole output records, and reporter backpressure/failure. Linux tests use controlled
 FIFO peers and pipe capacity; child watchdogs always terminate/reap on failure.
 R32 adds two CLI corpus cases, and examples 21–22 run in the example suite.
+The [concurrency policy checks](concurrency-policy-evidence.json) additionally
+hold siblings active across a CLI failure and an embedded cancellation, verifying
+continued admission, aggregate failure, independent control, and shared-operation
+reservation release. These tests use explicit entry/release handshakes.

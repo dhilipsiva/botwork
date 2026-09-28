@@ -530,6 +530,101 @@ async fn cpu_loops_yield_so_a_sibling_can_cancel_them() {
     assert_eq!(result.variables["kept"].to_string(), "7");
 }
 
+#[tokio::test]
+async fn cancelling_one_active_run_releases_only_its_shared_operation_reservations() {
+    let (entered, mut ready) = tokio::sync::mpsc::channel(2);
+    let gates = [
+        Arc::new(tokio::sync::Notify::new()),
+        Arc::new(tokio::sync::Notify::new()),
+    ];
+    let drops = [Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0))];
+    let releases = gates.clone();
+    let observed = drops.clone();
+    let operation = NativeOperation::asynchronous(
+        StatementSignature::native("Gate |slot|")
+            .unwrap()
+            .parameter("slot", ValueKind::Int)
+            .unwrap(),
+        move |values, control| {
+            let Literal::Int(slot @ 0..=1) = values[0] else {
+                panic!("test slot must be zero or one")
+            };
+            let slot = slot as usize;
+            let gate = Arc::clone(&releases[slot]);
+            let guard = Dropped(Arc::clone(&observed[slot]));
+            entered.try_send((slot, control)).unwrap();
+            async move {
+                let _guard = guard;
+                gate.notified().await;
+                Ok(Literal::None)
+            }
+        },
+    )
+    .unwrap();
+    let ownership = operation.ownership_budget().clone();
+    let mut engine = Engine::default();
+    engine.register_operation(operation).unwrap();
+    let engine = Arc::new(engine);
+    let parent = OperationControl::default();
+    let controls = [parent.child(None), parent.child(None)];
+    let mut tasks = Vec::new();
+    for (slot, control) in controls.iter().cloned().enumerate() {
+        let engine = Arc::clone(&engine);
+        tasks.push(tokio::spawn(async move {
+            engine
+                .run_source_async(
+                    "independent-control",
+                    "Outer { Gate |slot| }\n|kept| = |slot|\nTry { Outer } Catch { |handled| = |true| }\n|finished| = |true|",
+                    RunOptions {
+                        control,
+                        variables: BTreeMap::from([("slot".into(), Literal::Int(slot as i32))]),
+                        ..options()
+                    },
+                )
+                .await
+        }));
+    }
+    let mut callback_controls = BTreeMap::new();
+    for _ in 0..2 {
+        let (slot, control) = tokio::time::timeout(Duration::from_secs(5), ready.recv())
+            .await
+            .expect("both runs must enter before either is cancelled")
+            .unwrap();
+        assert!(callback_controls.insert(slot, control).is_none());
+    }
+    assert_eq!(ownership.usage().invocations, 2);
+    controls[0].cancel();
+    let cancelled = tokio::time::timeout(Duration::from_secs(5), tasks.remove(0))
+        .await
+        .expect("cancellation must release the first run")
+        .unwrap();
+    assert_eq!(cancelled.outcome(), RunOutcome::Cancelled);
+    assert_eq!(cancelled.variables["kept"].to_string(), "0");
+    assert!(!cancelled.variables.contains_key("handled"));
+    assert!(!cancelled.variables.contains_key("finished"));
+    assert_eq!(drops[0].load(Ordering::SeqCst), 1);
+    assert_eq!(drops[1].load(Ordering::SeqCst), 0);
+    assert_eq!(ownership.usage().invocations, 1);
+    assert!(callback_controls[&0].is_cancelled());
+    assert!(!parent.is_cancelled());
+    assert!(!controls[1].is_cancelled());
+    callback_controls[&1].checkpoint().unwrap();
+    assert!(!tasks[0].is_finished(), "sibling remains at its own gate");
+
+    gates[1].notify_one();
+    let sibling = tokio::time::timeout(Duration::from_secs(5), tasks.remove(0))
+        .await
+        .expect("sibling must finish after its gate is released")
+        .unwrap();
+    assert_eq!(sibling.outcome(), RunOutcome::Succeeded);
+    assert_eq!(sibling.variables["kept"].to_string(), "1");
+    assert_eq!(sibling.variables["finished"].to_string(), "true");
+    assert!(!sibling.variables.contains_key("handled"));
+    assert_eq!(drops[1].load(Ordering::SeqCst), 1);
+    assert_eq!(ownership.usage(), Default::default());
+    assert!(!parent.is_cancelled());
+}
+
 #[test]
 fn synchronous_entry_points_reject_async_registries_before_any_effects() {
     let calls = Arc::new(AtomicUsize::new(0));

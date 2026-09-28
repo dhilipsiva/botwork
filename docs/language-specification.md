@@ -186,7 +186,7 @@ The library's program evaluator returns the final top-level statement's normal r
 
 ## Evidence and Implementation Gaps
 
-R32 evidence includes `tests/parallel_cli.rs`, Linux FIFO/output-pipe scenarios, two CLI corpus cases, and examples 21–22. These cover duplicate paths, variable/module isolation, admission while reads stall, fresh queued deadlines, mixed failures, output quotas, complete Log records, and reporter backpressure/failure.
+R32 evidence includes `tests/parallel_cli.rs`, Linux FIFO/output-pipe scenarios, two CLI corpus cases, and examples 21–22. These cover duplicate paths, variable/module isolation, admission while reads stall, fresh queued deadlines, mixed failures, output quotas, complete Log records, and reporter backpressure/failure. `script_failure_keeps_admitted_and_queued_siblings_running` holds a sibling's source read open across another run's failure and verifies subsequent queued admission, preserved effects, skipped failing-script tails, exactly-once statuses, and aggregate failure.
 
 R31 evidence includes three unit checks for gated waits/ownership and failed startup handoff, eight subprocess scenarios plus two fixtures, two corpus cases, and a constructor doctest. It covers guardian SIGKILL, stopped guardian cancellation, host SIGKILL with closed stdio, kernel-confirmed descendant disappearance, typed response rejection and budget release, status/I/O/identity preservation, denied clone3/mount facilities, and failure without fallback. A full advertised platform/facility matrix and whole-run shutdown coordination remain open.
 
@@ -250,6 +250,8 @@ E5 evidence in `tests/call_composition.rs` covers precedence, nesting, resolutio
 F7 evidence in `tests/async_operations.rs` covers pre-entry cancellation/expiry, controlled-clock timeout, hierarchy/tie priority, self-cancellation, future destruction, typed values/causes, factory/poll/worker panics, missing runtime/time driver, bounded blocking admission, cancelled waiters, draining, dropped invocations, and permit release. Two host corpus cases and an executed Rust example cover public invocation.
 
 F8 evidence in `tests/async_execution.rs` covers suspension through expressions/control flow/imports, call frames and causes, cancellation and deadlines, operation/result quotas, synchronous rejection, CLI compatibility, owned future destruction, blocking draining, typed workers, and independent sibling runs. Two host corpus cases and an executed Rust example cover async custom calls and pre-effect synchronous rejection.
+
+`cancelling_one_active_run_releases_only_its_shared_operation_reservations` additionally holds two calls to the same registered operation active under sibling controls, cancels one through nested DSL calls, verifies its cleanup and handler bypass, and proves the still-pending sibling retains its reservation and subsequently succeeds.
 
 F9 evidence in worker unit tests, `tests/async_filesystem.rs`, and `tests/async_blocking.rs` covers queued/stalled work, exact admission, cancellation/deadline propagation, handoff/drop ownership, real FIFO and output-pipe waits, callback thread behavior, sibling progress, immutable environment sharing, cause/state preservation, bounded file reads, and deep-value disposal. Two host corpus cases and an executed Rust example verify worker execution and pre-effect snapshot rejection.
 

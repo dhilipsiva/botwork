@@ -103,6 +103,13 @@ an operation result wins over success and retains a distinct earlier error as a
 cause. A callback merely returning a cancellation category does not itself cancel
 the parent run control.
 
+Concurrent runs do not cancel each other implicitly. Give them separate controls
+or sibling child controls for independent stops; clones of one supplied control
+share cancellation deliberately. [Batch and host concurrency policies](parallel-cli.md)
+describe resource sharing, cleanup accounting, output ordering, and aggregate
+status. A host can await one cancelled result while another invocation of the
+same registered operation remains active and later succeeds.
+
 Dropping a run future drops suspended DSL state and the pending operation future.
 Async resources with synchronous Drop cleanup are released before a cooperative
 stop returns. Blocking callbacks receive cancellation but still need to cooperate;

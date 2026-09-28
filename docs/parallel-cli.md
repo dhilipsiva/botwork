@@ -35,6 +35,19 @@ execution does not change either globally. Files, output destinations, and other
 external side effects are shared resources; independent DSL state does not make
 them transactional or prevent conflicts between scripts.
 
+| Resource | Sharing policy |
+| --- | --- |
+| Root variables, definitions, module initialization/cache, inputs, execution and retention budgets | Fresh for every CLI file occurrence and Engine run. |
+| Working directory and environment | CLI runs share the launching directory and process environment. Engine callers may supply per-run directory/environment overlays; neither API changes the process settings. |
+| Files and external effects | Shared by path or external identity. Scripts/hosts coordinate conflicting access; failed runs do not roll back effects. |
+| Stdout/stderr | Shared destinations with whole-record locks and the ordering rules below. |
+| Filesystem and native/output worker pools | Process-wide bounded pools; one run can delay another through capacity contention. |
+| Registered host callbacks and operations | Engine runs share callback captures, operation ownership/capacity pools, and configured worker pools. Hosts synchronize mutable captures and choose separate pools when required. |
+| Cancellation | CLI timeouts are per run. Engine control clones share cancellation; sibling child controls allow independent cancellation under a common parent. |
+
+Sessions, reports, and artifact namespaces are not provided by this batch API;
+their future isolation contracts remain separate roadmap work.
+
 ## Admission, timeouts, and failures
 
 The job limit includes input/source preparation, parsing, evaluation, and waiting
@@ -48,17 +61,50 @@ loading and parsing. Time spent waiting for a job slot does not consume that
 run's timeout. The same step, call-depth, evaluation-depth, and output options
 apply independently to each run.
 
-A script error, missing file, resource limit, or timeout fails that run. Other
-admitted and queued runs continue; this command currently has no fail-fast mode.
-Exit status is 0 when all runs and status delivery succeed, 1 on run/reporting
-failure, and 2 for invalid command-line usage. Failed-run records include the
-original diagnostic. Timeout/resource failures have explicit terminal labels.
+A script error, missing file, resource limit, or timeout fails that run. An
+uncaught error skips the rest of that script; a successfully handled ordinary
+error can still end in success. Completed effects remain. The batch uses a
+finish-all policy: admitted and queued siblings continue. There is no batch
+fail-fast switch. This policy lets an automation batch collect independent
+results after the first failing script. Reporting failure has the distinct
+admission/draining behavior described below.
+
+With working status delivery, every file occurrence receives one started record
+and one terminal record. The final summary follows all terminal records and
+counts timeouts, resource stops, and other run errors as failed; successful plus
+failed equals the number of requested runs. Completion order does not change
+these counts. Failed-run records include the original diagnostic;
+timeout/resource failures have explicit terminal labels.
+
+| Exit status | Meaning |
+| --- | --- |
+| 0 | Every run and status write succeeded, including any handled script errors. |
+| 1 | At least one run or status write failed. The number/type of failures does not change the status. |
+| 2 | Invalid command-line usage; no scripts execute. |
+
+An embedded host can cancel one Engine run using its own `OperationControl`.
+Already-active siblings with independent controls continue, even when they share
+the same registered operation and ownership pool. A cancelled run returns
+`RunOutcome::Cancelled` after cooperative cleanup; it releases its reservations
+without releasing a sibling's live reservations. To arrange individual stops
+under a common parent, give runs separate `parent.child(None)` controls. Giving
+them clones of one control deliberately couples their cancellation; cancelling
+the parent stops all descendants. Engine returns individual `RunResult` values,
+leaving host scheduling and aggregate status to the caller. The CLI currently
+exposes deadlines, but no per-run cancellation command or coordinated signal
+handler; sending an OS signal is not a way to obtain this cleanup/summary contract.
 
 ## Output and reporting
 
 Log retains its normal stdout representation. Each checked Log record holds the
 stdout lock through its write, so records from different runs can appear in any
-order but do not interleave their bytes. A string can itself contain newlines.
+order but do not interleave their bytes. Within one run, statement effects and
+Log records retain source execution order, including across awaited calls.
+A string can itself contain newlines. Started records follow command-line
+admission order; terminal records follow result collection order, not file order
+or a guaranteed wall-clock completion order. A run's started record precedes
+its terminal record.
+
 There is no cross-stream ordering guarantee between stdout and stderr. Debug
 traces keep their original source coordinates; they can interleave with other
 traces and status records. Run IDs belong to lifecycle/terminal records; this
@@ -96,10 +142,15 @@ separate roadmap work.
 The CLI matrix covers duplicate files, inputs/scopes/module caches, stable IDs,
 mixed failures, per-run quotas, parser bounds, whole Log records, and single-file
 compatibility. Linux FIFO tests verify concurrent entry and capacity retention,
-out-of-order completion IDs, and fresh deadlines for queued runs. Pipe/device
-tests cover reporting failure before effects, draining after partial reporting,
+out-of-order completion IDs, fresh deadlines for queued runs, and a failing run
+leaving both an active reader and a queued run able to finish. The corresponding
+Engine test holds two invocations of a shared operation active, cancels one,
+checks independent cleanup/reservations, then releases the successful sibling.
+Pipe/device tests cover reporting failure before effects, draining after partial reporting,
 and sibling progress while status output is blocked. R32 contributes two corpus
 cases; examples 21–22 also run independently in the example suite.
 
 [Validation evidence](parallel-cli-evidence.json) records the actual profiles,
 mutation outcomes, and remaining observations.
+[Concurrency policy evidence](concurrency-policy-evidence.json) records the
+additional overlap checks and their validation without changing the runtime.

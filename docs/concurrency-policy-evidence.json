@@ -1,0 +1,399 @@
+{
+  "schema": 1,
+  "captured_at": "2026-09-28T09:02:25.646561+00:00",
+  "base_revision": "3c9d8b893f1eb8f72d9f3ee879e22f0a9351c0c5",
+  "scope": "Specify the existing concurrency policy and close active-overlap test gaps. Runtime and dependencies are unchanged.",
+  "policy": {
+    "fail_fast": "Uncaught failure stops that script; CLI batches finish every admitted and queued sibling. Handled errors can succeed. No batch fail-fast flag.",
+    "cancellation": "Embedded runs with independent controls can be stopped individually. Separate children of one parent isolate sibling cancellation. Operation captures and pools remain shared.",
+    "exit_status": {
+      "0": "All runs and status delivery succeeded",
+      "1": "At least one run or reporter failed",
+      "2": "Invalid arguments, before execution"
+    },
+    "output": "Within-run execution order and whole Log/status records; unspecified cross-run Log order and terminal collection order; no cross-stream ordering guarantee.",
+    "reporting_failure": "Stop queued admission, drain admitted runs, suppress later records, and return failure."
+  },
+  "tests": [
+    {
+      "name": "linux::script_failure_keeps_admitted_and_queued_siblings_running",
+      "file": "tests/parallel_cli/linux.rs",
+      "mechanism": "Connect two admitted source FIFOs with --jobs 2, verify a third remains queued, then supply a script that logs 10, fails on missing, and must skip Log 999. The third FIFO must enter after the failure while the second remains blocked. Release both siblings, including a handled error in the third, and verify preserved output, exactly-once status records, two successes/one failure, exit 1.",
+      "watchdogs_seconds": {
+        "fifo_entry": 5,
+        "child_exit": 10
+      },
+      "cleanup": "Child guard kills/reaps on failure; FIFO handles close on unwind."
+    },
+    {
+      "name": "cancelling_one_active_run_releases_only_its_shared_operation_reservations",
+      "file": "tests/async_execution.rs",
+      "mechanism": "Wait for two nested DSL calls into one shared NativeOperation. Cancel one sibling control only after both enter. Verify Cancelled, handler/tail bypass, retained earlier binding, first Drop, live sibling reservation/control, unchanged parent, then release the sibling and verify success and zero shared charges.",
+      "watchdogs_seconds": {
+        "entry_and_result": 5
+      },
+      "cleanup": "Async resource Drop counters and operation usage are checked explicitly."
+    }
+  ],
+  "environment": {
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)"
+  },
+  "random_seed": null,
+  "adapters": "In-process Rust NativeOperation test callback; Linux FIFOs for CLI overlap; no external services.",
+  "input_sha256": {
+    "Cargo.toml": "0e724e0e7c3ad6bb368a399613341dfe937920c744a7225736535ac26649e3b4",
+    "Cargo.lock": "ee5ce661ccea792322e70e11e062ec4d69e7cd7427dd17f3c2a076e0f48b1edc",
+    "src/main.rs": "9a77f751a16cbb8c38c8d4b85b0fdda9540e213566609f21f6bc387198c83449",
+    "src/batch.rs": "c5dda9f1ea268f60b755772e184b1a84699e06e52ede27f0c1ddd87b1ca391ae",
+    "src/core/run.rs": "59c348979b4a5e2fa2cd56bcb4d8f2308c48200caf9a2f101cd129484e544efb",
+    "src/core/run/asynchronous.rs": "34d5e4003829fa87560b46175955b4da61bd42709f81af488d746636ed81021f",
+    "src/core/operation.rs": "ba4ceed3144e87fa3c815e319677ad0468e622f9e35ee3c5ab83f6dc1361980b",
+    "src/core/eval/execution.rs": "38e563747cfb083c1283ea5a2df3deee2468e0a681d738ce9a10475e2ac1145b",
+    "tests/async_execution.rs": "b65564337f7e2328f7109a8943e2bdc2e591799b7161205625d784565ff656d1",
+    "tests/parallel_cli.rs": "8a27aa5ba90d7cdfe1c8317db7384bd20633b2d1e65c9a98224a88dbc2ad0a15",
+    "tests/parallel_cli/linux.rs": "ee67d35cb4d5f2e8dc68b975cddf9e9b95fe9041daf0bafbc5ff802c35838937",
+    "tests/support/cli_harness.rs": "7ada184407f64ce3fc2038829def7e0e37b3694b0436ea284f54e3758260853b"
+  },
+  "runtime_tree": {
+    "file_count": 112,
+    "sha256": "b682607d441ee63a1961bc4efb03a49d3ab5206d1e15f358efbc5d05dfee8f1e",
+    "algorithm": "SHA-256 of UTF-8 JSON mapping repository paths to file SHA-256; sorted keys, comma/colon separators, no trailing newline."
+  },
+  "test_tree": {
+    "file_count": 131,
+    "sha256": "cd113fdc7d46db2bb2902da291282231416eed9a63b42691160610db9977aef0",
+    "algorithm": "SHA-256 of UTF-8 JSON mapping repository paths to file SHA-256; sorted keys, comma/colon separators, no trailing newline."
+  },
+  "validation": [
+    {
+      "id": "gnu-debug",
+      "command": [
+        "cargo",
+        "test",
+        "--locked"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 21.275,
+      "log": "target/concurrency-policy/gnu-debug.log",
+      "log_sha256": "8a41f2ff6b7a41fe3f37fa04d8bc71875c3e405a35d9ad1d46fc278cea0a4ac7",
+      "summaries": 65,
+      "passed": 1367,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "gnu-release",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--release"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 39.883,
+      "log": "target/concurrency-policy/gnu-release.log",
+      "log_sha256": "94ead31dfc245f7d5c59f0b4816487039aa59aae2f8a5e7b7469ba158edab592",
+      "summaries": 65,
+      "passed": 1367,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "musl-debug",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 32.183,
+      "log": "target/concurrency-policy/musl-debug.log",
+      "log_sha256": "bd30d4641ee7443cad37d32049a6c4abc852d98e69e86e3985c8ec6cdf433b80",
+      "summaries": 65,
+      "passed": 1367,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "musl-release",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--release"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 47.017,
+      "log": "target/concurrency-policy/musl-release.log",
+      "log_sha256": "c363ad6afa5804fb413e018a4aa235de560822f9cfc90ec62e26633ff5abcf59",
+      "summaries": 65,
+      "passed": 1367,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "clippy-gnu",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 2.58,
+      "log": "target/concurrency-policy/clippy-gnu.log",
+      "log_sha256": "a1f782588a1f95d621fe15469d98f1fd9460ebc136270763eafe5a30387bea8a",
+      "summaries": 0,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "clippy-musl",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--target",
+        "x86_64-unknown-linux-musl",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 2.673,
+      "log": "target/concurrency-policy/clippy-musl.log",
+      "log_sha256": "3c90105927ee2a32c3ec417e8aaf2d5ffc8bc7cf6abe0ae942cf5aad0163225f",
+      "summaries": 0,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "format",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 0.465,
+      "log": "target/concurrency-policy/format.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summaries": 0,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "id": "diff",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 0.004,
+      "log": "target/concurrency-policy/diff.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summaries": 0,
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "test_sensitivity_probes": {
+    "scope": "Two test-sensitivity probes only; not a replacement for the fixed mutation campaign or a project mutation score.",
+    "snapshot_record": "target/mutation-core/concurrency-policy-dchm6chb/summary.json",
+    "snapshot_record_sha256": "8461b6161aa18cdf57702aa9cd1f1a59a23eb957dae1b4af2e3591c7821ea2fe",
+    "replay": "In an isolated checkout of this revision, run each exact test command unmodified. Apply its before/after substitution exactly once, run the recorded build then exact test, and restore the source. Baselines must pass; mutated builds must succeed and tests must report assertion failures. Command watchdog timeouts or compiler failures do not count as caught; these tests use bounded handshake assertions to reject missing progress.",
+    "frozen_probes": [
+      {
+        "id": "batch-returns-on-first-error",
+        "file": "src/batch.rs",
+        "before": "            failed += 1;",
+        "after": "            failed += 1;\n            return Err(CliError::Batch { failed, total });",
+        "suite": "parallel_cli",
+        "test": "linux::script_failure_keeps_admitted_and_queued_siblings_running"
+      },
+      {
+        "id": "async-parent-control-lost",
+        "file": "src/core/eval/execution.rs",
+        "before": "let pending = operation.invoke(values, control);",
+        "after": "let pending = operation.invoke(values, OperationControl::default());\n                drop(control);",
+        "suite": "async_execution",
+        "test": "cancelling_one_active_run_releases_only_its_shared_operation_reservations"
+      }
+    ],
+    "outcomes": [
+      {
+        "id": "batch-returns-on-first-error-baseline",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "parallel_cli",
+            "--no-run"
+          ],
+          "returncode": 0,
+          "timeout": false,
+          "elapsed_seconds": 8.078,
+          "log": "batch-returns-on-first-error-baseline-build.log",
+          "log_sha256": "fc9846403f38a8075de81520111e3ad50dfcae644ae4202545b3899b7e7d9172"
+        },
+        "test": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "parallel_cli",
+            "linux::script_failure_keeps_admitted_and_queued_siblings_running",
+            "--",
+            "--exact"
+          ],
+          "returncode": 0,
+          "timeout": false,
+          "elapsed_seconds": 0.064,
+          "log": "batch-returns-on-first-error-baseline-test.log",
+          "log_sha256": "ea1821bbca43bade64d5968f428def864a51fa988d4f5c9b30cd3d173c67154d"
+        },
+        "log_text": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s\n     Running tests/parallel_cli.rs (target/debug/deps/parallel_cli-d59f529d2d902496)\n\nrunning 1 test\ntest linux::script_failure_keeps_admitted_and_queued_siblings_running ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.03s\n\n",
+        "status": "passed"
+      },
+      {
+        "id": "batch-returns-on-first-error-mutated",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "parallel_cli",
+            "--no-run"
+          ],
+          "returncode": 0,
+          "timeout": false,
+          "elapsed_seconds": 0.615,
+          "log": "batch-returns-on-first-error-mutated-build.log",
+          "log_sha256": "eb8bbae7c3854f36c73bd6374f2f68674698483c10d54363bafebb943a281f42"
+        },
+        "test": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "parallel_cli",
+            "linux::script_failure_keeps_admitted_and_queued_siblings_running",
+            "--",
+            "--exact"
+          ],
+          "returncode": 101,
+          "timeout": false,
+          "elapsed_seconds": 5.073,
+          "log": "batch-returns-on-first-error-mutated-test.log",
+          "log_sha256": "bfa4b91ce9c8d8f6e9cfa0c0a391087953f79e0c85b4e7fe1a0ab0825521955e"
+        },
+        "log_text": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s\n     Running tests/parallel_cli.rs (target/debug/deps/parallel_cli-d59f529d2d902496)\n\nrunning 1 test\ntest linux::script_failure_keeps_admitted_and_queued_siblings_running ... FAILED\n\nfailures:\n\n---- linux::script_failure_keeps_admitted_and_queued_siblings_running stdout ----\n\nthread 'linux::script_failure_keeps_admitted_and_queued_siblings_running' (625272) panicked at tests/parallel_cli/linux.rs:92:17:\nreader never entered: \"/home/dhilipsiva/projects/dhilipsiva/botwork/target/mutation-core/concurrency-policy-dchm6chb/source/target/cli-cases/625271-1790586074219007232-0/queued.botwork\"\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    linux::script_failure_keeps_admitted_and_queued_siblings_running\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 5.02s\n\nerror: test failed, to rerun pass `--test parallel_cli`\n",
+        "status": "caught"
+      },
+      {
+        "id": "async-parent-control-lost-baseline",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "async_execution",
+            "--no-run"
+          ],
+          "returncode": 0,
+          "timeout": false,
+          "elapsed_seconds": 1.172,
+          "log": "async-parent-control-lost-baseline-build.log",
+          "log_sha256": "229791cbf211ff5b820ddfaf01ab60db0b73411768ab4404d2f2cd6eacd5b654"
+        },
+        "test": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "async_execution",
+            "cancelling_one_active_run_releases_only_its_shared_operation_reservations",
+            "--",
+            "--exact"
+          ],
+          "returncode": 0,
+          "timeout": false,
+          "elapsed_seconds": 0.064,
+          "log": "async-parent-control-lost-baseline-test.log",
+          "log_sha256": "3a177012f868937259b2ea7ff915d947030b411e9163055e86afda586bd1033d"
+        },
+        "log_text": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s\n     Running tests/async_execution.rs (target/debug/deps/async_execution-a4e5bee5731a3889)\n\nrunning 1 test\ntest cancelling_one_active_run_releases_only_its_shared_operation_reservations ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s\n\n",
+        "status": "passed"
+      },
+      {
+        "id": "async-parent-control-lost-mutated",
+        "build": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "async_execution",
+            "--no-run"
+          ],
+          "returncode": 0,
+          "timeout": false,
+          "elapsed_seconds": 1.819,
+          "log": "async-parent-control-lost-mutated-build.log",
+          "log_sha256": "a20272c180a87cfe7b22ca08a054e37c1d15c3be060d2ddd072f768b40a8c022"
+        },
+        "test": {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--test",
+            "async_execution",
+            "cancelling_one_active_run_releases_only_its_shared_operation_reservations",
+            "--",
+            "--exact"
+          ],
+          "returncode": 101,
+          "timeout": false,
+          "elapsed_seconds": 5.074,
+          "log": "async-parent-control-lost-mutated-test.log",
+          "log_sha256": "f29b5100765e526911130df13e3d499fab12cd124785a8161aecacf30f4d9e9c"
+        },
+        "log_text": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s\n     Running tests/async_execution.rs (target/debug/deps/async_execution-a4e5bee5731a3889)\n\nrunning 1 test\ntest cancelling_one_active_run_releases_only_its_shared_operation_reservations ... FAILED\n\nfailures:\n\n---- cancelling_one_active_run_releases_only_its_shared_operation_reservations stdout ----\n\nthread 'cancelling_one_active_run_releases_only_its_shared_operation_reservations' (626580) panicked at tests/async_execution.rs:599:10:\ncancellation must release the first run: Elapsed(())\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    cancelling_one_active_run_releases_only_its_shared_operation_reservations\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 5.00s\n\nerror: test failed, to rerun pass `--test async_execution`\n",
+        "status": "caught"
+      }
+    ],
+    "fixed_campaign": "The existing frozen core mutation scope/catalogue and its prior results are unchanged. These two probes do not establish a new project mutation score."
+  },
+  "boundaries": [
+    "No CLI per-run cancellation command, signal coordination, batch fail-fast switch, or hard shutdown guarantee was added.",
+    "Started blocking work must still return. Async Drop tests do not prove bounded cleanup for arbitrary adapters or blocked syscalls.",
+    "Session/report/artifact isolation, immutable module caching, adapter-specific sharing, 1000-run stress, and performance measurements remain separate TODOs.",
+    "The FIFO test is Linux-only; no new non-Linux platform claim. Hosted CI was not observed.",
+    "Prior worker-startup Unverified/NotStarted observation in docs/async-execution-evidence.json and musl debug timing sensitivity in docs/nonblocking-io-evidence.json remain historical open observations. No failure occurred in these four full-suite runs."
+  ]
+}
