@@ -1,0 +1,7 @@
+|start| = |@{ Parse Date Time |"2024-11-03 01:30:00"| Using |"%F %T"| In |"America/New_York"| Choosing |"earlier"| }|
+|end| = |@{ Add Duration |"PT1H"| To Date Time |start| }|
+Log |start|
+Log |@{ Convert Date Time |end| To |"America/New_York"| }|
+Log |@{ Difference Between Date Times |end| And |start| }|
+Log |@{ Duration Nanoseconds |"PT0.000000001S"| }|
+Log |@{ Format Date Time |end| Using |"%F %T %Z"| In |"America/New_York"| }|

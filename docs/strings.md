@@ -1,7 +1,7 @@
 # String statements
 
-The default Engine and CLI provide sixteen string signatures, bringing the fixed
-catalogue to 41 statements. All transformations return independent values for
+The default Engine and CLI provide sixteen string signatures as part of the
+57-statement fixed catalogue. All transformations return independent values for
 ordinary assignment. They preserve their inputs and require the declared kinds;
 there is no automatic String conversion in joining, splitting, or matching.
 Format String explicitly renders arbitrary supplied values as described below.
@@ -30,7 +30,7 @@ Names follow ordinary case-insensitive statement matching.
 parameter, return, and error metadata. The fixed names occupy root slots; existing
 conflicting declarations need renaming or qualification. Host registrations made
 before initialization remain intact, repeated initialization is idempotent, and
-child scopes may shadow the names. All 41 table slots count toward snapshot work;
+child scopes may shadow the names. All 57 table slots count toward snapshot work;
 fixed metadata remains exempt from user registry retention admission.
 
 ## Formatting, splitting, and replacement

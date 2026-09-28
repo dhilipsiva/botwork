@@ -61,7 +61,7 @@ fn native_metadata_counts_keys_labels_docs_errors_and_sources_exactly() {
         .unwrap();
     context.init_statements();
     assert_eq!(evaluate("Read |7|", &mut context).unwrap().to_string(), "7");
-    assert_eq!(context.statement_signatures().len(), 42);
+    assert_eq!(context.statement_signatures().len(), 58);
     assert!(context
         .statement_signature("Read |x|")
         .unwrap()
@@ -129,7 +129,7 @@ fn zero_registry_budgets_keep_fixed_builtin_initialization_infallible() {
     let mut context = Context::with_limits(limits(zero.clone())).unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 41);
+    assert_eq!(context.statement_signatures().len(), 57);
     assert!(context
         .statement_signature("Log |value|")
         .unwrap()

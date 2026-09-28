@@ -24,6 +24,20 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
 }
 
 #[test]
+fn datetime_example_resolves_a_repeated_local_time_explicitly() {
+    assert_example(
+        "31-datetime.botwork",
+        &[
+            "2024-11-03T05:30:00Z",
+            "2024-11-03T01:30:00-05:00",
+            "PT1H",
+            "1",
+            "2024-11-03 01:30:00 EST",
+        ],
+    );
+}
+
+#[test]
 fn string_example_transforms_unicode_and_extracts_regex_values() {
     assert_example(
         "30-strings.botwork",

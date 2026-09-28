@@ -119,6 +119,15 @@ has 106 entries, including fourteen new string faults. The `strings` integration
 suite joins the allocation oracle; [string evidence](strings-evidence.json) records
 the focused campaign without claiming a new complete generated score.
 
+Version 14 adds the date/time parser, zone resolver, duration arithmetic, and
+bounded formatter. The targeted catalogue has 121 entries, including fifteen
+new faults for unknown offsets, excess precision, leap seconds, DST choices and
+gaps, the named-zone horizon, historical offsets, negative epochs, duration
+units/sign/order/overflow, local zone fields, difference direction, and premature
+format allocation. The `datetime` integration suite joins the allocation oracle.
+[Date/time evidence](datetime-evidence.json) records the focused campaign; a new
+complete generated score is not claimed.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

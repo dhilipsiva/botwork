@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "mutations": [
     {
       "id": "precedence-products",
@@ -742,6 +742,111 @@
       "file": "src/core/eval/builtins/strings/patterns.rs",
       "before": "if pattern.len() > PATTERN_BYTES {",
       "after": "if pattern.len() >= PATTERN_BYTES {"
+    },
+    {
+      "id": "datetime-unknown-offset",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "        || text == \"-00:00\"\n",
+      "after": ""
+    },
+    {
+      "id": "datetime-excess-fraction",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "if !(1..=9).contains(&length)",
+      "after": "if !(1..=10).contains(&length)"
+    },
+    {
+      "id": "datetime-leap-seconds",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "if parsed.nanosecond() >= SECOND as u32 {",
+      "after": "if false {"
+    },
+    {
+      "id": "datetime-fold-choice",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "\"earlier\" => a.min(b),",
+      "after": "\"earlier\" => a.max(b),"
+    },
+    {
+      "id": "datetime-named-horizon",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "(1800..2100).contains(&year)",
+      "after": "(1800..2101).contains(&year)"
+    },
+    {
+      "id": "datetime-second-offset",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "if seconds % 60 != 0 {",
+      "after": "if false {"
+    },
+    {
+      "id": "datetime-before-epoch",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "value.div_euclid(SECOND)",
+      "after": "value / SECOND"
+    },
+    {
+      "id": "datetime-elapsed-day",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/duration.rs",
+      "before": "const DAY: i128 = 24 * HOUR;",
+      "after": "const DAY: i128 = 23 * HOUR;"
+    },
+    {
+      "id": "datetime-duration-sign",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/duration.rs",
+      "before": "Ok(if negative { -total } else { total })",
+      "after": "Ok(total)"
+    },
+    {
+      "id": "datetime-duration-order",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/duration.rs",
+      "before": "if next <= rank || fractional && suffix != b'S' {",
+      "after": "if fractional && suffix != b'S' {"
+    },
+    {
+      "id": "datetime-local-zone-field",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "Item::Fixed(spec) if local => !matches!(",
+      "after": "Item::Fixed(spec) if false => !matches!("
+    },
+    {
+      "id": "datetime-duration-wrap",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime.rs",
+      "before": "left.checked_add(right)",
+      "after": "Some(left.wrapping_add(right))"
+    },
+    {
+      "id": "datetime-difference-direction",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime.rs",
+      "before": "duration::render(context, left - right)",
+      "after": "duration::render(context, right - left)"
+    },
+    {
+      "id": "datetime-format-intermediate",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "strings::formatted(context, |output| delayed.write_to(output))",
+      "after": "strings::formatted(context, |output| write!(output, \"{delayed}\"))"
+    },
+    {
+      "id": "datetime-local-gap",
+      "area": "datetime",
+      "file": "src/core/eval/builtins/datetime/moment.rs",
+      "before": "LocalResult::None => {\n                return Err(invalid(\n                    context,\n                    \"The local time does not exist in this timezone\",\n                ))\n            }",
+      "after": "LocalResult::None => naive.and_utc(),"
     }
   ]
 }

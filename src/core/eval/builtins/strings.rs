@@ -6,6 +6,14 @@ mod build;
 mod patterns;
 mod template;
 
+// Share the two-pass bounded writer with other standard statement catalogues.
+pub(super) fn formatted(
+    context: &Context,
+    render: impl Fn(&mut dyn std::fmt::Write) -> std::fmt::Result,
+) -> TemporaryResult {
+    build::render(context, |output, _| render(output).map_err(Into::into))
+}
+
 #[derive(Clone, Copy)]
 pub(in crate::core::eval) enum StringOp {
     Format,

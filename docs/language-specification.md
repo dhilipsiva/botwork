@@ -204,7 +204,11 @@ The library's program evaluator returns the final top-level statement's normal r
 
 **B3 — String statements.** Provide explicit positional/named formatting, literal joining/splitting/replacement/membership, line splitting, Unicode scalar length/slicing, Unicode trim/case conversion, and bounded Unicode regex search/extraction. Preserve exact UTF-8 values without normalization, strict parameter kinds, immutable return values, eager arguments, call diagnostics, and assignment preservation. Admit complete output metrics and live temporary overlap before result copies. Distinguish literal replacement text from regex syntax and never evaluate formatted content as code. Regex operations use bounded compilation/cache/search accounting and the async worker boundary; stop checks remain cooperative around individual library calls. [String reference](strings.md) defines all sixteen signatures, braces/empty values, scalar versus grapheme behavior, regex escaping/captures, budgets, and examples.
 
+**B4 — Date/time statements.** Provide strict explicit-offset timestamp parsing, calendar formatting, explicit fixed/IANA timezone conversion, exact elapsed durations and arithmetic, instant/duration comparisons, and wall-clock capture. Preserve nanosecond precision and checked ranges; reject leap seconds, unknown offsets, nonexistent local times, and implicit ambiguity choices. Local parsing must not silently ignore timezone/epoch fields. Named-zone operations respect the bundled transition horizon. Admit output metrics and live temporary overlap before result allocation; preserve eager typed arguments, diagnostics, and failed-assignment destinations. [Date/time reference](datetime.md) defines all sixteen signatures, ISO duration subset, canonical forms, format directives, daylight-saving policy, and supported ranges.
+
 ## Evidence and Implementation Gaps
+
+B4 evidence includes synchronous/asynchronous date/time and arithmetic boundary tests, allocator observations, four conformance cases, an executed reference block, and example 31.
 
 B3 evidence includes string, planner, cancellation, worker-admission, and allocator tests; four conformance cases; an executed reference block; and example 30.
 

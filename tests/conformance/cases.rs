@@ -181,6 +181,10 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("datetime-statements", include_str!("../../examples/31-datetime.botwork"), "2024-11-03T05:30:00Z\n2024-11-03T01:30:00-05:00\nPT1H\n1\n2024-11-03 01:30:00 EST\n", &["B4"], &[]),
+        success("datetime-boundaries", r#"Assert |@{ Subtract Duration |"PT0.000000001S"| From Date Time |"1970-01-01T00:00:00Z"| }| Equals |"1969-12-31T23:59:59.999999999Z"|"#, "", &["B4"], &["B4"]),
+        failure("datetime-gap", r#"Parse Date Time |"2024-03-10 02:30:00"| Using |"%F %T"| In |"America/New_York"| Choosing |"earlier"|"#, "", "BW3003", "does not exist", &["B4"]),
+        failure("datetime-duration-overflow", r#"Parse Duration |"PT170141183460469231731687303715.884105728S"|"#, "", "BW3002", "supported range", &["B4"]),
         success("string-statements", include_str!("../../examples/30-strings.botwork"), "Items: tea / coffee /  / water\ntea, coffee, , water\nSTRASSE\n🙂é\n[\"42\", \"3\"]\n[\"order=42\", \"42\"]\n", &["B3"], &[]),
         success("string-boundaries", "Assert |@{ Slice String |\"🙂\"| From |1| To |1| }| Equals |\"\"|\nAssert |@{ Find Matches In |\"é\"| Regex |\"\"| }| Equals |[\"\", \"\"]|\nAssert |@{ Join Strings |[]| With |\"\"| }| Equals |\"\"|", "", &["B3"], &["B3"]),
         failure("string-missing-field", "Format String |\"{absent}\"| With |{}|", "", "BW3003", "format field", &["B3"]),

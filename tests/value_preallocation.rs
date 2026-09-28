@@ -949,9 +949,9 @@ fn import_cycle_rejection_formats_no_large_joined_path_chain() {
     let mut directory = cleanup.0.clone();
     // Keep each filesystem path below typical Unix path limits while the
     // complete 13-member diagnostic chain still exceeds the observed threshold.
-    // The 41-entry fixed statement table now exceeds 8 KiB; use longer paths
-    // and a 16 KiB threshold to keep measuring diagnostic payload allocations.
-    for _ in 0..12 {
+    // The 57-entry fixed statement table now exceeds 16 KiB; use longer paths
+    // and a 32 KiB threshold to keep measuring diagnostic payload allocations.
+    for _ in 0..24 {
         directory.push("x".repeat(120));
     }
     std::fs::create_dir_all(&directory).unwrap();
@@ -976,7 +976,7 @@ fn import_cycle_rejection_formats_no_large_joined_path_chain() {
             },
             ..RunOptions::default()
         };
-        let (run, large) = observe(16 * 1024, || {
+        let (run, large) = observe(32 * 1024, || {
             engine.run_source("entry", "Import |\"module0.botwork\"| As |lib|", options)
         });
         let error = run.result.unwrap_err();
@@ -1966,6 +1966,54 @@ fn missing_format_fields_admit_diagnostic_text_before_copying_the_field_name() {
         .to_string()
         .contains("diagnostic text bytes"));
     assert_eq!(copies, 1, "only the evaluated template argument is copied");
+}
+
+#[test]
+fn datetime_formatting_rejects_before_any_large_result_or_intermediate_allocation() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+        run::TemporaryLimits,
+    };
+    let output_bytes = 160_000;
+    let program = Program::parse(
+        "date-allocation",
+        "Format Date Time |\"2024-01-01T00:00:00Z\"| Using |pattern| In |\"UTC\"|",
+    )
+    .unwrap();
+    for temporary in [false, true] {
+        for allowed in [false, true] {
+            let deficit = usize::from(!allowed);
+            let mut context = Context::with_limits(RunLimits {
+                values: ValueLimits {
+                    string_bytes: output_bytes - if temporary { 0 } else { deficit },
+                    ..Default::default()
+                },
+                temporaries: TemporaryLimits {
+                    payload_bytes: output_bytes + 80_000 + 23 - if temporary { deficit } else { 0 },
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+            context.init_statements();
+            context
+                .set_input_variables(BTreeMap::from([(
+                    "pattern".into(),
+                    Literal::String("%Y".repeat(40_000)),
+                )]))
+                .unwrap();
+            let (result, copies) = observe(128 * 1024, || {
+                evaluate_program_detailed(&program, &mut context)
+            });
+            assert_eq!(result.is_ok(), allowed, "temporary={temporary}: {result:?}");
+            assert_eq!(
+                copies,
+                usize::from(allowed),
+                "only admitted final output may allocate this many bytes"
+            );
+        }
+    }
 }
 
 #[test]
