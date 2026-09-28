@@ -82,6 +82,9 @@ pub enum WorkerCleanup {
     Reaped,
     /// The guardian reaped the worker and every adopted descendant, then exited.
     TreeReaped,
+    /// The kernel reaped a namespace init and all its processes. Worker status
+    /// was not verified; this cleanup evidence can never establish success.
+    NamespaceReaped,
     /// Cleanup exceeded its allowance; the supervisor still owns capacity.
     Pending,
     /// Child ownership was lost. Its slot is quarantined, never silently reused.
@@ -164,6 +167,8 @@ struct Shared {
     guardian: Option<PathBuf>,
     #[cfg(target_os = "linux")]
     journal: Option<journal::WorkerJournal>,
+    #[cfg(target_os = "linux")]
+    namespaced: bool,
     state: Mutex<State>,
 }
 
@@ -211,6 +216,23 @@ impl WorkerPool {
         Ok(pool)
     }
 
+    /// Contain guardian failure with a fresh Linux user/PID/mount namespace.
+    /// Requires clone3, unprivileged namespaces, and a private proc mount.
+    /// There is no fallback. The optional journal persists transport evidence.
+    #[cfg(target_os = "linux")]
+    pub fn with_pid_namespace(
+        limits: WorkerLimits,
+        guardian: PathBuf,
+        journal: Option<journal::WorkerJournal>,
+    ) -> DiagnosticResult<Self> {
+        let mut pool = Self::with_process_tree(limits, guardian)?;
+        let owner = Arc::get_mut(&mut pool.0).expect("new pool is unique");
+        let shared = Arc::get_mut(&mut owner.0).expect("new state is unique");
+        shared.journal = journal;
+        shared.namespaced = true;
+        Ok(pool)
+    }
+
     fn configured(limits: WorkerLimits, _guardian: Option<PathBuf>) -> DiagnosticResult<Self> {
         let now = Instant::now();
         if now
@@ -233,6 +255,8 @@ impl WorkerPool {
             guardian: _guardian,
             #[cfg(target_os = "linux")]
             journal: None,
+            #[cfg(target_os = "linux")]
+            namespaced: false,
             state: Mutex::new(State {
                 closed: false,
                 next_id: 1,

@@ -156,6 +156,73 @@ fn every_post_launch_os_boundary_can_be_stalled_without_blocking_cancellation() 
 }
 
 #[test]
+fn namespace_reap_stall_keeps_pending_ownership_until_kernel_wait_completes() {
+    let pool = WorkerPool::with_pid_namespace(
+        WorkerLimits {
+            max_in_flight: NonZeroUsize::new(1).unwrap(),
+            timeout: Duration::from_secs(5),
+            cleanup_timeout: Duration::from_millis(20),
+            ..Default::default()
+        },
+        "/bin/true".into(),
+        None,
+    )
+    .unwrap();
+    let mut gate = Gate::new(&pool, Point::Reap, false);
+    let retained = Arc::new(());
+    let weak = Arc::downgrade(&retained);
+    let handle = pool
+        .start_retained(
+            command(None),
+            vec![],
+            OperationControl::default(),
+            Some(retained),
+        )
+        .unwrap();
+    let pid = gate.entered();
+    let delivered = report(handle);
+    assert_eq!(delivered.report.cleanup, WorkerCleanup::Pending);
+    assert_eq!(delivered.report.outcome, WorkerOutcome::Failed);
+    assert!(!delivered.report.progress_complete);
+    drop(delivered);
+    assert!(weak.upgrade().is_some());
+    assert!(pool
+        .start(command(None), vec![], OperationControl::default())
+        .is_err());
+    gate.release();
+    until(|| pool.snapshot().active.is_empty() && weak.upgrade().is_none());
+    let record = &pool.snapshot().completed[0];
+    assert_eq!(record.outcome, WorkerOutcome::Failed);
+    assert_eq!(record.cleanup, WorkerCleanup::NamespaceReaped);
+    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+}
+
+#[test]
+fn namespace_wait_ownership_loss_still_quarantines_instead_of_claiming_kernel_reap() {
+    let pool =
+        WorkerPool::with_pid_namespace(WorkerLimits::default(), "/bin/true".into(), None).unwrap();
+    let mut gate = Gate::new(&pool, Point::Observe, false);
+    let handle = pool
+        .start(command(None), vec![], OperationControl::default())
+        .unwrap();
+    let pid = gate.entered();
+    let mut status = 0;
+    assert_eq!(
+        unsafe { libc::waitpid(pid as i32, &mut status, 0) },
+        pid as i32
+    );
+    gate.release();
+    let delivered = report(handle);
+    assert_eq!(delivered.report.cleanup, WorkerCleanup::Unverified);
+    assert_eq!(delivered.report.outcome, WorkerOutcome::Interrupted);
+    assert!(!delivered.report.progress_complete);
+    assert_eq!(
+        pool.snapshot().active[0].cleanup,
+        Some(WorkerCleanup::Unverified)
+    );
+}
+
+#[test]
 fn successful_exit_with_stalled_cleanup_publishes_failure_before_execution_deadline() {
     for point in [Point::Terminate, Point::Reap] {
         let pool = pool();

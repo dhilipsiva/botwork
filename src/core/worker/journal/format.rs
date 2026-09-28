@@ -60,6 +60,7 @@ fn encode(frame: Frame) -> [u8; SLOT_BYTES] {
             WorkerCleanup::TreeReaped => 3,
             WorkerCleanup::Pending => 4,
             WorkerCleanup::Unverified => 5,
+            WorkerCleanup::NamespaceReaped => 6,
         };
         bytes[8] = u8::from(host.io_complete)
             | (u8::from(host.progress_complete) << 1)
@@ -126,6 +127,7 @@ fn decode(bytes: &[u8; SLOT_BYTES], role: Role) -> io::Result<Frame> {
                 3 => WorkerCleanup::TreeReaped,
                 4 => WorkerCleanup::Pending,
                 5 => WorkerCleanup::Unverified,
+                6 => WorkerCleanup::NamespaceReaped,
                 _ => return Err(bad()),
             };
             let host = JournalMetadata {

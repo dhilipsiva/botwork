@@ -12,6 +12,8 @@ use std::{
 
 const ARGUMENT: &str = "--botwork-worker-guardian-v1";
 const JOURNAL_ARGUMENT: &str = "--botwork-worker-guardian-journal-v1";
+pub(super) const NAMESPACE_ARGUMENT: &str = "--botwork-worker-namespace-v1";
+pub(super) const NAMESPACE_JOURNAL_ARGUMENT: &str = "--botwork-worker-namespace-journal-v1";
 const CONTROL_FD: i32 = 3;
 const HOST_FD: i32 = 4;
 const JOURNAL_FD: i32 = 5;
@@ -22,6 +24,7 @@ pub(super) fn spawn(
     executable: &Path,
     specification: WorkerCommand,
     record: Option<&File>,
+    namespaced: bool,
 ) -> io::Result<ChildOwner> {
     // Open our own process identity while it cannot have been recycled.
     let raw_host = unsafe { libc::syscall(libc::SYS_pidfd_open, libc::getpid(), 0) };
@@ -41,6 +44,16 @@ pub(super) fn spawn(
     let host_fd = passed_host.as_raw_fd();
     let passed_record = record.map(|file| duplicate(file.as_raw_fd())).transpose()?;
     let record_fd = passed_record.as_ref().map(AsRawFd::as_raw_fd);
+    if namespaced {
+        return super::namespace::spawn(
+            executable,
+            specification,
+            remote_fd,
+            host_fd,
+            record_fd,
+            control,
+        );
+    }
     let mut command = Command::new(executable);
     command
         .arg(if record.is_some() {
@@ -72,7 +85,7 @@ pub(super) fn spawn(
     }
     let child = command.spawn()?;
     Ok(ChildOwner {
-        child,
+        child: child.into(),
         owned: true,
         guardian: Some(control),
         #[cfg(test)]
@@ -138,7 +151,7 @@ fn decode(frame: &[u8; FRAME_BYTES]) -> io::Result<Completion> {
 
 // Duplicate the inherited descriptor into a fresh Rust owner. Do not construct
 // an OwnedFd from a descriptor that another embedding caller might already own.
-fn duplicate(source: i32) -> io::Result<OwnedFd> {
+pub(super) fn duplicate(source: i32) -> io::Result<OwnedFd> {
     let fd = unsafe { libc::fcntl(source, libc::F_DUPFD_CLOEXEC, 6) };
     if fd == -1 {
         return Err(io::Error::last_os_error());
@@ -180,11 +193,27 @@ fn control() -> io::Result<(UnixStream, OwnedFd)> {
 
 pub(crate) fn entry() -> Option<u8> {
     let mut args = std::env::args_os().skip(1);
-    let journaled = match args.next().as_deref() {
-        Some(arg) if arg == std::ffi::OsStr::new(ARGUMENT) => false,
-        Some(arg) if arg == std::ffi::OsStr::new(JOURNAL_ARGUMENT) => true,
+    let (journaled, namespaced) = match args.next().as_deref() {
+        Some(arg) if arg == std::ffi::OsStr::new(ARGUMENT) => (false, false),
+        Some(arg) if arg == std::ffi::OsStr::new(JOURNAL_ARGUMENT) => (true, false),
+        Some(arg) if arg == std::ffi::OsStr::new(NAMESPACE_ARGUMENT) => (false, true),
+        Some(arg) if arg == std::ffi::OsStr::new(NAMESPACE_JOURNAL_ARGUMENT) => (true, true),
         _ => return None,
     };
+    if namespaced {
+        if unsafe { libc::getpid() } != 1 {
+            return Some(2);
+        }
+        // Namespace bootstrap blocks handlers inherited from a multithreaded
+        // embedding host. Exec has now reset caught handlers; unblock signals
+        // before starting the worker so it has an ordinary empty signal mask.
+        let mut empty: libc::sigset_t = unsafe { std::mem::zeroed() };
+        if unsafe { libc::sigemptyset(&mut empty) } == -1
+            || unsafe { libc::sigprocmask(libc::SIG_SETMASK, &empty, std::ptr::null_mut()) } == -1
+        {
+            return Some(2);
+        }
+    }
     Some(match control() {
         Ok((mut control, host)) => {
             let record = if journaled {
@@ -229,7 +258,7 @@ pub(crate) fn entry() -> Option<u8> {
     })
 }
 
-fn frame(kind: u8, status: i32, errno: i32) -> [u8; FRAME_BYTES] {
+pub(super) fn frame(kind: u8, status: i32, errno: i32) -> [u8; FRAME_BYTES] {
     let mut frame = [0; FRAME_BYTES];
     frame[..4].copy_from_slice(MAGIC);
     frame[4] = kind;

@@ -271,7 +271,12 @@ fn launch_worker(
                 .as_ref()
                 .map(|ticket| ticket.file())
                 .transpose()?;
-            guardian::spawn(executable, specification, record.as_deref())
+            guardian::spawn(
+                executable,
+                specification,
+                record.as_deref(),
+                observation.shared.namespaced,
+            )
         }
         None => launch::spawn(specification),
     }

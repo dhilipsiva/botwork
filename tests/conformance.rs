@@ -325,6 +325,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,
+            Input::NamespaceBoundary | Input::NamespaceHelperFailure => {
+                check_namespace_case(&case);
+                continue;
+            }
             Input::JournalBoundary | Input::JournalLimit => {
                 check_journal_case(&case);
                 continue;
@@ -2267,5 +2271,57 @@ fn check_journal_case(_case: &Case) {
             assert!(pool.snapshot().active.is_empty());
             assert_eq!(journal.records().unwrap().len(), 1);
         }
+    }
+}
+
+fn check_namespace_case(_case: &Case) {
+    #[cfg(target_os = "linux")]
+    {
+        use botwork::core::{
+            operation::OperationControl,
+            worker::{WorkerCleanup, WorkerCommand, WorkerLimits, WorkerOutcome, WorkerPool},
+        };
+        let workspace = Harness::new();
+        let helper = if _case.error.is_some() {
+            "/bin/true"
+        } else {
+            env!("CARGO_BIN_EXE_botwork")
+        };
+        let pool =
+            WorkerPool::with_pid_namespace(WorkerLimits::default(), helper.into(), None).unwrap();
+        let handle = pool
+            .start(
+                WorkerCommand {
+                    executable: "/bin/true".into(),
+                    arguments: vec![],
+                    directory: workspace.workspace.clone(),
+                    environment: Default::default(),
+                },
+                vec![],
+                OperationControl::default(),
+            )
+            .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let report = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), handle.wait())
+                .await
+                .unwrap()
+        });
+        if let Some(expected) = _case.error {
+            assert_eq!(report.outcome, WorkerOutcome::Failed);
+            assert_eq!(report.cleanup, WorkerCleanup::NamespaceReaped);
+            assert!(report.exit_status.is_none());
+            let error = report.diagnostic.unwrap();
+            assert_eq!(error.code().as_str(), _case.code.unwrap());
+            assert!(error.to_string().contains(expected));
+        } else {
+            assert_eq!(report.outcome, WorkerOutcome::Succeeded);
+            assert_eq!(report.cleanup, WorkerCleanup::TreeReaped);
+            assert!(report.io_complete && report.progress_complete);
+        }
+        assert!(pool.snapshot().active.is_empty());
     }
 }

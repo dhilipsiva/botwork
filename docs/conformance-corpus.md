@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 143 cases against the 60 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 145 cases against the 61 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -68,6 +68,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | R28 | progress-boundary | progress-incomplete | progress-boundary |
 | R29 | tree-boundary | tree-unverified | tree-boundary |
 | R30 | journal-boundary | journal-limit | journal-boundary |
+| R31 | namespace-boundary | namespace-helper-failure | namespace-boundary |
 
 Boundary expectations include empty programs/collections, absent and None values, both signed integer limits, binary32 comparison precision, right-associated/unary powers, zero iterations, nested returns, failed assignment preservation, exact code-point distinctions, declaration collisions/shadowing, lexical updates, and CRLF/comment contents.
 
@@ -150,3 +151,5 @@ Two portable typed-protocol host cases preserve negative-zero float bits through
 Two shutdown host cases close and drain an owned Linux worker while preserving its cancellation report (empty-pool shutdown on other platforms), or reject an unrepresentable allowance before closing admission.
 
 Two R30 host cases persist a complete worker transport result at the exact journal record limit and reject another invocation with BW8001 before entry. Crash, corruption, and delayed receipt evidence lives in the dedicated journal and worker recovery matrices.
+
+Two R31 host cases require complete namespace-worker transport and verified tree cleanup for success, or preserve failure while releasing kernel-confirmed namespace capacity after a mismatched helper exits. Dedicated subprocess tests cover guardian/host death and unavailable facilities.

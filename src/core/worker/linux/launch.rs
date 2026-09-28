@@ -13,7 +13,7 @@ pub(super) fn spawn(specification: WorkerCommand) -> io::Result<ChildOwner> {
         .process_group(0)
         .spawn()
         .map(|child| ChildOwner {
-            child,
+            child: child.into(),
             owned: true,
             guardian: None,
             #[cfg(test)]

@@ -7,8 +7,10 @@ use std::{
 
 pub(super) mod guardian;
 mod launch;
+mod namespace;
 mod observation;
 mod owner;
+mod process;
 #[cfg(test)]
 pub(super) type LaunchHook = Box<dyn FnOnce(WorkerCommand) -> io::Result<ChildOwner> + Send>;
 
@@ -30,7 +32,7 @@ fn nonblocking(pipe: &impl AsRawFd) -> io::Result<()> {
 }
 
 pub(super) struct ChildOwner {
-    child: Child,
+    child: process::Process,
     owned: bool,
     guardian: Option<std::os::unix::net::UnixStream>,
     #[cfg(test)]
@@ -63,6 +65,17 @@ impl ChildOwner {
     fn terminate(&mut self) -> io::Result<()> {
         if !self.owned {
             return Ok(());
+        }
+        if self.child.namespaced() {
+            // Killing this known namespace init asks the kernel to terminate
+            // its entire namespace, even when the guardian cannot cooperate.
+            return self.child.kill().or_else(|error| {
+                if error.raw_os_error() == Some(libc::ESRCH) {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            });
         }
         if let Some(control) = &self.guardian {
             // Keep the guardian alive to reap its descendants, including detached ones.
@@ -102,7 +115,17 @@ impl ChildOwner {
         };
         self.owned = false;
         match self.guardian.as_mut() {
-            Some(control) => guardian::completion(control, status).map(Some),
+            Some(control) => match guardian::completion(control, status) {
+                Ok(completion) => Ok(Some(completion)),
+                Err(error) if self.child.namespaced() => Ok(Some(Completion {
+                    status: None,
+                    cleanup: WorkerCleanup::NamespaceReaped,
+                    error: Some(runtime(format_args!(
+                        "Namespace guardian ended without verified worker completion: {error}"
+                    ))),
+                })),
+                Err(error) => Err(error),
+            },
             None => Ok(Some(Completion {
                 status: Some(status),
                 cleanup: WorkerCleanup::Reaped,
