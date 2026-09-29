@@ -134,19 +134,18 @@ Or you can create a file from below sample and pass the path to cargo run
 
 # Sample Code
 
-Here is what a botwork script might looke like right now
+Here is what a botwork script might look like right now
 
 <!-- botwork-test: readme-sample -->
 ```botwork
 # Declaration
-What is square-root of |number| divided by |divisor| equals, eh?!... {
+What is the square of |number| divided by |divisor| equals, eh?!... {
 	|square| = |number ^ 2|
-	Return |square/divisor| 
-	Log |"This statement will never execute"|
+	Return |square / divisor|
 }
 
-# Invocation (case-insensitive)
-|answer| = WHAT is    sQuAre-RoOt of |6| divided by|2|equals, EH?!...
+# Invocation (case-insensitive, with flexible spacing)
+|answer| = WHAT is  the   sQuAre of |6| divided by|2|equals, EH?!...
 
 Log |"Here is your answer:"|
 Log |answer|
@@ -167,8 +166,9 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] Try/Catch and [awaited Finally cleanup](docs/cleanup.md)
   - [x] [Suite and case setup/teardown](docs/fixtures.md)
   - [x] Custom statements
-  - [ ] Map and Array access 
-  - [ ] Imports (other botwork files, wasm files, packages; locally or from URL)
+  - [x] [Map and Array access](docs/language.md#collection-access)
+  - [x] [Imports of local botwork files](docs/language.md#local-modules)
+  - [ ] Imports of wasm files and packages, locally or from URL
 - [ ] Docs
   - [x] README
   - [ ] Getting started docs
@@ -187,7 +187,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] Selenium/Webdriver
   - [ ] Appium
   - [ ] Playwirght
-- [ ] Reports
+- [x] Reports
   - [x] [Console Reports](docs/console-report.md)
   - [x] [JSON Reports](docs/json-report.md)
   - [x] [HTML Reports](docs/html-report.md)
@@ -201,9 +201,9 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] Python extention support (via pyo3)
   - [ ] Javascript extention support (via neon)
   - [ ] WASM extention support (via WASI)
-- [ ] CLI
+- [x] CLI
   - [x] Ability to pass variables from CLI / Files
-  - [ ] Run in parallel
-- [ ] Fully async, non-blocking operations
+  - [x] [Run in parallel](docs/parallel-cli.md)
+- [x] Fully async, non-blocking operations ([async execution](docs/async-execution.md), [nonblocking I/O](docs/nonblocking-io.md))
 - [ ] Refactor my crappy code :P 
-- [ ] Unit-tests with atleast 50% coverage 
+- [x] [Unit tests with at least 50% coverage](docs/testing.md)
