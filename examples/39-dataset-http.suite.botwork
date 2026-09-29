@@ -1,0 +1,13 @@
+# Check a JSON user API once per dataset row. Supply base_url; see docs/structured-data.md.
+Suite |"users"| Named |"User API contract"| {
+    Dataset |"expected"| From JSON |"datasets/users.json"|
+    Case |"profile"| Using |"expected"| As |user| {
+        |url| = Format String |"{base}/{id}.json"| With |{base: base_url, id: user.id}|
+        |response| = HTTP Request |"GET"| To |url| Options |{"timeout_ms": 5000}|
+        Assert |response.status| Equals |200|
+        |profile| = Parse JSON |response.body|
+        Assert |profile.name| Equals |user.name|
+        Assert |profile.roles| Equals |user.roles|
+        Assert |profile.address.city| Equals |user.city|
+    }
+}

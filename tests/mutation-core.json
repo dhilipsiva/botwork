@@ -1,5 +1,5 @@
 {
-  "version": 21,
+  "version": 22,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1547,6 +1547,118 @@
       "file": "src/core/ast.rs",
       "before": "span.start(), options.as_span().end())",
       "after": "span.start(), options.as_span().start())"
+    },
+    {
+      "id": "data-string-unadmitted",
+      "area": "structured-data",
+      "file": "src/core/input.rs",
+      "before": "            admit(origin, grow, 1, bytes)?;\n            Literal::String",
+      "after": "            Literal::String"
+    },
+    {
+      "id": "data-keys-unadmitted",
+      "area": "structured-data",
+      "file": "src/core/input.rs",
+      "before": "admit(origin, grow, 1, size.payload_bytes)?;",
+      "after": "admit(origin, grow, 1, 0)?;"
+    },
+    {
+      "id": "data-scalars-unadmitted",
+      "area": "structured-data",
+      "file": "src/core/input.rs",
+      "before": "if !matches!(value, Literal::String(_)) {",
+      "after": "if false && !matches!(value, Literal::String(_)) {"
+    },
+    {
+      "id": "data-reservation-ignored",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data.rs",
+      "before": ".map_or(Ok(()), |reservation| reservation.grow(nodes, bytes))",
+      "after": ".map_or(Ok(()), |_| Ok(()))"
+    },
+    {
+      "id": "data-float-loses-kind",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data.rs",
+      "before": "Literal::Float(value) => write!(f, \"{value:?}\"),",
+      "after": "Literal::Float(value) => write!(f, \"{value}\"),"
+    },
+    {
+      "id": "data-unsorted-keys",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data.rs",
+      "before": "                keys.sort_unstable();\n",
+      "after": ""
+    },
+    {
+      "id": "data-newline-long-escape",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data.rs",
+      "before": "                '\\n' => f.write_str(\"\\\\n\")?,\n",
+      "after": ""
+    },
+    {
+      "id": "data-signature-kept",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data.rs",
+      "before": "text.strip_prefix('\\u{feff}').unwrap_or(text)",
+      "after": "text"
+    },
+    {
+      "id": "csv-doubled-quotes-kept",
+      "area": "structured-data",
+      "file": "src/core/csv.rs",
+      "before": "Cow::Owned(inner.replace(\"\\\"\\\"\", \"\\\"\"))",
+      "after": "Cow::Borrowed(inner)"
+    },
+    {
+      "id": "csv-bare-carriage-return",
+      "area": "structured-data",
+      "file": "src/core/csv.rs",
+      "before": "Some(b'\\r') => Err(self.fail(\n                self.index,\n                \"a carriage return must be followed by a line feed\",\n            )),",
+      "after": "Some(b'\\r') => Ok(true),"
+    },
+    {
+      "id": "csv-wide-record-accepted",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data/csv.rs",
+      "before": "            if count != header.len() {",
+      "after": "            if count < header.len() {"
+    },
+    {
+      "id": "csv-duplicate-header",
+      "area": "structured-data",
+      "file": "src/core/eval/builtins/data/csv.rs",
+      "before": "if let Some(first) = columns.insert(name.as_ref(), index) {",
+      "after": "if let Some(first) = columns.insert(name.as_ref(), index).filter(|_| false) {"
+    },
+    {
+      "id": "dataset-invalid-row-id",
+      "area": "structured-data",
+      "file": "src/core/ast/suite/dataset.rs",
+      "before": "if id.len() > MAX_ID_BYTES || !valid_id(&id) {",
+      "after": "if id.len() > MAX_ID_BYTES {"
+    },
+    {
+      "id": "dataset-duplicate-row-id",
+      "area": "structured-data",
+      "file": "src/core/ast/suite/dataset.rs",
+      "before": "        if self.ids.contains(&id) {",
+      "after": "        if false && self.ids.contains(&id) {"
+    },
+    {
+      "id": "dataset-format-cache-collision",
+      "area": "structured-data",
+      "file": "src/suites/datasets.rs",
+      "before": "let key = (canonical, format);",
+      "after": "let key = (canonical, DatasetFormat::Botwork);"
+    },
+    {
+      "id": "dataset-json-read-as-csv",
+      "area": "structured-data",
+      "file": "src/core/ast/suite/dataset.rs",
+      "before": "            DatasetFormat::Json => Self::from_json(name, text),",
+      "after": "            DatasetFormat::Json => Self::from_csv(name, text),"
     }
   ]
 }

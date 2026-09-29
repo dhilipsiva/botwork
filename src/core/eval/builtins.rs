@@ -4,6 +4,7 @@ use crate::core::{diagnostic::DiagnosticCode as Code, signature::ValueKind as Ki
 use std::time::Duration;
 mod assertions;
 mod collections;
+mod data;
 mod datetime;
 pub(super) mod http;
 mod operating_system;
@@ -22,6 +23,7 @@ pub(super) enum Builtin {
     TypeOf,
     NoOperation,
     Collection(collections::Collection),
+    Data(data::DataOp),
     String(strings::StringOp),
     DateTime(datetime::DateTimeOp),
     OperatingSystem(operating_system::OsOp),
@@ -33,6 +35,7 @@ impl Builtin {
         let (header, description, parameters, returns, error) = match self {
             Self::Http(kind) => return kind.signature(),
             Self::Collection(kind) => return kind.signature(),
+            Self::Data(kind) => return kind.signature(),
             Self::String(kind) => return kind.signature(),
             Self::DateTime(kind) => return kind.signature(),
             Self::OperatingSystem(kind) => return kind.signature(),
@@ -82,6 +85,7 @@ impl Builtin {
                 false,
             )),
             Self::Collection(kind) => kind.invoke(values, context),
+            Self::Data(kind) => kind.invoke(values, context),
             Self::String(kind) => kind.invoke(values, context),
             Self::DateTime(kind) => kind.invoke(values, context),
             Self::OperatingSystem(kind) => kind.invoke(values, context),
@@ -176,6 +180,7 @@ pub(super) fn initialize(context: &mut Context) {
         .iter()
         .chain(collections::FIXED.iter())
         .chain(strings::FIXED.iter())
+        .chain(data::FIXED.iter())
         .chain(datetime::FIXED.iter())
         .chain(operating_system::FIXED.iter())
         .chain(processes::FIXED.iter())

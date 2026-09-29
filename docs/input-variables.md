@@ -13,7 +13,7 @@ Pass repeatable `--vars-file PATH` and `--var NAME=JSON` flags with `--file`. Fi
 | String | String with standard JSON escapes and Unicode |
 | Array, object | Array, Map; recursively apply these conversions |
 
-Float underflow rounds to zero; negative floating zero retains its sign. Large integer tokens fail instead of silently becoming floats. JSON supports escapes/exponents beyond the DSL source-literal syntax. Arrays/maps are ordinary owned values, and nested map keys may be any Unicode string. Values are data: neither DSL expressions nor shell substitutions are evaluated by Botwork. Quote arguments appropriately for your shell; for example, Bash accepts `--var 'message="hello=world"'`.
+[Parse JSON and JSON dataset files](structured-data.md#json-conversion) use these same conversion rules. Float underflow rounds to zero; negative floating zero retains its sign. Large integer tokens fail instead of silently becoming floats. JSON supports escapes/exponents beyond the DSL source-literal syntax. Arrays/maps are ordinary owned values, and nested map keys may be any Unicode string. Values are data: neither DSL expressions nor shell substitutions are evaluated by Botwork. Quote arguments appropriately for your shell; for example, Bash accepts `--var 'message="hello=world"'`.
 
 Top-level names must exactly match DSL identifiers, including Unicode XID characters and `_`. Names are case-sensitive; lowercase `true`, `false`, `and`, and `or` are reserved. Leading/trailing whitespace, dots, brackets, and assignment syntax are rejected. Flags split at the first `=`; strings still need JSON quotes.
 

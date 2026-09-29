@@ -1,7 +1,7 @@
 # Operating-system statements
 
 The default Engine and CLI provide 32 operating-system statements within the
-97-signature fixed catalogue. Paths and text are Strings. Binary files use
+100-signature fixed catalogue. Paths and text are Strings. Binary files use
 Arrays of Int bytes. Arguments retain ordinary left-to-right evaluation, strict
 kind checks, source/call diagnostics, and assignment preservation on failure.
 
@@ -138,7 +138,7 @@ During asynchronous execution, filesystem statements share the existing pool of
 share their immutable directory/environment owners with workers. Low-level
 Contexts additionally admit a directory-snapshot copy against snapshot path bytes.
 No mutable DSL bindings enter workers. The fixed catalogue is exempt from user
-registry retention budgets; its 97 slots count toward snapshot work. Initialization
+registry retention budgets; its 100 slots count toward snapshot work. Initialization
 is idempotent and preserves earlier host overrides.
 
 Completed effects are not rolled back on later I/O errors, cancellation, failed

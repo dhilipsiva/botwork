@@ -1,0 +1,6 @@
+A-1
+Float
+{"id":7,"items":[{"qty":2,"sku":"A-1"}],"note":null,"total":12.5}
+B,2
+11
+Operation performed on incompatible types: Parse JSON: $: expected value at line 1 column 4

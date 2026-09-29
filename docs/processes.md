@@ -1,6 +1,6 @@
 # Process statements
 
-The default Engine and CLI provide four process signatures within the 97-statement
+The default Engine and CLI provide four process signatures within the 100-statement
 fixed catalogue. They execute on Linux, both synchronously and asynchronously.
 Other platforms return BW7002 before starting a process. A standalone Context
 without a run environment also returns BW7002. CLI preparation captures the host
@@ -104,7 +104,7 @@ Logical budgets exclude allocator, thread-stack, and kernel overhead. Async call
 also require admission to the existing bounded native callback pool and snapshot
 budgets; they do not block the async executor. Synchronous calls block their caller.
 
-The fixed catalogue is exempt from user registration-retention budgets; all 97
+The fixed catalogue is exempt from user registration-retention budgets; all 100
 table slots count toward snapshot work. Hosts may replace these signatures before
 initialization. Root declarations collide with default names; child scopes can
 shadow them. CLI listing/help uses the same typed metadata.

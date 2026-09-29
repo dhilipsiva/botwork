@@ -3369,3 +3369,46 @@ fn assertion_operand_artifacts_are_admitted_before_full_payload_copies() {
         );
     }
 }
+
+#[test]
+fn parse_json_admits_decoded_strings_before_allocating_them() {
+    use botwork::core::{
+        ast::Program,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 100_000;
+    let json = format!("\"{}\"", "x".repeat(length));
+    let mut counts = Vec::new();
+    for admitted in [false, true] {
+        let mut limits = RunLimits::default();
+        // The argument copy (the JSON text) fits; its decoded String does not.
+        limits.temporaries.payload_bytes = if admitted {
+            4 * length
+        } else {
+            json.len() + length / 2
+        };
+        let mut context = Context::with_limits(limits).unwrap();
+        context.init_statements();
+        context
+            .set_input_variables(BTreeMap::from([(
+                "json".into(),
+                Literal::String(json.clone()),
+            )]))
+            .unwrap();
+        let program = Program::parse("json", "Parse JSON |json|").unwrap();
+        let (result, allocations) =
+            observe(length, || evaluate_program_detailed(&program, &mut context));
+        if !admitted {
+            assert_eq!(
+                result.as_ref().unwrap_err().code(),
+                botwork::core::diagnostic::DiagnosticCode::ResourceLimit
+            );
+        }
+        counts.push((result.is_ok(), allocations));
+    }
+    assert_eq!(
+        counts,
+        [(false, 1), (true, 2)],
+        "the argument copy, then the decoded String only after admission"
+    );
+}

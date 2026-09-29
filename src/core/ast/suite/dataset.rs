@@ -1,6 +1,11 @@
 //! Immutable, literal-only datasets. External resolution belongs to the caller.
 use super::*;
-use crate::core::{grammar::Literal, value_limits::ValueLimits};
+use crate::core::{
+    csv::Fields,
+    grammar::Literal,
+    input::{self, InputLimits},
+    value_limits::ValueLimits,
+};
 
 #[cfg(test)]
 mod tests;
@@ -10,6 +15,17 @@ pub const MAX_DATASET_ROWS: usize = 1024;
 pub const MAX_DATA_ROWS: usize = 4096;
 pub const MAX_DATA_NODES: usize = 65_536;
 pub const MAX_DATASET_PATH_BYTES: usize = 4096;
+
+/// How an external dataset file is read. Suffixes never select a format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DatasetFormat {
+    /// A literal-only `Dataset` document.
+    Botwork,
+    /// An array of objects, each with a String `id` field.
+    Json,
+    /// A header row including `id`, then one row per record.
+    Csv,
+}
 
 #[derive(Clone, Debug)]
 pub struct Row {
@@ -51,6 +67,143 @@ impl Dataset {
             .next()
             .expect("dataset definition");
         Self::lower(pair, &source, &mut DataBudget::default())
+    }
+
+    /// Parse an external file in its declared format.
+    pub fn parse_format(name: &str, text: &str, format: DatasetFormat) -> DiagnosticResult<Self> {
+        match format {
+            DatasetFormat::Botwork => Self::parse(name, text),
+            DatasetFormat::Json => Self::from_json(name, text),
+            DatasetFormat::Csv => Self::from_csv(name, text),
+        }
+    }
+
+    /// Rows are objects with a String `id`; each whole object is its row value.
+    pub fn from_json(name: &str, text: &str) -> DiagnosticResult<Self> {
+        let source = tabular_source(name, text)?;
+        let limits = InputLimits {
+            values: ValueLimits::default(),
+            ..InputLimits::default()
+        };
+        let elements = input::parse_array_elements(
+            name,
+            &source.text,
+            &limits,
+            "expected a JSON array of row objects",
+        )
+        .map_err(|error| match &*error.error {
+            BWErr::InputError(reason) => configuration(reason.clone()),
+            _ => error,
+        })?;
+        let mut rows = TabularRows::new(&source);
+        for (index, (range, value)) in elements.into_iter().enumerate() {
+            let span = Span::from_source_range(Arc::clone(&source), range.start, range.end)
+                .expect("JSON element within its source");
+            let id = match &value {
+                Literal::Map(fields) => match fields.get("id") {
+                    Some(Literal::String(id)) => id.clone(),
+                    _ => {
+                        return Err(configuration(format!(
+                            "JSON dataset row $[{index}] requires a String \"id\" field"
+                        ))
+                        .at(&span))
+                    }
+                },
+                _ => {
+                    return Err(configuration(format!(
+                        "JSON dataset row $[{index}] must be an object"
+                    ))
+                    .at(&span))
+                }
+            };
+            rows.push(id, value, span)?;
+        }
+        Ok(rows.finish(name))
+    }
+
+    /// A header row naming each column, including `id`, then one row per record.
+    /// Every field is a String; the row value maps each header to its field.
+    pub fn from_csv(name: &str, text: &str) -> DiagnosticResult<Self> {
+        let source = tabular_source(name, text)?;
+        let text = source.text.as_str();
+        let location = |offset: usize| {
+            Span::from_source_range(Arc::clone(&source), offset, offset)
+                .expect("CSV offset within its source")
+        };
+        let malformed = |error: crate::core::csv::Malformed| {
+            configuration(format!("CSV dataset: {}", error.reason)).at(&location(error.offset))
+        };
+        let mut fields = Fields::new(text);
+        let mut header = Vec::new();
+        loop {
+            let Some(field) = fields.next() else {
+                return Err(
+                    configuration("CSV datasets require a header row including id")
+                        .at(&location(0)),
+                );
+            };
+            let field = field.map_err(malformed)?;
+            if header.len() == ValueLimits::default().entries {
+                return Err(
+                    resource("dataset columns", header.len()).at(&location(fields.offset()))
+                );
+            }
+            header.push(field.text.into_owned());
+            if field.last {
+                break;
+            }
+        }
+        let mut seen = HashSet::with_capacity(header.len());
+        for name in &header {
+            if name.is_empty() || !seen.insert(name.as_str()) {
+                return Err(configuration(
+                    "CSV dataset header names must be nonempty and distinct",
+                )
+                .at(&location(0)));
+            }
+        }
+        let Some(id_column) = header.iter().position(|name| name == "id") else {
+            return Err(configuration("CSV datasets require an id column").at(&location(0)));
+        };
+        drop(seen);
+        let mut rows = TabularRows::new(&source);
+        loop {
+            let start = fields.offset();
+            let line = fields.line;
+            let mut values = Vec::with_capacity(header.len());
+            while let Some(field) = fields.next() {
+                let field = field.map_err(malformed)?;
+                values.push(field.text.into_owned());
+                if field.last {
+                    break;
+                }
+            }
+            if values.is_empty() {
+                break;
+            }
+            let end = text[..fields.offset()].trim_end_matches(['\r', '\n']).len();
+            let span = Span::from_source_range(Arc::clone(&source), start, end.max(start))
+                .expect("CSV record within its source");
+            if values.len() != header.len() {
+                return Err(configuration(format!(
+                    "CSV dataset line {line} has {} field{}; the header has {}",
+                    values.len(),
+                    if values.len() == 1 { "" } else { "s" },
+                    header.len()
+                ))
+                .at(&span));
+            }
+            let id = values[id_column].clone();
+            let value = Literal::Map(
+                header
+                    .iter()
+                    .cloned()
+                    .zip(values.into_iter().map(Literal::String))
+                    .collect(),
+            );
+            rows.push(id, value, span)?;
+        }
+        Ok(rows.finish(name))
     }
 
     pub(super) fn lower(
@@ -112,11 +265,86 @@ impl Dataset {
     }
 }
 
+/// External files share the DSL dataset size limits; one leading U+FEFF is ignored.
+fn tabular_source(name: &str, text: &str) -> DiagnosticResult<Arc<SourceFile>> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    if text.len() > DEFAULT_SOURCE_BYTES {
+        return Err(resource("dataset source bytes", DEFAULT_SOURCE_BYTES));
+    }
+    Ok(Arc::new(SourceFile::from_owned_parts(
+        name.into(),
+        text.into(),
+    )))
+}
+
+/// Row admission shared by JSON and CSV datasets.
+struct TabularRows {
+    source: Arc<SourceFile>,
+    rows: Vec<Row>,
+    ids: HashSet<String>,
+    nodes: usize,
+}
+
+impl TabularRows {
+    fn new(source: &Arc<SourceFile>) -> Self {
+        Self {
+            source: Arc::clone(source),
+            rows: Vec::new(),
+            ids: HashSet::new(),
+            nodes: 0,
+        }
+    }
+
+    fn push(&mut self, id: String, value: Literal, span: Span) -> DiagnosticResult<()> {
+        if self.rows.len() == MAX_DATASET_ROWS {
+            return Err(resource("dataset rows", MAX_DATASET_ROWS).at(&span));
+        }
+        if id.len() > MAX_ID_BYTES || !valid_id(&id) {
+            return Err(configuration("Dataset row IDs must start with an ASCII letter or digit and contain only letters, digits, '.', '_', or '-'").at(&span));
+        }
+        if self.ids.contains(&id) {
+            return Err(configuration(format!("Duplicate dataset row ID {id:?}")).at(&span));
+        }
+        let size = ValueLimits::default()
+            .check(&value)
+            .map_err(|error| Diagnostic::new(error).at(&span))?;
+        self.nodes = self.nodes.saturating_add(size.nodes);
+        if self.nodes > MAX_DATA_NODES {
+            return Err(resource("dataset literal nodes", MAX_DATA_NODES).at(&span));
+        }
+        self.ids.insert(id.clone());
+        self.rows.push(Row {
+            metadata: Metadata {
+                name: id.clone(),
+                id,
+                tags: BTreeSet::new(),
+            },
+            value,
+            span,
+        });
+        Ok(())
+    }
+
+    fn finish(self, name: &str) -> Dataset {
+        Dataset {
+            // Informational only: suites reference the declared alias. No tags.
+            metadata: Metadata {
+                id: "external".into(),
+                name: name.into(),
+                tags: BTreeSet::new(),
+            },
+            source: self.source,
+            rows: self.rows,
+            nodes: self.nodes,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DatasetDefinition {
     pub(super) id: String,
     pub(super) data: Option<Arc<Dataset>>,
-    external: Option<(String, Span)>,
+    external: Option<(String, Span, DatasetFormat)>,
 }
 
 impl DatasetDefinition {
@@ -136,7 +364,18 @@ impl DatasetDefinition {
         }
         let mut inner = pair.into_inner();
         let id = metadata(&mut inner, source)?.id;
-        let path = inner.next().expect("dataset path");
+        let mut path = inner.next().expect("dataset path");
+        let format = if path.as_rule() == Rule::dataset_format {
+            let format = if path.as_str().eq_ignore_ascii_case("json") {
+                DatasetFormat::Json
+            } else {
+                DatasetFormat::Csv
+            };
+            path = inner.next().expect("dataset path");
+            format
+        } else {
+            DatasetFormat::Botwork
+        };
         let span = Span::of(&path, source);
         let path = text(
             path.into_inner().next().expect("path string"),
@@ -149,7 +388,7 @@ impl DatasetDefinition {
         Ok(Self {
             id,
             data: None,
-            external: Some((path, span)),
+            external: Some((path, span, format)),
         })
     }
     pub fn id(&self) -> &str {
@@ -161,7 +400,13 @@ impl DatasetDefinition {
     pub fn external(&self) -> Option<(&str, &Span)> {
         self.external
             .as_ref()
-            .map(|(path, span)| (path.as_str(), span))
+            .map(|(path, span, _)| (path.as_str(), span))
+    }
+    /// The declared file format; inline datasets report Botwork.
+    pub fn format(&self) -> DatasetFormat {
+        self.external
+            .as_ref()
+            .map_or(DatasetFormat::Botwork, |(_, _, format)| *format)
     }
 }
 

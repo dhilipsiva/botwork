@@ -1,6 +1,10 @@
-# Version 21: add bounded Eventually/Retry polling with scoped attempt budgets.
+# Version 22: add JSON/CSV conversion statements and dataset files.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/builtins/data.rs",
+    "src/core/eval/builtins/data/csv.rs",
+    "src/core/csv.rs",
+    "src/core/input.rs",
     "src/core/eval/polling.rs",
     "src/core/run/attempt.rs",
     "src/core/eval/builtins/assertions.rs",
@@ -54,6 +58,9 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/eval/builtins/data(\.rs|/csv\.rs):',
+    '^src/core/csv.rs:',
+    '^src/core/input.rs:',
     '^src/core/eval/polling.rs:',
     '^src/core/run/attempt.rs:',
     '^src/core/eval/builtins/assertions.rs:',
@@ -103,6 +110,7 @@ additional_cargo_args = [
     "--test", "setup_failure",
     "--test", "acceptance_policy",
     "--test", "builtins",
+    "--test", "structured_data",
     "--test", "polling",
     "--test", "assertion_diagnostics",
     "--test", "assertion_artifacts",

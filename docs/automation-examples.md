@@ -146,6 +146,7 @@ The checks cover bundled inputs, overrides, Unicode and CRLF text, literal paths
 with spaces and shell punctuation, retained source/destination contents, temporary
 cleanup on success and failure, process launch and exit failures, exact HTTP
 status/header/body assertions, and a configured deadline. HTTP tests use local
-loopback fixtures and require no internet service. General diagnostic differences,
-structured JSON comparison, polling, and dataset-driven acceptance workflows have
-separate roadmap items.
+loopback fixtures and require no internet service. [Assertion diagnostics](assertion-diagnostics.md),
+[polling](polling.md), and [structured data](structured-data.md) now cover
+differences, eventual conditions, and dataset-driven JSON/HTTP checks. Complete
+reference workflows retain their separate roadmap item.

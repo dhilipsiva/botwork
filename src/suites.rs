@@ -61,8 +61,9 @@ fn discover(mut request: Request) -> Result<Discovered, CliError> {
             }
         }
         let directory = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-        let parsed = parsed
-            .resolve_datasets(|reference, span| discovery.load(&directory.join(reference), span))?;
+        let parsed = parsed.resolve_datasets(|reference, span, format| {
+            discovery.load(&directory.join(reference), span, format)
+        })?;
         case_count += parsed.run_count()?;
         if case_count > suite::MAX_SELECTED_CASES {
             return Err(suite::resource("discovered cases", suite::MAX_SELECTED_CASES).into());

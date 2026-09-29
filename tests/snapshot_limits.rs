@@ -118,7 +118,7 @@ fn template_copy_admission_precedes_inputs_and_script_effects_and_resets_per_run
         "Touch",
         RunOptions {
             variables: BTreeMap::from([("input".into(), Literal::Int(1))]),
-            limits: limits(97, 0),
+            limits: limits(100, 0),
             ..RunOptions::default()
         },
     );
@@ -138,7 +138,7 @@ fn template_copy_admission_precedes_inputs_and_script_effects_and_resets_per_run
                     "snapshot",
                     "Touch",
                     RunOptions {
-                        limits: limits(98, 0),
+                        limits: limits(101, 0),
                         ..RunOptions::default()
                     }
                 )
@@ -158,7 +158,7 @@ fn fixed_builtin_table_slot_is_included_in_engine_snapshot_count() {
                 "empty",
                 "",
                 RunOptions {
-                    limits: limits(96, 0),
+                    limits: limits(99, 0),
                     ..RunOptions::default()
                 }
             )
@@ -171,7 +171,7 @@ fn fixed_builtin_table_slot_is_included_in_engine_snapshot_count() {
                 "empty",
                 "",
                 RunOptions {
-                    limits: limits(97, 0),
+                    limits: limits(100, 0),
                     ..RunOptions::default()
                 }
             )

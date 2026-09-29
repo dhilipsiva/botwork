@@ -1,4 +1,5 @@
 //! Borrowed assertion evidence: bounded previews, full operands admitted before copying.
+use super::data::JsonString;
 use super::*;
 use crate::core::{
     diagnostic::FormattedDetail, grammar::QuotedString, value_limits::MAX_VALUE_DEPTH,
@@ -114,23 +115,6 @@ impl<T: fmt::Display> fmt::Display for Preview<T> {
         } else {
             result
         }
-    }
-}
-
-/// JSON strings are streamed, so neither escaped length nor map width allocates workspace.
-struct JsonString<'a>(&'a str);
-impl fmt::Display for JsonString<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_char('"')?;
-        for ch in self.0.chars() {
-            match ch {
-                '"' => f.write_str("\\\"")?,
-                '\\' => f.write_str("\\\\")?,
-                '\0'..='\u{1f}' => write!(f, "\\u{:04x}", ch as u32)?,
-                _ => f.write_char(ch)?,
-            }
-        }
-        f.write_char('"')
     }
 }
 

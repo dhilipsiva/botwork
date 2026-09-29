@@ -73,7 +73,7 @@ fn expansion_is_bounded_before_filters_and_reused_data_is_counted_once() {
                 &format!("Suite |\"s{id}\"| {{ Dataset |\"shared\"| From |\"data\"| {cases} }}"),
             )
             .unwrap()
-            .resolve_datasets(|_, _| Ok(Arc::clone(&data)))
+            .resolve_datasets(|_, _, _| Ok(Arc::clone(&data)))
             .unwrap(),
         )
     };
@@ -169,7 +169,7 @@ fn selection_accounts_for_unique_dataset_owners_and_external_sources() {
                 ),
             )
             .unwrap()
-            .resolve_datasets(|_, _| Ok(Arc::clone(&data)))
+            .resolve_datasets(|_, _, _| Ok(Arc::clone(&data)))
             .unwrap(),
         )
     };
@@ -294,7 +294,7 @@ fn selection_limits_unique_datasets_and_literal_nodes_across_suite_sources() {
                 ),
             )
             .unwrap()
-            .resolve_datasets(|_, _| Ok(Arc::clone(&data)))
+            .resolve_datasets(|_, _, _| Ok(Arc::clone(&data)))
             .unwrap(),
         )
     };

@@ -181,6 +181,13 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("structured-data", r#"|doc| = Parse JSON |"{\"b\": [1, 2.5, null], \"a\": \"é\"}"|
+Log |@{ Format JSON |doc| }|
+|rows| = Parse CSV |"id,qty\n\"x,1\",2\n"|
+Log |rows[0].id|"#, "{\"a\":\"é\",\"b\":[1,2.5,null]}\nx,1\n", &["B9"], &[]),
+        failure("structured-data-invalid-csv", r#"|rows| = Parse CSV |"a,b\n1\n"|"#, "", "BW3003", "record 1 has 1 field; the header has 2", &["B9"]),
+        Case { id: "structured-data-integer-boundary", positive: &[], invalid: &["B9"], boundary: &["B9"], input: Input::Script(r#"|ok| = Parse JSON |"[2147483647, -2147483648]"|
+|bad| = Parse JSON |"[2147483648]"|"#), stdout: "", code: Some("BW3003"), error: Some("$[0]: integer is outside -2147483648..2147483647") },
         success("polling-statements", r#"|checks| = |0|
 Eventually |{timeout_ms: 5000, interval_ms: 1}| {
     |checks| = |checks + 1|

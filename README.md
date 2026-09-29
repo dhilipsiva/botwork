@@ -45,6 +45,10 @@ For complete tasks, [build a verified catalogue or check an HTTP response contra
 Both examples combine imported helpers, JSON input variables, assertions, and
 standard statements, with runnable local fixtures and failure demonstrations.
 
+Convert JSON and CSV test data with `Parse JSON`, `Format JSON`, and `Parse CSV`,
+or read suite rows directly with `Dataset |"id"| From JSON |"rows.json"|`. See
+[structured data](docs/structured-data.md) for the conversion rules.
+
 Wait for eventual conditions with `Eventually` and repeat side-effecting actions with
 `Retry`. Both use bounded [deadlines, attempts, and backoff](docs/polling.md) and
 report the last failure together with the recent attempt history.
@@ -145,6 +149,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Process](docs/processes.md)
   - [x] [Strings](docs/strings.md)
   - [x] [Making HTTP Requests](docs/http.md)
+  - [x] [JSON and CSV data](docs/structured-data.md)
 - [ ] integrations
   - [ ] Selenium/Webdriver
   - [ ] Appium

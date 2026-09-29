@@ -54,6 +54,8 @@ To share data across files, place a single inline Dataset declaration in a
 `.dataset.botwork` file and reference it with
 `Dataset |"local-alias"| From |"relative/path.dataset.botwork"|`.
 Use the local alias in the case's `Using`; the file's own dataset ID can differ.
+Write `From JSON` or `From CSV` to read an array of row objects or a header-row
+table instead; see [JSON and CSV dataset files](structured-data.md#json-and-csv-dataset-files).
 External references take a nonempty literal path of at most 4,096 UTF-8 bytes
 without NUL. Paths resolve against the supplied suite file's directory; absolute
 paths also work. Filename suffixes are conventions. A data file cannot reference
@@ -148,7 +150,7 @@ Suite |"math"| {
         |answer| = |number * 2|
     }
 }
-"#)?.resolve_datasets(|path, _| {
+"#)?.resolve_datasets(|path, _, _| {
     assert_eq!(path, "shared");
     Ok(Arc::clone(&data))
 })?;
@@ -169,5 +171,6 @@ examples and example 24 execute in the normal suite.
 [Validation evidence](parameterized-cases-evidence.json) records the profile
 matrix, frozen mutation campaigns, exact replays, fixture repairs, and remaining
 observations. [Fixtures](fixtures.md) wrap each selected row with case setup and
-teardown and can provide immutable shared suite inputs. Assertions, tabular/JSON
-data conversion, and full structured reports retain their separate roadmap tasks.
+teardown and can provide immutable shared suite inputs. [Structured data](structured-data.md)
+adds JSON/CSV dataset files and conversion statements. Full structured reports
+retain their separate roadmap task.

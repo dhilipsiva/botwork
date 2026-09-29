@@ -1,7 +1,7 @@
 # Date/time statements
 
 The default Engine and CLI provide sixteen date/time statements as part of the
-97-signature fixed catalogue. Timestamps and durations are Strings; comparisons
+100-signature fixed catalogue. Timestamps and durations are Strings; comparisons
 return Int `-1`, `0`, or `1`. No Float conversion or machine-local timezone is
 implicit. All arguments except `amount` are Strings, checked without coercion.
 
@@ -125,7 +125,7 @@ names are small bounded workspace. Standard execution, values, temporaries,
 diagnostics, and result-export budgets still apply.
 
 Initialization is idempotent and preserves earlier host registrations. The fixed
-catalogue is exempt from user registry retention budgets; its 97 table slots
+catalogue is exempt from user registry retention budgets; its 100 table slots
 count toward snapshot work. These names occupy default root slots; child scopes
 can shadow them. Use `--statement-help 'Parse Date Time |text|'` for typed metadata.
 

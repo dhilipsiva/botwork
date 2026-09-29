@@ -6,8 +6,8 @@ use std::collections::{BTreeSet, HashSet};
 mod dataset;
 mod fixtures;
 pub use dataset::{
-    Dataset, DatasetDefinition, Row, MAX_DATASETS, MAX_DATASET_PATH_BYTES, MAX_DATASET_ROWS,
-    MAX_DATA_NODES, MAX_DATA_ROWS,
+    Dataset, DatasetDefinition, DatasetFormat, Row, MAX_DATASETS, MAX_DATASET_PATH_BYTES,
+    MAX_DATASET_ROWS, MAX_DATA_NODES, MAX_DATA_ROWS,
 };
 pub use fixtures::FixturePrograms;
 
@@ -312,12 +312,13 @@ impl Suite {
     /// cache and I/O policy; no case body or library declaration is evaluated.
     pub fn resolve_datasets(
         mut self,
-        mut load: impl FnMut(&str, &Span) -> DiagnosticResult<Arc<Dataset>>,
+        mut load: impl FnMut(&str, &Span, DatasetFormat) -> DiagnosticResult<Arc<Dataset>>,
     ) -> DiagnosticResult<Self> {
         for definition in &mut self.datasets {
             if definition.data.is_none() {
+                let format = definition.format();
                 let (path, span) = definition.external().expect("external dataset declaration");
-                definition.data = Some(load(path, span)?);
+                definition.data = Some(load(path, span, format)?);
             }
         }
         self.run_count()?;

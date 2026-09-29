@@ -57,6 +57,13 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "structured-data",
+            (
+                "docs/structured-data.md",
+                include_bytes!("doc-examples/structured-data.stdout").as_slice(),
+            ),
+        ),
+        (
             "polling-statements",
             (
                 "docs/polling.md",

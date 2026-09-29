@@ -3,8 +3,8 @@
 The default Engine and CLI provide these nine basic signatures plus sixteen
 [collection statements](collections.md), sixteen [string statements](strings.md),
 sixteen [date/time statements](datetime.md), and thirty-two
-[operating-system statements](operating-system.md), four [process statements](processes.md), and four [HTTP statements](http.md),
-for 97 fixed signatures in total. Statement names are
+[operating-system statements](operating-system.md), four [process statements](processes.md), four [HTTP statements](http.md),
+and three [structured-data statements](structured-data.md), for 100 fixed signatures in total. Statement names are
 case insensitive and ignore spaces/tabs as usual; variable names are exact and
 case sensitive. Arguments evaluate left to right once. Parameter validation,
 call/source diagnostics, cleanup, and execution/resource limits use the normal

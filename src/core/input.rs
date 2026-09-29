@@ -89,12 +89,26 @@ fn path_key(path: &str, key: &str) -> String {
     )
 }
 
+/// Admission for each converted node, called with its exact node and payload
+/// counts before the node is allocated or retained.
+pub(crate) type Grow<'a> = dyn FnMut(usize, usize) -> Result<(), BWErr> + 'a;
+
+fn admit(
+    origin: &(impl std::fmt::Display + ?Sized),
+    grow: &mut Grow<'_>,
+    nodes: usize,
+    bytes: usize,
+) -> DiagnosticResult<()> {
+    grow(nodes, bytes).map_err(|error| resource(origin, error))
+}
+
 fn convert(
     origin: &(impl std::fmt::Display + ?Sized),
     path: &str,
     raw: &RawValue,
     limits: &InputLimits,
     depth: usize,
+    grow: &mut Grow<'_>,
 ) -> DiagnosticResult<(Literal, ValueSize)> {
     limits
         .values
@@ -114,6 +128,7 @@ fn convert(
                 .values
                 .string_size(bytes)
                 .map_err(|error| resource(origin, error))?;
+            admit(origin, grow, 1, bytes)?;
             Literal::String(decode(origin, path, text)?)
         }
         b'[' => {
@@ -122,10 +137,17 @@ fn convert(
                 .values
                 .container_header(raw.len())
                 .map_err(|error| resource(origin, error))?;
+            admit(origin, grow, 1, 0)?;
             let mut values = Vec::with_capacity(raw.len());
             for (index, raw) in raw.into_iter().enumerate() {
-                let (value, child) =
-                    convert(origin, &format!("{path}[{index}]"), raw, limits, depth + 1)?;
+                let (value, child) = convert(
+                    origin,
+                    &format!("{path}[{index}]"),
+                    raw,
+                    limits,
+                    depth + 1,
+                    grow,
+                )?;
                 limits
                     .values
                     .add_child(&mut size, child)
@@ -146,10 +168,12 @@ fn convert(
                     .add_bytes(&mut size, key.len())
                     .map_err(|error| resource(origin, error))?;
             }
+            // Keys were bounded before decoding; admit them before retaining them.
+            admit(origin, grow, 1, size.payload_bytes)?;
             let mut values = std::collections::HashMap::new();
             for (key, raw) in raw {
                 let (value, child) =
-                    convert(origin, &path_key(path, &key), raw, limits, depth + 1)?;
+                    convert(origin, &path_key(path, &key), raw, limits, depth + 1, grow)?;
                 limits
                     .values
                     .add_child(&mut size, child)
@@ -180,7 +204,63 @@ fn convert(
         .values
         .check(&value)
         .map_err(|error| resource(origin, error))?;
+    if !matches!(value, Literal::String(_)) {
+        // Remaining scalars own no heap payload; admit their accounted size.
+        admit(origin, grow, size.nodes, size.payload_bytes)?;
+    }
     Ok((value, size))
+}
+
+/// Convert each element of a root JSON array with the input-variable rules,
+/// returning the element's byte range within `text` for row locations.
+pub(crate) fn parse_array_elements(
+    origin: &(impl std::fmt::Display + ?Sized),
+    text: &str,
+    limits: &InputLimits,
+    expected: &str,
+) -> DiagnosticResult<Vec<(std::ops::Range<usize>, Literal)>> {
+    let mut budget = Budget::new(limits)?;
+    budget.source(origin)?;
+    budget.bytes(origin, text.len())?;
+    budget.preflight(origin, text)?;
+    let root: &RawValue = decode(origin, "$", text)?;
+    if !root.get().starts_with('[') {
+        return Err(invalid(origin, "$", expected));
+    }
+    raw::array(origin, "$", root.get(), limits)?
+        .into_iter()
+        .enumerate()
+        .map(|(index, raw)| {
+            // Raw values borrow the caller's text, so the offset is exact.
+            let start = (raw.get().as_ptr() as usize).wrapping_sub(text.as_ptr() as usize);
+            debug_assert!(start + raw.get().len() <= text.len());
+            let (value, _) = convert(
+                origin,
+                &format!("$[{index}]"),
+                raw,
+                limits,
+                1,
+                &mut |_, _| Ok(()),
+            )?;
+            Ok((start..start + raw.get().len(), value))
+        })
+        .collect()
+}
+
+/// Convert one JSON document with the input-variable rules. `grow` admits each
+/// node before it is allocated; the grown totals equal the returned value's size.
+pub(crate) fn parse_document(
+    origin: &(impl std::fmt::Display + ?Sized),
+    text: &str,
+    limits: &InputLimits,
+    grow: &mut Grow<'_>,
+) -> DiagnosticResult<Literal> {
+    let mut budget = Budget::new(limits)?;
+    budget.source(origin)?;
+    budget.bytes(origin, text.len())?;
+    budget.preflight(origin, text)?;
+    let raw: &RawValue = decode(origin, "$", text)?;
+    convert(origin, "$", raw, limits, 1, grow).map(|(value, _)| value)
 }
 
 fn variables_from_text(
@@ -202,7 +282,14 @@ fn variables_from_text(
         .into_iter()
         .map(|(name, raw)| {
             validate_name(origin, &name)?;
-            let (value, _) = convert(origin, &path_key("$", &name), raw, budget.limits, 1)?;
+            let (value, _) = convert(
+                origin,
+                &path_key("$", &name),
+                raw,
+                budget.limits,
+                1,
+                &mut |_, _| Ok(()),
+            )?;
             Ok((name, value))
         })
         .collect()
@@ -225,7 +312,14 @@ fn variable_from_setting(
     budget.preflight(origin, text)?;
     let raw: &RawValue = decode(origin, "$", text)?;
     budget.variable_count(origin, 1)?;
-    let (value, _) = convert(origin, &path_key("$", name), raw, budget.limits, 1)?;
+    let (value, _) = convert(
+        origin,
+        &path_key("$", name),
+        raw,
+        budget.limits,
+        1,
+        &mut |_, _| Ok(()),
+    )?;
     Ok((name.into(), value))
 }
 

@@ -157,7 +157,7 @@ fn external_datasets_require_explicit_resolution_and_aliases_share_immutable_row
         .unwrap(),
     );
     let resolved = suite
-        .resolve_datasets(|path, span| {
+        .resolve_datasets(|path, span, _| {
             assert_eq!(path, "shared.dataset.botwork");
             assert_eq!(span.source().name(), "suite.botwork");
             Ok(Arc::clone(&external))

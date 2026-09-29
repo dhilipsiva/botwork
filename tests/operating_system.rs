@@ -356,9 +356,9 @@ fn file_listing_and_environment_values_obey_exact_output_limits() {
 async fn filesystem_workers_require_snapshot_admission_before_any_effect() {
     let directory = tempfile::tempdir().unwrap();
     for (source, entries, expected) in [
-        ("Write File |\"new\"| Text |\"data\"|", 97, false),
-        ("Write File |\"new\"| Text |\"data\"|", 98, true),
-        ("Path Is Absolute |\"relative\"|", 97, true),
+        ("Write File |\"new\"| Text |\"data\"|", 100, false),
+        ("Write File |\"new\"| Text |\"data\"|", 101, true),
+        ("Path Is Absolute |\"relative\"|", 100, true),
     ] {
         let result = Engine::default()
             .run_source_async(
@@ -430,7 +430,7 @@ fn metadata_is_typed_and_preserves_host_registrations() {
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 97);
+    assert_eq!(context.statement_signatures().len(), 100);
     let help = context
         .statement_signature("Write Binary File |p| Bytes |b|")
         .unwrap()

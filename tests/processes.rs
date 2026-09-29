@@ -98,7 +98,7 @@ fn metadata_is_typed_idempotent_and_preserves_host_overrides() {
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 97);
+    assert_eq!(context.statement_signatures().len(), 100);
     let help = context
         .statement_signature("Run Binary Process |e| With Arguments |a| Options |o|")
         .unwrap()

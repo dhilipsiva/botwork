@@ -1,0 +1,4 @@
+[
+  {"id": "alice", "name": "Alice Doe", "roles": ["admin", "editor"], "city": "Zürich"},
+  {"id": "bob", "name": "Bob", "roles": [], "city": "東京"}
+]

@@ -82,10 +82,10 @@ O(n) borrowed sorting slots after output admission.
 Initialization is idempotent and preserves host registrations made before it.
 These signatures occupy default root names, so existing conflicting root declarations
 need renaming or qualification; child scopes can shadow them normally. The complete
-97-signature fixed catalogue, including sixteen [string statements](strings.md)
+100-signature fixed catalogue, including sixteen [string statements](strings.md)
 and sixteen [date/time statements](datetime.md),
 is exempt from user registry retention budgets, while
-its 97 table slots count toward snapshot admission. Execution, values, temporaries,
+its 100 table slots count toward snapshot admission. Execution, values, temporaries,
 diagnostics, and result exports keep their normal limits.
 
 <!-- botwork-test: collection-statements -->

@@ -702,7 +702,7 @@ fn sync_rejection_precedes_argument_effects_and_metadata_preserves_overrides() {
         .unwrap();
     context.init_statements();
     context.init_statements();
-    assert_eq!(context.statement_signatures().len(), 97);
+    assert_eq!(context.statement_signatures().len(), 100);
     let help = context
         .statement_signature("HTTP Binary Request |m| To |u| Options |o|")
         .unwrap()

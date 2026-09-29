@@ -2,6 +2,7 @@ pub mod acceptance;
 pub mod ast;
 pub use ast::suite;
 pub mod ast_limits;
+pub(crate) mod csv;
 pub mod diagnostic;
 pub mod eval;
 pub mod grammar;

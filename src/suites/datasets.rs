@@ -1,6 +1,9 @@
 //! One bounded discovery owns suite sources and cached, immutable dataset files.
 use super::*;
-use botwork::core::{ast::Span, suite::Dataset};
+use botwork::core::{
+    ast::Span,
+    suite::{Dataset, DatasetFormat},
+};
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
@@ -10,7 +13,8 @@ use std::{
 #[derive(Default)]
 pub(super) struct Discovery {
     bytes: usize,
-    cache: HashMap<PathBuf, Arc<Dataset>>,
+    // One file can be declared in different formats; each parse is cached separately.
+    cache: HashMap<(PathBuf, DatasetFormat), Arc<Dataset>>,
     admitted: HashSet<*const Dataset>,
     rows: usize,
     nodes: usize,
@@ -89,7 +93,12 @@ impl Discovery {
         Ok(())
     }
 
-    pub(super) fn load(&mut self, path: &Path, span: &Span) -> Result<Arc<Dataset>, Diagnostic> {
+    pub(super) fn load(
+        &mut self,
+        path: &Path,
+        span: &Span,
+        format: DatasetFormat,
+    ) -> Result<Arc<Dataset>, Diagnostic> {
         let canonical = fs::canonicalize(path).map_err(|error| {
             Diagnostic::new(BWErr::ImportRead(format!(
                 "Dataset {}: {error}",
@@ -97,16 +106,22 @@ impl Discovery {
             )))
             .at(span)
         })?;
-        if let Some(data) = self.cache.get(&canonical) {
+        let key = (canonical, format);
+        if let Some(data) = self.cache.get(&key) {
             return Ok(Arc::clone(data));
         }
-        let source = self.read(&canonical, true).map_err(|error| match error {
+        let canonical = &key.0;
+        let source = self.read(canonical, true).map_err(|error| match error {
             CliError::Script(error) => error,
             error => Diagnostic::new(BWErr::ImportRead(error.to_string())).at(span),
         })?;
-        let data = Arc::new(Dataset::parse(&canonical.display().to_string(), &source)?);
+        let data = Arc::new(Dataset::parse_format(
+            &canonical.display().to_string(),
+            &source,
+            format,
+        )?);
         self.admit(&data)?;
-        self.cache.insert(canonical, Arc::clone(&data));
+        self.cache.insert(key, Arc::clone(&data));
         Ok(data)
     }
 }

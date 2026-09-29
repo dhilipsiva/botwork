@@ -179,6 +179,12 @@ attempt steps, attempt deadlines, and parent cancellation, plus the placement an
 header span of the polling statement. Its 221-entry catalogue adds 17 polling
 faults, with the `polling` integration suite as an oracle; see
 [polling evidence](polling-evidence.json).
+Version 22 adds structured data: per-node admission of strings, keys, and scalars,
+the Parse JSON reservation, Float kind and key order in canonical JSON, short
+escapes, byte order marks, CSV quote and line-ending rules, record width, header
+uniqueness, dataset row IDs, format dispatch, and per-format caching. Its
+237-entry catalogue adds 16 faults, with the `structured_data` suite as an oracle;
+see [structured-data evidence](structured-data-evidence.json).
 
 ## First campaign — 2026-09-28
 

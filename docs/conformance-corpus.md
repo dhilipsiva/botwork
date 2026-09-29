@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 197 cases against the 78 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 200 cases against the 79 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -15,6 +15,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | B5 | os-statements | os-invalid-byte, os-missing-file | os-boundaries |
 | B7 | http-statements | http-invalid-method | http-zero-deadline |
 | B8 | assertion-artifacts | assertion-invalid-condition | assertion-empty-array-difference |
+| B9 | structured-data | structured-data-invalid-csv, structured-data-integer-boundary | structured-data-integer-boundary |
 | F10 | cleanup-return | cleanup-control, cleanup-secondary-failure | cleanup-empty-and-catch |
 | F11 | polling-statements | polling-invalid-options, polling-single-attempt | polling-single-attempt |
 | B6 | process-statements | process-invalid-argument | process-empty |
@@ -183,3 +184,5 @@ Three B6 CLI cases execute text/binary capture and nonzero status, exact empty c
 Three B8 cases preserve full Bool operands through Catch, reject a non-Bool condition, and diagnose an extra element against an empty array. Dedicated assertion/CLI matrices cover nested differences, Unicode, budgets, artifacts, and dataset identity.
 
 Three F11 cases poll until a third check passes, reject Retry options without `attempts` before the block runs, and exhaust a single-attempt Retry with BW9005. The polling matrix covers exact schedules, deadlines, cancellation, limits, and failure evidence.
+
+Three B9 cases format parsed JSON canonically and read a quoted CSV field. They also reject a CSV record narrower than its header, and accept both Int bounds before rejecting the first integer outside them. The structured-data matrix covers conversion, round trips, CSV syntax, dataset files, and HTTP.

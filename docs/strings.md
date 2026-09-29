@@ -1,7 +1,7 @@
 # String statements
 
 The default Engine and CLI provide sixteen string signatures as part of the
-97-statement fixed catalogue. All transformations return independent values for
+100-statement fixed catalogue. All transformations return independent values for
 ordinary assignment. They preserve their inputs and require the declared kinds;
 there is no automatic String conversion in joining, splitting, or matching.
 Format String explicitly renders arbitrary supplied values as described below.
@@ -30,7 +30,7 @@ Names follow ordinary case-insensitive statement matching.
 parameter, return, and error metadata. The fixed names occupy root slots; existing
 conflicting declarations need renaming or qualification. Host registrations made
 before initialization remain intact, repeated initialization is idempotent, and
-child scopes may shadow the names. All 97 table slots count toward snapshot work;
+child scopes may shadow the names. All 100 table slots count toward snapshot work;
 fixed metadata remains exempt from user registry retention admission.
 
 ## Formatting, splitting, and replacement
@@ -45,7 +45,7 @@ Unused values are permitted; missing fields and unmatched/nested braces fail.
 
 Substitution uses readable Botwork display: a String inserts its raw text, None
 inserts `none`, scalars use their ordinary spelling, nested Strings are quoted,
-and maps sort their keys. This is not a JSON serializer. Inserted content is never
+and maps sort their keys. This is not a JSON serializer; use [Format JSON](structured-data.md#canonical-json). Inserted content is never
 parsed again as a template or executed. To surround a substituted value with
 braces, use `{{{0}}}`. Formatting always receives its data explicitly and never
 reads variable names from the template.

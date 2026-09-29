@@ -45,7 +45,7 @@ LIBRARY_FILES = {
     "src/core/eval/builtins/strings/template.rs",
     "src/core/eval/builtins/strings/patterns.rs",
     "src/core/acceptance.rs", "src/core/acceptance/totals.rs", "src/core/acceptance/view.rs",
-    "src/core/run/cleanup.rs", "src/core/eval/cleanup.rs", "src/core/run/attempt.rs", "src/core/eval/polling.rs",
+    "src/core/run/cleanup.rs", "src/core/eval/cleanup.rs", "src/core/run/attempt.rs", "src/core/eval/polling.rs", "src/core/csv.rs", "src/core/eval/builtins/data.rs", "src/core/eval/builtins/data/csv.rs",
     "src/core/ast/suite.rs", "src/core/ast/suite/dataset.rs",
     "src/core/ast/suite/fixtures.rs", "src/core/eval/fixtures.rs",
     "src/core/ast.rs", "src/core/ast/parse_diagnostic.rs", "src/core/ast_limits.rs", "src/core/diagnostic.rs", "src/core/diagnostic/value.rs", "src/core/diagnostic/ownership.rs", "src/core/diagnostic/rejection.rs", "src/core/diagnostic/construction.rs", "src/core/diagnostic/render.rs", "src/core/eval.rs", "src/core/eval/execution.rs", "src/core/eval/filesystem.rs", "src/core/eval/blocking.rs", "src/core/eval/diagnostics.rs",
