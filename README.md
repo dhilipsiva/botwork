@@ -22,6 +22,10 @@ I wanted:
 
 # Getting Started
 
+The [getting-started guide](docs/getting-started.md) covers installation, a first
+script, reading failures, and a complete acceptance-test workflow with reports.
+To look around quickly:
+
 1. Clone the repo
 2. run `cargo run -- --file examples/02-syntaxes.botwork`
 
@@ -171,7 +175,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] Imports of wasm files and packages, locally or from URL
 - [ ] Docs
   - [x] README
-  - [ ] Getting started docs
+  - [x] [Getting started docs](docs/getting-started.md)
   - [ ] Syntax docs
   - [ ] Statement docs
 - [ ] More statements out-of-box (like the ones RobotFramework Offers)

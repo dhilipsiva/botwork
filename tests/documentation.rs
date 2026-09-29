@@ -182,7 +182,21 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 include_bytes!("doc-examples/catch-recovery.stdout").as_slice(),
             ),
         ),
+        (
+            "hello",
+            ("docs/getting-started.md", b"Hello, botwork!\n".as_slice()),
+        ),
+        (
+            "greeting",
+            (
+                "docs/getting-started.md",
+                b"Welcome, Ada!\nLarge order\n12\n".as_slice(),
+            ),
+        ),
+        ("first-failure", ("docs/getting-started.md", b"".as_slice())),
     ]);
+    // Examples that document a failure: their exit status and stderr evidence.
+    let failing = BTreeMap::from([("first-failure", (1, "[BW9001] Assertion failed"))]);
     let mut seen = BTreeSet::new();
     let harness = Harness::new();
     for (document, blocks) in documents() {
@@ -207,17 +221,19 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 "{document}:{} ({id}); {}; timeout=5s\n{}",
                 block.line, harness.environment, block.source
             );
+            let (status, evidence) = failing.get(id).copied().unwrap_or((0, ""));
             assert_eq!(
                 output.status.code(),
-                Some(0),
+                Some(status),
                 "{label}\n{}",
                 String::from_utf8_lossy(&diagnostic)
             );
-            assert!(
-                diagnostic.is_empty(),
-                "{label}: {}",
-                String::from_utf8_lossy(&diagnostic)
-            );
+            let diagnostic = String::from_utf8_lossy(&diagnostic);
+            if evidence.is_empty() {
+                assert!(diagnostic.is_empty(), "{label}: {diagnostic}");
+            } else {
+                assert!(diagnostic.contains(evidence), "{label}: {diagnostic}");
+            }
             assert_eq!(&output.stdout, stdout, "{label}");
         }
     }
@@ -256,6 +272,10 @@ fn every_documented_suite_matches_its_cli_output() {
             document: "docs/json-report.md", stdout: "1\n2\n", status: 1,
             summary: "[cases] 2 selected: 1 succeeded, 1 failed\n", lines: None,
             diagnostics: &["[case checkout/total/pair] failed:", "BW9001"],
+        }),
+        ("checkout", Expected {
+            document: "docs/getting-started.md", stdout: "EUR\nEUR\n", status: 0,
+            summary: "[cases] 3 selected: 3 succeeded, 0 failed\n", lines: Some(10), diagnostics: &[],
         }),
         ("setup-failure-suite", Expected {
             document: "docs/setup-failure.md", stdout: "open demo\nclose demo\n", status: 1,
