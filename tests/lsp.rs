@@ -335,3 +335,172 @@ fn module_problems_follow_their_importers_and_their_own_documents() {
     assert_eq!(warning(&publications(&mut client, &module_uri)), None);
     assert_eq!(client.finish(true), Some(0));
 }
+
+/// The byte offset of an LSP position in `text`.
+fn byte_offset(text: &str, position: &Value) -> usize {
+    let line = position["line"].as_u64().unwrap() as usize;
+    let mut units = position["character"].as_u64().unwrap() as usize;
+    let start: usize = text.split_inclusive('\n').take(line).map(str::len).sum();
+    let mut offset = start;
+    for character in text[start..].chars() {
+        if units == 0 {
+            break;
+        }
+        units -= character.len_utf16();
+        offset += character.len_utf8();
+    }
+    offset
+}
+
+/// Apply LSP text edits.
+fn apply_edits(text: &str, edits: &Value) -> String {
+    let mut edits: Vec<(usize, usize, String)> = edits
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|edit| {
+            (
+                byte_offset(text, &edit["range"]["start"]),
+                byte_offset(text, &edit["range"]["end"]),
+                edit["newText"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    edits.sort();
+    let mut result = text.to_owned();
+    for (start, end, new) in edits.into_iter().rev() {
+        result.replace_range(start..end, &new);
+    }
+    result
+}
+
+#[test]
+fn rename_edits_every_workspace_file_that_reaches_the_definition() {
+    let directory = tempfile::tempdir().unwrap();
+    let directory = std::fs::canonicalize(directory.path()).unwrap();
+    std::fs::create_dir(directory.join("lib")).unwrap();
+    let files = [
+        ("lib/math.botwork", "# 😀\nDouble |x| { Return |x * 2| }\n"),
+        (
+            "main.botwork",
+            "Import |\"lib/math.botwork\"| As |m|\nLog |[\"😀\", @{ m::Double |2| }]|\n",
+        ),
+        (
+            "other.botwork",
+            "Import |\"lib/math.botwork\"| As |k|\nLog |@{ k::double |3| }|\n",
+        ),
+    ];
+    for (name, text) in files {
+        std::fs::write(directory.join(name), text).unwrap();
+    }
+    let mut client = Client::start(&directory);
+    let main = file_uri(&directory.join("main.botwork"));
+    client.open(&main, files[1].1);
+    // `m::Double` starts at character 15 of line 1, after a two-unit character.
+    let prepared = client.at("textDocument/prepareRename", &main, 1, 15, json!({}));
+    assert_eq!(
+        prepared,
+        json!({"range": range((1, 15), (1, 28)), "placeholder": "Double |x|"})
+    );
+    let edit = client.at(
+        "textDocument/rename",
+        &main,
+        1,
+        15,
+        json!({"newName": "Twice |x|"}),
+    );
+    let changes = edit["changes"].as_object().unwrap();
+    let renamed: std::collections::BTreeMap<&str, String> = files
+        .iter()
+        .map(|(name, text)| {
+            let uri = file_uri(&directory.join(name));
+            (
+                *name,
+                apply_edits(text, changes.get(&uri).unwrap_or(&json!([]))),
+            )
+        })
+        .collect();
+    assert_eq!(changes.len(), 3, "{edit}");
+    assert_eq!(
+        renamed["lib/math.botwork"],
+        "# 😀\nTwice |x| { Return |x * 2| }\n"
+    );
+    assert_eq!(
+        renamed["main.botwork"],
+        "Import |\"lib/math.botwork\"| As |m|\nLog |[\"😀\", @{ m::Twice |2| }]|\n"
+    );
+    assert_eq!(
+        renamed["other.botwork"],
+        "Import |\"lib/math.botwork\"| As |k|\nLog |@{ k::Twice |3| }|\n"
+    );
+    // Refusals come back as errors with the reason.
+    let refused = client.call(
+        "textDocument/rename",
+        json!({"textDocument": {"uri": main}, "position": {"line": 1, "character": 15}, "newName": "Log |x|"}),
+    );
+    assert_eq!(refused["error"]["code"], -32803);
+    assert!(refused["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("built-in"));
+    let builtin = client.call(
+        "textDocument/prepareRename",
+        json!({"textDocument": {"uri": main}, "position": {"line": 1, "character": 0}}),
+    );
+    assert!(builtin["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Built-in"));
+    // An unsaved change to the module stops a rename that crosses files.
+    let module = file_uri(&directory.join("lib/math.botwork"));
+    client.open(&module, "# 😀\nDouble |x| { Return |x * 3| }\n");
+    let unsaved = client.call(
+        "textDocument/rename",
+        json!({"textDocument": {"uri": main}, "position": {"line": 1, "character": 15}, "newName": "Twice |x|"}),
+    );
+    assert!(unsaved["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("Save"));
+    // Nothing is renamed in a file that does not parse.
+    client.change(&main, 2, "Log |@{ m::Double |2| }\n");
+    let broken = client.call(
+        "textDocument/prepareRename",
+        json!({"textDocument": {"uri": main}, "position": {"line": 0, "character": 9}}),
+    );
+    assert!(broken["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("does not parse"));
+    assert_eq!(client.finish(true), Some(0));
+}
+
+#[test]
+fn signature_help_follows_the_call_being_typed() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut client = Client::start(directory.path());
+    let uri = file_uri(&directory.path().join("main.botwork"));
+    let defined = "Say 😀 |x| To |y| { Return |x| }\n";
+    client.open(&uri, defined);
+    // The text no longer parses; help still knows the file's definitions.
+    client.change(&uri, 2, &format!("{defined}Log |@{{ Say 😀 |1| To |"));
+    let help = client.at("textDocument/signatureHelp", &uri, 1, 27, json!({}));
+    assert_eq!(help["activeSignature"], 0);
+    assert_eq!(help["activeParameter"], 1);
+    let signature = &help["signatures"][0];
+    assert_eq!(signature["label"], "Say 😀 |x| To |y|");
+    // Offsets count UTF-16 code units: the emoji takes two.
+    assert_eq!(
+        signature["parameters"],
+        json!([{"label": [7, 10]}, {"label": [14, 17]}])
+    );
+    assert_eq!(signature["documentation"]["kind"], "markdown");
+    let log = client.at("textDocument/signatureHelp", &uri, 1, 5, json!({}));
+    assert_eq!(log["signatures"][0]["label"], "Log |value|");
+    assert_eq!(log["activeParameter"], 0);
+    assert_eq!(
+        client.at("textDocument/signatureHelp", &uri, 0, 0, json!({})),
+        Value::Null
+    );
+    assert_eq!(client.finish(true), Some(0));
+}

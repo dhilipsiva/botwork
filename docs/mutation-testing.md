@@ -413,6 +413,35 @@ entries whose code moved, `lsp-problems-include-module-findings` and
 `lsp-warnings-published-as-errors`, were updated in place and re-run against
 the full oracle set.
 
+Version 40 adds renaming and signature help. Its faults cover:
+
+- refusals skipped:
+  - shadowed variables, and variables looked up by name;
+  - existing variable names;
+  - changed parameters;
+  - definitions inside blocks, and duplicate definitions;
+  - built-in and already-called names, including calls from importers;
+  - unsaved modules;
+  - files that do not parse;
+- edits:
+  - variables in other scopes renamed;
+  - namespaces dropped from qualified calls;
+  - inserted words left unspaced;
+  - importers left unedited;
+- the workspace not searched, and open documents' text ignored;
+- signature help:
+  - earlier words ignored;
+  - the active parameter shifted;
+  - strings and nested calls not followed;
+  - module exports left out;
+  - label offsets counted in bytes.
+
+Its 473-entry catalogue adds 23 faults, with the `lsp`, `rename`, and
+`shared_analysis` suites and the language and server unit tests as oracles; see
+[rename evidence](rename-evidence.json). `lsp-reexports-not-followed`, whose
+code moved into the shared re-export resolver, was updated in place and re-run
+against the full oracle set.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

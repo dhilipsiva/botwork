@@ -73,6 +73,8 @@ impl Client {
             assert_eq!(capabilities[provider], true, "{provider}");
         }
         assert!(capabilities["completionProvider"].is_object());
+        assert_eq!(capabilities["renameProvider"]["prepareProvider"], true);
+        assert!(capabilities["signatureHelpProvider"]["triggerCharacters"].is_array());
         client.notify("initialized", json!({}));
         client
     }

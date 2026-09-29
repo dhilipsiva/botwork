@@ -20,6 +20,8 @@ datasets (`*.dataset.botwork`). It chooses the kind from the file name.
 | Hover | For a built-in statement, the same help as `--statement-help`. For a definition, or a call to one, its header and where it is defined. For a call through an import alias, the header in the module file. For a variable, whether the file assigns it or it can only be an input variable. |
 | Go to definition | From a call to its definition, using the same scope rules as a run: the innermost enclosing definition first, then outer scopes. From an aliased call such as `m::Double \|2\|` to the definition in the module file, following re-exports. From an `Import` path to the module file. From a variable to its first binding in its scope. |
 | References | Every call that reaches a definition, plus the definition's header when the editor asks for declarations. For a built-in statement, every call to it. For a variable, every read and binding in its scope. |
+| Rename | A definition, with every call that reaches it, including qualified calls in the workspace's other files; or a variable, with every read and binding in its scope. A rename that could change what a call or read reaches is refused with the reason; see [renaming](#renaming). |
+| Signature help | While a call is typed: the statements it can still become, with their documentation, and the parameter being typed. It reads the text before the cursor, so it works in a call that does not parse yet, including a call inside another call's parameter. |
 
 ## Agreement with `--check`
 
@@ -65,6 +67,39 @@ server reports the same error as an empty range at line 1, character 0.
 - **Errors.** An unknown request fails with `MethodNotFound`, and a message whose
   body is not JSON gets a `ParseError` response. Unknown notifications are
   ignored.
+
+## Renaming
+
+The editor asks for a new name. For a variable, that is a variable name. For
+a definition, it is a new header with the same parameters in the same order,
+such as `Twice |x|` for `Double |x|`. The words may move around the
+parameters: `Add |a| To |b|` can become `Sum Of |a| And |b|` or
+`Add |a| |b| Together`, and each call is rewritten to match, keeping its
+arguments and any namespace such as `m::`.
+
+A rename is refused when it could change what a call or read reaches:
+
+- **Definitions.** The new header is a built-in, or is already defined or
+  called in the file. For an exported definition, the refusal also covers a
+  file that already calls the new name through the module. A definition inside
+  a block, such as an `If` branch, is registered only by some runs, and two
+  definitions of one signature in the same scope make the reached one depend
+  on order; both are refused.
+- **Variables.** The new name is already a variable in the file. The name is
+  also assigned in an enclosing or nested scope, so which assignment a read
+  reaches depends on the run. `Get Variable` or `Variable Exists` looks up a
+  name that is not a literal, or that is the old or the new name. An input
+  variable is named by whoever supplies it, and cannot be renamed.
+- **Files.** The file does not parse. A workspace file that does not parse
+  mentions the module. A file whose open text differs from the file on disk is
+  part of a rename across files, because other files read modules from disk.
+  Save it first.
+
+To rename a parameter, rename it as a variable; calls pass arguments by
+position and do not change.
+
+Renaming a definition searches the workspace folder for `.botwork` files that
+reach it, skipping hidden directories, `target`, and `node_modules`.
 
 ## Editor configuration
 
@@ -122,6 +157,9 @@ Syntax highlighting comes from the [Tree-sitter grammars](tree-sitter.md).
   - definitions in an imported module file, and a missing module;
   - a module's diagnostics as importers open, change, and close, while the
     module itself is open, and after it is saved;
+  - rename across workspace files that are not open, its refusals, and
+    signature help, with positions and label offsets after characters that take
+    two UTF-16 code units;
   - protocol errors, and the exit status with and without `shutdown`.
 - The unit tests in `src/core/language/tests.rs` check the shared analysis:
   - problems from the parser and the checks;
@@ -129,6 +167,19 @@ Syntax highlighting comes from the [Tree-sitter grammars](tree-sitter.md).
   - hover text and completions;
   - module resolution through re-exports;
   - suites, whose case programs are indexed once.
+- `tests/rename.rs` renames every definition and variable in the conformance
+  scripts and the examples, and every definition in the example modules. Each
+  rename is refused for one of the reasons above. Otherwise, the result must
+  resolve every call and variable as before and run with the same output, exit
+  status, and error codes. Module renames are run through the example scripts
+  that import them.
+- The unit tests in `src/core/language/rename/tests.rs` and
+  `src/core/language/signature_help/tests.rs` cover:
+  - rewriting words around parameters, keeping line continuations and
+    namespaces;
+  - each refusal;
+  - renames across importers and re-exports;
+  - signature help in nested calls, assignments, partial names, and modules.
 - The unit tests in `src/lsp.rs` check message framing, UTF-16 position
   conversion, and file URIs.
 
@@ -137,7 +188,11 @@ focused mutation campaign.
 
 ## Limits
 
-- **Renaming and signature help** are not implemented yet.
+- **Renaming scope.** Import aliases and suite, case, and dataset names are not
+  renamed. Scripts that call a module from outside the workspace folder are
+  not updated.
+- **Signature help** reads only the current line, so a call continued with `\`
+  from an earlier line gets no help.
 - **Workspace-wide references.** References cover the open document. Calls to
   a module's definitions from other files are not listed.
 - **Datasets** get diagnostics only; they define no statements or variables.

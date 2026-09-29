@@ -13,9 +13,9 @@ use botwork::core::{
 };
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     io::{self, BufRead, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 struct Document {
@@ -122,7 +122,41 @@ fn uri_of(path: &str) -> String {
 struct Server {
     language: Language,
     documents: HashMap<String, Document>,
+    /// The workspace folder, searched for files a rename must update.
+    root: PathBuf,
     shutdown: bool,
+}
+
+/// At most this many workspace files are read for a rename.
+const WORKSPACE_FILES: usize = 2000;
+
+/// `.botwork` files under `directory`, skipping hidden and build directories.
+fn workspace_files(directory: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.filter_map(Result::ok).collect();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if found.len() >= WORKSPACE_FILES {
+            return;
+        }
+        if kind.is_dir() && !name.starts_with('.') && name != "target" && name != "node_modules" {
+            workspace_files(&entry.path(), found);
+        } else if kind.is_file() && name.ends_with(".botwork") {
+            found.push(entry.path());
+        }
+    }
+}
+
+/// A request the server cannot carry out, with the reason.
+fn failed(message: impl Into<String>) -> (i64, String) {
+    (-32803, message.into())
 }
 
 impl Server {
@@ -154,6 +188,24 @@ impl Server {
             }
         }
         json!({"uri": uri, "diagnostics": diagnostics})
+    }
+
+    /// Every workspace file's text by path, with open documents' text in
+    /// place of what is on disk.
+    fn workspace(&self) -> BTreeMap<String, String> {
+        let mut files = Vec::new();
+        workspace_files(&self.root, &mut files);
+        let mut documents: BTreeMap<String, String> = files
+            .into_iter()
+            .filter_map(|path| {
+                let text = std::fs::read_to_string(&path).ok()?;
+                Some((path.to_string_lossy().into_owned(), text))
+            })
+            .collect();
+        for document in self.documents.values() {
+            documents.insert(document.name.clone(), document.text.clone());
+        }
+        documents
     }
 
     /// The URI of a file: its open document's, or its `file:` URI.
@@ -253,7 +305,14 @@ impl Server {
             return Err((-32600, "The server is shutting down".into()));
         }
         match method {
-            "initialize" => Ok(json!({
+            "initialize" => {
+                let folder = parameters["workspaceFolders"][0]["uri"]
+                    .as_str()
+                    .or(parameters["rootUri"].as_str());
+                if let Some(folder) = folder.filter(|uri| uri.starts_with("file:")) {
+                    self.root = PathBuf::from(name_of(folder));
+                }
+                Ok(json!({
                 "capabilities": {
                     "positionEncoding": "utf-16",
                     "textDocumentSync": {"openClose": true, "change": 1, "save": {"includeText": false}},
@@ -261,9 +320,95 @@ impl Server {
                     "hoverProvider": true,
                     "definitionProvider": true,
                     "referencesProvider": true,
+                    "renameProvider": {"prepareProvider": true},
+                    "signatureHelpProvider": {"triggerCharacters": ["|", " "]},
                 },
                 "serverInfo": {"name": "botwork", "version": env!("CARGO_PKG_VERSION")},
-            })),
+                }))
+            }
+            "textDocument/prepareRename" => {
+                let (document, text, analysis, offset) = self
+                    .locate(parameters)
+                    .ok_or_else(|| failed("The document is not open"))?;
+                if !document.analysis.parsed {
+                    return Err(failed(
+                        "The file does not parse; fix its syntax errors first",
+                    ));
+                }
+                let target = analysis.prepare_rename(offset).map_err(failed)?;
+                Ok(json!({
+                    "range": range(text, target.start, target.end),
+                    "placeholder": target.placeholder,
+                }))
+            }
+            "textDocument/rename" => {
+                let (document, _, _, offset) = self
+                    .locate(parameters)
+                    .ok_or_else(|| failed("The document is not open"))?;
+                let new_name = parameters["newName"].as_str().unwrap_or_default();
+                let documents = self.workspace();
+                let edits = self
+                    .language
+                    .rename(&documents, &document.name, offset, new_name)
+                    .map_err(failed)?;
+                let mut changes = serde_json::Map::new();
+                for (file, edits) in edits {
+                    let text = documents
+                        .get(&file)
+                        .cloned()
+                        .or_else(|| std::fs::read_to_string(&file).ok())
+                        .unwrap_or_default();
+                    let edits: Vec<Value> = edits
+                        .iter()
+                        .map(|edit| {
+                            json!({"range": range(&text, edit.start, edit.end), "newText": edit.text})
+                        })
+                        .collect();
+                    changes.insert(self.uri_for(&file), Value::Array(edits));
+                }
+                Ok(json!({"changes": changes}))
+            }
+            "textDocument/signatureHelp" => {
+                let Some(document) = parameters["textDocument"]["uri"]
+                    .as_str()
+                    .and_then(|uri| self.documents.get(uri))
+                else {
+                    return Ok(Value::Null);
+                };
+                let offset = offset_of(&document.text, &parameters["position"]);
+                let analysis = document
+                    .navigation
+                    .as_ref()
+                    .map_or(&document.analysis, |(_, analysis)| analysis);
+                let Some(help) = analysis.signature_help(&self.language, &document.text, offset)
+                else {
+                    return Ok(Value::Null);
+                };
+                let units = |text: &str| text.encode_utf16().count();
+                let signatures: Vec<Value> = help
+                    .signatures
+                    .iter()
+                    .map(|signature| {
+                        let parameters: Vec<Value> = signature
+                            .parameters
+                            .iter()
+                            .map(|&(start, end)| {
+                                json!({"label": [units(&signature.label[..start]), units(&signature.label[..end])]})
+                            })
+                            .collect();
+                        json!({
+                            "label": signature.label,
+                            "documentation": {"kind": "markdown", "value": signature.documentation},
+                            "parameters": parameters,
+                        })
+                    })
+                    .collect();
+                let mut result = json!({"signatures": signatures, "activeSignature": 0});
+                if let Some(active) = help.active_parameter {
+                    result["activeParameter"] = json!(active);
+                }
+                Ok(result)
+            }
             "shutdown" => {
                 self.shutdown = true;
                 Ok(Value::Null)
@@ -412,8 +557,9 @@ fn diagnostic(text: &str, problem: &Problem) -> Value {
 pub(super) fn run() -> i32 {
     let directory = std::env::current_dir().unwrap_or_else(|_| Path::new("/").to_owned());
     let mut server = Server {
-        language: Language::new(directory),
+        language: Language::new(&directory),
         documents: HashMap::new(),
+        root: directory,
         shutdown: false,
     };
     let stdin = io::stdin();

@@ -214,14 +214,28 @@ struct DefinitionSymbol {
     file: String,
     header_start: usize,
     header_end: usize,
+    signature: String,
+    /// Parameter names and their spans in the header.
+    parameters: Vec<(String, (usize, usize))>,
+    /// The frame it registers in, and whether it sits inside a block there, so
+    /// that only some runs register it.
+    frame: usize,
+    nested: bool,
 }
 
 #[derive(Clone, Debug)]
 struct CallSymbol {
     signature: String,
     span: (usize, usize),
+    /// Argument expressions' spans, and each argument's value when it is a
+    /// string literal.
+    arguments: Vec<(usize, usize)>,
+    literals: Vec<Option<String>>,
     /// The definition it reaches: in this file's index or a module's.
     target: Target,
+    /// For a qualified call, the module file and signature it names after
+    /// following re-exports, whether or not the module defines it.
+    module: Option<(PathBuf, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -245,6 +259,8 @@ struct VariableSymbol {
 struct ImportSymbol {
     path_span: (usize, usize),
     module: Option<PathBuf>,
+    /// The alias, as written.
+    name: String,
 }
 
 #[derive(Debug, Default)]
@@ -253,6 +269,8 @@ struct Index {
     calls: Vec<CallSymbol>,
     variables: Vec<VariableSymbol>,
     imports: Vec<ImportSymbol>,
+    /// Each frame's parent frame.
+    parents: Vec<Option<usize>>,
     /// Names bound anywhere, for completion.
     names: BTreeSet<String>,
 }
@@ -295,6 +313,7 @@ impl IndexBuilder<'_> {
     ) -> Frame<'p> {
         let id = self.frames;
         self.frames += 1;
+        self.index.parents.push(parent.map(|parent| parent.id));
         let mut frame = Frame {
             id,
             parent,
@@ -305,12 +324,13 @@ impl IndexBuilder<'_> {
         for parameter in parameters {
             self.variable(&parameter.text, &parameter.span, Some(id), true);
         }
-        self.collect(statements, &mut frame);
+        self.collect(statements, &mut frame, false);
         frame
     }
 
-    /// Record a frame's definitions, bindings, and imports, as the analyzer does.
-    fn collect(&mut self, statements: &[Statement], frame: &mut Frame<'_>) {
+    /// Record a frame's definitions, bindings, and imports, as the analyzer
+    /// does; `nested` statements sit inside a block of the frame.
+    fn collect(&mut self, statements: &[Statement], frame: &mut Frame<'_>, nested: bool) {
         for statement in statements {
             match statement.kind() {
                 StatementKind::Assign { name, .. } => {
@@ -324,6 +344,16 @@ impl IndexBuilder<'_> {
                             file: header.source().name().to_owned(),
                             header_start: header.start(),
                             header_end: header.end(),
+                            signature: definition.signature.clone(),
+                            parameters: definition
+                                .parameters
+                                .iter()
+                                .map(|name| {
+                                    (name.text.clone(), (name.span.start(), name.span.end()))
+                                })
+                                .collect(),
+                            frame: frame.id,
+                            nested,
                         });
                     }
                     let index = self
@@ -343,21 +373,23 @@ impl IndexBuilder<'_> {
                     else_branch,
                     ..
                 } => {
-                    self.collect(&then_branch.statements, frame);
+                    self.collect(&then_branch.statements, frame, true);
                     match else_branch {
-                        Some(ElseBranch::Block(block)) => self.collect(&block.statements, frame),
+                        Some(ElseBranch::Block(block)) => {
+                            self.collect(&block.statements, frame, true)
+                        }
                         Some(ElseBranch::If(nested)) => {
-                            self.collect(std::slice::from_ref(nested.as_ref()), frame)
+                            self.collect(std::slice::from_ref(nested.as_ref()), frame, true)
                         }
                         None => {}
                     }
                 }
                 StatementKind::For { binding, body, .. } => {
                     frame.variables.insert(binding.text.clone());
-                    self.collect(&body.statements, frame);
+                    self.collect(&body.statements, frame, true);
                 }
                 StatementKind::While { body, .. } | StatementKind::Poll { body, .. } => {
-                    self.collect(&body.statements, frame)
+                    self.collect(&body.statements, frame, true)
                 }
                 StatementKind::Try {
                     body,
@@ -367,12 +399,12 @@ impl IndexBuilder<'_> {
                     if let Some(binding) = binding {
                         frame.variables.insert(binding.text.clone());
                     }
-                    self.collect(&body.statements, frame);
-                    self.collect(&handler.statements, frame);
+                    self.collect(&body.statements, frame, true);
+                    self.collect(&handler.statements, frame, true);
                 }
                 StatementKind::Finally { body, cleanup } => {
-                    self.collect(&body.statements, frame);
-                    self.collect(&cleanup.statements, frame);
+                    self.collect(&body.statements, frame, true);
+                    self.collect(&cleanup.statements, frame, true);
                 }
                 StatementKind::Import {
                     path,
@@ -386,6 +418,7 @@ impl IndexBuilder<'_> {
                         self.index.imports.push(ImportSymbol {
                             path_span: (path_span.start(), path_span.end()),
                             module: module.clone(),
+                            name: namespace.text.trim().to_owned(),
                         });
                     }
                     frame
@@ -539,15 +572,21 @@ impl IndexBuilder<'_> {
             .iter()
             .for_each(|argument| self.expression(argument, frame));
         let signature = call.signature.as_str();
+        let mut module = None;
         let target = match signature.split_once("::") {
-            Some((namespace, exported)) => frame
-                .chain()
-                .find_map(|frame| frame.modules.get(namespace))
-                .and_then(|modules| modules.iter().find_map(|(_, module)| module.clone()))
-                .and_then(|module| module_definition(&module, exported, 0))
-                .map_or(Target::Unknown, |(location, header)| {
-                    Target::Module(location, header)
-                }),
+            Some((namespace, exported)) => {
+                module = frame
+                    .chain()
+                    .find_map(|frame| frame.modules.get(namespace))
+                    .and_then(|modules| modules.iter().find_map(|(_, module)| module.clone()))
+                    .and_then(|module| reexported(&module, exported, 0));
+                module
+                    .as_ref()
+                    .and_then(|(file, signature)| module_definition(file, signature))
+                    .map_or(Target::Unknown, |(location, header)| {
+                        Target::Module(location, header)
+                    })
+            }
             None => {
                 let own = frame.definitions.get(signature).and_then(|definitions| {
                     definitions
@@ -573,17 +612,28 @@ impl IndexBuilder<'_> {
             self.index.calls.push(CallSymbol {
                 signature: signature.to_owned(),
                 span: (call.span.start(), call.span.end()),
+                arguments: call
+                    .arguments
+                    .iter()
+                    .map(|argument| (argument.span.start(), argument.span.end()))
+                    .collect(),
+                literals: call
+                    .arguments
+                    .iter()
+                    .map(|argument| match &argument.kind {
+                        ExprKind::String(value) => Some(value.clone()),
+                        _ => None,
+                    })
+                    .collect(),
                 target,
+                module,
             });
         }
     }
 }
 
-/// Where a module defines `exported`, following re-exports a few levels deep.
-fn module_definition(module: &Path, exported: &str, depth: usize) -> Option<(Location, String)> {
-    if depth > 8 {
-        return None;
-    }
+/// A module's name and syntax tree, read as the analyzer reads it.
+fn read_module(module: &Path) -> Option<(String, Program)> {
     let mut text = String::new();
     fs::File::open(module)
         .ok()?
@@ -592,26 +642,42 @@ fn module_definition(module: &Path, exported: &str, depth: usize) -> Option<(Loc
         .ok()?;
     let name = module.to_string_lossy().into_owned();
     let program = Program::parse_detailed(&name, &text).ok()?;
-    if let Some((namespace, rest)) = exported.split_once("::") {
-        let import = program
-            .statements
-            .iter()
-            .find_map(|statement| match statement.kind() {
-                StatementKind::Import {
-                    path,
-                    namespace: alias,
-                    ..
-                } if super::ast::normalize_sentence(&alias.text) == namespace => Some(path.clone()),
-                _ => None,
-            })?;
-        let requested = module_path(&name, Path::new("/"), &import)?;
-        return module_definition(&fs::canonicalize(requested).ok()?, rest, depth + 1);
+    Some((name, program))
+}
+
+/// The module file and signature that `exported`, qualified in `module`,
+/// names: re-exports are followed a few levels deep.
+fn reexported(module: &Path, exported: &str, depth: usize) -> Option<(PathBuf, String)> {
+    let Some((namespace, rest)) = exported.split_once("::") else {
+        return Some((module.to_owned(), exported.to_owned()));
+    };
+    if depth > 8 {
+        return None;
     }
+    let (name, program) = read_module(module)?;
+    let import = program
+        .statements
+        .iter()
+        .find_map(|statement| match statement.kind() {
+            StatementKind::Import {
+                path,
+                namespace: alias,
+                ..
+            } if super::ast::normalize_sentence(&alias.text) == namespace => Some(path.clone()),
+            _ => None,
+        })?;
+    let requested = module_path(&name, Path::new("/"), &import)?;
+    reexported(&fs::canonicalize(requested).ok()?, rest, depth + 1)
+}
+
+/// Where a module defines `signature` at its root, and the header.
+fn module_definition(module: &Path, signature: &str) -> Option<(Location, String)> {
+    let (name, program) = read_module(module)?;
     program
         .statements
         .iter()
         .find_map(|statement| match statement.kind() {
-            StatementKind::Define(definition) if definition.signature == exported => Some((
+            StatementKind::Define(definition) if definition.signature == signature => Some((
                 Location {
                     file: name.clone(),
                     start: definition.header.start(),
@@ -670,6 +736,34 @@ impl Analysis {
             start: definition.header_start,
             end: definition.header_end,
         }
+    }
+
+    /// How each call and variable resolves, in source order, without names
+    /// or positions. Documents that differ only by a rename resolve alike
+    /// exactly when their resolutions are equal.
+    pub fn resolution(&self) -> Vec<String> {
+        let mut entries: Vec<(usize, String)> = Vec::new();
+        for call in &self.index.calls {
+            let target = match &call.target {
+                Target::Builtin => format!("built-in {}", call.signature),
+                Target::Definition(index) => format!("definition {index}"),
+                Target::Module(location, _) => format!("a definition in {}", location.file),
+                Target::Unknown => "nothing".to_owned(),
+            };
+            entries.push((
+                call.span.0,
+                format!("call with {} arguments to {target}", call.arguments.len()),
+            ));
+        }
+        for variable in &self.index.variables {
+            let role = if variable.binding { "binding" } else { "read" };
+            entries.push((
+                variable.span.0,
+                format!("variable {role} in frame {:?}", variable.frame),
+            ));
+        }
+        entries.sort();
+        entries.into_iter().map(|(_, entry)| entry).collect()
     }
 
     /// Markdown for the symbol at `offset`.
@@ -901,6 +995,13 @@ fn inside_parameter(text: &str, offset: usize) -> bool {
     }
     inside
 }
+
+mod rename;
+
+mod signature_help;
+
+pub use rename::{apply, Edit, RenameTarget};
+pub use signature_help::{Signature, SignatureHelp};
 
 #[cfg(test)]
 mod tests;

@@ -1,5 +1,5 @@
 {
-  "version": 39,
+  "version": 40,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2973,8 +2973,8 @@
       "id": "lsp-reexports-not-followed",
       "area": "lsp",
       "file": "src/core/language.rs",
-      "before": "        return module_definition(&fs::canonicalize(requested).ok()?, rest, depth + 1);\n",
-      "after": "        return fs::canonicalize(requested).ok().and(None);\n"
+      "before": "    reexported(&fs::canonicalize(requested).ok()?, rest, depth + 1)\n",
+      "after": "    fs::canonicalize(requested).ok().and(None)\n"
     },
     {
       "id": "lsp-outermost-call-chosen",
@@ -3150,6 +3150,167 @@
       "file": "src/lsp.rs",
       "before": "                if !diagnostics.contains(&value) {\n",
       "after": "                if diagnostics.len() < usize::MAX {\n"
+    },
+    {
+      "id": "lsp-rename-shadowing-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "        let shadowed = self.index.variables.iter().any(|other| {\n",
+      "after": "        let shadowed = false && self.index.variables.iter().any(|other| {\n"
+    },
+    {
+      "id": "lsp-rename-lookups-by-name-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "        let by_name = self.index.calls.iter().any(|call| {\n",
+      "after": "        let by_name = false && self.index.calls.iter().any(|call| {\n"
+    },
+    {
+      "id": "lsp-rename-existing-variable-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "        if self.index.variables.iter().any(|other| other.name == new) {\n",
+      "after": "        if self.index.variables.iter().any(|other| other.name == new && false) {\n"
+    },
+    {
+      "id": "lsp-rename-other-scopes-edited",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "            .filter(|variable| variable.name == old && variable.frame == Some(frame))\n",
+      "after": "            .filter(|variable| variable.name == old)\n"
+    },
+    {
+      "id": "lsp-rename-parameters-changed-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "        if header.parameters != parameters {\n",
+      "after": "        if false && header.parameters != parameters {\n"
+    },
+    {
+      "id": "lsp-rename-nested-definitions-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "        if definition.nested {\n",
+      "after": "        if definition.nested && false {\n"
+    },
+    {
+      "id": "lsp-rename-duplicates-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "        if duplicated {\n",
+      "after": "        if duplicated && false {\n"
+    },
+    {
+      "id": "lsp-rename-builtin-collision-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "            if self.builtins.contains_key(&header.signature) {\n",
+      "after": "            if self.builtins.contains_key(&header.signature) && false {\n"
+    },
+    {
+      "id": "lsp-rename-called-name-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "                .any(|call| call.signature == header.signature)\n",
+      "after": "                .any(|call| call.signature == header.signature && false)\n"
+    },
+    {
+      "id": "lsp-rename-importer-collision-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "                            module.to_str() == Some(file) && *signature == header.signature\n",
+      "after": "                            module.to_str() == Some(file) && *signature == header.signature && false\n"
+    },
+    {
+      "id": "lsp-rename-qualifier-dropped",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "                new = format!(\"{}{new}\", &text[first..first + at + 2]);\n",
+      "after": "                new = format!(\"{new}{}\", &text[first..first]);\n"
+    },
+    {
+      "id": "lsp-rename-inserted-words-unspaced",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "                    (false, false) => format!(\" {new} \"),\n",
+      "after": "                    (false, false) => format!(\"{new}\"),\n"
+    },
+    {
+      "id": "lsp-rename-importers-not-edited",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "                        location.file == file && location.start == header_start\n",
+      "after": "                        location.file == file && location.start == header_start && false\n"
+    },
+    {
+      "id": "lsp-rename-unsaved-modules-allowed",
+      "area": "lsp-rename",
+      "file": "src/core/language/rename.rs",
+      "before": "                if fs::read_to_string(name).is_ok_and(|disk| disk != texts[name]) {\n",
+      "after": "                if fs::read_to_string(name).is_ok_and(|disk| disk != texts[name] && false) {\n"
+    },
+    {
+      "id": "lsp-signature-earlier-words-ignored",
+      "area": "lsp-rename",
+      "file": "src/core/language/signature_help.rs",
+      "before": "                && typed.parts[..complete] == shape.parts[..complete]\n",
+      "after": "                && typed.parts[..complete].len() <= shape.parts.len()\n"
+    },
+    {
+      "id": "lsp-signature-active-parameter-shifted",
+      "area": "lsp-rename",
+      "file": "src/core/language/signature_help.rs",
+      "before": "        let active = if typed.inside { complete - 1 } else { complete };\n",
+      "after": "        let active = complete;\n"
+    },
+    {
+      "id": "lsp-signature-strings-not-skipped",
+      "area": "lsp-rename",
+      "file": "src/core/language/signature_help.rs",
+      "before": "            '\"' => string = !string,\n",
+      "after": "            '\"' => {}\n"
+    },
+    {
+      "id": "lsp-signature-nested-calls-ignored",
+      "area": "lsp-rename",
+      "file": "src/core/language/signature_help.rs",
+      "before": "            '@' if characters.peek() == Some(&'{') => {\n",
+      "after": "            '@' if false && characters.peek() == Some(&'{') => {\n"
+    },
+    {
+      "id": "lsp-signature-exports-not-listed",
+      "area": "lsp-rename",
+      "file": "src/core/language/signature_help.rs",
+      "before": "                exports(module, &import.name, 0, &mut candidates);\n",
+      "after": "                let _ = (module, &candidates);\n"
+    },
+    {
+      "id": "lsp-signature-labels-in-bytes",
+      "area": "lsp-rename",
+      "file": "src/lsp.rs",
+      "before": "                let units = |text: &str| text.encode_utf16().count();\n",
+      "after": "                let units = |text: &str| text.len();\n"
+    },
+    {
+      "id": "lsp-rename-workspace-not-scanned",
+      "area": "lsp-rename",
+      "file": "src/lsp.rs",
+      "before": "        workspace_files(&self.root, &mut files);\n",
+      "after": "        workspace_files(&self.root, &mut files.split_off(0));\n"
+    },
+    {
+      "id": "lsp-rename-open-text-ignored",
+      "area": "lsp-rename",
+      "file": "src/lsp.rs",
+      "before": "            documents.insert(document.name.clone(), document.text.clone());\n",
+      "after": "            let _ = document;\n"
+    },
+    {
+      "id": "lsp-prepare-rename-in-broken-files",
+      "area": "lsp-rename",
+      "file": "src/lsp.rs",
+      "before": "                if !document.analysis.parsed {\n",
+      "after": "                if !document.analysis.parsed && false {\n"
     }
   ]
 }
