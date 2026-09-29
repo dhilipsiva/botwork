@@ -160,6 +160,18 @@ entries and the final focused process campaign covers all 23 process faults.
 [Process evidence](processes-evidence.json) records both review stages separately;
 generated discovery is not a new complete generated score.
 
+Version 19 adds HTTP option defaults, redirect/retry policy, TLS hostname checks,
+request framing, deadline latching, and body/header/workspace admission. Its
+190-entry targeted catalogue adds 19 HTTP faults, with the `http` integration
+suite as an oracle; see [HTTP evidence](http-evidence.json).
+Version 20 adds structured assertion evidence: bounded previews and truncation
+markers, exact numeric comparison, deterministic array/map/string difference
+selection, full-operand diagnostic ownership, and CLI artifact completeness,
+quotas, privacy, exclusive publication, and dataset identity. Its 204-entry
+catalogue adds 14 assertion faults; the `assertion_diagnostics` and
+`assertion_artifacts` suites join the oracles. [Assertion evidence](assertion-diagnostics-evidence.json)
+records the focused campaign.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

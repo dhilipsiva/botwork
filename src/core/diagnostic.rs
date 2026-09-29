@@ -125,7 +125,7 @@ impl BWErr {
             Self::InputError(_) => DiagnosticCode::Input,
             Self::RunConfiguration(_) => DiagnosticCode::RunConfiguration,
             Self::SourceRead(_) => DiagnosticCode::SourceRead,
-            Self::AssertionFailed(_) => DiagnosticCode::Assertion,
+            Self::AssertionFailed(_) | Self::AssertionMismatch { .. } => DiagnosticCode::Assertion,
             Self::ExplicitFailure(_) => DiagnosticCode::ExplicitFailure,
             Self::ResourceLimit { .. } => DiagnosticCode::ResourceLimit,
         }
@@ -167,7 +167,7 @@ impl fmt::Display for Help<'_> {
             BWErr::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.",
             BWErr::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/AST/value/evaluation/import limits within documented ceilings.",
             BWErr::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.",
-            BWErr::AssertionFailed(_) => "Inspect the condition or compared values; fix the behavior or update the expectation deliberately.",
+            BWErr::AssertionFailed(_) | BWErr::AssertionMismatch { .. } => "Inspect the condition or compared values; fix the behavior or update the expectation deliberately.",
             BWErr::ExplicitFailure(_) => "Inspect the explicit failure reason and the path that reached Fail.",
             BWErr::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.",
             BWErr::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.",

@@ -84,6 +84,13 @@ fn identity(index: usize, cases: &[SelectedCase]) -> Identity {
         number: index + 1,
         path: Arc::new(PathBuf::from(case.suite().source().name())),
         case: Some((case.id(), case.display_name())),
+        dataset: case.row().map(|row| {
+            (
+                case.dataset().expect("row dataset").id().to_owned(),
+                row.metadata().id().to_owned(),
+            )
+        }),
+        artifacts: None,
     }
 }
 
@@ -296,7 +303,9 @@ pub(super) async fn run(
                         work -= 1;
                         groups[group].active -= 1;
                         if result.is_err() { failed += 1; failed_ids[index] = true; }
-                        report(Message::Finished(identity(index, &cases), result), &mut reporting_error).await;
+                        let mut run_identity = identity(index, &cases);
+                        run_identity.artifacts = configuration.artifacts.clone();
+                        report(Message::Finished(run_identity, result), &mut reporting_error).await;
                     }
                     Task::Owner(group) => {
                         if matches!(groups[group].state, State::SettingUp | State::Finishing) { work -= 1; }
@@ -307,7 +316,7 @@ pub(super) async fn run(
                             for &index in &groups[group].indices { failed_ids[index] = true; }
                         }
                         groups[group].state = State::Done;
-                        report(Message::SuiteFinished(groups[group].suite.metadata().id().into(), result), &mut reporting_error).await;
+                        report(Message::SuiteFinished(groups[group].suite.metadata().id().into(), result, configuration.artifacts.clone()), &mut reporting_error).await;
                         skip(&mut groups[group], &cases, &mut failed_ids, &mut skipped, &mut reporting_error, "suite setup did not complete").await;
                     }
                 }

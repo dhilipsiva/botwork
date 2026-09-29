@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 160 cases against the 67 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 194 cases against the 77 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -8,6 +8,14 @@ Names below are stable corpus case IDs. One script can exercise several related 
 
 | Rule | Positive case | Invalid-input case | Boundary case |
 | --- | --- | --- | --- |
+| B1 | builtins-success | builtins-invalid, builtins-assertion | builtins-success |
+| B2 | collection-statements | collection-missing-index, collection-duplicate-key | collection-boundaries |
+| B3 | string-statements | string-missing-field, string-invalid-regex | string-boundaries |
+| B4 | datetime-statements | datetime-gap, datetime-duration-overflow | datetime-boundaries |
+| B5 | os-statements | os-invalid-byte, os-missing-file | os-boundaries |
+| B7 | http-statements | http-invalid-method | http-zero-deadline |
+| B8 | assertion-artifacts | assertion-invalid-condition | assertion-empty-array-difference |
+| F10 | cleanup-return | cleanup-control, cleanup-secondary-failure | cleanup-empty-and-catch |
 | B6 | process-statements | process-invalid-argument | process-empty |
 | E1 | control | incomplete-continuation | recovery |
 | E2 | values | return-operand-order | recovery |
@@ -170,3 +178,5 @@ Four B2 CLI cases exercise collection replacement and sorted iteration, empty ra
 Four B3 CLI cases exercise named formatting, literal transformations, Unicode slicing/casing, regex matching/extraction, empty boundaries, missing fields, and invalid regex syntax. String escapes remain unchanged.
 
 Three B6 CLI cases execute text/binary capture and nonzero status, exact empty captures, and rejection of a non-String argument before launch. Lifecycle, environment, admission, and async scheduling use the dedicated process and worker matrices.
+
+Three B8 cases preserve full Bool operands through Catch, reject a non-Bool condition, and diagnose an extra element against an empty array. Dedicated assertion/CLI matrices cover nested differences, Unicode, budgets, artifacts, and dataset identity.

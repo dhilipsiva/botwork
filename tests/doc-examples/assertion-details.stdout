@@ -1,0 +1,6 @@
+BW9001
+Expected {"items": ["café", 1]} (Map), got {"items": ["cafe", 1]} (Map)
+  difference at $["items"][0]: expected "café" (String), got "cafe" (String); Unicode scalar index 3: expected 'é' (U+00E9), got 'e' (U+0065)
+  full operands: details.expected / details.actual (typed JSON)
+{"kind":"Map","value":{"items":{"kind":"Array","value":[{"kind":"String","value":"cafe"},{"kind":"Int","value":1}]}}}
+{"kind":"Map","value":{"items":{"kind":"Array","value":[{"kind":"String","value":"café"},{"kind":"Float","value":1.0}]}}}

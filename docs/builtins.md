@@ -30,9 +30,10 @@ strings, arrays, or None. Equality is exactly the `==` relation: recursively
 compare arrays/maps; compare Int/Float without rounding integers to f32; treat
 maps independently of insertion order; compare strings by their actual Unicode
 scalar sequence without normalization. Nonfinite input remains invalid. Assertion
-mismatch reasons name expected/actual values and their kinds within diagnostic
-budgets. Rich diffs, case/dataset report fields, and retained artifacts remain the
-separate diagnostic-assertions task.
+mismatch reasons name expected/actual values and their kinds with bounded previews
+and a first string/collection difference. [Assertion diagnostics](assertion-diagnostics.md)
+retain full admitted typed operands, preserve case/dataset identity in CLI failures,
+and support optional artifact files.
 
 Assertions and explicit failures are catchable. Unhandled failures stop the body,
 then entered Finally/fixture owners still await cleanup. `Fail` is deliberately

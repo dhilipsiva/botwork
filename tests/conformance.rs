@@ -84,6 +84,19 @@ fn inventory(cases: &[Case], specification: &str) -> Result<(), String> {
 fn corpus_covers_each_specified_rule_and_registers_every_fixture() {
     let cases = cases();
     inventory(&cases, SPECIFICATION).unwrap();
+    let guide = include_str!("../docs/conformance-corpus.md");
+    let rules = rule_ids(SPECIFICATION).unwrap();
+    assert!(guide.contains(&format!(
+        "registers {} cases against the {} rule IDs",
+        cases.len(),
+        rules.len()
+    )));
+    for rule in rules {
+        assert!(
+            guide.contains(&format!("| {rule} |")),
+            "missing documented traceability row: {rule}"
+        );
+    }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/conformance");
     for entry in fs::read_dir(root).unwrap() {
         let path = entry.unwrap().path();

@@ -92,6 +92,13 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "assertion-details",
+            (
+                "docs/assertion-diagnostics.md",
+                include_bytes!("doc-examples/assertion-details.stdout").as_slice(),
+            ),
+        ),
+        (
             "builtins",
             (
                 "docs/builtins.md",

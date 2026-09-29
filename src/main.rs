@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 
+mod assertion_artifacts;
 mod batch;
 mod suites;
 
@@ -51,6 +52,9 @@ struct Args {
     /// Write a failed-case record; invalidate it before discovery/execution
     #[arg(long, requires = "suite", value_name = "PATH")]
     failures: Option<PathBuf>,
+    /// Save full permitted assertion operands in a fresh directory beneath PATH
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    assertion_artifacts: Option<PathBuf>,
     /// Maximum simultaneous runs, including file/input preparation (1-64)
     #[arg(short = 'j', long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=64))]
     jobs: u8,
@@ -100,6 +104,8 @@ struct Args {
 
 #[derive(Debug, thiserror::Error)]
 enum CliError {
+    #[error("Writing assertion artifacts failed: {source}\n{original}")]
+    Artifact { source: io::Error, original: String },
     #[error("Suite execution failed: {failed} cases failed, {skipped} skipped, {fixtures_failed} suite fixtures failed")]
     Suites {
         failed: usize,
@@ -261,6 +267,16 @@ fn main() -> ExitCode {
                 CliError::Script(Diagnostic::new(BWErr::AsyncRuntime(error.to_string())))
             })
             .and_then(|runtime| {
+                let artifacts = args
+                    .assertion_artifacts
+                    .as_deref()
+                    .map(assertion_artifacts::Store::new)
+                    .transpose()
+                    .map_err(|source| CliError::Read {
+                        file: args.assertion_artifacts.clone().expect("artifact path"),
+                        source,
+                    })?
+                    .map(std::sync::Arc::new);
                 let limits = RunLimits {
                     output: output_limits,
                     steps: args.max_steps,
@@ -277,6 +293,7 @@ fn main() -> ExitCode {
                         suites::Request::from(&args),
                         usize::from(args.jobs),
                         batch::Configuration {
+                            artifacts,
                             debug: args.debug,
                             files: args.variable_files,
                             settings: args.variables,
@@ -286,19 +303,21 @@ fn main() -> ExitCode {
                         },
                     ))
                 } else if args.file.len() == 1 {
-                    runtime.block_on(run(
+                    let result = runtime.block_on(run(
                         &args.file[0],
                         args.debug,
                         &args.variable_files,
                         &args.variables,
                         limits,
                         args.timeout_ms,
-                    ))
+                    ));
+                    assertion_artifacts::write_single(result, artifacts.as_deref(), &args.file[0])
                 } else {
                     runtime.block_on(batch::run(
                         args.file,
                         usize::from(args.jobs),
                         batch::Configuration {
+                            artifacts,
                             debug: args.debug,
                             files: args.variable_files,
                             settings: args.variables,

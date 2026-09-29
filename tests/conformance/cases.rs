@@ -181,6 +181,12 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("assertion-artifacts", r#"Try { Assert |false| } Catch |error| {
+Log |error.details.actual|
+Log |error.details.expected|
+}"#, "{\"kind\":\"Bool\",\"value\":false}\n{\"kind\":\"Bool\",\"value\":true}\n", &["B8"], &[]),
+        failure("assertion-invalid-condition", "Assert |1|", "", "BW3003", "Bool", &["B8"]),
+        Case { id: "assertion-empty-array-difference", positive: &[], invalid: &["B8"], boundary: &["B8"], input: Input::Script("Assert |[1]| Equals |[]|"), stdout: "", code: Some("BW9001"), error: Some("array lengths: expected 0, got 1") },
         success("http-statements", include_str!("../../examples/34-http.botwork"), "200\n{\"message\":\"hello\"}\n", &["B7"], &[]),
         Case { id: "http-zero-deadline", positive: &[], invalid: &["B7"], boundary: &["B7"], input: Input::Script(r#"HTTP Request |"GET"| To |"http://127.0.0.1:1/"| Options |{"timeout_ms": 0}|"#), stdout: "", code: Some("BW5002"), error: Some("expired") },
         failure("http-invalid-method", r#"HTTP Request |"CONNECT"| To |"http://localhost"|"#, "", "BW3003", "CONNECT tunnels are unsupported", &["B7"]),

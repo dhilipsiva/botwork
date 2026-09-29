@@ -157,6 +157,13 @@ pub enum BWErr {
     OutputError(String),
     #[error("Assertion failed: {0}")]
     AssertionFailed(String),
+    /// Bounded human reason and complete, admitted typed-JSON operand artifacts.
+    #[error("Assertion failed: {reason}")]
+    AssertionMismatch {
+        reason: String,
+        actual: String,
+        expected: String,
+    },
     #[error("Explicit failure: {0}")]
     ExplicitFailure(String),
     #[error("Native operation failed: {0}")]
@@ -207,7 +214,7 @@ struct CollectionValue<'a>(&'a Literal, bool);
 // Sorting changes only order, not the number of bytes in the representation.
 pub(crate) struct DisplayValue<'a>(pub &'a Literal, pub bool);
 
-struct QuotedString<'a>(&'a str);
+pub(crate) struct QuotedString<'a>(pub &'a str);
 
 impl fmt::Display for QuotedString<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

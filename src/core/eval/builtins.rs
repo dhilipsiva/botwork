@@ -2,6 +2,7 @@
 use super::*;
 use crate::core::{diagnostic::DiagnosticCode as Code, signature::ValueKind as Kind};
 use std::time::Duration;
+mod assertions;
 mod collections;
 mod datetime;
 pub(super) mod http;
@@ -94,11 +95,11 @@ impl Builtin {
                 if matches!(&*values[0], Literal::Bool(true)) {
                     context.temporary(Literal::None)
                 } else {
-                    Err(context.detail_error(
-                        BWErr::AssertionFailed,
-                        "Expected true, got false",
-                        None,
-                        false,
+                    Err(assertions::failure(
+                        &values[0],
+                        &Literal::Bool(true),
+                        true,
+                        context,
                     ))
                 }
             }
@@ -116,18 +117,7 @@ impl Builtin {
                 if equal {
                     context.temporary(Literal::None)
                 } else {
-                    Err(context.formatted_error(
-                        BWErr::AssertionFailed,
-                        format_args!(
-                            "Expected {} ({}), got {} ({})",
-                            *values[1],
-                            values[1].kind().as_str(),
-                            *values[0],
-                            values[0].kind().as_str()
-                        ),
-                        None,
-                        false,
-                    ))
+                    Err(assertions::failure(&values[0], &values[1], false, context))
                 }
             }
             Self::Fail => {

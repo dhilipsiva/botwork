@@ -13,7 +13,7 @@ impl<'a> WireError<'a> {
     ) -> DiagnosticResult<Self> {
         let code = u16::from_le_bytes(input.take(2)?.try_into().unwrap());
         let count = match code {
-            1003 | 2003 | 3004 | 6003 => 3,
+            1003 | 2003 | 3004 | 6003 | 9003 => 3,
             1001 | 1002 | 1004 | 2001 | 2002 | 2004 | 3001 | 3002 | 3003 | 4001 | 4002 | 4003
             | 5001 | 5002 | 5003 | 6001 | 6002 | 7001 | 7002 | 7003 | 8001 | 9001 | 9002 => 1,
             _ => return Err(invalid("Unknown worker diagnostic code")),
@@ -78,6 +78,11 @@ impl<'a> WireError<'a> {
             7003 => BWErr::SourceRead(self.fields[0].into()),
             9001 => BWErr::AssertionFailed(self.fields[0].into()),
             9002 => BWErr::ExplicitFailure(self.fields[0].into()),
+            9003 => BWErr::AssertionMismatch {
+                reason: self.fields[0].into(),
+                actual: self.fields[1].into(),
+                expected: self.fields[2].into(),
+            },
             1003 => BWErr::DuplicateParameter {
                 name: self.fields[0].into(),
                 original: self.fields[1].into(),
@@ -112,11 +117,26 @@ pub(super) fn encode(
     output: &mut Encoder<'_>,
     error: &BWErr,
 ) -> DiagnosticResult<()> {
-    let code: u16 = error.code().as_str()[2..]
-        .parse()
-        .expect("stable diagnostic code");
+    // 9003 is an additive wire shape for BW9001 with full operands. The legacy
+    // single-reason BW9001 shape remains unchanged for existing peers.
+    let code: u16 = if matches!(error, BWErr::AssertionMismatch { .. }) {
+        9003
+    } else {
+        error.code().as_str()[2..]
+            .parse()
+            .expect("stable diagnostic code")
+    };
     output.put(&code.to_le_bytes())?;
     match error {
+        BWErr::AssertionMismatch {
+            reason,
+            actual,
+            expected,
+        } => {
+            output.string(reason)?;
+            output.string(actual)?;
+            output.string(expected)
+        }
         BWErr::ParsingError(text)
         | BWErr::ControlFlowError(text)
         | BWErr::SignatureError(text)

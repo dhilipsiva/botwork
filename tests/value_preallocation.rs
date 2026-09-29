@@ -3328,3 +3328,44 @@ fn aggregate_operation_panic_limits_reject_before_large_signature_detail_allocat
         }
     }
 }
+
+#[test]
+fn assertion_operand_artifacts_are_admitted_before_full_payload_copies() {
+    use botwork::core::{
+        ast::Program,
+        diagnostic::DiagnosticCode,
+        eval::{evaluate_program_detailed, Context},
+    };
+    let length = 64 * 1024;
+    for admitted in [false, true] {
+        let mut limits = RunLimits::default();
+        if !admitted {
+            limits.diagnostics.text_bytes = 1024;
+        }
+        let mut context = Context::with_limits(limits).unwrap();
+        context.init_statements();
+        context
+            .set_input_variables(BTreeMap::from([
+                ("actual".into(), Literal::String("a".repeat(length))),
+                ("expected".into(), Literal::String("b".repeat(length))),
+            ]))
+            .unwrap();
+        let program = Program::parse("artifacts", "Assert |actual| Equals |expected|").unwrap();
+        let (result, allocations) =
+            observe(length, || evaluate_program_detailed(&program, &mut context));
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.code(),
+            if admitted {
+                DiagnosticCode::Assertion
+            } else {
+                DiagnosticCode::ResourceLimit
+            }
+        );
+        assert_eq!(
+            allocations,
+            if admitted { 4 } else { 2 },
+            "two argument copies, then two admitted artifact strings"
+        );
+    }
+}

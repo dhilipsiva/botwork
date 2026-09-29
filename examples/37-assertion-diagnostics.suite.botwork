@@ -1,0 +1,15 @@
+# Intentionally fails one row. Use --assertion-artifacts artifacts for full operands.
+Suite |"diagnostics"| Named |"Greeting contracts"| {
+    Dataset |"messages"| {
+        Row |"unchanged"| Values |{actual: "hello", expected: "hello"}|
+        Row |"changed"| Values |{actual: "café", expected: "cafe"}|
+    }
+    Library {
+        Check Greeting |actual| Against |expected| {
+            Assert |{message: actual}| Equals |{message: expected}|
+        }
+    }
+    Case |"greeting"| Using |"messages"| As |data| {
+        Check Greeting |data.actual| Against |data.expected|
+    }
+}

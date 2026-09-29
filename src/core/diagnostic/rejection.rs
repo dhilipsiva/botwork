@@ -53,6 +53,15 @@ fn error_summary(error: &BWErr, shortened: &mut usize) -> BWErr {
         value
     };
     match error {
+        BWErr::AssertionMismatch {
+            reason,
+            actual,
+            expected,
+        } => BWErr::AssertionMismatch {
+            reason: detail(reason),
+            actual: detail(actual),
+            expected: detail(expected),
+        },
         BWErr::VariableNotDefined(value) => BWErr::VariableNotDefined(detail(value)),
         BWErr::StatementNotDefined(value) => BWErr::StatementNotDefined(detail(value)),
         BWErr::DuplicateStatement {

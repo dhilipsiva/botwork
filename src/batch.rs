@@ -9,6 +9,7 @@ use tokio::task::JoinSet;
 mod tests;
 
 pub(super) struct Configuration {
+    pub(super) artifacts: Option<Arc<super::assertion_artifacts::Store>>,
     pub(super) debug: bool,
     pub(super) files: Vec<PathBuf>,
     pub(super) settings: Vec<String>,
@@ -23,6 +24,19 @@ pub(super) struct Identity {
     pub(super) number: usize,
     pub(super) path: Arc<PathBuf>,
     pub(super) case: Option<(String, String)>,
+    pub(super) dataset: Option<(String, String)>,
+    pub(super) artifacts: Option<Arc<super::assertion_artifacts::Store>>,
+}
+
+struct DatasetLabel<'a>(&'a Option<(String, String)>);
+impl std::fmt::Display for DatasetLabel<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some((dataset, row)) = self.0 {
+            write!(f, " [dataset {dataset:?}, row {row:?}]")
+        } else {
+            Ok(())
+        }
+    }
 }
 
 enum Input {
@@ -80,7 +94,11 @@ pub(super) enum Message {
     Skipped(Identity, &'static str),
     SuiteStarted(String),
     SuiteReady(String),
-    SuiteFinished(String, Result<(), CliError>),
+    SuiteFinished(
+        String,
+        Result<(), CliError>,
+        Option<Arc<super::assertion_artifacts::Store>>,
+    ),
     Summary {
         total: usize,
         succeeded: usize,
@@ -110,11 +128,57 @@ fn outcome(error: &CliError) -> &'static str {
 fn write_report(message: Message) -> Result<(), CliError> {
     let context = Context::default();
     let mut stderr = io::stderr().lock();
-    match message {
+    let exported = match &message {
+        Message::Finished(run, Err(error)) => run.artifacts.as_ref().map(|store| {
+            store.write_error(
+                error,
+                &super::assertion_artifacts::Identity {
+                    run: run.number,
+                    file: &run.path,
+                    case: run.case.as_ref().map(|(id, _)| id.as_str()),
+                    name: run.case.as_ref().map(|(_, name)| name.as_str()),
+                    dataset: run.dataset.as_ref().map(|(id, _)| id.as_str()),
+                    row: run.dataset.as_ref().map(|(_, row)| row.as_str()),
+                    suite_fixture: None,
+                },
+            )
+        }),
+        Message::SuiteFinished(id, Err(error), artifacts) => artifacts.as_ref().map(|store| {
+            store.write_error(
+                error,
+                &super::assertion_artifacts::Identity {
+                    run: 0,
+                    file: std::path::Path::new(""),
+                    case: None,
+                    name: None,
+                    dataset: None,
+                    row: None,
+                    suite_fixture: Some(id),
+                },
+            )
+        }),
+        _ => None,
+    }
+    .transpose()
+    .map_err(|source| {
+        let original = match &message {
+            Message::Finished(run, Err(error)) => format!(
+                "[run {}] {:?}{}\n{error}",
+                run.number,
+                run.case,
+                DatasetLabel(&run.dataset)
+            ),
+            Message::SuiteFinished(id, Err(error), _) => format!("[suite {id}]\n{error}"),
+            _ => unreachable!("only failed runs export assertion evidence"),
+        };
+        CliError::Artifact { source, original }
+    })?
+    .unwrap_or_default();
+    let result = match message {
         Message::SuiteStarted(id) => context.write_output(&mut stderr, format_args!("[suite {id}] setup started\n")),
         Message::SuiteReady(id) => context.write_output(&mut stderr, format_args!("[suite {id}] setup succeeded\n")),
-        Message::SuiteFinished(id, Ok(())) => context.write_output(&mut stderr, format_args!("[suite {id}] teardown succeeded\n")),
-        Message::SuiteFinished(id, Err(error)) => context.write_output(&mut stderr, format_args!("[suite {id}] fixture {}:\n{error}\n", outcome(&error))),
+        Message::SuiteFinished(id, Ok(()), _) => context.write_output(&mut stderr, format_args!("[suite {id}] teardown succeeded\n")),
+        Message::SuiteFinished(id, Err(error), _) => context.write_output(&mut stderr, format_args!("[suite {id}] fixture {}:\n{error}\n", outcome(&error))),
         Message::Skipped(Identity { case: Some((id, name)), .. }, reason) => context.write_output(&mut stderr, format_args!("[case {id}] skipped: {name:?}: {reason}\n")),
         Message::Skipped(_, _) => unreachable!("only cases are skipped by suite fixtures"),
         Message::Started(Identity {
@@ -124,6 +188,7 @@ fn write_report(message: Message) -> Result<(), CliError> {
         Message::Finished(
             Identity {
                 case: Some((id, name)),
+                dataset,
                 ..
             },
             result,
@@ -134,7 +199,7 @@ fn write_report(message: Message) -> Result<(), CliError> {
             ),
             Err(error) => context.write_output(
                 &mut stderr,
-                format_args!("[case {id}] {}: {name:?}\n{error}\n", outcome(&error)),
+                format_args!("[case {id}] {}: {name:?}{}\n{error}\n", outcome(&error), DatasetLabel(&dataset)),
             ),
         },
         Message::Started(run) => context.write_output(
@@ -179,7 +244,12 @@ fn write_report(message: Message) -> Result<(), CliError> {
         ),
     }
     .map(|_| ())
-    .map_err(CliError::from)
+    .map_err(CliError::from);
+    result?;
+    for path in exported {
+        context.write_output(&mut stderr, format_args!("[assertion artifact] {path:?}\n"))?;
+    }
+    Ok(())
 }
 
 pub(super) async fn report(message: Message) -> Result<(), CliError> {
@@ -256,6 +326,16 @@ async fn run_inputs(
                 number: index + 1,
                 path: Arc::new(path),
                 case,
+                dataset: match &input {
+                    Input::Case(case) => case.row().map(|row| {
+                        (
+                            case.dataset().expect("row dataset").id().to_owned(),
+                            row.metadata().id().to_owned(),
+                        )
+                    }),
+                    Input::File(_) => None,
+                },
+                artifacts: configuration.artifacts.clone(),
             };
             if let Err(error) = report(Message::Started(identity.clone())).await {
                 reporting_error = Some(error);

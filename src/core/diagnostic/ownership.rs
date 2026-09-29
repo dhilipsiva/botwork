@@ -64,6 +64,11 @@ fn add(
 
 fn error_text(error: &BWErr) -> [&str; 3] {
     match error {
+        BWErr::AssertionMismatch {
+            reason,
+            actual,
+            expected,
+        } => [reason, actual, expected],
         BWErr::DuplicateStatement {
             signature,
             original,

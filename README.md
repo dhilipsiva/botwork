@@ -45,6 +45,10 @@ For complete tasks, [build a verified catalogue or check an HTTP response contra
 Both examples combine imported helpers, JSON input variables, assertions, and
 standard statements, with runnable local fixtures and failure demonstrations.
 
+[Assertion diagnostics](docs/assertion-diagnostics.md) show nested value differences
+and case/dataset identity. Add `--assertion-artifacts PATH` to retain full permitted
+operands from unhandled assertions in separate JSON files.
+
 Default [source and syntax limits](docs/syntax-limits.md) reject oversized inputs before parsing or execution.
 [Runtime budgets](docs/embedded-runs.md#cli-and-low-level-contexts) stop excessive steps and recursion;
 configure `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and cooperative `--timeout-ms`.

@@ -37,7 +37,7 @@ LIBRARY_FILES = {
     "src/core/eval/builtins/operating_system/paths.rs",
     "src/core/eval/builtins/operating_system/values.rs",
     "src/core/eval/builtins/datetime.rs", "src/core/eval/builtins/datetime/duration.rs", "src/core/eval/builtins/datetime/moment.rs",
-    "src/core/eval/builtins.rs",
+    "src/core/eval/builtins.rs", "src/core/eval/builtins/assertions.rs",
     "src/core/eval/builtins/collections.rs",
     "src/core/eval/builtins/collections/build.rs",
     "src/core/eval/builtins/strings.rs",
@@ -52,7 +52,7 @@ LIBRARY_FILES = {
     "src/core/eval/output.rs", "src/core/run/output_limits.rs", "src/core/eval/imports.rs", "src/core/eval/snapshots.rs", "src/core/eval/results.rs", "src/core/eval/temporaries.rs", "src/core/grammar.rs", "src/core/input.rs", "src/core/input/limits.rs", "src/core/input/raw.rs",
     "src/core/worker/protocol.rs", "src/core/worker/protocol/values.rs", "src/core/worker/protocol/diagnostics.rs", "src/core/worker/protocol/diagnostics/errors.rs", "src/core/operation/isolated.rs", "src/core/worker.rs", "src/core/worker/linux.rs", "src/core/worker/linux/launch.rs", "src/core/worker/linux/namespace.rs", "src/core/worker/linux/process.rs", "src/core/worker/linux/guardian.rs", "src/core/worker/journal.rs", "src/core/worker/journal/format.rs", "src/core/worker/journal/storage.rs", "src/core/worker/linux/observation.rs", "src/core/worker/linux/owner.rs", "src/core/operation.rs", "src/core/operation/ownership.rs", "src/core/operation/diagnostics.rs", "src/core/run.rs", "src/core/run/asynchronous.rs", "src/core/run/blocking_io.rs", "src/core/run/import_limits.rs", "src/core/run/retained_values.rs", "src/core/run/retained_definitions.rs", "src/core/run/retained_diagnostics.rs", "src/core/run/retained_names.rs", "src/core/run/retained_registry.rs", "src/core/run/snapshot_limits.rs", "src/core/run/result_limits.rs", "src/core/run/temporary_values.rs", "src/core/signature.rs", "src/core/syntax_limits.rs", "src/core/value_limits.rs",
 }
-EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs", "src/batch.rs", "src/suites.rs", "src/suites/history.rs", "src/suites/datasets.rs", "src/suites/execution.rs"}}
+EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs", "src/assertion_artifacts.rs", "src/batch.rs", "src/suites.rs", "src/suites/history.rs", "src/suites/datasets.rs", "src/suites/execution.rs"}}
 
 
 def capture(*command):

@@ -187,6 +187,15 @@ impl<'a> Node<'a> {
                 ("source", Self::Source(Some(&value.span))),
             ]),
             Self::Details(error) => Shape::Map(match error {
+                BWErr::AssertionMismatch {
+                    reason,
+                    actual,
+                    expected,
+                } => vec![
+                    ("reason", text(reason)),
+                    ("actual", text(actual)),
+                    ("expected", text(expected)),
+                ],
                 BWErr::VariableNotDefined(name) => vec![("name", text(name))],
                 BWErr::StatementNotDefined(call) => vec![("call", text(call))],
                 BWErr::DuplicateStatement {

@@ -1,5 +1,5 @@
 {
-  "version": 19,
+  "version": 20,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1330,6 +1330,104 @@
       "file": "src/core/eval/builtins/http/config.rs",
       "before": "|| !body.is_empty())",
       "after": "|| false && !body.is_empty())"
+    },
+    {
+      "id": "assertion-actual-replaced",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "full: format_args!(\"{}\", Typed(actual)),",
+      "after": "full: format_args!(\"{}\", Typed(expected)),"
+    },
+    {
+      "id": "assertion-preview-unbounded",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "remaining: PREVIEW_BYTES,",
+      "after": "remaining: usize::MAX,"
+    },
+    {
+      "id": "assertion-truncation-hidden",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "const TRUNCATED: &str = \"…[truncated]\";",
+      "after": "const TRUNCATED: &str = \"\";"
+    },
+    {
+      "id": "assertion-numeric-rounding",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "(Literal::Int(a), Literal::Float(b)) => f64::from(*a) == f64::from(*b),",
+      "after": "(Literal::Int(a), Literal::Float(b)) => (*a as f32) == *b,"
+    },
+    {
+      "id": "assertion-map-last-key",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "                    .min();",
+      "after": "                    .max();"
+    },
+    {
+      "id": "assertion-array-missing-index",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "a.len().min(b.len())",
+      "after": "a.len().max(b.len())"
+    },
+    {
+      "id": "assertion-scalar-index",
+      "area": "assertion-diagnostics",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "                index += 1;",
+      "after": "                index += 2;"
+    },
+    {
+      "id": "assertion-unaccounted-actual",
+      "area": "assertion-diagnostics",
+      "file": "src/core/diagnostic/ownership.rs",
+      "before": "} => [reason, actual, expected],",
+      "after": "} => [reason, \"\", expected],"
+    },
+    {
+      "id": "assertion-emergency-complete",
+      "area": "assertion-diagnostics",
+      "file": "src/assertion_artifacts.rs",
+      "before": " && diagnostic.omissions.is_none();",
+      "after": ";"
+    },
+    {
+      "id": "assertion-record-boundary",
+      "area": "assertion-diagnostics",
+      "file": "src/assertion_artifacts.rs",
+      "before": "if used.records >= self.limits.records {",
+      "after": "if used.records > self.limits.records {"
+    },
+    {
+      "id": "assertion-byte-boundary",
+      "area": "assertion-diagnostics",
+      "file": "src/assertion_artifacts.rs",
+      "before": "if data.len() > self.maximum.saturating_sub(*self.used) {",
+      "after": "if false && data.len() > self.maximum.saturating_sub(*self.used) {"
+    },
+    {
+      "id": "assertion-private-directory",
+      "area": "assertion-diagnostics",
+      "file": "src/assertion_artifacts.rs",
+      "before": "builder.permissions(fs::Permissions::from_mode(0o700));",
+      "after": "builder.permissions(fs::Permissions::from_mode(0o755));"
+    },
+    {
+      "id": "assertion-overwrite-artifact",
+      "area": "assertion-diagnostics",
+      "file": "src/assertion_artifacts.rs",
+      "before": ".persist_noclobber(&destination)",
+      "after": ".persist(&destination)"
+    },
+    {
+      "id": "assertion-lost-dataset",
+      "area": "assertion-diagnostics",
+      "file": "src/batch.rs",
+      "before": "dataset: run.dataset.as_ref().map(|(id, _)| id.as_str()),",
+      "after": "dataset: None,"
     }
   ]
 }

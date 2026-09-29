@@ -348,7 +348,7 @@ impl Context {
         self.formatted_error(category, format_args!("{detail}"), span, expression)
     }
 
-    fn constructed_fields<const N: usize>(
+    pub(super) fn constructed_fields<const N: usize>(
         &self,
         category: impl Fn([String; N]) -> BWErr,
         messages: [FormattedDetail<'_>; N],
