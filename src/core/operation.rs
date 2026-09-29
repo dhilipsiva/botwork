@@ -27,14 +27,73 @@ use super::{
     value_limits::{Owned, ValueLimits},
 };
 
+/// How long a stopped operation waits for started blocking work before
+/// abandoning it; see [`OperationControl::stop_grace`].
+pub const DEFAULT_STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Clones share cancellation; children receive parent cancellation without cancelling parents.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct OperationControl {
     cancellation: CancellationToken,
     deadline: Option<Instant>,
+    stop_grace: std::time::Duration,
+}
+
+impl Default for OperationControl {
+    fn default() -> Self {
+        Self {
+            cancellation: CancellationToken::default(),
+            deadline: None,
+            stop_grace: DEFAULT_STOP_GRACE,
+        }
+    }
 }
 
 impl OperationControl {
+    /// After a stop, how long work waits for a started blocking job, such as a
+    /// system call that cannot be interrupted, before abandoning it. Children
+    /// inherit it.
+    pub fn stop_grace(&self) -> std::time::Duration {
+        self.stop_grace
+    }
+
+    /// This control with another stop grace, inherited by its later children.
+    pub fn with_stop_grace(mut self, grace: std::time::Duration) -> Self {
+        self.stop_grace = grace;
+        self
+    }
+
+    /// `stop`, with the abandonment of a started blocking job that outlived the
+    /// grace as its cause.
+    pub fn abandoned(&self, stop: Diagnostic) -> Diagnostic {
+        stop.while_handling(self.abandonment())
+    }
+
+    /// The cause attached to a stop when a started blocking job outlives the grace.
+    pub(crate) fn abandonment(&self) -> Diagnostic {
+        Diagnostic::formatted(
+            BWErr::AsyncRuntime,
+            format_args!(
+                "A started blocking operation did not stop within {} ms of the stop and was abandoned; it may still finish in the background, and its result is discarded",
+                self.stop_grace.as_millis()
+            ),
+        )
+    }
+
+    /// Wait for `work` at most the stop grace; None when it was abandoned.
+    /// Without a Tokio time driver the wait is unbounded.
+    pub async fn within_grace<F: Future>(&self, work: F) -> Option<F::Output> {
+        let Ok(timer) = catch_unwind(AssertUnwindSafe(|| tokio::time::sleep(self.stop_grace)))
+        else {
+            return Some(work.await);
+        };
+        tokio::select! {
+            biased;
+            output = work => Some(output),
+            _ = timer => None,
+        }
+    }
+
     pub fn cancel(&self) {
         self.cancellation.cancel();
     }
@@ -53,6 +112,7 @@ impl OperationControl {
                 (Some(parent), Some(child)) => Some(parent.min(child)),
                 (parent, child) => parent.or(child),
             },
+            stop_grace: self.stop_grace,
         }
     }
 
@@ -151,8 +211,9 @@ impl NativeOperation {
         )
     }
 
-    /// Blocking callbacks must cooperate with checkpoints. Stop requests drain
-    /// started work before returning; an uncooperative callback has no hard bound.
+    /// Blocking callbacks must cooperate with checkpoints. After a stop, a started
+    /// callback has the control's stop grace to return; one still running then is
+    /// abandoned, keeping its capacity until it returns, and its result is discarded.
     pub fn blocking(
         signature: StatementSignature,
         max_in_flight: NonZeroUsize,
@@ -376,13 +437,18 @@ impl NativeOperation {
                         let error = self.track_error(error, preserve, true, &scope);
                         child.cancel();
                         worker.abort(); // Cancels queued work; started callbacks must cooperate.
-                        return Err(match worker.await {
-                            Ok(Err(cause)) => self.combine_errors(error, cause, preserve, &scope),
-                            Err(cause) if !cause.is_cancelled() => {
+                        // A callback still running after the stop grace is abandoned.
+                        return Err(match child.within_grace(&mut worker).await {
+                            Some(Ok(Err(cause))) => self.combine_errors(error, cause, preserve, &scope),
+                            Some(Err(cause)) if !cause.is_cancelled() => {
                                 let Tracked { value, reservation, .. } = *error;
                                 self.track_error(self.worker_cleanup_error(PendingDiagnostic { value, reservation }, &cause), preserve, true, &scope)
                             },
-                            _ => error,
+                            Some(_) => error,
+                            None => {
+                                let abandoned = self.track_error(PendingDiagnostic::from(child.abandonment()), false, true, &scope);
+                                self.combine_errors(error, abandoned, preserve, &scope)
+                            }
                         });
                     }
                     value = &mut worker => value.map_err(|error| fail(self.worker_error(&error)))??,

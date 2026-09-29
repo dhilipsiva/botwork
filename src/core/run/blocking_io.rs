@@ -106,8 +106,13 @@ pub(crate) async fn execute<T: Send + 'static>(
         stop = pending.control.stopped() => {
             pending.control.cancel();
             pending.worker.abort();
-            // Drain started work. Cancellation never means a syscall was killed.
-            ((&mut pending.worker).await, Some(stop))
+            // Drain started work within the stop grace. Cancellation never means a
+            // syscall was killed: work still running afterwards is abandoned, keeping
+            // its permit until it returns, and its result is discarded.
+            match control.within_grace(&mut pending.worker).await {
+                Some(result) => (result, Some(stop)),
+                None => return Err(control.abandoned(stop)),
+            }
         }
         result = &mut pending.worker => (result, control.checkpoint().err()),
     };

@@ -92,13 +92,14 @@ only arguments; use an operation interface when it needs explicit control.
 A saved callback control belongs to that job and is cancelled when its handoff
 finishes, including after normal completion.
 
-Normal cancellation/timeout handling drains started jobs before returning. A
-blocked OS call or uncooperative callback must still return: neither Rust nor
-Tokio can forcibly stop a started blocking closure. Dropping the entire future
-can return earlier, but the worker retains its arguments, capacity, and cleanup
-responsibility. No result or late side effect is reported as successfully
-cancelled or rolled back. Blocking-worker runtime shutdown can still wait for
-started jobs; whole-run shutdown bounds remain separate roadmap work.
+Normal cancellation/timeout handling waits up to the control's
+[stop grace](shutdown.md) for a started job, then abandons it: the stop returns
+with a BW5003 cause. Neither Rust nor Tokio can forcibly stop a started blocking
+closure, so an abandoned or dropped worker keeps its arguments, capacity, and
+cleanup responsibility until its call returns, and its result is discarded. No
+result or late side effect is reported as successfully cancelled or rolled back.
+Dropping a runtime still waits for started jobs unless the host shuts it down in
+the background, as the CLI does.
 
 Output still uses the bounded streaming writer and its byte quotas. A destination
 can accept a prefix before failing or observing a stop; completed output remains
@@ -108,8 +109,8 @@ helpers remain synchronous for hosts that explicitly call them.
 
 The implementation follows Tokio's guidance to isolate ordinary file operations
 on blocking workers. Special files such as FIFOs can remain blocked until a peer
-acts, including during shutdown; moving the wait off the executor is not a hard
-deadline for such files. See [Tokio filesystem guidance](https://docs.rs/tokio/1.53.1/tokio/fs/index.html)
+acts. The stop grace bounds how long a stopped run waits for them, but it does not
+release the blocked call. See [Tokio filesystem guidance](https://docs.rs/tokio/1.53.1/tokio/fs/index.html)
 and [blocking task lifecycle](https://docs.rs/tokio/1.53.1/tokio/task/fn.spawn_blocking.html).
 
 ## Validation

@@ -4,7 +4,7 @@ use botwork::core::{
     eval::{evaluate_program_async, Context, FixtureInputs},
     grammar::BWErr,
     listener::ListenerOptions,
-    operation::OperationControl,
+    operation::{OperationControl, DEFAULT_STOP_GRACE},
     report::{Recording, RunIdentity, RunRecord},
     run::{
         CleanupLimits, OutputLimits, RunLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES,
@@ -138,6 +138,30 @@ struct Args {
     /// Cooperative timeout for each independent Finally cleanup, in milliseconds
     #[arg(long, default_value_t = 5_000, conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     cleanup_timeout_ms: u64,
+    /// After a stop, milliseconds to wait for started blocking work, such as a
+    /// system call that cannot be interrupted, before abandoning it
+    #[arg(long, default_value_t = DEFAULT_STOP_GRACE.as_millis() as u64, value_parser = clap::value_parser!(u64).range(0..=3_600_000), conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    stop_grace_ms: u64,
+}
+
+/// A runtime that shuts down without waiting for abandoned blocking jobs, which
+/// may never return; see [`OperationControl::stop_grace`].
+struct Runtime(Option<tokio::runtime::Runtime>);
+
+impl std::ops::Deref for Runtime {
+    type Target = tokio::runtime::Runtime;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().expect("runtime")
+    }
+}
+
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.0.take() {
+            runtime.shutdown_background();
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -224,21 +248,41 @@ async fn run_recorded(
     let settings = settings.to_vec();
     // Each admitted run owns one preparation job. File/variable loading and parsing
     // finish off the executor before the owned program/context are handed back.
-    let (program, context) = tokio::task::spawn_blocking(move || {
-        prepare(&file, debug, &files, &settings, limits, control)
-    })
-    .await
-    .map_err(|_| {
-        Diagnostic::new(BWErr::AsyncRuntime(
-            "CLI preparation worker failed before completing".into(),
-        ))
-    })??;
+    let (program, context) = prepared(
+        &control.clone(),
+        move || prepare(&file, debug, &files, &settings, limits, control),
+        "CLI preparation worker failed before completing",
+    )
+    .await?;
     let mut context = context;
     if let Some(recording) = recording {
         context.attach_recording(recording)?;
     }
     evaluate_program_async(&program, context).await?;
     Ok(())
+}
+
+/// Run preparation off the executor. A stop ends the wait at once; preparation
+/// still running after the stop grace is abandoned, like any started blocking job.
+async fn prepared<T: Send + 'static>(
+    control: &OperationControl,
+    work: impl FnOnce() -> Result<T, CliError> + Send + 'static,
+    failure: &'static str,
+) -> Result<T, CliError> {
+    let mut job = tokio::task::spawn_blocking(work);
+    let stop = tokio::select! {
+        biased;
+        result = &mut job => {
+            return result.map_err(|_| Diagnostic::new(BWErr::AsyncRuntime(failure.into())))?;
+        }
+        stop = control.stopped() => stop,
+    };
+    job.abort();
+    Err(match control.within_grace(&mut job).await {
+        Some(_) => stop,
+        None => control.abandoned(stop),
+    }
+    .into())
 }
 
 fn run_control(timeout_ms: Option<u64>) -> Result<OperationControl, CliError> {
@@ -276,39 +320,38 @@ async fn run_case_recorded(
     fixture: Option<FixtureInputs>,
     recording: Option<&Recording>,
 ) -> Result<(), CliError> {
-    let deadline = run_control(configuration.timeout_ms)?.deadline();
-    let control = fixture
-        .as_ref()
-        .map_or_else(OperationControl::default, |fixture| {
-            fixture.control().clone()
-        })
-        .child(deadline);
+    // Every case descends from the root control, through its fixture when it has one.
+    let control = run_control(configuration.timeout_ms)?;
+    let control = match &fixture {
+        Some(fixture) => fixture.control().child(control.deadline()),
+        None => control,
+    };
     control.checkpoint()?;
-    let (program, context) = tokio::task::spawn_blocking(move || {
-        let mut context = Context::with_host_environment(configuration.limits.clone(), control)?;
-        let variables = match &fixture {
-            Some(_) => std::collections::BTreeMap::new(),
-            None => secrets::load(&configuration.files, &configuration.settings)?,
-        };
-        let variables = case.bind_inputs(variables, &configuration.limits.values)?;
-        let program = case.program();
-        context.init_statements();
-        context.set_input_variables(variables)?;
-        context.set_secrets(secrets::registry())?;
-        context.set_compiled_modules(compiled_modules())?;
-        if let Some(fixture) = fixture {
-            fixture.inherit_into(&mut context)?;
-        }
-        context.checkpoint()?;
-        context.set_statement_tracing(configuration.debug);
-        Ok::<_, CliError>((program, context))
-    })
-    .await
-    .map_err(|_| {
-        Diagnostic::new(BWErr::AsyncRuntime(
-            "Case preparation worker failed before completing".into(),
-        ))
-    })??;
+    let (program, context) = prepared(
+        &control.clone(),
+        move || {
+            let mut context =
+                Context::with_host_environment(configuration.limits.clone(), control)?;
+            let variables = match &fixture {
+                Some(_) => std::collections::BTreeMap::new(),
+                None => secrets::load(&configuration.files, &configuration.settings)?,
+            };
+            let variables = case.bind_inputs(variables, &configuration.limits.values)?;
+            let program = case.program();
+            context.init_statements();
+            context.set_input_variables(variables)?;
+            context.set_secrets(secrets::registry())?;
+            context.set_compiled_modules(compiled_modules())?;
+            if let Some(fixture) = fixture {
+                fixture.inherit_into(&mut context)?;
+            }
+            context.checkpoint()?;
+            context.set_statement_tracing(configuration.debug);
+            Ok((program, context))
+        },
+        "Case preparation worker failed before completing",
+    )
+    .await?;
     let mut context = context;
     if let Some(recording) = recording {
         context.attach_recording(recording)?;
@@ -396,7 +439,8 @@ fn main() -> ExitCode {
                 CliError::Script(Diagnostic::new(BWErr::AsyncRuntime(error.to_string())))
             })
             .and_then(|runtime| {
-                interrupt::install().map_err(|error| {
+                let runtime = Runtime(Some(runtime));
+                interrupt::install(Duration::from_millis(args.stop_grace_ms)).map_err(|error| {
                     Diagnostic::new(BWErr::AsyncRuntime(format!(
                         "Signal handling setup failed: {error}"
                     )))

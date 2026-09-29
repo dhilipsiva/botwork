@@ -8,5 +8,6 @@
 #![doc = include_str!("../docs/run-records.md")]
 #![doc = include_str!("../docs/listeners.md")]
 #![doc = include_str!("../docs/secrets.md")]
+#![doc = include_str!("../docs/shutdown.md")]
 
 pub mod core;

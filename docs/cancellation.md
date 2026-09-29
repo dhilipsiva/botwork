@@ -18,7 +18,7 @@ the tests that prove it; the linked pages hold the detailed contracts.
 | `RunOptions::timeout`, `--timeout-ms` | The run from admission | BW5002 `timed_out` |
 | `--suite-timeout-ms` | A suite owner's setup, borrowers, and teardown | BW5002 |
 | An operation's own `timeout_ms` (HTTP, processes, `Eventually`) | That operation, which then stops the run | BW5002 |
-| SIGINT or SIGTERM | Every run and fixture, through the CLI's root control | BW5001; see [terminal outcomes](terminal-outcomes.md#interruption) |
+| SIGINT or SIGTERM | Every run, suite case, and fixture, through the CLI's root control | BW5001; see [terminal outcomes](terminal-outcomes.md#interruption) |
 
 A child control inherits its parent's cancellation and the earlier of the two
 deadlines, so a stop anywhere above an operation reaches it. `Catch` never
@@ -31,9 +31,10 @@ consumes BW5001 or BW5002.
 | Statements, custom calls, loops, conditions, imports, module initialization | Checkpoints before statements, iterations, and calls, and at every await | [async execution](async-execution.md#cancellation-and-limits) | `async_execution`, `runtime_limits`, `cancellation::deadlines_reach_cleanup_through_nested_calls_and_loops` |
 | `Try`/`Finally` cleanup | `Finally` runs after the stop, under its own step and time allowance independent of the stopped control | [cleanup](cleanup.md) | `cleanup`, `resource_release` (nested scenario), `cancellation` |
 | `Eventually`, `Retry` | A stop ends polling; the deadline also interrupts an attempt in progress | [polling](polling.md) | `polling` |
-| Sleep and native asynchronous operations | Child controls; a dropped waiter cancels queued jobs, and started blocking jobs drain | [nonblocking I/O](nonblocking-io.md) | `async_operations`, `async_blocking` |
-| File and environment operations | Bounded workers check the stop between 16 KiB I/O calls | [operating system](operating-system.md), [nonblocking I/O](nonblocking-io.md) | `operating_system`, `async_filesystem`, `resource_release` |
-| `Log` and `--debug` output | Output workers observe the stop while a destination is blocked | [nonblocking I/O](nonblocking-io.md) | `async_blocking`, `parallel_cli` |
+| Sleep and native asynchronous operations | Child controls; a dropped waiter cancels queued jobs, and started blocking jobs have the stop grace, then are abandoned | [nonblocking I/O](nonblocking-io.md), [shutdown bounds](shutdown.md) | `async_operations`, `async_blocking`, `shutdown` |
+| File and environment operations | Bounded workers check the stop between 16 KiB I/O calls; a blocked call is abandoned after the stop grace | [operating system](operating-system.md), [nonblocking I/O](nonblocking-io.md), [shutdown bounds](shutdown.md) | `operating_system`, `async_filesystem`, `resource_release`, `shutdown` |
+| `Log` and `--debug` output | Output workers observe the stop while a destination is blocked; a blocked write is abandoned after the stop grace | [nonblocking I/O](nonblocking-io.md), [shutdown bounds](shutdown.md) | `async_blocking`, `parallel_cli`, `shutdown` |
+| CLI preparation | Loading the entry file, variable files, and inputs races the stop and has the stop grace | [shutdown bounds](shutdown.md) | `shutdown` |
 | Processes | The supervisor kills the child's process group and reaps it within the cleanup allowance | [processes](processes.md), [isolated workers](isolated-workers.md) | `processes`, `isolated_workers`, `resource_release`, `cancellation::interrupts_stop_cli_processes_requests_and_nested_cleanup` |
 | HTTP requests | The request races the stop and closes its connection | [HTTP](http.md#timeouts-cancellation-and-admission) | `http`, `resource_release`, `cancellation` |
 | Shared suite fixtures | Setup stops, queued borrowers are skipped, and ready fixtures are torn down under cleanup limits | [fixtures](fixtures.md) | `suite_fixtures`, `terminal_outcomes` |
@@ -79,9 +80,10 @@ The CLI tests in `tests/cancellation.rs` cover three cases:
 
 - **Blocking system calls.** An operating-system call that blocks indefinitely,
   such as opening a FIFO that no writer opens, finishes before its worker can
-  observe a stop. The run still returns promptly with the stop, but that worker
-  thread stays blocked until the call returns. Use a process statement or an
-  isolated worker when a hard deadline must also free the resource.
+  observe a stop. The run returns within the [stop grace](shutdown.md) with the
+  stop, but that worker thread stays blocked until the call returns. Use a
+  process statement or an isolated worker when a hard deadline must also free the
+  resource.
 - **Idle pool threads.** Idle worker-pool threads persist until their keep-alive
   expires; they are reused, not leaked.
 - **Forced termination.** A SIGKILL or a crash releases nothing gracefully. The

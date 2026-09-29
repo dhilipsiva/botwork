@@ -117,11 +117,12 @@ same registered operation remains active and later succeeds.
 Dropping a run future drops suspended DSL state and the pending operation future.
 Async resources with synchronous Drop cleanup are released before a cooperative
 stop returns. Blocking callbacks receive cancellation but still need to cooperate;
-normal stop handling drains started blocking work. Dropping the entire run cannot
-synchronously join such a worker. Isolated operations retain their supervisor and
+normal stop handling waits up to the [stop grace](shutdown.md) for started
+blocking work, then abandons it. Dropping the entire run cannot synchronously
+join such a worker. Isolated operations retain their supervisor and
 ownership through pending cleanup, using the existing process-containment mode.
-Do not detach tasks or rely on an async destructor. Awaited teardown and coordinated
-whole-run shutdown remain separate roadmap work.
+Do not detach tasks or rely on an async destructor. [Shutdown bounds](shutdown.md)
+state how long a stopped run can take.
 
 The timeout clock starts when an Engine async future is constructed, including time
 before its first poll. Unpolled input trees use iterative destruction. During
@@ -132,9 +133,9 @@ CPU-only loop; step budgets and their counting rules do not change.
 This is cooperative execution. Async callback factories and polls must return
 promptly. [Bounded workers](nonblocking-io.md) now isolate ordinary native
 callbacks, Log/debug output, source reads, module resolution, and environment
-preparation. Engine/module parsing remains synchronous CPU work. Blocking syscalls
-and callbacks must still return before normal stop handling completes; this API
-does not promise a hard wall-clock bound for them. Use an isolated operation when a hard host-operation
+preparation. Engine/module parsing remains synchronous CPU work. A stopped run waits for
+blocking syscalls and callbacks only for the stop grace, then abandons them; the
+abandoned call itself has no wall-clock bound. Use an isolated operation when a hard host-operation
 deadline is required. Existing [worker containment limits](isolated-workers.md)
 and [operation ownership rules](operation-ownership.md) still apply.
 

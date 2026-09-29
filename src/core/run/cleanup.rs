@@ -42,7 +42,10 @@ impl RunBudget {
             // A cleanup loop cannot manufacture unlimited fresh allowances.
             return Ok(self.shared());
         }
-        let control = OperationControl::default().child(Some(self.0.limits.cleanup.deadline()?));
+        // Cleanup is independent of the stopped control but keeps its stop grace.
+        let control = OperationControl::default()
+            .with_stop_grace(self.0.control.stop_grace())
+            .child(Some(self.0.limits.cleanup.deadline()?));
         let mut limits = self.0.limits.clone();
         limits.steps = limits.cleanup.steps;
         Ok(Self(Arc::new(BudgetState {

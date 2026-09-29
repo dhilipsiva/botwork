@@ -507,3 +507,60 @@ fn panic_error(limits: &DiagnosticLimits, signature: &StatementSignature) -> Pen
         .unwrap()
         .panic_error()
 }
+
+#[test]
+fn children_and_clones_inherit_the_stop_grace() {
+    assert_eq!(
+        OperationControl::default().stop_grace(),
+        std::time::Duration::from_secs(2)
+    );
+    let grace = std::time::Duration::from_millis(125);
+    let parent = OperationControl::default().with_stop_grace(grace);
+    let child = parent.child(Some(Instant::now()));
+    assert_eq!(
+        (parent.clone().stop_grace(), child.stop_grace()),
+        (grace, grace)
+    );
+    assert_eq!(child.child(None).stop_grace(), grace);
+    let stop = child.abandoned(Diagnostic::new(BWErr::Timeout("deadline".into())));
+    assert_eq!(stop.code(), DiagnosticCode::Timeout);
+    let text = stop.to_string();
+    assert!(
+        text.contains("[BW5003]")
+            && text.contains("did not stop within 125 ms of the stop and was abandoned"),
+        "{text}"
+    );
+}
+
+#[tokio::test]
+async fn within_grace_keeps_finished_work_and_abandons_the_rest() {
+    let control = OperationControl::default().with_stop_grace(std::time::Duration::from_millis(50));
+    assert_eq!(control.within_grace(async { 7 }).await, Some(7));
+    let start = std::time::Instant::now();
+    assert_eq!(
+        control.within_grace(std::future::pending::<()>()).await,
+        None
+    );
+    let waited = start.elapsed();
+    assert!(
+        waited >= std::time::Duration::from_millis(50)
+            && waited < std::time::Duration::from_millis(1500),
+        "{waited:?}"
+    );
+    // A zero grace still takes work that is already finished.
+    let none = control.clone().with_stop_grace(std::time::Duration::ZERO);
+    assert_eq!(none.within_grace(async { 8 }).await, Some(8));
+}
+
+#[test]
+fn without_a_time_driver_the_grace_cannot_be_measured_so_work_is_awaited() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    let control = OperationControl::default().with_stop_grace(std::time::Duration::ZERO);
+    let value = runtime.block_on(control.within_grace(async {
+        tokio::task::yield_now().await;
+        9
+    }));
+    assert_eq!(value, Some(9));
+}

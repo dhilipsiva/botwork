@@ -145,19 +145,23 @@ async fn owner(
     ready: mpsc::Sender<Ready>,
 ) -> Result<(), CliError> {
     let control = crate::run_control(configuration.suite_timeout_ms)?;
-    let context = tokio::task::spawn_blocking(move || {
-        let mut context = Context::with_host_environment(configuration.limits.clone(), control)?;
-        let variables = crate::secrets::load(&configuration.files, &configuration.settings)?;
-        context.init_statements();
-        context.set_input_variables(variables)?;
-        context.set_secrets(crate::secrets::registry())?;
-        context.set_compiled_modules(crate::compiled_modules())?;
-        context.checkpoint()?;
-        context.set_statement_tracing(configuration.debug);
-        Ok::<_, CliError>(context)
-    })
-    .await
-    .map_err(|_| batch::task_failure())??;
+    let context = crate::prepared(
+        &control.clone(),
+        move || {
+            let mut context =
+                Context::with_host_environment(configuration.limits.clone(), control)?;
+            let variables = crate::secrets::load(&configuration.files, &configuration.settings)?;
+            context.init_statements();
+            context.set_input_variables(variables)?;
+            context.set_secrets(crate::secrets::registry())?;
+            context.set_compiled_modules(crate::compiled_modules())?;
+            context.checkpoint()?;
+            context.set_statement_tracing(configuration.debug);
+            Ok(context)
+        },
+        "CLI task failed before completing",
+    )
+    .await?;
     let result = evaluate_suite_fixture_async(&suite, context, move |inputs| async move {
         let (finish, finished) = oneshot::channel();
         if ready

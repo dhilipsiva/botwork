@@ -1,5 +1,5 @@
 {
-  "version": 32,
+  "version": 33,
   "mutations": [
     {
       "id": "precedence-products",
@@ -131,8 +131,8 @@
       "id": "worker-stop-skips-draining",
       "area": "cleanup",
       "file": "src/core/run/blocking_io.rs",
-      "before": "((&mut pending.worker).await, Some(stop))",
-      "after": "return Err(stop)"
+      "before": "            match control.within_grace(&mut pending.worker).await {\n                Some(result) => (result, Some(stop)),\n                None => return Err(control.abandoned(stop)),\n            }\n",
+      "after": "            return Err(stop)\n"
     },
     {
       "id": "worker-environment-loses-control",
@@ -320,7 +320,7 @@
       "id": "cleanup-inherits-stopped-control",
       "area": "cleanup",
       "file": "src/core/run/cleanup.rs",
-      "before": "OperationControl::default().child(Some(self.0.limits.cleanup.deadline()?))",
+      "before": "OperationControl::default()\n            .with_stop_grace(self.0.control.stop_grace())\n            .child(Some(self.0.limits.cleanup.deadline()?))",
       "after": "self.0.control.child(Some(self.0.limits.cleanup.deadline()?))"
     },
     {
@@ -425,8 +425,8 @@
       "id": "fixture-drops-parent-control",
       "area": "fixtures",
       "file": "src/main.rs",
-      "before": ".map_or_else(OperationControl::default, |fixture| {\n            fixture.control().clone()\n        })",
-      "after": ".map_or_else(OperationControl::default, |_fixture| {\n            OperationControl::default()\n        })"
+      "before": "        Some(fixture) => fixture.control().child(control.deadline()),\n",
+      "after": "        Some(_fixture) => OperationControl::default().child(control.deadline()),\n"
     },
     {
       "id": "fixture-teardown-before-borrowers",
@@ -2513,6 +2513,97 @@
       "file": "src/core/run/asynchronous.rs",
       "before": "            environment.compiled = Some(self.compiled.clone());\n",
       "after": ""
+    },
+    {
+      "id": "shutdown-io-drain-unbounded",
+      "area": "shutdown",
+      "file": "src/core/run/blocking_io.rs",
+      "before": "            match control.within_grace(&mut pending.worker).await {\n",
+      "after": "            match Some((&mut pending.worker).await) {\n"
+    },
+    {
+      "id": "shutdown-io-abandonment-unreported",
+      "area": "shutdown",
+      "file": "src/core/run/blocking_io.rs",
+      "before": "                None => return Err(control.abandoned(stop)),\n",
+      "after": "                None => return Err(stop),\n"
+    },
+    {
+      "id": "shutdown-native-drain-unbounded",
+      "area": "shutdown",
+      "file": "src/core/operation.rs",
+      "before": "return Err(match child.within_grace(&mut worker).await {",
+      "after": "return Err(match Some((&mut worker).await) {"
+    },
+    {
+      "id": "shutdown-native-abandonment-unreported",
+      "area": "shutdown",
+      "file": "src/core/operation.rs",
+      "before": "                                self.combine_errors(error, abandoned, preserve, &scope)\n",
+      "after": "                                drop(abandoned);\n                                error\n"
+    },
+    {
+      "id": "shutdown-native-permit-released-at-start",
+      "area": "shutdown",
+      "file": "src/core/operation.rs",
+      "before": "                    let _permit = permit;\n",
+      "after": "                    drop(permit);\n"
+    },
+    {
+      "id": "shutdown-grace-timer-default",
+      "area": "shutdown",
+      "file": "src/core/operation.rs",
+      "before": "catch_unwind(AssertUnwindSafe(|| tokio::time::sleep(self.stop_grace)))",
+      "after": "catch_unwind(AssertUnwindSafe(|| tokio::time::sleep(DEFAULT_STOP_GRACE)))"
+    },
+    {
+      "id": "shutdown-grace-not-inherited",
+      "area": "shutdown",
+      "file": "src/core/operation.rs",
+      "before": "            stop_grace: self.stop_grace,\n",
+      "after": "            stop_grace: DEFAULT_STOP_GRACE,\n"
+    },
+    {
+      "id": "shutdown-cleanup-grace-default",
+      "area": "shutdown",
+      "file": "src/core/run/cleanup.rs",
+      "before": "            .with_stop_grace(self.0.control.stop_grace())\n",
+      "after": ""
+    },
+    {
+      "id": "shutdown-cli-preparation-ignores-stop",
+      "area": "shutdown",
+      "file": "src/main.rs",
+      "before": "        stop = control.stopped() => stop,\n",
+      "after": "        stop = control.stopped(), if false => stop,\n"
+    },
+    {
+      "id": "shutdown-cli-preparation-drain-unbounded",
+      "area": "shutdown",
+      "file": "src/main.rs",
+      "before": "    Err(match control.within_grace(&mut job).await {\n",
+      "after": "    Err(match Some((&mut job).await) {\n"
+    },
+    {
+      "id": "shutdown-cli-runtime-joins-abandoned",
+      "area": "shutdown",
+      "file": "src/main.rs",
+      "before": "            runtime.shutdown_background();\n",
+      "after": "            drop(runtime);\n"
+    },
+    {
+      "id": "shutdown-cli-grace-flag-ignored",
+      "area": "shutdown",
+      "file": "src/interrupt.rs",
+      "before": "    ROOT.get_or_init(|| OperationControl::default().with_stop_grace(stop_grace));\n",
+      "after": "    ROOT.get_or_init(OperationControl::default);\n    let _ = stop_grace;\n"
+    },
+    {
+      "id": "shutdown-suite-case-detached-from-root",
+      "area": "shutdown",
+      "file": "src/main.rs",
+      "before": "        None => control,\n",
+      "after": "        None => OperationControl::default().child(control.deadline()),\n"
     }
   ]
 }

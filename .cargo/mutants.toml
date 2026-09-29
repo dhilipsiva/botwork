@@ -1,6 +1,8 @@
-# Version 32: share compiled modules and prove run isolation.
+# Version 33: bound shutdown after stops.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/operation.rs",
+    "src/main.rs",
     "src/core/eval/compiled.rs",
     "src/core/secret.rs",
     "src/secrets.rs",
@@ -69,6 +71,8 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    ' (OperationControl::(stop_grace|with_stop_grace|abandoned|abandonment|within_grace|child)|prepared|run_case_recorded)( ->|$)',
+    ' <impl Drop for Runtime>::drop with \(\)$',
     '^src/core/eval/compiled.rs:',
     '^src/(core/secret|secrets).rs:',
     '^src/(core/)?listener.rs:',
@@ -136,6 +140,7 @@ additional_cargo_args = [
     "--test", "cancellation",
     "--test", "resource_release",
     "--test", "run_isolation",
+    "--test", "shutdown",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

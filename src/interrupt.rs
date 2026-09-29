@@ -92,9 +92,10 @@ mod signals {
     }
 }
 
-/// Handle SIGINT and SIGTERM for the rest of the process.
-pub(super) fn install() -> std::io::Result<()> {
-    root();
+/// Handle SIGINT and SIGTERM for the rest of the process, giving the root control
+/// its stop grace. Call it before anything reads [`root`].
+pub(super) fn install(stop_grace: std::time::Duration) -> std::io::Result<()> {
+    ROOT.get_or_init(|| OperationControl::default().with_stop_grace(stop_grace));
     #[cfg(target_os = "linux")]
     signals::install()?;
     Ok(())

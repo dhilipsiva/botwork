@@ -27,7 +27,7 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW4003 | Native callback panic | Fix the callback and inspect captured host state before reuse |
 | BW5001 | Operation cancellation | Inspect completed effects; use fresh control for an intentional retry |
 | BW5002 | Operation deadline | Inspect completed effects and choose an appropriate new deadline |
-| BW5003 | Async runtime failure | Keep a Tokio runtime with time enabled alive through operation completion |
+| BW5003 | Async runtime failure | Keep a Tokio runtime with time enabled alive through operation completion; after a stop, unblock or isolate work that outlives the [stop grace](shutdown.md) |
 | BW6001 | Module loading | Check the source-relative local .botwork path, permissions, and UTF-8 contents/path |
 | BW6002 | Import cycle | Move shared definitions into a module outside the reported cycle |
 | BW6003 | Namespace collision | Use a distinct alias or remove the same-scope qualified declaration |

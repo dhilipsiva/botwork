@@ -137,16 +137,18 @@ assert!(run.steps > 10);
 ## Cancellation and forced termination
 
 To obtain awaited cleanup, request cooperative cancellation and continue polling
-the run future to completion. Started blocking callbacks drain before Finally
-begins. Async cleanup operations receive the cleanup control and are awaited.
+the run future to completion. Started blocking callbacks have the [stop grace](shutdown.md) to
+return before Finally begins, and blocking work inside Finally has the same grace
+after the cleanup deadline. Async cleanup operations receive the cleanup control and are awaited.
 Cancellation does not clear completed effects or turn an interrupted body into
 success.
 
 Dropping/aborting a future, dropping its runtime, terminating the host, or an
 aborting panic cannot execute asynchronous DSL cleanup. Unwinding native callback
 panics become ordinary diagnostics and do run cleanup; a process abort cannot.
-An uncooperative native callback, stalled OS call, or unscheduled executor can
-exceed these cooperative deadlines. Use the documented isolated-worker ownership
+An uncooperative native callback or stalled OS call is abandoned after the stop
+grace but keeps running in the background, and an unscheduled executor can exceed
+these cooperative deadlines. Use the documented isolated-worker ownership
 and supervision boundary for host operations requiring stronger termination.
 Even process termination cannot guarantee rollback of external resources.
 

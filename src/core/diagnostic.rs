@@ -208,7 +208,7 @@ impl fmt::Display for Help<'_> {
             BWErr::NativePanic(_) => "Fix the native callback; return an error for expected failures and inspect captured host state before reuse.",
             BWErr::Cancelled(_) => "Inspect completed effects and use a fresh operation control for an intentional retry.",
             BWErr::Timeout(_) => "Inspect completed effects and set an appropriate deadline before intentionally retrying.",
-            BWErr::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish.",
+            BWErr::AsyncRuntime(_) => "Use a live Tokio runtime with time enabled and keep it running until operations finish; after a stop, unblock or isolate work that outlives the stop grace.",
             BWErr::InputError(_) => "Use exact DSL variable names and JSON values with i32 integers, finite f32 decimals, and at most 128 nested containers.",
             BWErr::RunConfiguration(_) => "Use an existing working directory, valid environment names/values, a representable timeout, and syntax/AST/value/evaluation/import limits within documented ceilings.",
             BWErr::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.",

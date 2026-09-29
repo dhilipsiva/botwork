@@ -295,6 +295,23 @@ Its 359-entry catalogue adds 6 faults, with the `run_isolation` suite as an
 oracle; see [run-isolation evidence](run-isolation-evidence.json). The secret
 entry for the CLI file context moved with this change and was updated in place.
 
+Version 33 adds shutdown bounds. Its faults cover:
+
+- unbounded drains of started blocking I/O, native callbacks, and CLI preparation;
+- abandonment that goes unreported;
+- a native permit released before its callback returns;
+- a grace timer that ignores the configured grace;
+- a grace that children, cleanup, or the CLI flag do not carry;
+- CLI preparation that ignores the stop;
+- a CLI runtime that joins abandoned jobs at exit;
+- suite cases without fixtures detached from the interrupt root.
+
+Its 372-entry catalogue adds 13 faults, with the `shutdown` suite as an oracle;
+see [shutdown evidence](shutdown-evidence.json). Three entries whose code moved
+with this change were updated in place and re-run against the full oracle set:
+`worker-stop-skips-draining`, `cleanup-inherits-stopped-control`, and
+`fixture-drops-parent-control`.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

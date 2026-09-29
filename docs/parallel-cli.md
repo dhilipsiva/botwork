@@ -131,12 +131,11 @@ the final error message. Already-written output and completed effects remain.
 The CLI uses a current-thread Tokio runtime with blocking workers for admitted
 preparation and reporting, alongside the existing bounded filesystem/native
 pools. `--jobs` bounds runs, not OS threads or aggregate process memory. See
-[I/O isolation](nonblocking-io.md) for pool limits and thread behavior. Started
-blocking calls still need to return, and normal stop handling drains them. A
-stalled special file or uncooperative callback can therefore delay batch exit.
-Hard shutdown bounds, coordinated signal cancellation, structured reports,
-per-run configuration manifests, and adapter-specific sharing policies remain
-separate roadmap work.
+[I/O isolation](nonblocking-io.md) for pool limits and thread behavior. After a stop,
+started blocking calls have the [stop grace](shutdown.md) (`--stop-grace-ms`) to
+return and are then abandoned, so a stalled special file or uncooperative callback
+cannot hold a stopped run or the process. Per-run configuration manifests and
+adapter-specific sharing policies remain separate roadmap work.
 
 ## Validation
 
