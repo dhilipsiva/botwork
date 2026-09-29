@@ -73,6 +73,13 @@ jobs:
         run: python3 tests/performance_tools.py
       - name: Check benchmark workload correctness (no performance threshold)
         run: python3 scripts/performance.py --smoke --profile ${{ matrix.profile }} --target ${{ matrix.target }}
+      - name: Allow unprivileged user namespaces for isolated workers
+        # Ubuntu runners restrict them through AppArmor; PID-namespace worker tests
+        # need them, as docs/isolated-workers.md requires of deployments.
+        run: |
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Run tests and examples
         run: cargo +stable test --locked --target ${{ matrix.target }} ${{ matrix.flags }}
 

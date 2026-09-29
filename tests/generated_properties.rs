@@ -63,7 +63,7 @@ fn parser_seed_corpus_is_valid() {
 fn parser_mutations_preserve_bounded_results_and_source_coordinates() {
     campaign(|bytes| {
         let mut input = PARSER_SEEDS[bytes[0] as usize % PARSER_SEEDS.len()].to_vec();
-        for mutation in bytes[1..].chunks_exact(3).take(8) {
+        for mutation in bytes[1..].as_chunks::<3>().0.iter().take(8) {
             let index = mutation[1] as usize % (input.len() + 1);
             match mutation[0] % 4 {
                 0 => input.insert(index, mutation[2]),
