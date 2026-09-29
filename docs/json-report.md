@@ -319,7 +319,9 @@ fields:
 - `details_omitted: true`.
 
 `omitted_run_details` counts these summaries. Counts, statuses, and the verdict
-are never reduced.
+are never reduced. [Report limits](report-limits.md) lists every bound in one
+place, including the 4,096-run selection limit and the recovery of interrupted
+writes.
 
 ## Shared fixtures
 

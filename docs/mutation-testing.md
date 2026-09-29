@@ -248,6 +248,17 @@ entries whose code moved with this change were updated in place:
 - four JSON-report entries;
 - one listener entry.
 
+Version 29 adds report limits. Its faults cover:
+
+- an unbounded batch selection, and its boundary;
+- an ignored HTML page budget, and its boundary;
+- stale temporaries that are kept;
+- a sweep that ignores the output name, accepts any suffix, or removes symbolic
+  links.
+
+Its 330-entry catalogue adds 8 faults, with the `report_limits` suite as an
+oracle; see [report-limit evidence](report-limits-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

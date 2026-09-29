@@ -112,9 +112,7 @@ impl History {
             return Err(suite::configuration("Failed-case output needs a filename").into());
         }
         // Do not overwrite unrelated existing files.
-        let file = AtomicFile::begin(path, "Failed-case record", "botwork-failures", |path| {
-            read(path).map(|_| ())
-        })?;
+        let file = AtomicFile::begin(path, "Failed-case record", |path| read(path).map(|_| ()))?;
         let history = Self { file };
         history.write(false, vec![])?;
         Ok(history)

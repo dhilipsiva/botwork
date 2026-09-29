@@ -207,12 +207,10 @@ impl Report {
         mode: &'static str,
     ) -> Result<Self, CliError> {
         let json = json
-            .map(|path| AtomicFile::begin(path, "JSON report", "botwork-report", recognized))
+            .map(|path| AtomicFile::begin(path, "JSON report", recognized))
             .transpose()?;
         let html = html
-            .map(|path| {
-                AtomicFile::begin(path, "HTML report", "botwork-report-html", html::recognized)
-            })
+            .map(|path| AtomicFile::begin(path, "HTML report", html::recognized))
             .transpose()?;
         let started_at = timestamp(SystemTime::now());
         let first = json.as_ref().or(html.as_ref()).expect("an output");
@@ -370,12 +368,10 @@ impl Report {
         }
         // The locks also prove that the invocation that wrote the journal ended.
         let json = json
-            .map(|path| AtomicFile::begin(path, "JSON report", "botwork-report", recognized))
+            .map(|path| AtomicFile::begin(path, "JSON report", recognized))
             .transpose()?;
         let html = html
-            .map(|path| {
-                AtomicFile::begin(path, "HTML report", "botwork-report-html", html::recognized)
-            })
+            .map(|path| AtomicFile::begin(path, "HTML report", html::recognized))
             .transpose()?;
         if json.is_none() && html.is_none() {
             return Err(Diagnostic::new(BWErr::OutputError(format!(
@@ -537,7 +533,9 @@ impl Report {
             .as_ref()
             .map_or(Ok(()), |json| json.write(&document));
         let html = self.html.as_ref().map_or(Ok(()), |html| {
-            html.write_bytes(html::render(&document, html.directory()).as_bytes())
+            html.write_bytes(
+                html::render(&document, html.directory(), html::MAX_PAGE_BYTES).as_bytes(),
+            )
         });
         json.and(html)
     }

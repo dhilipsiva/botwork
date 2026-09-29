@@ -383,6 +383,15 @@ fn main() -> ExitCode {
                         "Signal handling setup failed: {error}"
                     )))
                 })?;
+                // A batch selects at most as many runs as suites may, which bounds
+                // every per-run structure a report or summary keeps.
+                if args.file.len() > botwork::core::suite::MAX_SELECTED_CASES {
+                    return Err(botwork::core::suite::resource(
+                        "selected files",
+                        botwork::core::suite::MAX_SELECTED_CASES,
+                    )
+                    .into());
+                }
                 let artifacts = args
                     .assertion_artifacts
                     .as_deref()

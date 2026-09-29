@@ -1,5 +1,5 @@
 {
-  "version": 28,
+  "version": 29,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2254,6 +2254,62 @@
       "file": "src/suites/execution.rs",
       "before": "            |error: &Option<CliError>| error.is_some() || crate::interrupt::interrupted();",
       "after": "            |error: &Option<CliError>| error.is_some();"
+    },
+    {
+      "id": "limits-batch-selection-unbounded",
+      "area": "report-limits",
+      "file": "src/main.rs",
+      "before": "                if args.file.len() > botwork::core::suite::MAX_SELECTED_CASES {",
+      "after": "                if false && args.file.len() > botwork::core::suite::MAX_SELECTED_CASES {"
+    },
+    {
+      "id": "limits-batch-selection-boundary",
+      "area": "report-limits",
+      "file": "src/main.rs",
+      "before": "                if args.file.len() > botwork::core::suite::MAX_SELECTED_CASES {",
+      "after": "                if args.file.len() > botwork::core::suite::MAX_SELECTED_CASES + 1 {"
+    },
+    {
+      "id": "limits-page-budget-ignored",
+      "area": "report-limits",
+      "file": "src/report_json/html.rs",
+      "before": "        if out.len() >= budget {",
+      "after": "        if false {"
+    },
+    {
+      "id": "limits-page-budget-boundary",
+      "area": "report-limits",
+      "file": "src/report_json/html.rs",
+      "before": "        if out.len() >= budget {",
+      "after": "        if out.len() > budget {"
+    },
+    {
+      "id": "limits-stale-temporaries-kept",
+      "area": "report-limits",
+      "file": "src/atomic_file.rs",
+      "before": "        remove_stale(&parent, filename).map_err(|cause| error(&path, &cause))?;",
+      "after": "        let _ = remove_stale;"
+    },
+    {
+      "id": "limits-sweep-ignores-output-name",
+      "area": "report-limits",
+      "file": "src/atomic_file.rs",
+      "before": "            .strip_prefix(prefix.as_str())",
+      "after": "            .strip_prefix(\".\")"
+    },
+    {
+      "id": "limits-sweep-accepts-any-suffix",
+      "area": "report-limits",
+      "file": "src/atomic_file.rs",
+      "before": "                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))",
+      "after": "                    .all(|_| true)"
+    },
+    {
+      "id": "limits-sweep-removes-links",
+      "area": "report-limits",
+      "file": "src/atomic_file.rs",
+      "before": "        if stale && entry.file_type()?.is_file() {",
+      "after": "        if stale && !entry.file_type()?.is_dir() {"
     }
   ]
 }

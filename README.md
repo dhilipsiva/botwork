@@ -59,7 +59,9 @@ the runs.
 Every started run ends with exactly one [terminal outcome](docs/terminal-outcomes.md).
 Ctrl-C cancels started runs cooperatively and still publishes the reports.
 `--reconcile-report PATH` finishes reports after a forced termination, marking
-unfinished runs as interrupted.
+unfinished runs as interrupted. Every report output has a documented
+[limit](docs/report-limits.md), so large suites and long loops keep reports
+bounded.
 
 Embedded hosts can request a versioned [run record](docs/run-records.md) of each run's
 statements, logs, timing, and outcome through `RunOptions::record`.

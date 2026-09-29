@@ -1,4 +1,4 @@
-# Version 28: add terminal outcomes, interruption, and report reconciliation.
+# Version 29: bound report selections and pages, and sweep interrupted publications.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/interrupt.rs",
@@ -126,6 +126,7 @@ additional_cargo_args = [
     "--test", "listeners",
     "--test", "html_report",
     "--test", "terminal_outcomes",
+    "--test", "report_limits",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

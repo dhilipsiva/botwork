@@ -18,6 +18,9 @@ use std::{
 /// Identifies a replaceable HTML report within its first bytes.
 pub(super) const GENERATOR: &str = r#"<meta name="generator" content="botwork-report-html 1">"#;
 const RECOGNITION_BYTES: u64 = 4096;
+/// Run details are rendered while the page is smaller than this; later runs
+/// keep their summary. Escaping can enlarge recorded text several times over.
+pub(super) const MAX_PAGE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_SOURCE_FILES: usize = 64;
 const MAX_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
 /// Columns are counted in Unicode scalars; longer line prefixes get no excerpt.
@@ -471,7 +474,7 @@ fn identity_name(id: &str, name: &str) -> String {
 
 /// Render the complete page for `document`; artifact links are relative to
 /// `directory`, the report's canonical directory.
-pub(super) fn render(document: &Document<'_>, directory: &Path) -> String {
+pub(super) fn render(document: &Document<'_>, directory: &Path, budget: usize) -> String {
     let mut sources = Sources::default();
     let mut out = String::new();
     let overall = match document.verdict {
@@ -603,6 +606,19 @@ pub(super) fn render(document: &Document<'_>, directory: &Path) -> String {
     }
     out.push_str("</table>");
     for run in &document.runs {
+        if out.len() >= budget {
+            let (number, identity, outcome) = match run {
+                Run::Full(entry) => (entry.number, &entry.record.identity, entry.record.status),
+                Run::Summary(summary) => (summary.number, &summary.identity, summary.status),
+            };
+            let _ = write!(
+                out,
+                r#"<details class="run" id="run-{number}"><summary>#{number} {} {}</summary><p class="muted">Details omitted: the page budget was spent.</p></details>"#,
+                identity_name(&identity.id, &identity.name),
+                status(outcome)
+            );
+            continue;
+        }
         match run {
             Run::Full(entry) => {
                 let record = entry.record;
@@ -785,6 +801,74 @@ mod tests {
         let edge = MAX_LINE_PREFIX_BYTES;
         assert!(sources.excerpt(&at(&wide, edge, edge + 1)).is_some());
         assert!(sources.excerpt(&at(&wide, edge + 1, edge + 2)).is_none());
+    }
+
+    #[test]
+    fn run_details_stop_at_the_page_budget() {
+        use super::super::{Entry, FORMAT, VERSION};
+        use botwork::core::{
+            acceptance::{CaseTotals, Delivery},
+            report::{RecordOptions, RunIdentity},
+            run::{Engine, RunOptions},
+        };
+        let record = Engine::default()
+            .run_source(
+                "budget.botwork",
+                "No Operation",
+                RunOptions {
+                    record: Some(RecordOptions {
+                        identity: RunIdentity::new("budget", "budget"),
+                        ..RecordOptions::default()
+                    }),
+                    ..RunOptions::default()
+                },
+            )
+            .record
+            .unwrap();
+        let mut totals = CaseTotals::default();
+        totals.record_many(CaseStatus::Succeeded, 3).unwrap();
+        let verdict = totals.finish(0, Delivery::Complete);
+        let page = |budget| {
+            render(
+                &Document {
+                    format: FORMAT,
+                    version: VERSION,
+                    complete: true,
+                    mode: "batch",
+                    started_at: "2026-01-01T00:00:00.000000Z",
+                    finished_at: Some("2026-01-01T00:00:01.000000Z".into()),
+                    duration_us: Some(1),
+                    exit_code: Some(0),
+                    verdict: Some(&verdict),
+                    runs: (1..=3)
+                        .map(|number| {
+                            Run::Full(Entry {
+                                number,
+                                record: &record,
+                            })
+                        })
+                        .collect(),
+                    omitted_run_details: 0,
+                    fixtures: &[],
+                },
+                Path::new("/"),
+                budget,
+            )
+        };
+        let full = page(usize::MAX);
+        assert_eq!(full.matches("<h3>Statements</h3>").count(), 3);
+        // Run 2's section starts exactly at the budget, so it and run 3 are cut.
+        let second = full.find(r#"<details class="run" id="run-2""#).unwrap();
+        let cut = page(second);
+        assert_eq!(cut.matches("<h3>Statements</h3>").count(), 1);
+        assert_eq!(
+            cut.matches("Details omitted: the page budget was spent.")
+                .count(),
+            2
+        );
+        assert!(cut.contains(r#"id="run-3"><summary>#3 budget"#));
+        let later = page(second + 1);
+        assert_eq!(later.matches("<h3>Statements</h3>").count(), 2);
     }
 
     #[test]

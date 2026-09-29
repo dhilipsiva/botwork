@@ -58,7 +58,7 @@ fn temporary_collisions_are_retried_without_overwrite_and_other_io_errors_keep_t
     let path = directory.0.join("failed.json");
     let history = History::begin(path.clone()).unwrap();
     let collision = directory.0.join(format!(
-        ".botwork-failures-{}-{}.tmp",
+        ".failed.json.{}.{}.tmp",
         std::process::id(),
         TEMPORARY.load(Ordering::Relaxed)
     ));

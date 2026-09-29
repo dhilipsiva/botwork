@@ -62,7 +62,9 @@ Each run's details contain:
   link sits in the run that produced it.
 
 Runs beyond the report's 32 MiB [detail budget](json-report.md#retention) show
-only their summary row and a note that details were omitted.
+only their summary row and a note that details were omitted. Rendered details
+also stop at a 64 MiB page budget, because escaping can enlarge recorded text;
+later runs keep a summary section. See [report limits](report-limits.md).
 
 ### Source excerpts
 
