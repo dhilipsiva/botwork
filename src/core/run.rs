@@ -198,6 +198,8 @@ pub struct RunEnvironment {
     pub(crate) recorder: Option<crate::core::report::Recorder>,
     /// Masked from every output of the run and its workers.
     pub(crate) secrets: crate::core::secret::Secrets,
+    /// Parsed modules shared with other runs; module state stays per run.
+    pub(crate) compiled: Option<crate::core::eval::CompiledModules>,
 }
 
 impl Context {
@@ -211,6 +213,23 @@ impl Context {
         })?;
         let mut environment = RunEnvironment::clone(environment);
         environment.secrets = secrets.clone();
+        self.environment = Some(Arc::new(environment));
+        Ok(())
+    }
+
+    /// Share parsed imported modules with every run given the same cache. The
+    /// context needs a run environment, as from [`Context::with_host_environment`].
+    pub fn set_compiled_modules(
+        &mut self,
+        modules: &crate::core::eval::CompiledModules,
+    ) -> DiagnosticResult<()> {
+        let environment = self.environment.as_ref().ok_or_else(|| {
+            Diagnostic::new(BWErr::RunConfiguration(
+                "Compiled modules require a run environment".into(),
+            ))
+        })?;
+        let mut environment = RunEnvironment::clone(environment);
+        environment.compiled = Some(modules.clone());
         self.environment = Some(Arc::new(environment));
         Ok(())
     }
@@ -269,6 +288,7 @@ impl RunEnvironment {
             control,
             recorder: self.recorder.clone(),
             secrets: self.secrets.clone(),
+            compiled: self.compiled.clone(),
         }
     }
     pub fn working_directory(&self) -> &Path {
@@ -370,6 +390,7 @@ impl RunEnvironment {
             control,
             recorder: None,
             secrets: options.secrets.clone(),
+            compiled: None,
         })
     }
 }
@@ -418,13 +439,18 @@ impl RunResult {
 #[derive(Clone)]
 pub struct Engine {
     template: Context,
+    /// Parsed imported modules shared by this engine's runs.
+    compiled: crate::core::eval::CompiledModules,
 }
 
 impl Default for Engine {
     fn default() -> Self {
         let mut template = Context::default();
         template.init_statements();
-        Self { template }
+        Self {
+            template,
+            compiled: crate::core::eval::CompiledModules::default(),
+        }
     }
 }
 
@@ -446,7 +472,20 @@ impl Engine {
         })
         .expect("registry budgets have no fixed ceilings");
         template.init_statements();
-        Self { template }
+        Self {
+            template,
+            compiled: crate::core::eval::CompiledModules::default(),
+        }
+    }
+
+    /// The cache of parsed imported modules this engine's runs share.
+    pub fn compiled_modules(&self) -> &crate::core::eval::CompiledModules {
+        &self.compiled
+    }
+
+    /// Share `modules` with other engines or hosts instead of this engine's own cache.
+    pub fn share_compiled_modules(&mut self, modules: &crate::core::eval::CompiledModules) {
+        self.compiled = modules.clone();
     }
 
     /// Callbacks use workers in async runs and the calling thread in synchronous runs.

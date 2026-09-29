@@ -1,6 +1,7 @@
-# Version 31: prove cancellation propagation and resource release.
+# Version 32: share compiled modules and prove run isolation.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/compiled.rs",
     "src/core/secret.rs",
     "src/secrets.rs",
     "src/interrupt.rs",
@@ -68,6 +69,7 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/eval/compiled.rs:',
     '^src/(core/secret|secrets).rs:',
     '^src/(core/)?listener.rs:',
     '^src/(report_json|atomic_file|report_json/html|report_json/journal|interrupt).rs:',
@@ -133,6 +135,7 @@ additional_cargo_args = [
     "--test", "secrets",
     "--test", "cancellation",
     "--test", "resource_release",
+    "--test", "run_isolation",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

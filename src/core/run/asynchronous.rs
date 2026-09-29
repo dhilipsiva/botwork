@@ -108,6 +108,7 @@ impl Engine {
             environment.recorder = recording
                 .as_ref()
                 .map(|recording| recording.recorder().clone());
+            environment.compiled = Some(self.compiled.clone());
             let environment = Arc::new(environment);
             context.working_directory = Ok(environment.working_directory().to_owned());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));

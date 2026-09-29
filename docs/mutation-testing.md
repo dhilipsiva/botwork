@@ -283,6 +283,18 @@ evidence confirm that the resource test detects leaked descriptors, threads, and
 child processes. Its 353-entry catalogue adds 2 faults; see
 [cancellation evidence](cancellation-evidence.json).
 
+Version 32 adds compiled modules and run isolation. Its faults cover:
+
+- cache keys that ignore limits or text;
+- evicting the most recently used parse;
+- keeping oversized modules;
+- uncounted hits;
+- an engine whose runs skip the cache.
+
+Its 359-entry catalogue adds 6 faults, with the `run_isolation` suite as an
+oracle; see [run-isolation evidence](run-isolation-evidence.json). The secret
+entry for the CLI file context moved with this change and was updated in place.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

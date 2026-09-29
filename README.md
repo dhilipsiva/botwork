@@ -62,6 +62,8 @@ Ctrl-C cancels started runs cooperatively and still publishes the reports.
 unfinished runs as interrupted. Every report output has a documented
 [limit](docs/report-limits.md), so large suites and long loops keep reports
 bounded.
+Runs are [isolated](docs/run-isolation.md): they share only the parsed trees of
+unchanged imported modules, and each builds its own module state.
 Stops reach nested statements, I/O, listeners, and cleanup, and runs release
 their resources afterwards; see [cancellation](docs/cancellation.md).
 Mark inputs as [secrets](docs/secrets.md) with `--secret NAME` or

@@ -151,6 +151,7 @@ async fn owner(
         context.init_statements();
         context.set_input_variables(variables)?;
         context.set_secrets(crate::secrets::registry())?;
+        context.set_compiled_modules(crate::compiled_modules())?;
         context.checkpoint()?;
         context.set_statement_tracing(configuration.debug);
         Ok::<_, CliError>(context)

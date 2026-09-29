@@ -1,6 +1,6 @@
 # Embedded Rust Runs
 
-`core::run::Engine` keeps reusable native registrations. `run_source(name, text, options)`, `run_program(&program, options)`, and `run_file(path, options)` synchronously execute in fresh contexts. Each run owns variables, custom definitions, namespace/module caches, handler state, and counters. Programs are immutable and reusable. Engine clones share native callback captures; hosts remain responsible for intentional shared state and callback synchronization.
+`core::run::Engine` keeps reusable native registrations. `run_source(name, text, options)`, `run_program(&program, options)`, and `run_file(path, options)` synchronously execute in fresh contexts. Each run owns variables, custom definitions, namespace/module caches, handler state, and counters. Runs of one Engine share only the parsed trees of unchanged imported modules through `Engine::compiled_modules`; see [run isolation](run-isolation.md). Programs are immutable and reusable. Engine clones share native callback captures; hosts remain responsible for intentional shared state and callback synchronization.
 
 The corresponding `run_source_async`, `run_program_async`, and `run_file_async` methods await registered `NativeOperation` calls through the same evaluator. [Async execution](async-execution.md) describes registration, owned futures, scope/import preservation, cancellation, scheduler yields, and explicit rejection of operation registries by synchronous entry points.
 

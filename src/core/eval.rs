@@ -10,6 +10,8 @@ use std::{
 mod blocking;
 mod builtins;
 mod cleanup;
+mod compiled;
+pub use compiled::{CompiledModules, CompiledStatistics, DEFAULT_COMPILED_SOURCE_BYTES};
 mod fixtures;
 pub use fixtures::{evaluate_suite_fixture_async, FixtureInputs, FixtureResult};
 mod diagnostics;
@@ -433,6 +435,36 @@ impl Context {
             |failure| self.ast_error(failure),
         )
         .inspect_err(|error| self.latch_limit(error))
+    }
+
+    /// Parse an imported module, sharing the tree through the run's compiled
+    /// module cache when it has one. Limits are checked exactly as a fresh parse.
+    pub(crate) fn parse_module(&self, name: &str, source: &str) -> EvaluationResult<Arc<Program>> {
+        let Some(modules) = self
+            .environment
+            .as_ref()
+            .and_then(|environment| environment.compiled.as_ref())
+        else {
+            return self.parse_source(name, source).map(Arc::new);
+        };
+        if let Some(budget) = &self.budget {
+            budget.check_parser_entry()?;
+        }
+        let limits = self
+            .budget
+            .as_ref()
+            .map(|budget| budget.limits().clone())
+            .unwrap_or_default();
+        modules.get_or_parse(
+            name,
+            source,
+            compiled::ParseLimits {
+                source_bytes: limits.source_bytes,
+                syntax: limits.syntax,
+                ast: limits.ast,
+            },
+            || self.parse_source(name, source),
+        )
     }
 
     pub(crate) fn parse_source(&self, name: &str, source: &str) -> EvaluationResult<Program> {

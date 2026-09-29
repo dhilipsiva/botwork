@@ -1,5 +1,5 @@
 {
-  "version": 31,
+  "version": 32,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2448,8 +2448,8 @@
       "id": "secrets-file-context-unmasked",
       "area": "secrets",
       "file": "src/main.rs",
-      "before": "    context.set_input_variables(variables)?;\n    context.set_secrets(secrets::registry())?;\n    context.checkpoint()?;",
-      "after": "    context.set_input_variables(variables)?;\n    context.checkpoint()?;"
+      "before": "    context.set_input_variables(variables)?;\n    context.set_secrets(secrets::registry())?;\n    context.set_compiled_modules(compiled_modules())?;",
+      "after": "    context.set_input_variables(variables)?;\n    context.set_compiled_modules(compiled_modules())?;"
     },
     {
       "id": "secrets-values-unregistered",
@@ -2471,6 +2471,48 @@
       "file": "src/main.rs",
       "before": "    let control = interrupt::root().child(deadline);",
       "after": "    let control = OperationControl::default().child(deadline);"
+    },
+    {
+      "id": "compiled-limits-ignored",
+      "area": "run-isolation",
+      "file": "src/core/eval/compiled.rs",
+      "before": "            .find(|entry| entry.limits == *limits && entry.source == source)?;",
+      "after": "            .find(|entry| entry.source == source)?;"
+    },
+    {
+      "id": "compiled-text-ignored",
+      "area": "run-isolation",
+      "file": "src/core/eval/compiled.rs",
+      "before": "            .find(|entry| entry.limits == *limits && entry.source == source)?;",
+      "after": "            .find(|entry| entry.limits == *limits)?;"
+    },
+    {
+      "id": "compiled-most-recent-evicted",
+      "area": "run-isolation",
+      "file": "src/core/eval/compiled.rs",
+      "before": "                .min()",
+      "after": "                .max()"
+    },
+    {
+      "id": "compiled-oversized-kept",
+      "area": "run-isolation",
+      "file": "src/core/eval/compiled.rs",
+      "before": "        if source.len() > store.capacity {",
+      "after": "        if false {"
+    },
+    {
+      "id": "compiled-hits-uncounted",
+      "area": "run-isolation",
+      "file": "src/core/eval/compiled.rs",
+      "before": "                store.statistics.hits += 1;",
+      "after": "                store.statistics.hits += 0;"
+    },
+    {
+      "id": "compiled-engine-cache-unused",
+      "area": "run-isolation",
+      "file": "src/core/run/asynchronous.rs",
+      "before": "            environment.compiled = Some(self.compiled.clone());\n",
+      "after": ""
     }
   ]
 }

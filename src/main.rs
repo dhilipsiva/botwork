@@ -169,6 +169,14 @@ enum CliError {
     },
 }
 
+/// Parsed imported modules shared by every run, case, and fixture of this
+/// invocation; each still builds its own module state.
+fn compiled_modules() -> &'static botwork::core::eval::CompiledModules {
+    static MODULES: std::sync::OnceLock<botwork::core::eval::CompiledModules> =
+        std::sync::OnceLock::new();
+    MODULES.get_or_init(botwork::core::eval::CompiledModules::default)
+}
+
 /// Run a file, recording it when a report requested a recording.
 async fn run(
     file: &Path,
@@ -287,6 +295,7 @@ async fn run_case_recorded(
         context.init_statements();
         context.set_input_variables(variables)?;
         context.set_secrets(secrets::registry())?;
+        context.set_compiled_modules(compiled_modules())?;
         if let Some(fixture) = fixture {
             fixture.inherit_into(&mut context)?;
         }
@@ -343,6 +352,7 @@ fn prepare(
     context.init_statements();
     context.set_input_variables(variables)?;
     context.set_secrets(secrets::registry())?;
+    context.set_compiled_modules(compiled_modules())?;
     context.checkpoint()?;
     context.set_statement_tracing(debug);
     Ok((program, context))

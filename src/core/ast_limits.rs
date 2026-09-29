@@ -11,7 +11,7 @@ pub const DEFAULT_AST_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AstLimits {
     pub nodes: usize,
     pub depth: usize,

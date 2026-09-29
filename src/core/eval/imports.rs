@@ -379,7 +379,7 @@ async fn load_module(
         .to_str()
         .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
     let program = context
-        .parse_source(source_name, &source)
+        .parse_module(source_name, &source)
         .map_err(|error| {
             error.with_related("imported here", import_site, context.budget.as_ref())
         })?;

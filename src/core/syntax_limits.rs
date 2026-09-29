@@ -9,7 +9,7 @@ pub const MAX_SYNTAX_COMPLEXITY: usize = 66;
 
 /// Hosts may tighten the parser guard. Raising its fixed ceilings requires a
 /// reviewed parser/stack change; this configuration never changes process globals.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SyntaxLimits {
     pub nesting: usize,
     pub operators: usize,
