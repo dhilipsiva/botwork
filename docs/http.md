@@ -177,6 +177,18 @@ Output:
 {"message":"hello"}
 ```
 
+The other forms, against the same endpoint, with their output in comments:
+
+<!-- botwork-test: http-variants -->
+```botwork
+|url| = Get Environment Variable |"BOTWORK_HTTP_URL"|
+Log |@{ HTTP Request |"GET"| To |url| }.status|                             # 200
+|binary| = HTTP Binary Request |"GET"| To |url|
+Log |@{ Length Of |binary.body| }|                                          # 19 bytes
+|binary| = HTTP Binary Request |"GET"| To |url| Options |{"timeout_ms": 3000}|
+Log |binary.success|                                                        # true
+```
+
 The equivalent file is [example 34](../examples/34-http.botwork).
 The transport uses [Hyper's connection builder](https://docs.rs/hyper/1.11.1/hyper/client/conn/http1/struct.Builder.html)
 and [Tokio Rustls](https://docs.rs/tokio-rustls/0.26.6/tokio_rustls/client/struct.TlsConnector.html).

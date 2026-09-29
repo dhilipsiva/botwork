@@ -118,7 +118,7 @@ See [precedence](language.md#binary-operator-precedence),
 
 | Form | Syntax |
 | --- | --- |
-| Call | `Log |"hello"|`, or `alias::Statement |value|` for an imported statement |
+| Call | `Log |"hello"|`, or `alias::Statement |value|` for an imported statement; see the [statement reference](statements.md) |
 | Assignment | `|name| = |expression|`, or `|name| = Statement |argument|` |
 | Definition | `Sentence with |parameter| { ... }` |
 | Return | `Return |value|` or a bare `Return`, inside a definition |

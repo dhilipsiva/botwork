@@ -140,6 +140,26 @@ Log |@{ Duration Nanoseconds |"PT0.000000001S"| }|
 Log |@{ Format Date Time |end| Using |"%F %T %Z"| In |"America/New_York"| }|
 ```
 
+More statements, with their output in comments:
+
+<!-- botwork-test: datetime-variants -->
+```botwork
+|start| = Parse Date Time |"2001-03-01T09:30:00+05:30"|
+Log |start|                                             # 2001-03-01T04:00:00Z
+|pause| = Create Duration |90| In |"minutes"|
+Log |pause|                                             # PT1H30M
+Log |@{ Duration Seconds |pause| }|                     # 5400
+|longer| = Add Durations |pause| And |@{ Parse Duration |"PT30M"| }|
+Log |longer|                                            # PT2H
+Log |@{ Subtract Durations |longer| Minus |pause| }|    # PT30M
+Log |@{ Compare Durations |pause| And |longer| }|       # -1
+|earlier| = Subtract Duration |pause| From Date Time |start|
+Log |earlier|                                           # 2001-03-01T02:30:00Z
+Log |@{ Compare Date Times |earlier| And |start| }|     # -1
+|now| = Current Date Time In |"UTC"|
+Log |@{ Compare Date Times |now| And |start| }|         # 1
+```
+
 Output:
 
 ```text

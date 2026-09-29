@@ -183,6 +183,48 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "collection-variants",
+            (
+                "docs/collections.md",
+                include_bytes!("doc-examples/collection-variants.stdout").as_slice(),
+            ),
+        ),
+        (
+            "string-variants",
+            (
+                "docs/strings.md",
+                include_bytes!("doc-examples/string-variants.stdout").as_slice(),
+            ),
+        ),
+        (
+            "datetime-variants",
+            (
+                "docs/datetime.md",
+                include_bytes!("doc-examples/datetime-variants.stdout").as_slice(),
+            ),
+        ),
+        (
+            "operating-system-variants",
+            (
+                "docs/operating-system.md",
+                include_bytes!("doc-examples/operating-system-variants.stdout").as_slice(),
+            ),
+        ),
+        (
+            "process-variants",
+            (
+                "docs/processes.md",
+                include_bytes!("doc-examples/process-variants.stdout").as_slice(),
+            ),
+        ),
+        (
+            "http-variants",
+            (
+                "docs/http.md",
+                include_bytes!("doc-examples/http-variants.stdout").as_slice(),
+            ),
+        ),
+        (
             "syntax-values",
             (
                 "docs/syntax.md",

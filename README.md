@@ -24,7 +24,8 @@ I wanted:
 
 The [getting-started guide](docs/getting-started.md) covers installation, a first
 script, reading failures, and a complete acceptance-test workflow with reports.
-The [syntax reference](docs/syntax.md) lists every form a script or suite can use.
+The [syntax reference](docs/syntax.md) lists every form a script or suite can use,
+and the [statement reference](docs/statements.md) lists every built-in statement.
 To look around quickly:
 
 1. Clone the repo
@@ -178,7 +179,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] README
   - [x] [Getting started docs](docs/getting-started.md)
   - [x] [Syntax docs](docs/syntax.md)
-  - [ ] Statement docs
+  - [x] [Statement docs](docs/statements.md)
 - [ ] More statements out-of-box (like the ones RobotFramework Offers)
   - [x] [Built-ins](docs/builtins.md)
   - [x] [Collections](docs/collections.md)

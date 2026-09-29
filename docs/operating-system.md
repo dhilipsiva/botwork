@@ -182,4 +182,37 @@ hello world
 txt
 ```
 
+More statements, with their output in comments. The paths are relative to the
+run directory:
+
+<!-- botwork-test: operating-system-variants -->
+```botwork
+Try {
+    Create Directory |"reports/2026"|
+    Log |@{ Directory Exists |"reports/2026"| }|                    # true
+    Create File |"reports/2026/summary.txt"| Text |"ok"|
+    Log |@{ File Exists |"reports/2026/summary.txt"| }|             # true
+    Log |@{ Path Kind |"reports"| }|                                 # directory
+    Move Path |"reports/2026/summary.txt"| To |"reports/summary.txt"|
+    Log |@{ Path Exists |"reports/2026/summary.txt"| }|             # false
+    Write Binary File |"reports/data.bin"| Bytes |[0, 127, 255]|
+    Log |@{ Read Binary File |"reports/data.bin"| }|                 # [0, 127, 255]
+    Remove File |"reports/data.bin"|
+    Log |@{ File Name |"reports/summary.txt"| }|                    # summary.txt
+    Log |@{ Parent Path |"reports/summary.txt"| }|                  # reports
+    Log |@{ Path Components |"reports/summary.txt"| }|              # ["reports", "summary.txt"]
+    Log |@{ Path Is Absolute |"reports"| }|                         # false
+    Log |@{ Path Is Absolute |@{ Absolute Path |"reports"| }| }|    # true
+    Log |@{ Path Is Absolute |@{ Canonical Path |"reports"| }| }|   # true
+    Log |@{ Path Is Absolute |@{ Working Directory }| }|            # true
+} Finally {
+    Remove Directory |"reports"| Recursively |true|
+}
+|system| = Operating System
+Log |@{ Collection Contains |["linux", "macos", "windows"]| Item |system| }|  # true
+Log |@{ Path Separator } == "/" or system == "windows"|         # true
+Log |@{ Environment Variable Exists |"PATH"| }|                 # true
+Log |@{ Collection Contains |@{ Environment Variables }| Item |"PATH"| }|    # true
+```
+
 The same program is [example 32](../examples/32-operating-system.botwork).

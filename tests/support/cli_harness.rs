@@ -73,7 +73,8 @@ impl Harness {
         fs::write(&path, source).unwrap();
         let mut command = Command::new(env!("CARGO_BIN_EXE_botwork"));
         command.arg("--file").arg(path).args(arguments);
-        let fixture = (id == "http-statements").then(http_fixture::Fixture::new);
+        let fixture =
+            matches!(id, "http-statements" | "http-variants").then(http_fixture::Fixture::new);
         if let Some(fixture) = &fixture {
             command.env("BOTWORK_HTTP_URL", &fixture.url);
         }

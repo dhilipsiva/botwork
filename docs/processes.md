@@ -9,10 +9,10 @@ can use the same constructor before initializing statements.
 
 | Statement | Parameters | Result |
 | --- | --- | --- |
-| `Run Process` … `With Arguments` | executable String, arguments Array of Strings | text result Map |
-| `Run Process` … `With Arguments` … `Options` | above, options Map | text result Map |
-| `Run Binary Process` … `With Arguments` | executable String, arguments Array of Strings | binary result Map |
-| `Run Binary Process` … `With Arguments` … `Options` | above, options Map | binary result Map |
+| `Run Process \|executable\| With Arguments \|arguments\|` | executable String, arguments Array of Strings | text result Map |
+| `Run Process \|executable\| With Arguments \|arguments\| Options \|options\|` | above, options Map | text result Map |
+| `Run Binary Process \|executable\| With Arguments \|arguments\|` | executable String, arguments Array of Strings | binary result Map |
+| `Run Binary Process \|executable\| With Arguments \|arguments\| Options \|options\|` | above, options Map | binary result Map |
 
 Arguments are passed literally, including empty arguments, spaces, quotes, wildcards,
 and shell punctuation. No shell is inserted and no command string is split. To run
@@ -122,6 +122,16 @@ Log |result.stderr|
 
 |result| = Run Binary Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": [0, 255, 10]}|
 Log |result.stdout|
+```
+
+The other two forms, with their output in comments:
+
+<!-- botwork-test: process-variants -->
+```botwork
+|result| = Run Process |"/bin/sh"| With Arguments |["-c", "printf '%s' \"$GREETING\""]| Options |{"environment": {"GREETING": "hi"}}|
+Log |result.stdout|                                     # hi
+|result| = Run Binary Process |"/bin/printf"| With Arguments |["AB"]|
+Log |result.stdout|                                     # [65, 66]
 ```
 
 This is also [example 33](../examples/33-processes.botwork). It prints `Hello, world!`,

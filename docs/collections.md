@@ -107,6 +107,20 @@ Log |@{ Enumerate |["a", "b"]| }|
 Log |@{ Length Of |stock| }|
 ```
 
+More statements, with their output in comments:
+
+<!-- botwork-test: collection-variants -->
+```botwork
+Log |@{ Create Map }|                                   # {}
+|prices| = Create Map From |[["tea", 3], ["coffee", 5]]|
+Log |@{ Get From |prices| At |"coffee"| }|              # 5
+Log |@{ Get From |["a", "b", "c"]| At |1| }|            # b
+Log |@{ Map Values |prices| }|                          # [5, 3], in key order
+Log |@{ Remove From |prices| At |"tea"| }|              # {"coffee": 5}
+Log |@{ Remove From |[1, 2, 3]| At |0| }|               # [2, 3]
+Log |@{ Repeat |"-"| Times |3| }|                       # ["-", "-", "-"]
+```
+
 Run the same script as `cargo run -- --file examples/29-collections.botwork`.
 The example, reference block, focused tests, allocator observations, and B2
 conformance cases execute in the test suite. [Verification evidence](collections-evidence.json)

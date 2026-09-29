@@ -164,6 +164,19 @@ Log |@{ Find Matches In |text| Regex |"[0-9]+"| }|
 Log |@{ Capture From |text| Regex |"order=([0-9]+)"| }|
 ```
 
+More statements, with their output in comments:
+
+<!-- botwork-test: string-variants -->
+```botwork
+|title| = |"Grüße, World"|
+Log |@{ String Length |title| }|                        # 12 Unicode scalar values
+Log |@{ Lowercase String |title| }|                     # grüße, world
+Log |@{ String Contains |title| Text |"World"| }|       # true
+Log |@{ String Starts With |title| Prefix |"Grü"| }|    # true
+Log |@{ String Ends With |title| Suffix |"world"| }|    # false: matching is exact
+Log |@{ Split Lines |"one\ntwo\n"| }|                   # ["one", "two"]
+```
+
 Run the same script with `cargo run -- --file examples/30-strings.botwork`.
 The reference, example, B3 corpus, semantic/quota tests, and allocator observations
 are executable. [Verification evidence](strings-evidence.json) records the tested
