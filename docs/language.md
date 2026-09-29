@@ -1,6 +1,6 @@
 # Language Behavior
 
-This reference records implemented behavior as language TODOs are completed. The [core language specification](language-specification.md) defines the intended semantics and identifies pending implementation work.
+This reference records implemented behavior as language TODOs are completed. The [syntax reference](syntax.md) lists every syntactic form and links back to the sections below. The [core language specification](language-specification.md) defines the intended semantics and identifies pending implementation work.
 
 ## Values and Supported Operations
 

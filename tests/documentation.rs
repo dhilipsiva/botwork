@@ -183,6 +183,20 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "syntax-values",
+            (
+                "docs/syntax.md",
+                include_bytes!("doc-examples/syntax-values.stdout").as_slice(),
+            ),
+        ),
+        (
+            "syntax-statements",
+            (
+                "docs/syntax.md",
+                include_bytes!("doc-examples/syntax-statements.stdout").as_slice(),
+            ),
+        ),
+        (
             "hello",
             ("docs/getting-started.md", b"Hello, botwork!\n".as_slice()),
         ),
@@ -388,4 +402,58 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
         ]),
         "include new Rust documentation examples in rustdoc before registering their files"
     );
+}
+
+#[test]
+fn syntax_reference_quotes_every_grammar_keyword_and_operator() {
+    let grammar = include_str!("../src/core/grammar.pest");
+    let reference = include_str!("../docs/syntax.md");
+    let summary = reference
+        .split_once("## Grammar summary")
+        .expect("a grammar summary")
+        .1
+        .to_lowercase();
+    // Case-insensitive keywords are written ^"word" in the grammar; the power
+    // operator's own token is "^".
+    let mut tokens: BTreeSet<String> = grammar
+        .match_indices("^\"")
+        .filter(|(index, _)| !grammar[..*index].ends_with('"'))
+        .map(|(index, _)| grammar[index + 2..].split('"').next().unwrap().to_owned())
+        .collect();
+    // Operators and literal words are the first quoted text of their rules.
+    let rules = [
+        "exponent",
+        "multiply",
+        "divide",
+        "modulus",
+        "plus",
+        "minus",
+        "less_than",
+        "less_than_or_equal",
+        "greater_than",
+        "greater_than_or_equal",
+        "not_equal",
+        "equal",
+        "logical_and",
+        "logical_or",
+        "logical_not",
+        "boolean_true",
+        "boolean_false",
+        "dataset_none",
+    ];
+    for line in grammar.lines() {
+        let Some((name, body)) = line.split_once('=') else {
+            continue;
+        };
+        if rules.contains(&name.trim()) {
+            tokens.insert(body.split('"').nth(1).expect("a quoted token").to_owned());
+        }
+    }
+    assert!(tokens.len() > 40, "{tokens:?}");
+    for token in tokens {
+        assert!(
+            summary.contains(&format!("\"{token}\"")),
+            "docs/syntax.md's grammar summary does not quote {token:?}"
+        );
+    }
 }
