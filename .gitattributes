@@ -1,2 +1,6 @@
 # Preserve CRLF in the source-location diagnostic fixture.
 /tests/fixtures/invalid-control-unicode.botwork -text whitespace=cr-at-eol
+editors/tree-sitter-botwork/*/src/parser.c linguist-generated
+editors/tree-sitter-botwork/*/src/grammar.json linguist-generated
+editors/tree-sitter-botwork/*/src/node-types.json linguist-generated
+editors/tree-sitter-botwork/*/src/tree_sitter/** linguist-generated

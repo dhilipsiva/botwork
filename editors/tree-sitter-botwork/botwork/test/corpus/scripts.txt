@@ -1,0 +1,271 @@
+============================================================
+Assignments, calls, and expressions
+============================================================
+
+|total| = |1 + 2 * 3 ^ -2|
+Log |total == 7 and !done|
+|copy| = Read File |"a.txt"|
+
+---
+
+(source_file
+  (assignment
+    (parameter_name
+      (identifier))
+    (parameter
+      (binary_expression
+        (integer)
+        (binary_expression
+          (integer)
+          (power_expression
+            (integer)
+            (unary_expression
+              (integer)))))))
+  (sentence
+    (word)
+    (parameter
+      (binary_expression
+        (binary_expression
+          (identifier)
+          (integer))
+        (unary_expression
+          (identifier)))))
+  (assignment
+    (parameter_name
+      (identifier))
+    (sentence
+      (word)
+      (word)
+      (parameter
+        (string)))))
+
+============================================================
+Definitions and returns
+============================================================
+
+Double |value| {
+    Return |value * 2|
+}
+Pair |first| with \
+    |second| { Return |[first, second]| }
+
+---
+
+(source_file
+  (definition
+    (definition_header
+      (word)
+      (parameter_name
+        (identifier)))
+    (block
+      (return_statement
+        (parameter
+          (binary_expression
+            (identifier)
+            (integer))))))
+  (definition
+    (definition_header
+      (word)
+      (parameter_name
+        (identifier))
+      (word)
+      (continuation)
+      (parameter_name
+        (identifier)))
+    (block
+      (return_statement
+        (parameter
+          (array
+            (identifier)
+            (identifier)))))))
+
+============================================================
+Control flow
+============================================================
+
+If |x > 1| {
+    Log |x|
+} Else If |x == 1| {
+    Log |1|
+} Else {}
+For |item| In |[1, 2]| {
+    Continue
+}
+While |true| { Break }
+Try { Fail |"no"| } Catch |error| { Rethrow } Finally { Log |1| }
+Eventually |{timeout_ms: 10}| { Log |1| }
+Retry |{attempts: 2}| { Log |1| }
+
+---
+
+(source_file
+  (if_statement
+    (parameter
+      (binary_expression
+        (identifier)
+        (integer)))
+    (block
+      (sentence
+        (word)
+        (parameter
+          (identifier))))
+    (else_clause
+      (if_statement
+        (parameter
+          (binary_expression
+            (identifier)
+            (integer)))
+        (block
+          (sentence
+            (word)
+            (parameter
+              (integer))))
+        (else_clause
+          (block)))))
+  (for_statement
+    (parameter_name
+      (identifier))
+    (parameter
+      (array
+        (integer)
+        (integer)))
+    (block
+      (continue_statement)))
+  (while_statement
+    (parameter
+      (true))
+    (block
+      (break_statement)))
+  (try_statement
+    (block
+      (sentence
+        (word)
+        (parameter
+          (string))))
+    (catch_clause
+      (parameter_name
+        (identifier))
+      (block
+        (rethrow_statement)))
+    (finally_clause
+      (block
+        (sentence
+          (word)
+          (parameter
+            (integer))))))
+  (eventually_statement
+    (parameter
+      (map
+        (pair
+          (identifier)
+          (integer))))
+    (block
+      (sentence
+        (word)
+        (parameter
+          (integer)))))
+  (retry_statement
+    (parameter
+      (map
+        (pair
+          (identifier)
+          (integer))))
+    (block
+      (sentence
+        (word)
+        (parameter
+          (integer))))))
+
+============================================================
+Imports and qualified calls
+============================================================
+
+Import |"helpers.botwork"| As |helpers|
+Log |@{ helpers::Double |3| }.value[0]|
+
+---
+
+(source_file
+  (import_statement
+    (string)
+    (parameter_name
+      (identifier)))
+  (sentence
+    (word)
+    (parameter
+      (primary
+        (call_expression
+          (sentence
+            (word)
+            (parameter
+              (integer))))
+        (field_access
+          (identifier))
+        (index_access
+          (integer))))))
+
+============================================================
+Comments and multi-line collections
+============================================================
+
+# line
+### block
+comment ###
+|data| = |{
+    name: "x", # item
+    "list": [
+        1,
+        2,
+    ],
+}|
+
+---
+
+(source_file
+  (comment)
+  (comment)
+  (assignment
+    (parameter_name
+      (identifier))
+    (parameter
+      (map
+        (pair
+          (identifier)
+          (string))
+        (comment)
+        (pair
+          (string)
+          (array
+            (integer)
+            (integer)))))))
+
+============================================================
+Keywords only start statements
+============================================================
+
+In order |1|
+Log |1| If |2|
+Break!
+Iffy |1|
+
+---
+
+(source_file
+  (sentence
+    (word)
+    (word)
+    (parameter
+      (integer)))
+  (sentence
+    (word)
+    (parameter
+      (integer))
+    (word)
+    (parameter
+      (integer)))
+  (sentence
+    (word))
+  (sentence
+    (word)
+    (parameter
+      (integer))))

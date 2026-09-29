@@ -20,6 +20,7 @@ page.
   `###` opens a block comment that ends at the next `###`.
 - **Canonical layout.** `botwork --format` rewrites a file in one layout; see
   [formatting](format.md).
+- **Editors.** [Tree-sitter grammars](tree-sitter.md) parse the same syntax.
 
 See [whitespace, lines, and comments](language.md#whitespace-lines-and-comments).
 

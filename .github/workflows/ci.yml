@@ -76,6 +76,28 @@ jobs:
       - name: Run tests and examples
         run: cargo +stable test --locked --target ${{ matrix.target }} ${{ matrix.flags }}
 
+  tree-sitter:
+    name: Tree-sitter grammars
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Install the Tree-sitter CLI
+        run: npm install --global tree-sitter-cli@0.25.9
+      - name: Run the grammar corpus tests
+        run: |
+          (cd editors/tree-sitter-botwork/botwork && tree-sitter test)
+          (cd editors/tree-sitter-botwork/suite && tree-sitter test)
+      - name: Check agreement with the interpreter and the generated parsers
+        env:
+          BOTWORK_REQUIRE_TREE_SITTER: "1"
+        run: cargo +stable test --locked --test tree_sitter
+
   fuzz:
     name: Seeded fuzz smoke (AddressSanitizer)
     runs-on: ubuntu-latest

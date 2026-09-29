@@ -1,0 +1,116 @@
+============================================================
+Suite with fixtures, datasets, and cases
+============================================================
+
+Suite |"checkout"| Named |"Checkout"| Tags |["smoke"]| {
+    Dataset |"orders"| {
+        Row |"one"| Values |{items: [5], expected: -5, note: none}|
+    }
+    Dataset |"file"| From JSON |"rows.json"|
+    Library {
+        Total |x| { Return |x| }
+    }
+    SuiteSetup { |currency| = |"EUR"| }
+    Case |"total"| Using |"orders"| As |order| {
+        Log |currency|
+    }
+}
+
+---
+
+(source_file
+  (suite
+    (suite_id
+      (string))
+    (suite_name
+      (suite_id
+        (string)))
+    (suite_tags
+      (string))
+    (dataset
+      (suite_id
+        (string))
+      (row
+        (suite_id
+          (string))
+        (data_map
+          (data_pair
+            (identifier)
+            (data_array
+              (data_number
+                (integer))))
+          (data_pair
+            (identifier)
+            (data_number
+              (integer)))
+          (data_pair
+            (identifier)
+            (none)))))
+    (dataset
+      (suite_id
+        (string))
+      (dataset_format)
+      (suite_id
+        (string)))
+    (library
+      (block
+        (definition
+          (definition_header
+            (word)
+            (parameter_name
+              (identifier)))
+          (block
+            (return_statement
+              (parameter
+                (identifier)))))))
+    (fixture
+      (block
+        (assignment
+          (parameter_name
+            (identifier))
+          (parameter
+            (string)))))
+    (case
+      (suite_id
+        (string))
+      (case_using
+        (suite_id
+          (string))
+        (parameter_name
+          (identifier)))
+      (block
+        (sentence
+          (word)
+          (parameter
+            (identifier)))))))
+
+============================================================
+Dataset file
+============================================================
+
+Dataset |"numbers"| {
+    Row |"first"| Values |1|
+    Row |"second"| Values |[1, 2.5, "x", true]|
+}
+
+---
+
+(source_file
+  (dataset
+    (suite_id
+      (string))
+    (row
+      (suite_id
+        (string))
+      (data_number
+        (integer)))
+    (row
+      (suite_id
+        (string))
+      (data_array
+        (data_number
+          (integer))
+        (data_number
+          (float))
+        (string)
+        (true)))))

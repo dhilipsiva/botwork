@@ -10,6 +10,7 @@ Botwork is a Rust 2021 automation framework with a library and CLI in one Cargo 
 - `src/core/grammar.rs`: parser setup, operator precedence, literals, and errors.
 - `src/core/eval.rs`: execution context, statements, and expression evaluation.
 - `examples/*.botwork`: runnable language examples; use numbered names such as `03-feature.botwork` for additions.
+- `editors/tree-sitter-botwork/`: Tree-sitter grammars for scripts and suites; see `docs/tree-sitter.md`.
 
 There is currently no separate test or asset directory.
 

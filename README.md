@@ -203,7 +203,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
 - [ ] Tooling
   - [ ] LSP support
   - [ ] Editor support (Mainly Helix/Vim/VS Code)
-  - [ ] TreeSitter grammar
+  - [x] [TreeSitter grammar](docs/tree-sitter.md)
   - [x] [Linting](docs/check.md)
   - [ ] Trusted & Verified registry (for botwork packages)
   - [ ] Python extention support (via pyo3)

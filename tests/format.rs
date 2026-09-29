@@ -2,11 +2,8 @@
 //! the examples, and the executed documentation is idempotent, keeps every
 //! comment and string literal, and leaves the syntax tree unchanged. Invalid
 //! input is refused.
-#[path = "conformance/cases.rs"]
-#[allow(dead_code)]
-mod corpus;
-#[path = "support/markdown.rs"]
-mod markdown;
+#[path = "support/sources.rs"]
+mod sources;
 
 use botwork::core::{
     ast::{
@@ -16,7 +13,7 @@ use botwork::core::{
     },
     format::{format, SourceKind},
 };
-use corpus::Input;
+use sources::sources;
 use std::{fmt::Write, fs, path::Path};
 
 /// The source with each comment and string literal replaced by one letter.
@@ -259,64 +256,6 @@ fn meaning(name: &str, source: &str, kind: SourceKind) -> Option<String> {
         }
     }
     Some(shape)
-}
-
-/// Every valid source the repository holds, with its kind.
-fn sources() -> Vec<(String, String, SourceKind)> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let mut found = Vec::new();
-    for case in corpus::cases() {
-        if let Input::Script(source) = case.input {
-            found.push((
-                format!("corpus:{}", case.id),
-                source.to_owned(),
-                SourceKind::Script,
-            ));
-        }
-    }
-    for directory in [
-        "examples",
-        "examples/modules",
-        "examples/datasets",
-        "tests/conformance",
-    ] {
-        let mut paths: Vec<_> = fs::read_dir(root.join(directory))
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| {
-                path.extension()
-                    .is_some_and(|extension| extension == "botwork")
-            })
-            .collect();
-        paths.sort();
-        for path in paths {
-            let text = fs::read_to_string(&path).unwrap();
-            found.push((path.display().to_string(), text, SourceKind::of_path(&path)));
-        }
-    }
-    let mut documents = vec![root.join("README.md")];
-    documents.extend(
-        fs::read_dir(root.join("docs"))
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| path.extension().is_some_and(|extension| extension == "md")),
-    );
-    documents.sort();
-    for path in documents {
-        for block in markdown::blocks(&fs::read_to_string(&path).unwrap()).unwrap() {
-            let kind = match block.language.as_str() {
-                "botwork" => SourceKind::Script,
-                "botwork-suite" => SourceKind::Suite,
-                _ => continue,
-            };
-            found.push((
-                format!("{}:{}", path.display(), block.line),
-                block.source,
-                kind,
-            ));
-        }
-    }
-    found
 }
 
 #[test]
