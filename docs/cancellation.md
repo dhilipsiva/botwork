@@ -65,7 +65,9 @@ child process may remain, zombies included.
 | Repeated file writes and reads, then `Fail` | Failure | BW9002 |
 
 Injecting one leaked descriptor per run makes the test fail, which confirms it
-detects leaks.
+detects leaks. [Stress repetition](stress.md) repeats handshake-driven
+cancellation, deadline, abandonment, HTTP, process, and CLI interrupt scenarios
+1,000 times each with the same release checks.
 
 The CLI tests in `tests/cancellation.rs` cover three cases:
 

@@ -88,7 +88,8 @@ Entry scripts are parsed by each run as before.
   a cookie.
 
 Unit tests in `src/core/eval/compiled/tests.rs` cover sharing, keys, failures,
-oversized modules, and least-recently-used eviction. The
+oversized modules, and least-recently-used eviction. [Stress repetition](stress.md)
+runs eight concurrent isolated runs 1,000 times. The
 [terminal outcome](terminal-outcomes.md) tests cover per-run records and
 artifacts under concurrency.
 

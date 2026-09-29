@@ -312,6 +312,12 @@ with this change were updated in place and re-run against the full oracle set:
 `worker-stop-skips-draining`, `cleanup-inherits-stopped-control`, and
 `fixture-drops-parent-control`.
 
+Version 34 adds stress repetition. Its faults leave a resource behind rather
+than change a result: a leaked HTTP stream, a leaked operation future, and a
+forgotten blocking permit. Its 375-entry catalogue adds 3 faults, with the
+`stress` suite as an oracle; see [stress evidence](stress-evidence.json), which
+also records an intermittent leak that only 1,000 iterations catch.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

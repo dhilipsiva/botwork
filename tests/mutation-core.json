@@ -1,5 +1,5 @@
 {
-  "version": 33,
+  "version": 34,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2604,6 +2604,27 @@
       "file": "src/main.rs",
       "before": "        None => control,\n",
       "after": "        None => OperationControl::default().child(control.deadline()),\n"
+    },
+    {
+      "id": "stress-http-stream-leaked",
+      "area": "stress",
+      "file": "src/core/eval/builtins/http/transport.rs",
+      "before": "    } else {\n        Box::new(stream)\n    };\n",
+      "after": "    } else {\n        Box::new(Box::leak(Box::new(stream)))\n    };\n"
+    },
+    {
+      "id": "stress-operation-future-leaked",
+      "area": "stress",
+      "file": "src/core/operation.rs",
+      "before": "                    scope: Some(admission.scope),\n                };\n",
+      "after": "                    scope: Some(admission.scope),\n                };\n                let future = Box::leak(Box::new(future));\n"
+    },
+    {
+      "id": "stress-blocking-permit-forgotten",
+      "area": "stress",
+      "file": "src/core/operation.rs",
+      "before": "                    let _permit = permit;\n",
+      "after": "                    std::mem::forget(permit);\n"
     }
   ]
 }

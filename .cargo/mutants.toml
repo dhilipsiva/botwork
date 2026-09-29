@@ -1,4 +1,4 @@
-# Version 33: bound shutdown after stops.
+# Version 34: repeat isolation and cancellation under stress.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/core/operation.rs",
@@ -141,6 +141,7 @@ additional_cargo_args = [
     "--test", "resource_release",
     "--test", "run_isolation",
     "--test", "shutdown",
+    "--test", "stress",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

@@ -69,6 +69,8 @@ their resources afterwards; see [cancellation](docs/cancellation.md).
 A stopped run returns within its [shutdown bound](docs/shutdown.md), even when a
 system call cannot be interrupted: blocked work is abandoned after
 `--stop-grace-ms` (2 seconds by default).
+[Stress repetition](docs/stress.md) runs deterministic isolation and cancellation
+scenarios 1,000 times each and checks every outcome and released resource.
 Mark inputs as [secrets](docs/secrets.md) with `--secret NAME` or
 `--secret-env NAME=VARIABLE`. Their values are then masked as `***` in logs,
 diagnostics, traces, reports, listener events, and artifacts.
