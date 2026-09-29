@@ -9,5 +9,6 @@
 #![doc = include_str!("../docs/listeners.md")]
 #![doc = include_str!("../docs/secrets.md")]
 #![doc = include_str!("../docs/shutdown.md")]
+#![doc = include_str!("../docs/check.md")]
 
 pub mod core;

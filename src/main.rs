@@ -24,6 +24,7 @@ use std::{
 mod assertion_artifacts;
 mod atomic_file;
 mod batch;
+mod check;
 mod interrupt;
 mod listener;
 mod report_json;
@@ -49,6 +50,9 @@ struct Args {
     /// Exclude cases with any of these inherited or local tags (repeatable)
     #[arg(long, requires = "suite")]
     exclude_tag: Vec<String>,
+    /// Check files or suites without running them: syntax, control placement, and lint rules
+    #[arg(long, conflicts_with_all = ["list_cases", "list_statements", "statement_help", "reconcile_report", "report_json", "report_html", "listener", "failures", "rerun_failed", "assertion_artifacts"])]
+    check: bool,
     /// List selected case metadata as JSON lines without executing libraries or cases
     #[arg(long, requires = "suite", conflicts_with_all = ["jobs", "failures", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
     list_cases: bool,
@@ -191,6 +195,9 @@ enum CliError {
         file: PathBuf,
         source: Box<Diagnostic>,
     },
+    /// `--check` found errors; its findings and summary are already printed.
+    #[error("check failed")]
+    Checked,
 }
 
 /// Parsed imported modules shared by every run, case, and fixture of this
@@ -412,6 +419,8 @@ fn main() -> ExitCode {
     };
     let result = if args.list_statements || args.statement_help.is_some() {
         statement_help(args.statement_help.as_deref(), output_limits)
+    } else if args.check {
+        check::run(&args.file, &args.suite)
     } else if let Some(path) = &args.reconcile_report {
         report_json::Report::reconcile(path).and_then(|found| {
             let selected = found
@@ -610,7 +619,9 @@ fn main() -> ExitCode {
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
-        Err(CliError::Batch { .. } | CliError::Suites { .. }) => ExitCode::FAILURE,
+        Err(CliError::Batch { .. } | CliError::Suites { .. } | CliError::Checked) => {
+            ExitCode::FAILURE
+        }
         Err(error) => {
             // Failure reporting has its own bounded allowance, so an exhausted
             // script output budget does not hide the reason for failure.

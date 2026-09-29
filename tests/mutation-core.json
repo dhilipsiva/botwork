@@ -1,5 +1,5 @@
 {
-  "version": 34,
+  "version": 35,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2625,6 +2625,125 @@
       "file": "src/core/operation.rs",
       "before": "                    let _permit = permit;\n",
       "after": "                    std::mem::forget(permit);\n"
+    },
+    {
+      "id": "lint-builtin-redefinition-allowed",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "            if root {\n",
+      "after": "            if false && root {\n"
+    },
+    {
+      "id": "lint-unreachable-silent",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "            if let Some(exit) = exit.filter(|_| !reported) {\n",
+      "after": "            if let Some(exit) = exit.filter(|_| false) {\n"
+    },
+    {
+      "id": "lint-unreachable-repeated",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "                reported = true;\n",
+      "after": "                let _ = &mut reported;\n"
+    },
+    {
+      "id": "lint-try-leaves-if-either",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "block_leaves(body) && block_leaves(handler)",
+      "after": "block_leaves(body) || block_leaves(handler)"
+    },
+    {
+      "id": "lint-definition-order-reversed",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": ".any(|definition| definition.span.start() < call.span.start())",
+      "after": ".any(|definition| definition.span.start() > call.span.start())"
+    },
+    {
+      "id": "lint-outer-definitions-ignored",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "            .skip(1)\n",
+      "after": "            .skip(usize::MAX)\n"
+    },
+    {
+      "id": "lint-suite-inputs-ignored",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "frame.variables.contains(variable) || frame.inputs.contains(variable)",
+      "after": "frame.variables.contains(variable)"
+    },
+    {
+      "id": "lint-variables-reported-every-read",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "if !frame.binds(name) && self.reported.insert(name.clone()) {",
+      "after": "if !frame.binds(name) {"
+    },
+    {
+      "id": "lint-argument-kinds-unchecked",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "            if !parameter.accepted.contains(kind) {\n",
+      "after": "            if false && !parameter.accepted.contains(kind) {\n"
+    },
+    {
+      "id": "lint-negative-literals-ignored",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "matches!(kind, ValueKind::Int | ValueKind::Float)",
+      "after": "matches!(kind, ValueKind::Float)"
+    },
+    {
+      "id": "lint-condition-kind-inverted",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "if literal_kind(condition).is_some_and(|kind| kind != ValueKind::Bool) {",
+      "after": "if literal_kind(condition).is_some_and(|kind| kind == ValueKind::Bool) {"
+    },
+    {
+      "id": "lint-row-binding-dropped",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "                inputs.insert(binding.to_owned());\n",
+      "after": "                let _ = binding;\n"
+    },
+    {
+      "id": "lint-imports-ignored",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "            if !frame.imports(namespace) {\n",
+      "after": "            if true {\n"
+    },
+    {
+      "id": "lint-first-definition-duplicated",
+      "area": "lint",
+      "file": "src/core/analysis.rs",
+      "before": "            for duplicate in &statements[1..] {\n",
+      "after": "            for duplicate in statements.iter() {\n"
+    },
+    {
+      "id": "check-warnings-counted-as-errors",
+      "area": "lint",
+      "file": "src/check.rs",
+      "before": "                        Severity::Warning => warnings += 1,\n",
+      "after": "                        Severity::Warning => errors += 1,\n"
+    },
+    {
+      "id": "check-always-passes",
+      "area": "lint",
+      "file": "src/check.rs",
+      "before": "    if errors == 0 {\n",
+      "after": "    if true {\n"
+    },
+    {
+      "id": "check-parse-errors-uncounted",
+      "area": "lint",
+      "file": "src/check.rs",
+      "before": "                errors += 1;\n",
+      "after": "                let _ = errors;\n"
     }
   ]
 }

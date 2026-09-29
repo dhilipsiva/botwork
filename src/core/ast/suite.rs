@@ -61,6 +61,12 @@ impl Case {
     pub fn span(&self) -> &Span {
         &self.body.span
     }
+    /// The variable a parameterized case binds its dataset row to.
+    pub fn binding(&self) -> Option<&str> {
+        self.parameters
+            .as_ref()
+            .map(|parameters| parameters.binding.text.as_str())
+    }
 }
 
 #[derive(Clone, Debug)]

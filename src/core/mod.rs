@@ -1,4 +1,5 @@
 pub mod acceptance;
+pub mod analysis;
 pub mod ast;
 pub use ast::suite;
 pub mod ast_limits;

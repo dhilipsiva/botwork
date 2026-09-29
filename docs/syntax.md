@@ -221,7 +221,8 @@ See [While loops](language.md#while-loops), [Try/Catch](language.md#trycatch),
   raises BW9001 when the condition is false.
 
 Every diagnostic carries a stable `BWnnnn` code; see
-[diagnostic codes](diagnostics.md).
+[diagnostic codes](diagnostics.md). `botwork --check` reports many of these
+errors without running the script; see [checking scripts](check.md).
 
 ## Suite files
 

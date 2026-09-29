@@ -318,6 +318,20 @@ forgotten blocking permit. Its 375-entry catalogue adds 3 faults, with the
 `stress` suite as an oracle; see [stress evidence](stress-evidence.json), which
 also records an intermittent leak that only 1,000 iterations catch.
 
+Version 35 adds static checks. Its faults cover:
+
+- rules that stop reporting: built-in redefinitions, unreachable code, argument
+  kinds, negated literals, conditions, and imports;
+- rules that report too much: repeated unreachable or undefined-variable
+  findings, and single definitions reported as duplicates;
+- wrong resolution: reversed definition order, ignored enclosing scopes, and
+  ignored suite setup variables or row bindings;
+- a `Try` that counts as leaving when only one branch leaves;
+- a CLI that counts warnings as errors, always passes, or ignores parse errors.
+
+Its 392-entry catalogue adds 17 faults, with the `check` suite and the analysis
+unit tests as oracles; see [check evidence](check-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

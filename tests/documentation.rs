@@ -238,6 +238,7 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 include_bytes!("doc-examples/syntax-statements.stdout").as_slice(),
             ),
         ),
+        ("check-example", ("docs/check.md", b"".as_slice())),
         (
             "hello",
             ("docs/getting-started.md", b"Hello, botwork!\n".as_slice()),
@@ -252,7 +253,10 @@ fn every_documented_botwork_example_matches_its_cli_output() {
         ("first-failure", ("docs/getting-started.md", b"".as_slice())),
     ]);
     // Examples that document a failure: their exit status and stderr evidence.
-    let failing = BTreeMap::from([("first-failure", (1, "[BW9001] Assertion failed"))]);
+    let failing = BTreeMap::from([
+        ("first-failure", (1, "[BW9001] Assertion failed")),
+        ("check-example", (1, "[BW2002] Statement not defined")),
+    ]);
     let mut seen = BTreeSet::new();
     let harness = Harness::new();
     for (document, blocks) in documents() {
@@ -416,6 +420,7 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
     assert!(
         include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/shutdown.md\")]")
     );
+    assert!(include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/check.md\")]"));
     assert!(include_str!("../src/core/worker.rs")
         .contains("#![doc = include_str!(\"../../docs/isolated-workers.md\")]"));
     assert!(include_str!("../src/core/worker/protocol.rs")
@@ -440,7 +445,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/run-records.md".to_owned(),
             "docs/listeners.md".to_owned(),
             "docs/secrets.md".to_owned(),
-            "docs/shutdown.md".to_owned()
+            "docs/shutdown.md".to_owned(),
+            "docs/check.md".to_owned()
         ]),
         "include new Rust documentation examples in rustdoc before registering their files"
     );

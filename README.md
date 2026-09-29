@@ -26,6 +26,7 @@ The [getting-started guide](docs/getting-started.md) covers installation, a firs
 script, reading failures, and a complete acceptance-test workflow with reports.
 The [syntax reference](docs/syntax.md) lists every form a script or suite can use,
 and the [statement reference](docs/statements.md) lists every built-in statement.
+`--check` [finds mistakes without running](docs/check.md) a file or suite.
 To look around quickly:
 
 1. Clone the repo
@@ -202,7 +203,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [ ] LSP support
   - [ ] Editor support (Mainly Helix/Vim/VS Code)
   - [ ] TreeSitter grammar
-  - [ ] Linting  
+  - [x] [Linting](docs/check.md)
   - [ ] Trusted & Verified registry (for botwork packages)
   - [ ] Python extention support (via pyo3)
   - [ ] Javascript extention support (via neon)
