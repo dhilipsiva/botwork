@@ -4,6 +4,7 @@ use botwork::core::{
     eval::{evaluate_program_async, Context, FixtureInputs},
     grammar::BWErr,
     input::load_variables,
+    listener::ListenerOptions,
     operation::OperationControl,
     report::{Recording, RunIdentity, RunRecord},
     run::{
@@ -24,6 +25,7 @@ use std::{
 mod assertion_artifacts;
 mod atomic_json;
 mod batch;
+mod listener;
 mod report_json;
 mod suites;
 
@@ -61,6 +63,23 @@ struct Args {
     /// Write a versioned botwork-report JSON document; mark it incomplete before running
     #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     report_json: Option<PathBuf>,
+    /// Stream execution events as JSON Lines to PROGRAM's stdin (run without a shell)
+    #[arg(long, value_name = "PROGRAM", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    listener: Option<PathBuf>,
+    /// Argument for the listener program (repeatable)
+    #[arg(
+        long = "listener-arg",
+        value_name = "ARG",
+        requires = "listener",
+        allow_hyphen_values = true
+    )]
+    listener_args: Vec<std::ffi::OsString>,
+    /// Events queued for a listener before a slow listener is detached (1-1048576)
+    #[arg(long, value_name = "EVENTS", requires = "listener", value_parser = clap::value_parser!(u32).range(1..=1_048_576))]
+    listener_queue: Option<u32>,
+    /// Milliseconds to wait for the listener after the last event (1-3600000)
+    #[arg(long, value_name = "MS", requires = "listener", value_parser = clap::value_parser!(u64).range(1..=3_600_000))]
+    listener_timeout_ms: Option<u64>,
     /// Maximum simultaneous runs, including file/input preparation (1-64)
     #[arg(short = 'j', long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=64))]
     jobs: u8,
@@ -349,6 +368,28 @@ fn main() -> ExitCode {
                     .map(|path| report_json::Report::begin(path, mode))
                     .transpose()?
                     .map(std::sync::Arc::new);
+                // Start the listener before discovery, so its stream covers every run.
+                let listener = args
+                    .listener
+                    .as_deref()
+                    .map(|program| {
+                        let defaults = ListenerOptions::default();
+                        listener::Hub::begin(
+                            program,
+                            &args.listener_args,
+                            ListenerOptions {
+                                capacity: args
+                                    .listener_queue
+                                    .map_or(defaults.capacity, |events| events as usize),
+                                close_timeout: args
+                                    .listener_timeout_ms
+                                    .map_or(defaults.close_timeout, Duration::from_millis),
+                            },
+                            mode,
+                        )
+                    })
+                    .transpose()?
+                    .map(std::sync::Arc::new);
                 let limits = RunLimits {
                     output: output_limits,
                     steps: args.max_steps,
@@ -360,13 +401,14 @@ fn main() -> ExitCode {
                     },
                     ..RunLimits::default()
                 };
-                if !args.suite.is_empty() {
+                let result = if !args.suite.is_empty() {
                     runtime.block_on(suites::run(
                         suites::Request::from(&args),
                         usize::from(args.jobs),
                         batch::Configuration {
                             artifacts,
                             report,
+                            listener: listener.clone(),
                             debug: args.debug,
                             files: args.variable_files,
                             settings: args.variables,
@@ -377,9 +419,12 @@ fn main() -> ExitCode {
                     ))
                 } else if args.file.len() == 1 {
                     let path = args.file[0].display().to_string();
-                    let recording = report
-                        .as_ref()
-                        .map(|_| report_json::recording(RunIdentity::new(path.clone(), path)));
+                    let recording = batch::recording(
+                        report.is_some(),
+                        listener.as_deref(),
+                        1,
+                        RunIdentity::new(path.clone(), path),
+                    );
                     let (result, record) = runtime.block_on(run(
                         &args.file[0],
                         args.debug,
@@ -397,17 +442,14 @@ fn main() -> ExitCode {
                         &args.file[0],
                         &mut exported,
                     );
-                    match (report, record) {
-                        (Some(report), Some(record)) => {
-                            report.run(1, record, &exported);
-                            let mut totals = botwork::core::acceptance::CaseTotals::default();
-                            totals.record(status)?;
-                            let verdict =
-                                totals.finish(0, botwork::core::acceptance::Delivery::Complete);
-                            batch::publish_report(result, report.finish(&verdict, 1))
-                        }
-                        _ => result,
+                    if let (Some(report), Some(record)) = (&report, record) {
+                        report.run(1, record, &exported);
                     }
+                    let mut totals = botwork::core::acceptance::CaseTotals::default();
+                    totals.record(status)?;
+                    let delivered =
+                        batch::deliver(report.as_deref(), listener.as_deref(), totals, 0);
+                    batch::publish_report(result, delivered)
                 } else {
                     runtime.block_on(batch::run(
                         args.file,
@@ -415,6 +457,7 @@ fn main() -> ExitCode {
                         batch::Configuration {
                             artifacts,
                             report,
+                            listener: listener.clone(),
                             debug: args.debug,
                             files: args.variable_files,
                             settings: args.variables,
@@ -423,7 +466,10 @@ fn main() -> ExitCode {
                             suite_timeout_ms: args.suite_timeout_ms,
                         },
                     ))
-                }
+                };
+                // A stopped invocation still closes the listener, without a trailer.
+                let closed = listener.map_or(Ok(()), |hub| hub.finish(None));
+                batch::publish_report(result, closed)
             })
     };
     match result {

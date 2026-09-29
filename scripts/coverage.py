@@ -45,14 +45,14 @@ LIBRARY_FILES = {
     "src/core/eval/builtins/strings/template.rs",
     "src/core/eval/builtins/strings/patterns.rs",
     "src/core/acceptance.rs", "src/core/acceptance/totals.rs", "src/core/acceptance/view.rs",
-    "src/core/run/cleanup.rs", "src/core/eval/cleanup.rs", "src/core/run/attempt.rs", "src/core/eval/polling.rs", "src/core/csv.rs", "src/core/report.rs", "src/core/eval/builtins/data.rs", "src/core/eval/builtins/data/csv.rs",
+    "src/core/run/cleanup.rs", "src/core/eval/cleanup.rs", "src/core/run/attempt.rs", "src/core/eval/polling.rs", "src/core/csv.rs", "src/core/report.rs", "src/core/listener.rs", "src/core/eval/builtins/data.rs", "src/core/eval/builtins/data/csv.rs",
     "src/core/ast/suite.rs", "src/core/ast/suite/dataset.rs",
     "src/core/ast/suite/fixtures.rs", "src/core/eval/fixtures.rs",
     "src/core/ast.rs", "src/core/ast/parse_diagnostic.rs", "src/core/ast_limits.rs", "src/core/diagnostic.rs", "src/core/diagnostic/value.rs", "src/core/diagnostic/ownership.rs", "src/core/diagnostic/rejection.rs", "src/core/diagnostic/construction.rs", "src/core/diagnostic/render.rs", "src/core/eval.rs", "src/core/eval/execution.rs", "src/core/eval/filesystem.rs", "src/core/eval/blocking.rs", "src/core/eval/diagnostics.rs",
     "src/core/eval/output.rs", "src/core/run/output_limits.rs", "src/core/eval/imports.rs", "src/core/eval/snapshots.rs", "src/core/eval/results.rs", "src/core/eval/temporaries.rs", "src/core/grammar.rs", "src/core/input.rs", "src/core/input/limits.rs", "src/core/input/raw.rs",
     "src/core/worker/protocol.rs", "src/core/worker/protocol/values.rs", "src/core/worker/protocol/diagnostics.rs", "src/core/worker/protocol/diagnostics/errors.rs", "src/core/operation/isolated.rs", "src/core/worker.rs", "src/core/worker/linux.rs", "src/core/worker/linux/launch.rs", "src/core/worker/linux/namespace.rs", "src/core/worker/linux/process.rs", "src/core/worker/linux/guardian.rs", "src/core/worker/journal.rs", "src/core/worker/journal/format.rs", "src/core/worker/journal/storage.rs", "src/core/worker/linux/observation.rs", "src/core/worker/linux/owner.rs", "src/core/operation.rs", "src/core/operation/ownership.rs", "src/core/operation/diagnostics.rs", "src/core/run.rs", "src/core/run/asynchronous.rs", "src/core/run/blocking_io.rs", "src/core/run/import_limits.rs", "src/core/run/retained_values.rs", "src/core/run/retained_definitions.rs", "src/core/run/retained_diagnostics.rs", "src/core/run/retained_names.rs", "src/core/run/retained_registry.rs", "src/core/run/snapshot_limits.rs", "src/core/run/result_limits.rs", "src/core/run/temporary_values.rs", "src/core/signature.rs", "src/core/syntax_limits.rs", "src/core/value_limits.rs",
 }
-EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs", "src/assertion_artifacts.rs", "src/atomic_json.rs", "src/report_json.rs", "src/batch.rs", "src/suites.rs", "src/suites/history.rs", "src/suites/datasets.rs", "src/suites/execution.rs"}}
+EXPECTED_FILES = {"unit": LIBRARY_FILES, "all": LIBRARY_FILES | {"src/main.rs", "src/assertion_artifacts.rs", "src/atomic_json.rs", "src/listener.rs", "src/report_json.rs", "src/batch.rs", "src/suites.rs", "src/suites/history.rs", "src/suites/datasets.rs", "src/suites/execution.rs"}}
 
 
 def capture(*command):

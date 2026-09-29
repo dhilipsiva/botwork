@@ -14,6 +14,7 @@ Set `RunOptions::record` to receive `RunResult::record`:
 | `identity` | `RunIdentity` with `id`, `name`, and optional `dataset`/`row`. An empty `id` defaults to the source name, and an empty `name` to the `id` |
 | `expectation` | `CaseExpectation` that decides the terminal status (default: success required) |
 | `limits` | `RecordLimits` retention bounds (below) |
+| `observer` | An optional `EventObserver` that receives each event as it is recorded; see [listeners](listeners.md) |
 
 Recording is off by default. Recording starts before run preparation, so a run
 whose limits, source, or environment are rejected still ends with one terminal
@@ -223,8 +224,9 @@ assert!(skipped.started_at.is_none());
 
 ## Current boundary
 
-The CLI [JSON report](json-report.md) records every file and case run.
-Listeners and HTML reports are separate roadmap tasks built on this model. Suite case programs run as one merged program, so their records do not
+The CLI [JSON report](json-report.md) records every file and case run, and
+[listeners](listeners.md) receive the same events live. HTML reports are a
+separate roadmap task built on this model. Suite case programs run as one merged program, so their records do not
 yet separate setup, body, and teardown phases. Engine runs cannot be reconciled
 after a forced process termination, because their records live in memory.
 

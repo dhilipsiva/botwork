@@ -50,7 +50,10 @@ failed, timed-out, and stopped work, then a summary whose counts match the exit 
 Add `--report-json report.json` for a versioned [JSON report](docs/json-report.md)
 that CI can consume. It records the same verdict and exit status, every run's
 statements, logs, errors, and artifacts, and a [schema](docs/json-report.schema.json)
-to validate against.
+to validate against. `--listener PROGRAM` streams the same execution events live
+to a [report listener](docs/listeners.md), as JSON Lines on its stdin. The stream
+has defined ordering, and slow or failing listeners are detached without slowing
+the runs.
 
 Embedded hosts can request a versioned [run record](docs/run-records.md) of each run's
 statements, logs, timing, and outcome through `RunOptions::record`.
@@ -168,7 +171,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Console Reports](docs/console-report.md)
   - [x] [JSON Reports](docs/json-report.md)
   - [ ] HTML Reports
-  - [ ] Report listeners
+  - [x] [Report listeners](docs/listeners.md)
 - [ ] Tooling
   - [ ] LSP support
   - [ ] Editor support (Mainly Helix/Vim/VS Code)

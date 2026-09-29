@@ -235,7 +235,7 @@ Command-line usage errors exit 2 before the report path is touched.
 | Field | Contents |
 | --- | --- |
 | `format`, `version` | `"botwork-report"`, `1` |
-| `complete` | `true` only when every selected run has a record and the verdict was delivered |
+| `complete` | `true` once the document is final: every selected run has a record and the verdict is decided |
 | `mode` | `"file"` (one `--file`), `"batch"` (several), or `"suites"` |
 | `started_at`, `finished_at` | RFC 3339 UTC times with microseconds; `finished_at` is `null` in the marker |
 | `duration_us` | Monotonic invocation duration in microseconds, or `null` |
@@ -248,7 +248,10 @@ Command-line usage errors exit 2 before the report path is touched.
 The verdict is the `RunVerdict` that also decides the console summary and the
 exit status; see [acceptance policy](acceptance-policy.md). In a complete report,
 `exit_code` always equals the process exit status. `verdict.cases.total` always
-equals the number of `runs`.
+equals the number of `runs`. When a [listener](listeners.md) fails,
+`verdict.delivery` is `failed`, `verdict.complete` is `false`, and the verdict
+fails with `exit_code` 1. The document itself is still complete, and its counts
+still describe every run.
 
 ## Runs
 

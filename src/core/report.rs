@@ -120,6 +120,27 @@ pub struct RecordOptions {
     /// Decides the terminal status with the acceptance policy.
     pub expectation: CaseExpectation,
     pub limits: RecordLimits,
+    /// Receives each event as it is recorded.
+    pub observer: Option<EventObserver>,
+}
+
+/// Receives a run's events as they happen: exactly the events its record folds,
+/// in `sequence` order. It is called while the run's recorder is locked, so it
+/// must return promptly and must not block; hand events to a
+/// [`Dispatcher`](super::listener::Dispatcher) for slow or fallible work.
+#[derive(Clone)]
+pub struct EventObserver(Arc<dyn Fn(&EventRecord) + Send + Sync>);
+
+impl EventObserver {
+    pub fn new(observe: impl Fn(&EventRecord) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(observe))
+    }
+}
+
+impl fmt::Debug for EventObserver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("EventObserver")
+    }
 }
 
 /// One unhandled error: stable code, derived status, bounded message, location,
@@ -523,13 +544,22 @@ struct Live {
     record: RunRecord,
     start: Instant,
     statement: Option<(u64, Instant)>,
+    observer: Option<EventObserver>,
 }
 
 impl Live {
     fn emit(&mut self, event: Event) {
-        let sequence = self.record.events;
-        // The recorder only emits well-ordered events.
-        let _ = self.record.apply(&EventRecord { sequence, event });
+        let event = EventRecord {
+            sequence: self.record.events,
+            event,
+        };
+        // The recorder only emits well-ordered events; observers see exactly the
+        // events the record accepted.
+        if self.record.apply(&event).is_ok() {
+            if let Some(observer) = &self.observer {
+                (observer.0)(&event);
+            }
+        }
     }
 }
 
@@ -545,7 +575,7 @@ impl Recording {
     /// Emit `RunStarted` now. An empty identity `id` stays empty.
     pub fn start(options: RecordOptions) -> Self {
         Self {
-            recorder: Recorder::start(options.identity, options.limits),
+            recorder: Recorder::start(options.identity, options.limits, options.observer),
             expectation: options.expectation,
         }
     }
@@ -573,12 +603,17 @@ impl fmt::Debug for Recorder {
 }
 
 impl Recorder {
-    pub(crate) fn start(identity: RunIdentity, limits: RecordLimits) -> Self {
+    pub(crate) fn start(
+        identity: RunIdentity,
+        limits: RecordLimits,
+        observer: Option<EventObserver>,
+    ) -> Self {
         let started = SystemTime::now();
         let mut live = Live {
             record: RunRecord::new(identity.clone(), limits),
             start: Instant::now(),
             statement: None,
+            observer,
         };
         live.emit(Event::RunStarted {
             identity,

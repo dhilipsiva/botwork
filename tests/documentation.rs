@@ -57,6 +57,13 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "listener-stream",
+            (
+                "docs/listeners.md",
+                include_bytes!("doc-examples/listener-stream.stdout").as_slice(),
+            ),
+        ),
+        (
             "structured-data",
             (
                 "docs/structured-data.md",
@@ -317,6 +324,9 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
         .contains("#![doc = include_str!(\"../docs/nonblocking-io.md\")]"));
     assert!(include_str!("../src/lib.rs")
         .contains("#![doc = include_str!(\"../docs/run-records.md\")]"));
+    assert!(
+        include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/listeners.md\")]")
+    );
     assert!(include_str!("../src/core/worker.rs")
         .contains("#![doc = include_str!(\"../../docs/isolated-workers.md\")]"));
     assert!(include_str!("../src/core/worker/protocol.rs")
@@ -338,7 +348,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/fixtures.md".to_owned(),
             "docs/isolated-workers.md".to_owned(),
             "docs/worker-protocol.md".to_owned(),
-            "docs/run-records.md".to_owned()
+            "docs/run-records.md".to_owned(),
+            "docs/listeners.md".to_owned()
         ]),
         "include new Rust documentation examples in rustdoc before registering their files"
     );

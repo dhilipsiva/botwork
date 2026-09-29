@@ -1,7 +1,7 @@
 //! CLI batch admission. Mutable interpreter state belongs to each admitted run.
 use super::{BWErr, CliError, Context, Diagnostic, RunLimits};
-use botwork::core::acceptance::{CaseStatus, CaseTotals, Delivery};
-use botwork::core::report::RunIdentity;
+use botwork::core::acceptance::{CaseStatus, CaseTotals, Delivery, SkipReason};
+use botwork::core::report::{ErrorRecord, Recording, RunIdentity};
 use botwork::core::suite::SelectedCase;
 use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 use tokio::task::JoinSet;
@@ -12,6 +12,7 @@ mod tests;
 pub(super) struct Configuration {
     pub(super) artifacts: Option<Arc<super::assertion_artifacts::Store>>,
     pub(super) report: Option<Arc<super::report_json::Report>>,
+    pub(super) listener: Option<Arc<super::listener::Hub>>,
     pub(super) debug: bool,
     pub(super) files: Vec<PathBuf>,
     pub(super) settings: Vec<String>,
@@ -100,21 +101,107 @@ pub(super) fn publish_report(
     }
 }
 
-/// Publish the JSON report from the verdict that also decides the exit status.
-pub(super) async fn finish_report(
+/// Finish the listener, then publish the JSON report. The listener hears the
+/// execution outcome; its delivery then decides the verdict the report records,
+/// which is also the one that decides the exit status.
+pub(super) fn deliver(
+    report: Option<&super::report_json::Report>,
+    listener: Option<&super::listener::Hub>,
+    totals: CaseTotals,
+    fixtures_failed: usize,
+) -> Result<(), CliError> {
+    let listened = listener.map_or(Ok(()), |hub| {
+        hub.finish(Some(&totals.finish(fixtures_failed, Delivery::Complete)))
+    });
+    let delivery = if listened.is_ok() {
+        Delivery::Complete
+    } else {
+        Delivery::Failed
+    };
+    let reported = report.map_or(Ok(()), |report| {
+        report.finish(&totals.finish(fixtures_failed, delivery), totals.total())
+    });
+    publish_report(listened, reported)
+}
+
+/// [`deliver`] off the executor, since a listener may take its close timeout.
+pub(super) async fn finish_outputs(
     report: Option<Arc<super::report_json::Report>>,
+    listener: Option<Arc<super::listener::Hub>>,
     outcome: &Outcome,
 ) -> Result<(), CliError> {
-    let Some(report) = report else {
+    if report.is_none() && listener.is_none() {
         return Ok(());
-    };
-    let verdict = outcome
-        .totals
-        .finish(outcome.fixtures_failed, Delivery::Complete);
-    let expected = outcome.totals.total();
-    tokio::task::spawn_blocking(move || report.finish(&verdict, expected))
-        .await
-        .map_err(|_| task_failure())?
+    }
+    let (totals, fixtures_failed) = (outcome.totals, outcome.fixtures_failed);
+    tokio::task::spawn_blocking(move || {
+        deliver(
+            report.as_deref(),
+            listener.as_deref(),
+            totals,
+            fixtures_failed,
+        )
+    })
+    .await
+    .map_err(|_| task_failure())?
+}
+
+/// Start recording run `number` when a report or listener consumes records.
+pub(super) fn recording(
+    report: bool,
+    listener: Option<&super::listener::Hub>,
+    number: usize,
+    identity: RunIdentity,
+) -> Option<Recording> {
+    (report || listener.is_some())
+        .then(|| super::report_json::recording(identity, listener.map(|hub| hub.observer(number))))
+}
+
+impl Configuration {
+    pub(super) fn recording(&self, number: usize, identity: RunIdentity) -> Option<Recording> {
+        recording(
+            self.report.is_some(),
+            self.listener.as_deref(),
+            number,
+            identity,
+        )
+    }
+
+    /// A selected case that never started: one skipped record and event.
+    pub(super) fn skipped(&self, number: usize, case: &SelectedCase, reason: SkipReason) {
+        if self.report.is_none() && self.listener.is_none() {
+            return;
+        }
+        let event = super::report_json::skipped_event(case_identity(case), reason);
+        if let Some(hub) = &self.listener {
+            hub.event(number, event.clone());
+        }
+        if let Some(report) = &self.report {
+            report.skipped(number, &event);
+        }
+    }
+
+    /// A finished shared suite fixture.
+    pub(super) fn fixture(&self, suite: &str, result: &Result<(), CliError>) {
+        if self.report.is_none() && self.listener.is_none() {
+            return;
+        }
+        let error = result.as_ref().err().map(|error| {
+            ErrorRecord::from_diagnostic(
+                &super::report_json::diagnostic(error),
+                &super::report_json::limits(),
+            )
+        });
+        let status = error
+            .as_ref()
+            .map_or(CaseStatus::Succeeded, |error| error.status);
+        if let Some(hub) = &self.listener {
+            hub.fixture(suite, status, error.clone());
+        }
+        if let Some(report) = &self.report {
+            report.fixture(suite, status, error);
+        }
+    }
 }
 
 /// Failure recap lines kept for the final console summary.
@@ -469,7 +556,7 @@ pub(super) async fn run(
     jobs: usize,
     configuration: Configuration,
 ) -> Result<(), CliError> {
-    let report = configuration.report.clone();
+    let (report, listener) = (configuration.report.clone(), configuration.listener.clone());
     let outcome = run_inputs(
         files.into_iter().map(Input::File).collect(),
         jobs,
@@ -477,7 +564,7 @@ pub(super) async fn run(
         false,
     )
     .await?;
-    let published = finish_report(report, &outcome).await;
+    let published = finish_outputs(report, listener, &outcome).await;
     publish_report(outcome.result(), published)
 }
 
@@ -555,19 +642,20 @@ async fn run_inputs(
                 },
                 artifacts: configuration.artifacts.clone(),
             };
-            let recording = configuration.report.as_ref().map(|_| {
-                super::report_json::recording(match &input {
+            if let Err(error) = report(Message::Started(identity.clone())).await {
+                reporting_error = Some(error);
+                break;
+            }
+            let recording = configuration.recording(
+                identity.number,
+                match &input {
                     Input::File(path) => {
                         let path = path.display().to_string();
                         RunIdentity::new(path.clone(), path)
                     }
                     Input::Case(case) => case_identity(case),
-                })
-            });
-            if let Err(error) = report(Message::Started(identity.clone())).await {
-                reporting_error = Some(error);
-                break;
-            }
+                },
+            );
             let configuration = Arc::clone(&configuration);
             let task = running.spawn(async move {
                 match input {

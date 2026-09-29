@@ -207,6 +207,16 @@ Version 25 also repairs three entries whose source text had drifted:
 `cleanup-body-only`, `dataset-canonical-cache-bypassed`, and
 `parallel-report-failure-skips-drain`. Focused campaigns check only their own area,
 so `tests/mutation_tools.py` now checks every entry against the current sources.
+Version 26 adds report listeners. Its faults cover the dispatcher: overflow and
+its boundary, sends accepted after a failure or close, uncaught panics, ignored
+finish errors, unreported timeouts, and misreported completion. Further faults
+cover a silent event observer, a missing trailer, and a timeout that kills only
+the listener and not its process group. The rest cover ignored exit statuses,
+stdin kept open, skipped stream positions, a report verdict that ignores listener
+failure, unstreamed skips and fixtures, and an ignored queue option. Its 290-entry
+catalogue adds 18 faults, with the `listeners` suite as an oracle; see
+[listener evidence](listeners-evidence.json). The JSON-report entries whose code
+moved with this change were updated in place.
 
 ## First campaign — 2026-09-28
 

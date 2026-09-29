@@ -4,8 +4,8 @@ use super::{atomic_json::AtomicJson, BWErr, CliError, Diagnostic};
 use botwork::core::{
     acceptance::{CaseStatus, RunVerdict, SkipReason},
     report::{
-        timestamp, ArtifactRecord, ErrorRecord, Event, EventRecord, RecordLimits, RecordOptions,
-        Recording, RunIdentity, RunRecord,
+        timestamp, ArtifactRecord, ErrorRecord, Event, EventObserver, EventRecord, RecordLimits,
+        RecordOptions, Recording, RunIdentity, RunRecord,
     },
 };
 use serde::Serialize;
@@ -39,12 +39,25 @@ pub(super) fn limits() -> RecordLimits {
 }
 
 /// Start recording one CLI run with report retention bounds.
-pub(super) fn recording(identity: RunIdentity) -> Recording {
+pub(super) fn recording(identity: RunIdentity, observer: Option<EventObserver>) -> Recording {
     Recording::start(RecordOptions {
         identity,
         limits: limits(),
+        observer,
         ..RecordOptions::default()
     })
+}
+
+/// The only event of selected work that never started.
+pub(super) fn skipped_event(identity: RunIdentity, reason: SkipReason) -> EventRecord {
+    EventRecord {
+        sequence: 0,
+        event: Event::RunSkipped {
+            identity,
+            reason,
+            recorded_at: timestamp(SystemTime::now()),
+        },
+    }
 }
 
 /// The diagnostic a record keeps for a CLI failure. Entry-file read failures,
@@ -112,7 +125,7 @@ struct Fixture {
 struct Document<'a> {
     format: &'static str,
     version: u32,
-    /// True only when every selected run was recorded and delivery completed.
+    /// True once the document is final: every selected run has a record.
     complete: bool,
     mode: &'static str,
     started_at: &'a str,
@@ -237,30 +250,16 @@ impl Report {
     }
 
     /// Selected work that never started has one skipped record.
-    pub(super) fn skipped(&self, number: usize, identity: RunIdentity, reason: SkipReason) {
-        let event = EventRecord {
-            sequence: 0,
-            event: Event::RunSkipped {
-                identity,
-                reason,
-                recorded_at: timestamp(SystemTime::now()),
-            },
-        };
-        let record = RunRecord::from_events(RunIdentity::default(), limits(), [&event])
+    pub(super) fn skipped(&self, number: usize, event: &EventRecord) {
+        let record = RunRecord::from_events(RunIdentity::default(), limits(), [event])
             .expect("a skipped record has one event");
         self.keep(number, record);
     }
 
-    pub(super) fn fixture(&self, suite: &str, result: &Result<(), CliError>) {
-        let error = result
-            .as_ref()
-            .err()
-            .map(|error| ErrorRecord::from_diagnostic(&diagnostic(error), &limits()));
+    pub(super) fn fixture(&self, suite: &str, status: CaseStatus, error: Option<ErrorRecord>) {
         self.collected().fixtures.push(Fixture {
             suite: suite.to_owned(),
-            status: error
-                .as_ref()
-                .map_or(CaseStatus::Succeeded, |error| error.status),
+            status,
             error,
         });
     }
@@ -294,7 +293,7 @@ impl Report {
         self.file.write(&Document {
             format: FORMAT,
             version: VERSION,
-            complete: verdict.is_some_and(RunVerdict::complete),
+            complete: verdict.is_some(),
             mode: self.mode,
             started_at: &self.started_at,
             finished_at: finished.map(timestamp),

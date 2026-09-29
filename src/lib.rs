@@ -6,5 +6,6 @@
 #![doc = include_str!("../docs/fixtures.md")]
 #![doc = include_str!("../docs/acceptance-policy.md")]
 #![doc = include_str!("../docs/run-records.md")]
+#![doc = include_str!("../docs/listeners.md")]
 
 pub mod core;

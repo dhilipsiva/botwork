@@ -1,5 +1,5 @@
 {
-  "version": 25,
+  "version": 26,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1811,7 +1811,7 @@
       "id": "json-report-marker-claims-completion",
       "area": "json-report",
       "file": "src/report_json.rs",
-      "before": "            complete: verdict.is_some_and(RunVerdict::complete),",
+      "before": "            complete: verdict.is_some(),",
       "after": "            complete: true,"
     },
     {
@@ -1888,22 +1888,148 @@
       "id": "json-report-skip-misnumbered",
       "area": "json-report",
       "file": "src/suites/execution.rs",
-      "before": "            json.skipped(index + 1, batch::case_identity(&cases[index]), reason);",
-      "after": "            json.skipped(index, batch::case_identity(&cases[index]), reason);"
+      "before": "        configuration.skipped(index + 1, &cases[index], reason);",
+      "after": "        configuration.skipped(index, &cases[index], reason);"
     },
     {
       "id": "json-report-fixtures-unrecorded",
       "area": "json-report",
-      "file": "src/suites/execution.rs",
-      "before": "                        if let Some(json) = &configuration.report {\n                            json.fixture(",
-      "after": "                        if let Some(json) = configuration.report.as_ref().filter(|_| false) {\n                            json.fixture("
+      "file": "src/batch.rs",
+      "before": "        if let Some(report) = &self.report {\n            report.fixture(suite, status, error);",
+      "after": "        if let Some(report) = self.report.as_ref().filter(|_| false) {\n            report.fixture(suite, status, error);"
     },
     {
       "id": "json-report-single-file-status-fixed",
       "area": "json-report",
       "file": "src/main.rs",
-      "before": "                            totals.record(status)?;",
-      "after": "                            totals.record(botwork::core::acceptance::CaseStatus::Succeeded)?;"
+      "before": "                    totals.record(status)?;",
+      "after": "                    totals.record(botwork::core::acceptance::CaseStatus::Succeeded)?;"
+    },
+    {
+      "id": "listeners-overflow-accepted",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "        if state.queue.len() >= self.shared.capacity {",
+      "after": "        if false {"
+    },
+    {
+      "id": "listeners-capacity-boundary",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "        if state.queue.len() >= self.shared.capacity {",
+      "after": "        if state.queue.len() > self.shared.capacity {"
+    },
+    {
+      "id": "listeners-detached-still-accepts",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "        if state.closed || state.failure.is_some() {",
+      "after": "        if state.closed {"
+    },
+    {
+      "id": "listeners-closed-still-accepts",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "        if state.closed || state.failure.is_some() {",
+      "after": "        if state.failure.is_some() {"
+    },
+    {
+      "id": "listeners-panic-uncaught",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "        let result = catch_unwind(AssertUnwindSafe(|| listener.deliver(&item)));",
+      "after": "        let result = Ok::<_, ()>(listener.deliver(&item));"
+    },
+    {
+      "id": "listeners-finish-error-ignored",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "    let result = catch_unwind(AssertUnwindSafe(|| listener.finish()));",
+      "after": "    let result = catch_unwind(AssertUnwindSafe(|| listener.finish().or(Ok(()))));"
+    },
+    {
+      "id": "listeners-timeout-unreported",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "                Shared::fail(&mut state, ListenerFailure::Timeout { pending });",
+      "after": "                let _ = pending;"
+    },
+    {
+      "id": "listeners-finished-misreported",
+      "area": "listeners",
+      "file": "src/core/listener.rs",
+      "before": "            failure: state.failure.clone(),\n            finished,\n",
+      "after": "            failure: state.failure.clone(),\n            finished: true,\n"
+    },
+    {
+      "id": "listeners-observer-silent",
+      "area": "listeners",
+      "file": "src/core/report.rs",
+      "before": "            if let Some(observer) = &self.observer {",
+      "after": "            if let Some(observer) = self.observer.as_ref().filter(|_| false) {"
+    },
+    {
+      "id": "listeners-trailer-missing",
+      "area": "listeners",
+      "file": "src/listener.rs",
+      "before": "        if let Some(verdict) = verdict {",
+      "after": "        if let Some(verdict) = verdict.filter(|_| false) {"
+    },
+    {
+      "id": "listeners-group-survives-timeout",
+      "area": "listeners",
+      "file": "src/listener.rs",
+      "before": "                    libc::kill(-(process.id() as libc::pid_t), libc::SIGKILL);",
+      "after": "                    libc::kill(process.id() as libc::pid_t, libc::SIGKILL);"
+    },
+    {
+      "id": "listeners-exit-status-ignored",
+      "area": "listeners",
+      "file": "src/listener.rs",
+      "before": "                Ok(Some(status)) if status.success() => return Ok(()),",
+      "after": "                Ok(Some(_)) => return Ok(()),"
+    },
+    {
+      "id": "listeners-stdin-kept-open",
+      "area": "listeners",
+      "file": "src/listener.rs",
+      "before": "        drop(self.stdin.take());",
+      "after": "        let _ = &self.stdin;"
+    },
+    {
+      "id": "listeners-position-skipped",
+      "area": "listeners",
+      "file": "src/listener.rs",
+      "before": "        self.position += 1;",
+      "after": "        self.position += 2;"
+    },
+    {
+      "id": "listeners-report-ignores-listener",
+      "area": "listeners",
+      "file": "src/batch.rs",
+      "before": "    let delivery = if listened.is_ok() {",
+      "after": "    let delivery = if true {"
+    },
+    {
+      "id": "listeners-skip-not-streamed",
+      "area": "listeners",
+      "file": "src/batch.rs",
+      "before": "        if let Some(hub) = &self.listener {\n            hub.event(number, event.clone());",
+      "after": "        if let Some(hub) = self.listener.as_ref().filter(|_| false) {\n            hub.event(number, event.clone());"
+    },
+    {
+      "id": "listeners-fixture-not-streamed",
+      "area": "listeners",
+      "file": "src/batch.rs",
+      "before": "        if let Some(hub) = &self.listener {\n            hub.fixture(suite, status, error.clone());",
+      "after": "        if let Some(hub) = self.listener.as_ref().filter(|_| false) {\n            hub.fixture(suite, status, error.clone());"
+    },
+    {
+      "id": "listeners-queue-option-ignored",
+      "area": "listeners",
+      "file": "src/main.rs",
+      "before": "                                    .map_or(defaults.capacity, |events| events as usize),",
+      "after": "                                    .map_or(defaults.capacity, |_| defaults.capacity),"
     }
   ]
 }

@@ -120,7 +120,7 @@ async fn skip(
     cases: &[SelectedCase],
     failed: &mut [bool],
     tally: &mut Tally,
-    json: Option<&crate::report_json::Report>,
+    configuration: &batch::Configuration,
     reporting_error: &mut Option<CliError>,
     reason: SkipReason,
 ) {
@@ -129,9 +129,7 @@ async fn skip(
             reporting_error.get_or_insert(error);
         }
         failed[index] = true;
-        if let Some(json) = json {
-            json.skipped(index + 1, batch::case_identity(&cases[index]), reason);
-        }
+        configuration.skipped(index + 1, &cases[index], reason);
         report(
             Message::Skipped(identity(index, cases), skip_message(reason)),
             reporting_error,
@@ -248,7 +246,7 @@ pub(super) async fn run(
                         &cases,
                         &mut failed_ids,
                         &mut tally,
-                        configuration.report.as_deref(),
+                        &configuration,
                         &mut reporting_error,
                         SkipReason::SuiteStopped,
                     )
@@ -293,10 +291,7 @@ pub(super) async fn run(
                     };
                     let case = cases[index].clone();
                     let configuration = Arc::clone(&configuration);
-                    let recording = configuration
-                        .report
-                        .as_ref()
-                        .map(|_| crate::report_json::recording(batch::case_identity(&case)));
+                    let recording = configuration.recording(index + 1, batch::case_identity(&case));
                     let task =
                         running.spawn(crate::run_case(case, configuration, inputs, recording));
                     identities.insert(task.id(), Task::Case { group, index });
@@ -342,9 +337,7 @@ pub(super) async fn run(
                     Task::Owner(group) => {
                         if matches!(groups[group].state, State::SettingUp | State::Finishing) { work -= 1; }
                         tally.fixture(groups[group].suite.metadata().id(), &result);
-                        if let Some(json) = &configuration.report {
-                            json.fixture(groups[group].suite.metadata().id(), &result);
-                        }
+                        configuration.fixture(groups[group].suite.metadata().id(), &result);
                         if result.is_err() {
                             // A failed shared fixture affects every selected borrower,
                             // including passed cases that need the fixture on a rerun.
@@ -352,7 +345,7 @@ pub(super) async fn run(
                         }
                         groups[group].state = State::Done;
                         report(Message::SuiteFinished(groups[group].suite.metadata().id().into(), result, configuration.artifacts.clone()), &mut reporting_error).await;
-                        skip(&mut groups[group], &cases, &mut failed_ids, &mut tally, configuration.report.as_deref(), &mut reporting_error, SkipReason::SuiteSetupFailed).await;
+                        skip(&mut groups[group], &cases, &mut failed_ids, &mut tally, &configuration, &mut reporting_error, SkipReason::SuiteSetupFailed).await;
                     }
                 }
             }

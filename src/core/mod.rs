@@ -7,6 +7,7 @@ pub mod diagnostic;
 pub mod eval;
 pub mod grammar;
 pub mod input;
+pub mod listener;
 pub mod operation;
 mod parser;
 pub mod report;
