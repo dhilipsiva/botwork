@@ -111,6 +111,17 @@ class MutationTools(unittest.TestCase):
             with self.subTest(source=source), self.assertRaises(ValueError):
                 TOOLS["replace_once"](source, {"id": "example", "before": before, "after": after})
 
+    def test_checked_in_catalogue_matches_current_sources(self):
+        # A focused campaign checks only its own area, so stale entries elsewhere
+        # would otherwise surface only in a full campaign.
+        root = Path(__file__).resolve().parents[1]
+        catalogue = json.loads((root / "tests/mutation-core.json").read_text())
+        ids = [item["id"] for item in catalogue["mutations"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        for item in catalogue["mutations"]:
+            with self.subTest(mutation=item["id"]):
+                TOOLS["replace_once"]((root / item["file"]).read_text(), item)
+
     def test_process_deadline_is_recorded_as_timeout(self):
         outcome = TOOLS["execute"]([sys.executable, "-c", "import time; time.sleep(60)"],
                                    self.output, self.output / "timeout.log", 0.05)

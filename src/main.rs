@@ -5,6 +5,7 @@ use botwork::core::{
     grammar::BWErr,
     input::load_variables,
     operation::OperationControl,
+    report::{Recording, RunIdentity, RunRecord},
     run::{
         CleanupLimits, OutputLimits, RunLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES,
         DEFAULT_STEPS, MAX_EVALUATION_DEPTH,
@@ -21,7 +22,9 @@ use std::{
 };
 
 mod assertion_artifacts;
+mod atomic_json;
 mod batch;
+mod report_json;
 mod suites;
 
 /// Run Botwork automation scripts.
@@ -55,6 +58,9 @@ struct Args {
     /// Save full permitted assertion operands in a fresh directory beneath PATH
     #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     assertion_artifacts: Option<PathBuf>,
+    /// Write a versioned botwork-report JSON document; mark it incomplete before running
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    report_json: Option<PathBuf>,
     /// Maximum simultaneous runs, including file/input preparation (1-64)
     #[arg(short = 'j', long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=64))]
     jobs: u8,
@@ -125,6 +131,7 @@ enum CliError {
     },
 }
 
+/// Run a file, recording it when a report requested a recording.
 async fn run(
     file: &Path,
     debug: bool,
@@ -132,6 +139,38 @@ async fn run(
     settings: &[String],
     limits: RunLimits,
     timeout_ms: Option<u64>,
+    recording: Option<Recording>,
+) -> (Result<(), CliError>, Option<RunRecord>) {
+    let result = run_recorded(
+        file,
+        debug,
+        files,
+        settings,
+        limits,
+        timeout_ms,
+        recording.as_ref(),
+    )
+    .await;
+    let record = finish_recording(recording, &result);
+    (result, record)
+}
+
+fn finish_recording(
+    recording: Option<Recording>,
+    result: &Result<(), CliError>,
+) -> Option<RunRecord> {
+    let error = result.as_ref().err().map(report_json::diagnostic);
+    recording.map(|recording| recording.finish(error.as_ref().map_or(Ok(()), Err)))
+}
+
+async fn run_recorded(
+    file: &Path,
+    debug: bool,
+    files: &[PathBuf],
+    settings: &[String],
+    limits: RunLimits,
+    timeout_ms: Option<u64>,
+    recording: Option<&Recording>,
 ) -> Result<(), CliError> {
     let control = run_control(timeout_ms)?;
     let file = file.to_owned();
@@ -148,6 +187,10 @@ async fn run(
             "CLI preparation worker failed before completing".into(),
         ))
     })??;
+    let mut context = context;
+    if let Some(recording) = recording {
+        context.attach_recording(recording)?;
+    }
     evaluate_program_async(&program, context).await?;
     Ok(())
 }
@@ -169,10 +212,23 @@ fn run_control(timeout_ms: Option<u64>) -> Result<OperationControl, CliError> {
     Ok(control)
 }
 
+/// Run one selected case, recording it when a report requested a recording.
 async fn run_case(
     case: botwork::core::suite::SelectedCase,
     configuration: std::sync::Arc<batch::Configuration>,
     fixture: Option<FixtureInputs>,
+    recording: Option<Recording>,
+) -> (Result<(), CliError>, Option<RunRecord>) {
+    let result = run_case_recorded(case, configuration, fixture, recording.as_ref()).await;
+    let record = finish_recording(recording, &result);
+    (result, record)
+}
+
+async fn run_case_recorded(
+    case: botwork::core::suite::SelectedCase,
+    configuration: std::sync::Arc<batch::Configuration>,
+    fixture: Option<FixtureInputs>,
+    recording: Option<&Recording>,
 ) -> Result<(), CliError> {
     let deadline = run_control(configuration.timeout_ms)?.deadline();
     let control = fixture
@@ -205,6 +261,10 @@ async fn run_case(
             "Case preparation worker failed before completing".into(),
         ))
     })??;
+    let mut context = context;
+    if let Some(recording) = recording {
+        context.attach_recording(recording)?;
+    }
     evaluate_program_async(&program, context).await?;
     Ok(())
 }
@@ -277,6 +337,18 @@ fn main() -> ExitCode {
                         source,
                     })?
                     .map(std::sync::Arc::new);
+                let mode = match (args.suite.is_empty(), args.file.len()) {
+                    (false, _) => "suites",
+                    (true, 1) => "file",
+                    _ => "batch",
+                };
+                // Mark the report incomplete before discovery or any run effects.
+                let report = args
+                    .report_json
+                    .clone()
+                    .map(|path| report_json::Report::begin(path, mode))
+                    .transpose()?
+                    .map(std::sync::Arc::new);
                 let limits = RunLimits {
                     output: output_limits,
                     steps: args.max_steps,
@@ -294,6 +366,7 @@ fn main() -> ExitCode {
                         usize::from(args.jobs),
                         batch::Configuration {
                             artifacts,
+                            report,
                             debug: args.debug,
                             files: args.variable_files,
                             settings: args.variables,
@@ -303,21 +376,45 @@ fn main() -> ExitCode {
                         },
                     ))
                 } else if args.file.len() == 1 {
-                    let result = runtime.block_on(run(
+                    let path = args.file[0].display().to_string();
+                    let recording = report
+                        .as_ref()
+                        .map(|_| report_json::recording(RunIdentity::new(path.clone(), path)));
+                    let (result, record) = runtime.block_on(run(
                         &args.file[0],
                         args.debug,
                         &args.variable_files,
                         &args.variables,
                         limits,
                         args.timeout_ms,
+                        recording,
                     ));
-                    assertion_artifacts::write_single(result, artifacts.as_deref(), &args.file[0])
+                    let status = batch::status(&result);
+                    let mut exported = Vec::new();
+                    let result = assertion_artifacts::write_single(
+                        result,
+                        artifacts.as_deref(),
+                        &args.file[0],
+                        &mut exported,
+                    );
+                    match (report, record) {
+                        (Some(report), Some(record)) => {
+                            report.run(1, record, &exported);
+                            let mut totals = botwork::core::acceptance::CaseTotals::default();
+                            totals.record(status)?;
+                            let verdict =
+                                totals.finish(0, botwork::core::acceptance::Delivery::Complete);
+                            batch::publish_report(result, report.finish(&verdict, 1))
+                        }
+                        _ => result,
+                    }
                 } else {
                     runtime.block_on(batch::run(
                         args.file,
                         usize::from(args.jobs),
                         batch::Configuration {
                             artifacts,
+                            report,
                             debug: args.debug,
                             files: args.variable_files,
                             settings: args.variables,

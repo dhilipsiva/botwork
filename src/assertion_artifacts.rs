@@ -251,6 +251,7 @@ pub(super) fn write_single(
     result: Result<(), CliError>,
     store: Option<&Store>,
     file: &Path,
+    exported: &mut Vec<PathBuf>,
 ) -> Result<(), CliError> {
     let Err(error) = result else {
         return result;
@@ -272,12 +273,13 @@ pub(super) fn write_single(
                 original: error.to_string(),
             })?;
         let context = super::Context::default();
-        for path in paths {
+        for path in &paths {
             context.write_output(
                 &mut io::stderr().lock(),
                 format_args!("[assertion artifact] {path:?}\n"),
             )?;
         }
+        exported.extend(paths);
     }
     Err(error)
 }
@@ -325,8 +327,13 @@ mod tests {
             let parent = tempfile::tempdir().unwrap();
             let mut store = Store::new(parent.path()).unwrap();
             store.limits = limits;
-            let error = write_single(Err(failure()), Some(&store), Path::new("artifact.botwork"))
-                .unwrap_err();
+            let error = write_single(
+                Err(failure()),
+                Some(&store),
+                Path::new("artifact.botwork"),
+                &mut Vec::new(),
+            )
+            .unwrap_err();
             let message = error.to_string();
             assert!(
                 message.contains("Writing assertion artifacts failed")

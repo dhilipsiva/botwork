@@ -1,10 +1,9 @@
 use super::*;
-use crate::core::{acceptance::CaseExpectation, eval::execution, report::Recorder};
+use crate::core::eval::execution;
 use std::future::Future;
 
 // Wrap host-owned trees before constructing a future, including an unpolled one.
-/// A recording run's live recorder and the expectation that decides its status.
-type Recording = Option<(Recorder, CaseExpectation)>;
+type Recording = Option<crate::core::report::Recording>;
 
 pub(super) struct PendingRun {
     options: RunOptions,
@@ -27,7 +26,10 @@ impl PendingRun {
             if identity.name.is_empty() {
                 identity.name = identity.id.clone();
             }
-            (Recorder::start(identity, record.limits), record.expectation)
+            crate::core::report::Recording::start(crate::core::report::RecordOptions {
+                identity,
+                ..record
+            })
         });
         Self {
             options,
@@ -56,9 +58,9 @@ impl ActiveRun {
         let steps = self.context.budget.as_ref().map_or(0, RunBudget::used);
         let (result, variables, snapshot_error) =
             self.context.finish_result(result, &self.result_limits);
-        let record = self.recording.map(|(recorder, expectation)| {
-            recorder.finish(result.as_ref().map(|_| ()), &expectation)
-        });
+        let record = self
+            .recording
+            .map(|recording| recording.finish(result.as_ref().map(|_| ())));
         RunResult {
             result,
             variables,
@@ -102,7 +104,9 @@ impl Engine {
                 Some(environment) => environment,
                 None => RunEnvironment::prepare(&options, control_start)?,
             };
-            environment.recorder = recording.as_ref().map(|(recorder, _)| recorder.clone());
+            environment.recorder = recording
+                .as_ref()
+                .map(|recording| recording.recorder().clone());
             let environment = Arc::new(environment);
             context.working_directory = Ok(environment.working_directory().to_owned());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));

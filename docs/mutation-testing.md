@@ -196,6 +196,17 @@ counted as failures, recap bounds, exit decisions that ignore fixtures, syntheti
 locations, uncounted fixture and skip outcomes, and empty recaps. Its 257-entry
 catalogue adds 8 faults, with the `console_report` suite as an oracle; see
 [console-report evidence](console-report-evidence.json).
+Version 25 adds the JSON report. Its faults cover unchecked record counts, markers
+that claim completion, fixed exit codes, the run budget (ignored, uncharged, and
+off by one), summaries that drop the error, and the artifact limit. Further faults
+cover replacement of foreign or unchecked existing files, detached batch
+artifacts, dropped dataset rows, misnumbered skips, unrecorded fixtures, and a
+fixed single-file status. Its 272-entry catalogue adds 15 faults, with the
+`json_report` suite as an oracle; see [JSON-report evidence](json-report-evidence.json).
+Version 25 also repairs three entries whose source text had drifted:
+`cleanup-body-only`, `dataset-canonical-cache-bypassed`, and
+`parallel-report-failure-skips-drain`. Focused campaigns check only their own area,
+so `tests/mutation_tools.py` now checks every entry against the current sources.
 
 ## First campaign — 2026-09-28
 

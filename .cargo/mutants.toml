@@ -1,6 +1,8 @@
-# Version 24: add the console failure recap and status summary.
+# Version 25: add the versioned JSON report.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/report_json.rs",
+    "src/atomic_json.rs",
     "src/core/report.rs",
     "src/core/eval/builtins/data.rs",
     "src/core/eval/builtins/data/csv.rs",
@@ -59,6 +61,7 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/(report_json|atomic_json).rs:',
     '^src/core/report.rs:',
     '^src/core/eval/builtins/data(\.rs|/csv\.rs):',
     '^src/core/csv.rs:',
@@ -113,6 +116,7 @@ additional_cargo_args = [
     "--test", "acceptance_policy",
     "--test", "builtins",
     "--test", "console_report",
+    "--test", "json_report",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

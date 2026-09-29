@@ -533,6 +533,33 @@ impl Live {
     }
 }
 
+/// A run being recorded by a host that prepares its own `Context`. Start it when
+/// the run begins, attach it once the context exists, and finish it exactly once.
+#[derive(Debug)]
+pub struct Recording {
+    recorder: Recorder,
+    expectation: CaseExpectation,
+}
+
+impl Recording {
+    /// Emit `RunStarted` now. An empty identity `id` stays empty.
+    pub fn start(options: RecordOptions) -> Self {
+        Self {
+            recorder: Recorder::start(options.identity, options.limits),
+            expectation: options.expectation,
+        }
+    }
+
+    /// Emit the terminal event and return the folded record.
+    pub fn finish(self, result: Result<(), &Diagnostic>) -> RunRecord {
+        self.recorder.finish(result, &self.expectation)
+    }
+
+    pub(crate) fn recorder(&self) -> &Recorder {
+        &self.recorder
+    }
+}
+
 /// Live capture for one run, shared with worker and module contexts.
 #[derive(Clone)]
 pub(crate) struct Recorder {

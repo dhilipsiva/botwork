@@ -111,6 +111,7 @@ pub(super) async fn run(
         )
         .into());
     }
+    let report = configuration.report.clone();
     let outcome = if has_fixtures {
         execution::run(discovered.cases, jobs, configuration).await?
     } else {
@@ -124,5 +125,6 @@ pub(super) async fn run(
                 Diagnostic::new(BWErr::AsyncRuntime("Failed-case writer failed".into()))
             })??;
     }
-    outcome.result()
+    let published = batch::finish_report(report, &outcome).await;
+    batch::publish_report(outcome.result(), published)
 }

@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dhilipsiva/botwork/docs/json-report.schema.json",
+  "title": "botwork-report version 1",
+  "description": "One Botwork CLI invocation: its verdict, exit status, run records, and shared suite fixtures.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "complete",
+    "mode",
+    "started_at",
+    "finished_at",
+    "duration_us",
+    "exit_code",
+    "verdict",
+    "runs",
+    "omitted_run_details",
+    "fixtures"
+  ],
+  "properties": {
+    "format": { "const": "botwork-report" },
+    "version": { "const": 1 },
+    "complete": {
+      "description": "True only when every selected run has a record and the verdict was delivered.",
+      "type": "boolean"
+    },
+    "mode": { "enum": ["file", "batch", "suites"] },
+    "started_at": { "$ref": "#/$defs/timestamp" },
+    "finished_at": {
+      "description": "Null while the report is an incomplete marker.",
+      "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }]
+    },
+    "duration_us": { "type": ["integer", "null"], "minimum": 0 },
+    "exit_code": {
+      "description": "The process exit status the verdict decides; null while incomplete.",
+      "enum": [0, 1, null]
+    },
+    "verdict": {
+      "oneOf": [{ "$ref": "#/$defs/verdict" }, { "type": "null" }]
+    },
+    "runs": {
+      "description": "Run records ordered by number; runs beyond the byte budget keep only a summary.",
+      "type": "array",
+      "items": {
+        "oneOf": [{ "$ref": "#/$defs/run" }, { "$ref": "#/$defs/run_summary" }]
+      }
+    },
+    "omitted_run_details": { "type": "integer", "minimum": 0 },
+    "fixtures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fixture" }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "description": "RFC 3339 UTC with microseconds.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "code": { "type": "string", "pattern": "^BW[0-9]{4}$" },
+    "status": {
+      "enum": [
+        "succeeded",
+        "expected_failure",
+        "failed",
+        "unexpected_pass",
+        "skipped",
+        "cancelled",
+        "timed_out",
+        "limit_exceeded",
+        "interrupted"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "dataset", "row"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "dataset": { "type": ["string", "null"] },
+        "row": { "type": ["string", "null"] }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "start_byte", "end_byte", "line", "column", "end_line", "end_column"],
+      "properties": {
+        "file": { "type": "string" },
+        "start_byte": { "$ref": "#/$defs/count" },
+        "end_byte": { "$ref": "#/$defs/count" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "end_column": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "status", "message", "truncated", "location", "causes", "omitted_causes"],
+      "properties": {
+        "code": { "$ref": "#/$defs/code" },
+        "status": { "$ref": "#/$defs/status" },
+        "message": { "type": "string" },
+        "truncated": { "type": "boolean" },
+        "location": {
+          "oneOf": [{ "$ref": "#/$defs/location" }, { "type": "null" }]
+        },
+        "causes": { "type": "array", "items": { "$ref": "#/$defs/code" } },
+        "omitted_causes": { "$ref": "#/$defs/count" }
+      }
+    },
+    "statement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "kind", "location", "offset_us", "duration_us", "status", "code"],
+      "properties": {
+        "index": { "$ref": "#/$defs/count" },
+        "kind": {
+          "description": "Open vocabulary: one name per statement kind, such as call, assignment, if, try, or finally.",
+          "type": "string"
+        },
+        "location": { "$ref": "#/$defs/location" },
+        "offset_us": { "$ref": "#/$defs/count" },
+        "duration_us": { "type": ["integer", "null"], "minimum": 0 },
+        "status": {
+          "oneOf": [{ "$ref": "#/$defs/status" }, { "type": "null" }]
+        },
+        "code": {
+          "oneOf": [{ "$ref": "#/$defs/code" }, { "type": "null" }]
+        }
+      }
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "offset_us", "bytes", "text", "truncated"],
+      "properties": {
+        "statement": { "type": ["integer", "null"], "minimum": 0 },
+        "offset_us": { "$ref": "#/$defs/count" },
+        "bytes": { "$ref": "#/$defs/count" },
+        "text": { "type": "string" },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {
+          "description": "Open vocabulary; assertion evidence files use assertion.",
+          "type": "string"
+        },
+        "path": { "type": "string" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "format",
+        "version",
+        "identity",
+        "status",
+        "complete",
+        "skip_reason",
+        "started_at",
+        "finished_at",
+        "duration_us",
+        "statements",
+        "omitted_statements",
+        "logs",
+        "omitted_logs",
+        "logged_bytes",
+        "error",
+        "artifacts",
+        "omitted_artifacts",
+        "events"
+      ],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "format": { "const": "botwork-run" },
+        "version": { "const": 1 },
+        "identity": { "$ref": "#/$defs/identity" },
+        "status": { "$ref": "#/$defs/status" },
+        "complete": { "type": "boolean" },
+        "skip_reason": { "enum": ["suite_setup_failed", "suite_stopped", null] },
+        "started_at": {
+          "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }]
+        },
+        "finished_at": {
+          "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }]
+        },
+        "duration_us": { "type": ["integer", "null"], "minimum": 0 },
+        "statements": { "type": "array", "items": { "$ref": "#/$defs/statement" } },
+        "omitted_statements": { "$ref": "#/$defs/count" },
+        "logs": { "type": "array", "items": { "$ref": "#/$defs/log" } },
+        "omitted_logs": { "$ref": "#/$defs/count" },
+        "logged_bytes": { "$ref": "#/$defs/count" },
+        "error": {
+          "oneOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }]
+        },
+        "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } },
+        "omitted_artifacts": { "$ref": "#/$defs/count" },
+        "events": { "$ref": "#/$defs/count" }
+      }
+    },
+    "run_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "identity", "status", "complete", "error", "details_omitted"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "identity": { "$ref": "#/$defs/identity" },
+        "status": { "$ref": "#/$defs/status" },
+        "complete": { "type": "boolean" },
+        "error": {
+          "oneOf": [{ "$ref": "#/$defs/code" }, { "type": "null" }]
+        },
+        "details_omitted": { "const": true }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "succeeded",
+        "expected_failure",
+        "failed",
+        "unexpected_pass",
+        "skipped",
+        "cancelled",
+        "timed_out",
+        "limit_exceeded",
+        "interrupted"
+      ],
+      "properties": {
+        "total": { "$ref": "#/$defs/count" },
+        "succeeded": { "$ref": "#/$defs/count" },
+        "expected_failure": { "$ref": "#/$defs/count" },
+        "failed": { "$ref": "#/$defs/count" },
+        "unexpected_pass": { "$ref": "#/$defs/count" },
+        "skipped": { "$ref": "#/$defs/count" },
+        "cancelled": { "$ref": "#/$defs/count" },
+        "timed_out": { "$ref": "#/$defs/count" },
+        "limit_exceeded": { "$ref": "#/$defs/count" },
+        "interrupted": { "$ref": "#/$defs/count" }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "complete", "cases", "fixture_failures", "delivery"],
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "complete": { "type": "boolean" },
+        "cases": { "$ref": "#/$defs/totals" },
+        "fixture_failures": { "$ref": "#/$defs/count" },
+        "delivery": { "enum": ["complete", "failed", "interrupted"] }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "status", "error"],
+      "properties": {
+        "suite": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "error": {
+          "oneOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

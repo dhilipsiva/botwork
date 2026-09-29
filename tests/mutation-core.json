@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "mutations": [
     {
       "id": "precedence-products",
@@ -180,8 +180,8 @@
       "id": "parallel-report-failure-skips-drain",
       "area": "cleanup",
       "file": "src/batch.rs",
-      "before": "if let Err(error) = report(Message::Finished(identity, result)).await {\n                reporting_error = Some(error);\n            }",
-      "after": "if let Err(error) = report(Message::Finished(identity, result)).await {\n                return Err(error);\n            }"
+      "before": "                Err(error) => reporting_error = Some(error),\n            }\n        }\n        // After a reporting failure",
+      "after": "                Err(error) => return Err(error),\n            }\n        }\n        // After a reporting failure"
     },
     {
       "id": "parallel-report-runs-inline",
@@ -278,7 +278,7 @@
       "id": "dataset-canonical-cache-bypassed",
       "area": "isolation",
       "file": "src/suites/datasets.rs",
-      "before": "if let Some(data) = self.cache.get(&canonical) {",
+      "before": "if let Some(data) = self.cache.get(&key) {",
       "after": "if let Some(data) = None::<&Arc<Dataset>> {"
     },
     {
@@ -299,8 +299,8 @@
       "id": "cleanup-body-only",
       "area": "cleanup",
       "file": "src/core/eval/execution.rs",
-      "before": "super::cleanup::evaluate(body, cleanup, context).await",
-      "after": "evaluate_block(body, context).await"
+      "before": "            super::cleanup::evaluate(body, cleanup, context)\n        }",
+      "after": "            Box::pin(evaluate_block(body, context))\n        }"
     },
     {
       "id": "cleanup-discard-secondary",
@@ -1799,6 +1799,111 @@
       "file": "src/suites/execution.rs",
       "before": "        if let Err(error) = tally.skipped() {",
       "after": "        if let Err(error) = Ok::<(), CliError>(()) {"
+    },
+    {
+      "id": "json-report-record-count-unchecked",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "        if recorded != expected {",
+      "after": "        if false && recorded != expected {"
+    },
+    {
+      "id": "json-report-marker-claims-completion",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "            complete: verdict.is_some_and(RunVerdict::complete),",
+      "after": "            complete: true,"
+    },
+    {
+      "id": "json-report-exit-code-fixed",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "            exit_code: verdict.map(RunVerdict::exit_code),",
+      "after": "            exit_code: verdict.map(|_| 0),"
+    },
+    {
+      "id": "json-report-budget-ignored",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "        let kept = if size <= self.budget.saturating_sub(collected.retained) {",
+      "after": "        let kept = if true {"
+    },
+    {
+      "id": "json-report-budget-uncharged",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "            collected.retained += size;",
+      "after": "            collected.retained += size.min(0);"
+    },
+    {
+      "id": "json-report-budget-boundary",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "        let kept = if size <= self.budget.saturating_sub(collected.retained) {",
+      "after": "        let kept = if size < self.budget.saturating_sub(collected.retained) {"
+    },
+    {
+      "id": "json-report-summary-drops-error",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "                error: record.error.as_ref().map(|error| error.code),",
+      "after": "                error: None,"
+    },
+    {
+      "id": "json-report-artifact-limit-ignored",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "            if record.artifacts.len() < limits().artifacts {",
+      "after": "            if true {"
+    },
+    {
+      "id": "json-report-foreign-format-replaced",
+      "area": "json-report",
+      "file": "src/report_json.rs",
+      "before": "    if value[\"format\"] != FORMAT {",
+      "after": "    if false {"
+    },
+    {
+      "id": "json-report-existing-file-unchecked",
+      "area": "json-report",
+      "file": "src/atomic_json.rs",
+      "before": "            Ok(_) => existing(&path)?,",
+      "after": "            Ok(_) => {}"
+    },
+    {
+      "id": "json-report-batch-artifacts-detached",
+      "area": "json-report",
+      "file": "src/batch.rs",
+      "before": "                        report.run(number, record, &exported);",
+      "after": "                        report.run(number, record, &[]);"
+    },
+    {
+      "id": "json-report-case-row-dropped",
+      "area": "json-report",
+      "file": "src/batch.rs",
+      "before": "    match case.row() {\n        Some(row) => identity.with_row(",
+      "after": "    match case.row().filter(|_| false) {\n        Some(row) => identity.with_row("
+    },
+    {
+      "id": "json-report-skip-misnumbered",
+      "area": "json-report",
+      "file": "src/suites/execution.rs",
+      "before": "            json.skipped(index + 1, batch::case_identity(&cases[index]), reason);",
+      "after": "            json.skipped(index, batch::case_identity(&cases[index]), reason);"
+    },
+    {
+      "id": "json-report-fixtures-unrecorded",
+      "area": "json-report",
+      "file": "src/suites/execution.rs",
+      "before": "                        if let Some(json) = &configuration.report {\n                            json.fixture(",
+      "after": "                        if let Some(json) = configuration.report.as_ref().filter(|_| false) {\n                            json.fixture("
+    },
+    {
+      "id": "json-report-single-file-status-fixed",
+      "area": "json-report",
+      "file": "src/main.rs",
+      "before": "                            totals.record(status)?;",
+      "after": "                            totals.record(botwork::core::acceptance::CaseStatus::Succeeded)?;"
     }
   ]
 }

@@ -207,6 +207,7 @@ async fn invalid_admission_limits_fail_before_preparing_inputs_or_paths() {
             jobs,
             Configuration {
                 artifacts: None,
+                report: None,
                 debug: false,
                 files: vec![],
                 settings: vec!["malformed input".into()],

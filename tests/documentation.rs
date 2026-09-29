@@ -238,6 +238,11 @@ fn every_documented_suite_matches_its_cli_output() {
             document: "docs/parameterized-cases.md", stdout: "42\n8\n0\n", status: 0,
             summary: "[cases] 3 selected: 3 succeeded, 0 failed\n", lines: Some(7), diagnostics: &[],
         }),
+        ("json-report-suite", Expected {
+            document: "docs/json-report.md", stdout: "1\n2\n", status: 1,
+            summary: "[cases] 2 selected: 1 succeeded, 1 failed\n", lines: None,
+            diagnostics: &["[case checkout/total/pair] failed:", "BW9001"],
+        }),
         ("setup-failure-suite", Expected {
             document: "docs/setup-failure.md", stdout: "open demo\nclose demo\n", status: 1,
             summary: "[cases] 2 selected: 0 succeeded, 0 failed, 2 skipped; 1 suite fixtures failed\n",

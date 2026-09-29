@@ -1,6 +1,7 @@
 //! CLI batch admission. Mutable interpreter state belongs to each admitted run.
 use super::{BWErr, CliError, Context, Diagnostic, RunLimits};
 use botwork::core::acceptance::{CaseStatus, CaseTotals, Delivery};
+use botwork::core::report::RunIdentity;
 use botwork::core::suite::SelectedCase;
 use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 use tokio::task::JoinSet;
@@ -10,6 +11,7 @@ mod tests;
 
 pub(super) struct Configuration {
     pub(super) artifacts: Option<Arc<super::assertion_artifacts::Store>>,
+    pub(super) report: Option<Arc<super::report_json::Report>>,
     pub(super) debug: bool,
     pub(super) files: Vec<PathBuf>,
     pub(super) settings: Vec<String>,
@@ -79,6 +81,40 @@ impl Outcome {
             })
         }
     }
+}
+
+/// Combine a run result with report publication. A publication failure is
+/// printed at once so an earlier failure keeps its place as the result.
+pub(super) fn publish_report(
+    result: Result<(), CliError>,
+    published: Result<(), CliError>,
+) -> Result<(), CliError> {
+    match (result, published) {
+        (result, Ok(())) => result,
+        (Ok(()), Err(error)) => Err(error),
+        (Err(error), Err(publication)) => {
+            let _ = Context::default()
+                .write_output(&mut io::stderr().lock(), format_args!("{publication}\n"));
+            Err(error)
+        }
+    }
+}
+
+/// Publish the JSON report from the verdict that also decides the exit status.
+pub(super) async fn finish_report(
+    report: Option<Arc<super::report_json::Report>>,
+    outcome: &Outcome,
+) -> Result<(), CliError> {
+    let Some(report) = report else {
+        return Ok(());
+    };
+    let verdict = outcome
+        .totals
+        .finish(outcome.fixtures_failed, Delivery::Complete);
+    let expected = outcome.totals.total();
+    tokio::task::spawn_blocking(move || report.finish(&verdict, expected))
+        .await
+        .map_err(|_| task_failure())?
 }
 
 /// Failure recap lines kept for the final console summary.
@@ -266,7 +302,8 @@ fn outcome(error: &CliError) -> &'static str {
     error_status(error).label()
 }
 
-fn write_report(message: Message) -> Result<(), CliError> {
+/// Write one console record; return the assertion artifacts it exported.
+fn write_report(message: Message) -> Result<Vec<PathBuf>, CliError> {
     let context = Context::default();
     let mut stderr = io::stderr().lock();
     let exported = match &message {
@@ -413,13 +450,13 @@ fn write_report(message: Message) -> Result<(), CliError> {
     .map(|_| ())
     .map_err(CliError::from);
     result?;
-    for path in exported {
+    for path in &exported {
         context.write_output(&mut stderr, format_args!("[assertion artifact] {path:?}\n"))?;
     }
-    Ok(())
+    Ok(exported)
 }
 
-pub(super) async fn report(message: Message) -> Result<(), CliError> {
+pub(super) async fn report(message: Message) -> Result<Vec<PathBuf>, CliError> {
     // One bounded record at a time, off the executor. A blocked reporter stops
     // admission while already-admitted runs continue to receive executor time.
     tokio::task::spawn_blocking(move || write_report(message))
@@ -432,14 +469,28 @@ pub(super) async fn run(
     jobs: usize,
     configuration: Configuration,
 ) -> Result<(), CliError> {
-    run_inputs(
+    let report = configuration.report.clone();
+    let outcome = run_inputs(
         files.into_iter().map(Input::File).collect(),
         jobs,
         configuration,
         false,
     )
-    .await?
-    .result()
+    .await?;
+    let published = finish_report(report, &outcome).await;
+    publish_report(outcome.result(), published)
+}
+
+/// The report identity of a selected case, with its dataset row when present.
+pub(super) fn case_identity(case: &SelectedCase) -> RunIdentity {
+    let identity = RunIdentity::new(case.id(), case.display_name());
+    match case.row() {
+        Some(row) => identity.with_row(
+            case.dataset().expect("row dataset").id(),
+            row.metadata().id(),
+        ),
+        None => identity,
+    }
 }
 
 pub(super) async fn run_cases(
@@ -504,6 +555,15 @@ async fn run_inputs(
                 },
                 artifacts: configuration.artifacts.clone(),
             };
+            let recording = configuration.report.as_ref().map(|_| {
+                super::report_json::recording(match &input {
+                    Input::File(path) => {
+                        let path = path.display().to_string();
+                        RunIdentity::new(path.clone(), path)
+                    }
+                    Input::Case(case) => case_identity(case),
+                })
+            });
             if let Err(error) = report(Message::Started(identity.clone())).await {
                 reporting_error = Some(error);
                 break;
@@ -511,7 +571,9 @@ async fn run_inputs(
             let configuration = Arc::clone(&configuration);
             let task = running.spawn(async move {
                 match input {
-                    Input::Case(case) => super::run_case(case, configuration, None).await,
+                    Input::Case(case) => {
+                        super::run_case(case, configuration, None, recording).await
+                    }
                     Input::File(path) => {
                         super::run(
                             &path,
@@ -520,6 +582,7 @@ async fn run_inputs(
                             &configuration.settings,
                             configuration.limits.clone(),
                             configuration.timeout_ms,
+                            recording,
                         )
                         .await
                     }
@@ -530,11 +593,13 @@ async fn run_inputs(
         let Some(completed) = running.join_next_with_id().await else {
             break;
         };
-        let (task, result) = match completed {
-            Ok((task, result)) => (task, result),
-            Err(error) => (error.id(), Err(task_failure())),
+        // A lost task has no record, which keeps any report incomplete.
+        let (task, (result, record)) = match completed {
+            Ok(completed) => completed,
+            Err(error) => (error.id(), (Err(task_failure()), None)),
         };
         let identity = identities.remove(&task).expect("admitted run identity");
+        let number = identity.number;
         tally.finished(&identity, &result)?;
         if result.is_err() {
             if let Some((id, _)) = &identity.case {
@@ -542,8 +607,13 @@ async fn run_inputs(
             }
         }
         if reporting_error.is_none() {
-            if let Err(error) = report(Message::Finished(identity, result)).await {
-                reporting_error = Some(error);
+            match report(Message::Finished(identity, result)).await {
+                Ok(exported) => {
+                    if let (Some(report), Some(record)) = (&configuration.report, record) {
+                        report.run(number, record, &exported);
+                    }
+                }
+                Err(error) => reporting_error = Some(error),
             }
         }
         // After a reporting failure, drain every admitted run without admitting

@@ -196,6 +196,23 @@ pub struct RunEnvironment {
 }
 
 impl Context {
+    /// Record this context's statements and logs into `recording`. The context
+    /// needs a run environment, as from [`Context::with_host_environment`].
+    pub fn attach_recording(
+        &mut self,
+        recording: &crate::core::report::Recording,
+    ) -> DiagnosticResult<()> {
+        let environment = self.environment.as_ref().ok_or_else(|| {
+            Diagnostic::new(BWErr::RunConfiguration(
+                "Recording requires a run environment".into(),
+            ))
+        })?;
+        let mut environment = RunEnvironment::clone(environment);
+        environment.recorder = Some(recording.recorder().clone());
+        self.environment = Some(Arc::new(environment));
+        Ok(())
+    }
+
     /// A fresh, controlled context with a canonical current directory and an
     /// immutable snapshot of the host environment. Capture performs blocking OS
     /// work; async hosts should call this during worker-based preparation.

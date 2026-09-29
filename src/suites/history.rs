@@ -1,17 +1,11 @@
 //! Bounded rerun selection, with an incomplete marker before case effects.
 use super::*;
+use crate::atomic_json::AtomicJson;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::{
-    collections::HashSet,
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
-    path::Path,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::{collections::HashSet, fs::OpenOptions, io::Read, path::Path};
 
 const MAX_HISTORY_BYTES: usize = 2 * 1024 * 1024;
 const FORMAT: &str = "botwork-failed-cases";
-static TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -108,66 +102,20 @@ pub(super) fn load(path: &Path) -> Result<Vec<String>, CliError> {
     Ok(record.failed)
 }
 
-fn output_error(path: &Path, error: impl std::fmt::Display) -> CliError {
-    Diagnostic::new(BWErr::OutputError(format!(
-        "Failed-case record {}: {error}",
-        path.display()
-    )))
-    .into()
-}
-
 pub(super) struct History {
-    path: PathBuf,
-    // The persistent sidecar inode is never replaced or removed by a writer.
-    // Its advisory lock is released by the kernel when this handle closes.
-    _lock: File,
+    file: AtomicJson,
 }
 
 impl History {
     pub(super) fn begin(path: PathBuf) -> Result<Self, CliError> {
-        let filename = path
-            .file_name()
-            .ok_or_else(|| suite::configuration("Failed-case output needs a filename"))?;
-        let parent = path
-            .parent()
-            .filter(|path| !path.as_os_str().is_empty())
-            .unwrap_or(Path::new("."));
-        let parent = fs::canonicalize(parent).map_err(|error| output_error(&path, error))?;
-        let path = parent.join(filename);
-        let mut lock_name = filename.to_os_string();
-        lock_name.push(".lock");
-        let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options
-                .mode(0o600)
-                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        if path.file_name().is_none() {
+            return Err(suite::configuration("Failed-case output needs a filename").into());
         }
-        let lock = options
-            .open(parent.join(lock_name))
-            .map_err(|error| output_error(&path, error))?;
-        if !lock
-            .metadata()
-            .map_err(|error| output_error(&path, error))?
-            .is_file()
-        {
-            return Err(output_error(&path, "lock must be an ordinary file"));
-        }
-        lock.try_lock()
-            .map_err(|error| output_error(&path, error))?;
-        match fs::symlink_metadata(&path) {
-            Ok(metadata) if !metadata.file_type().is_file() => {
-                return Err(output_error(&path, "output must be an ordinary file"))
-            }
-            Ok(_) => {
-                read(&path)?;
-            } // Do not overwrite unrelated existing files.
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(output_error(&path, error)),
-        }
-        let history = Self { path, _lock: lock };
+        // Do not overwrite unrelated existing files.
+        let file = AtomicJson::begin(path, "Failed-case record", "botwork-failures", |path| {
+            read(path).map(|_| ())
+        })?;
+        let history = Self { file };
         history.write(false, vec![])?;
         Ok(history)
     }
@@ -185,55 +133,12 @@ impl History {
         {
             return Err(suite::configuration("Invalid failed-case result IDs").into());
         }
-        let record = Record {
+        self.file.write(&Record {
             format: FORMAT.into(),
             version: 2,
             complete,
             failed,
-        };
-        let parent = self.path.parent().expect("canonical parent");
-        for _ in 0..64 {
-            let temporary = parent.join(format!(
-                ".botwork-failures-{}-{}.tmp",
-                std::process::id(),
-                TEMPORARY.fetch_add(1, Ordering::Relaxed)
-            ));
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = match options.open(&temporary) {
-                Ok(file) => file,
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(output_error(&self.path, error)),
-            };
-            let result = (|| -> Result<(), CliError> {
-                serde_json::to_writer(&mut file, &record)
-                    .map_err(|error| output_error(&self.path, error))?;
-                file.write_all(b"\n")
-                    .and_then(|_| file.sync_all())
-                    .map_err(|error| output_error(&self.path, error))?;
-                drop(file);
-                fs::rename(&temporary, &self.path)
-                    .map_err(|error| output_error(&self.path, error))?;
-                #[cfg(unix)]
-                File::open(parent)
-                    .and_then(|directory| directory.sync_all())
-                    .map_err(|error| output_error(&self.path, error))?;
-                Ok(())
-            })();
-            if result.is_err() {
-                let _ = fs::remove_file(&temporary);
-            }
-            return result;
-        }
-        Err(output_error(
-            &self.path,
-            "temporary file collisions exhausted",
-        ))
+        })
     }
 }
 

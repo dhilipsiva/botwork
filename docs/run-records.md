@@ -19,6 +19,50 @@ Recording is off by default. Recording starts before run preparation, so a run
 whose limits, source, or environment are rejected still ends with one terminal
 record.
 
+## Recording a host-prepared context
+
+Hosts that prepare their own `Context`, as the CLI does, record through
+`Recording`:
+
+1. `Recording::start(options)` emits `run_started` when the run begins.
+2. `Context::attach_recording(&recording)` captures the context's top-level
+   statements and logs. It needs a run environment, as from
+   `Context::with_host_environment`; a context without one is rejected with
+   BW7002.
+3. `Recording::finish(result)` emits the terminal event and returns the record.
+   Call it exactly once, including when preparation fails before a context exists.
+
+```rust
+use botwork::core::{
+    acceptance::CaseStatus,
+    ast::Program,
+    eval::{evaluate_program_async, Context},
+    operation::OperationControl,
+    report::{RecordOptions, Recording, RunIdentity},
+    run::RunLimits,
+};
+
+let recording = Recording::start(RecordOptions {
+    identity: RunIdentity::new("host/run", "host run"),
+    ..RecordOptions::default()
+});
+let rejected = Context::default().attach_recording(&recording).unwrap_err();
+assert_eq!(rejected.code().as_str(), "BW7002");
+let program = Program::parse_detailed("host.botwork", "Log |\"ready\"|\nAssert |false|")?;
+let mut context = Context::with_host_environment(RunLimits::default(), OperationControl::default())?;
+context.init_statements();
+context.attach_recording(&recording)?;
+let result = tokio::runtime::Builder::new_current_thread()
+    .enable_all()
+    .build()?
+    .block_on(evaluate_program_async(&program, context));
+let record = recording.finish(result.as_ref().map(|_| ()));
+assert_eq!(record.status, CaseStatus::Failed);
+assert_eq!(record.statements.len(), 2);
+assert_eq!(record.logs[0].text, "ready");
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ## Outcomes
 
 Records use the [acceptance](acceptance-policy.md) status vocabulary, with one
@@ -78,8 +122,8 @@ order (`causes` and `omitted_causes`). The complete `Diagnostic` remains in
 `RunResult::result`.
 
 **Artifacts.** An `Artifact` event records a `kind` and a `path`. Embedded runs
-produce none. CLI assertion artifacts attach to records when CLI reports adopt
-this model.
+produce none. The CLI [JSON report](json-report.md) attaches assertion evidence
+files to the run that produced them.
 
 ## Events and ordering
 
@@ -179,9 +223,8 @@ assert!(skipped.started_at.is_none());
 
 ## Current boundary
 
-The CLI does not yet produce records. The console report, versioned JSON
-report, listeners, and HTML reports are separate roadmap tasks built on this
-model. Suite case programs run as one merged program, so their records do not
+The CLI [JSON report](json-report.md) records every file and case run.
+Listeners and HTML reports are separate roadmap tasks built on this model. Suite case programs run as one merged program, so their records do not
 yet separate setup, body, and teardown phases. Engine runs cannot be reconciled
 after a forced process termination, because their records live in memory.
 

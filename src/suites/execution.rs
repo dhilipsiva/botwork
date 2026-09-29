@@ -2,7 +2,10 @@
 //! setup, case execution, and teardown occupy the bounded execution slots.
 use super::*;
 use crate::batch::{Identity, Message, Outcome, Tally};
-use botwork::core::eval::{evaluate_suite_fixture_async, FixtureInputs};
+use botwork::core::{
+    acceptance::SkipReason,
+    eval::{evaluate_suite_fixture_async, FixtureInputs},
+};
 use std::collections::{HashMap, VecDeque};
 use tokio::{
     sync::{mpsc, oneshot},
@@ -94,11 +97,21 @@ fn identity(index: usize, cases: &[SelectedCase]) -> Identity {
     }
 }
 
-async fn report(message: Message, error: &mut Option<CliError>) {
+/// Report unless reporting already failed; return any exported artifacts.
+async fn report(message: Message, error: &mut Option<CliError>) -> Vec<PathBuf> {
     if error.is_none() {
-        if let Err(failure) = batch::report(message).await {
-            *error = Some(failure);
+        match batch::report(message).await {
+            Ok(exported) => return exported,
+            Err(failure) => *error = Some(failure),
         }
+    }
+    Vec::new()
+}
+
+fn skip_message(reason: SkipReason) -> &'static str {
+    match reason {
+        SkipReason::SuiteSetupFailed => "suite setup did not complete",
+        SkipReason::SuiteStopped => "suite control stopped",
     }
 }
 
@@ -107,16 +120,20 @@ async fn skip(
     cases: &[SelectedCase],
     failed: &mut [bool],
     tally: &mut Tally,
+    json: Option<&crate::report_json::Report>,
     reporting_error: &mut Option<CliError>,
-    reason: &'static str,
+    reason: SkipReason,
 ) {
     for index in group.pending.drain(..) {
         if let Err(error) = tally.skipped() {
             reporting_error.get_or_insert(error);
         }
         failed[index] = true;
+        if let Some(json) = json {
+            json.skipped(index + 1, batch::case_identity(&cases[index]), reason);
+        }
         report(
-            Message::Skipped(identity(index, cases), reason),
+            Message::Skipped(identity(index, cases), skip_message(reason)),
             reporting_error,
         )
         .await;
@@ -231,8 +248,9 @@ pub(super) async fn run(
                         &cases,
                         &mut failed_ids,
                         &mut tally,
+                        configuration.report.as_deref(),
                         &mut reporting_error,
-                        "suite control stopped",
+                        SkipReason::SuiteStopped,
                     )
                     .await;
                 }
@@ -246,12 +264,13 @@ pub(super) async fn run(
                         continue;
                     }
                     groups[group].state = State::SettingUp;
-                    let task = running.spawn(owner(
+                    let owner = owner(
                         group,
                         Arc::clone(&groups[group].suite),
                         Arc::clone(&configuration),
                         ready_tx.clone(),
-                    ));
+                    );
+                    let task = running.spawn(async move { (owner.await, None) });
                     identities.insert(task.id(), Task::Owner(group));
                     work += 1;
                 }
@@ -274,7 +293,12 @@ pub(super) async fn run(
                     };
                     let case = cases[index].clone();
                     let configuration = Arc::clone(&configuration);
-                    let task = running.spawn(crate::run_case(case, configuration, inputs));
+                    let recording = configuration
+                        .report
+                        .as_ref()
+                        .map(|_| crate::report_json::recording(batch::case_identity(&case)));
+                    let task =
+                        running.spawn(crate::run_case(case, configuration, inputs, recording));
                     identities.insert(task.id(), Task::Case { group, index });
                     work += 1;
                 }
@@ -294,9 +318,10 @@ pub(super) async fn run(
                 }
             }
             completed = running.join_next_with_id() => {
-                let (id, result) = match completed.expect("owned tasks") {
+                // A lost task has no record, which keeps any report incomplete.
+                let (id, (result, record)) = match completed.expect("owned tasks") {
                     Ok(value) => value,
-                    Err(error) => (error.id(), Err(batch::task_failure())),
+                    Err(error) => (error.id(), (Err(batch::task_failure()), None)),
                 };
                 match identities.remove(&id).expect("admitted task") {
                     Task::Case { group, index } => {
@@ -308,11 +333,18 @@ pub(super) async fn run(
                         if let Err(error) = tally.finished(&run_identity, &result) {
                             reporting_error.get_or_insert(error);
                         }
-                        report(Message::Finished(run_identity, result), &mut reporting_error).await;
+                        let number = run_identity.number;
+                        let exported = report(Message::Finished(run_identity, result), &mut reporting_error).await;
+                        if let (Some(json), Some(record)) = (&configuration.report, record) {
+                            json.run(number, record, &exported);
+                        }
                     }
                     Task::Owner(group) => {
                         if matches!(groups[group].state, State::SettingUp | State::Finishing) { work -= 1; }
                         tally.fixture(groups[group].suite.metadata().id(), &result);
+                        if let Some(json) = &configuration.report {
+                            json.fixture(groups[group].suite.metadata().id(), &result);
+                        }
                         if result.is_err() {
                             // A failed shared fixture affects every selected borrower,
                             // including passed cases that need the fixture on a rerun.
@@ -320,7 +352,7 @@ pub(super) async fn run(
                         }
                         groups[group].state = State::Done;
                         report(Message::SuiteFinished(groups[group].suite.metadata().id().into(), result, configuration.artifacts.clone()), &mut reporting_error).await;
-                        skip(&mut groups[group], &cases, &mut failed_ids, &mut tally, &mut reporting_error, "suite setup did not complete").await;
+                        skip(&mut groups[group], &cases, &mut failed_ids, &mut tally, configuration.report.as_deref(), &mut reporting_error, SkipReason::SuiteSetupFailed).await;
                     }
                 }
             }
