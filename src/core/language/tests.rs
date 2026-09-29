@@ -49,7 +49,8 @@ fn problems_come_from_the_parser_and_the_shared_checks() {
     assert!(broken.problems[0]
         .help
         .starts_with("Check the indicated token"));
-    assert!(broken.problems[0].end > broken.problems[0].start);
+    // The span is the parser's own: here, the end of the text.
+    assert_eq!((broken.problems[0].start, broken.problems[0].end), (7, 7));
 }
 
 #[test]
@@ -129,6 +130,16 @@ fn imports_resolve_to_module_files_and_their_definitions() {
     let analysis = language.analyze("main.botwork", text, SourceKind::Script);
     // The module's own warning about `y` belongs to the module's file.
     assert!(analysis.problems.is_empty(), "{:?}", analysis.problems);
+    let math = fs::canonicalize(directory.path().join("lib/math.botwork")).unwrap();
+    let related = &analysis.related[math.to_str().unwrap()];
+    assert_eq!(related.text, "Double |x| { Return |x * y| }\n");
+    let codes: Vec<_> = related
+        .problems
+        .iter()
+        .map(|problem| (problem.code.as_str(), problem.start, problem.end))
+        .collect();
+    assert_eq!(codes, [("BW2001", 25, 26)]);
+    assert_eq!(analysis.related.len(), 1);
     let module = analysis.definition(offset(text, "lib/wrap"));
     assert!(module[0].file.ends_with("lib/wrap.botwork"), "{module:?}");
     let target = analysis.definition(offset(text, "w::m::Double"));

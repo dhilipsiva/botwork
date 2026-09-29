@@ -47,7 +47,8 @@ Each finding gives:
 - a message and a suggested fix.
 
 A predicted error has the same code and range as the error the run itself
-would report.
+would report. The [language server](lsp.md) shares this analysis and reports
+the same problems in an editor.
 
 ## Rules
 

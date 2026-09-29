@@ -1,190 +1,12 @@
 //! `--lsp` serves the Language Server Protocol on stdin and stdout, with
 //! diagnostics, completion, hover, definitions, and references from the shared
 //! language analysis.
+#[path = "support/lsp_client.rs"]
+mod lsp_client;
+
+use lsp_client::{file_uri, range, Client};
 use serde_json::{json, Value};
-use std::{
-    io::{BufRead, BufReader, Read, Write},
-    path::Path,
-    process::{Child, ChildStdin, Command, Stdio},
-    sync::mpsc::{self, Receiver},
-    time::Duration,
-};
-
-/// How long any single message may take; a hung server fails the test.
-const WAIT: Duration = Duration::from_secs(20);
-
-struct Client {
-    child: Child,
-    stdin: Option<ChildStdin>,
-    messages: Receiver<Value>,
-    next: i64,
-}
-
-impl Client {
-    fn start(directory: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_botwork"))
-            .arg("--lsp")
-            .current_dir(directory)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .unwrap();
-        let stdin = child.stdin.take();
-        let mut stdout = BufReader::new(child.stdout.take().unwrap());
-        let (sender, messages) = mpsc::channel();
-        std::thread::spawn(move || loop {
-            let mut length = None;
-            loop {
-                let mut line = String::new();
-                if stdout.read_line(&mut line).unwrap_or(0) == 0 {
-                    return;
-                }
-                let line = line.trim_end();
-                if line.is_empty() {
-                    break;
-                }
-                if let Some(value) = line.strip_prefix("Content-Length: ") {
-                    length = Some(value.parse::<usize>().unwrap());
-                }
-            }
-            let mut body = vec![0; length.expect("a Content-Length header")];
-            stdout.read_exact(&mut body).unwrap();
-            if sender.send(serde_json::from_slice(&body).unwrap()).is_err() {
-                return;
-            }
-        });
-        let mut client = Self {
-            child,
-            stdin,
-            messages,
-            next: 0,
-        };
-        let result = client.request("initialize", json!({"capabilities": {}}));
-        let capabilities = &result["capabilities"];
-        assert_eq!(capabilities["positionEncoding"], "utf-16");
-        assert_eq!(capabilities["textDocumentSync"]["change"], 1);
-        for provider in ["hoverProvider", "definitionProvider", "referencesProvider"] {
-            assert_eq!(capabilities[provider], true, "{provider}");
-        }
-        assert!(capabilities["completionProvider"].is_object());
-        client.notify("initialized", json!({}));
-        client
-    }
-
-    fn send(&mut self, message: Value) {
-        self.send_raw(&message.to_string());
-    }
-
-    fn send_raw(&mut self, body: &str) {
-        let stdin = self.stdin.as_mut().unwrap();
-        write!(stdin, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
-        stdin.flush().unwrap();
-    }
-
-    fn notify(&mut self, method: &str, params: Value) {
-        self.send(json!({"jsonrpc": "2.0", "method": method, "params": params}));
-    }
-
-    fn receive(&mut self) -> Value {
-        self.messages
-            .recv_timeout(WAIT)
-            .expect("the server answers in time")
-    }
-
-    /// The whole response to a request.
-    fn call(&mut self, method: &str, params: Value) -> Value {
-        self.next += 1;
-        let id = self.next;
-        self.send(json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}));
-        loop {
-            let message = self.receive();
-            if message["id"] == id {
-                return message;
-            }
-        }
-    }
-
-    fn request(&mut self, method: &str, params: Value) -> Value {
-        let response = self.call(method, params);
-        assert!(response.get("error").is_none(), "{response}");
-        response["result"].clone()
-    }
-
-    /// The next diagnostics published for `uri`.
-    fn diagnostics(&mut self, uri: &str) -> Vec<Value> {
-        loop {
-            let message = self.receive();
-            if message["method"] == "textDocument/publishDiagnostics"
-                && message["params"]["uri"] == uri
-            {
-                return message["params"]["diagnostics"].as_array().unwrap().clone();
-            }
-        }
-    }
-
-    fn open(&mut self, uri: &str, text: &str) -> Vec<Value> {
-        self.notify(
-            "textDocument/didOpen",
-            json!({"textDocument": {"uri": uri, "languageId": "botwork", "version": 1, "text": text}}),
-        );
-        self.diagnostics(uri)
-    }
-
-    fn change(&mut self, uri: &str, version: i64, text: &str) -> Vec<Value> {
-        self.notify(
-            "textDocument/didChange",
-            json!({"textDocument": {"uri": uri, "version": version}, "contentChanges": [{"text": text}]}),
-        );
-        self.diagnostics(uri)
-    }
-
-    fn at(&mut self, method: &str, uri: &str, line: u32, character: u32, extra: Value) -> Value {
-        let mut params = json!({
-            "textDocument": {"uri": uri},
-            "position": {"line": line, "character": character},
-        });
-        if let (Some(params), Some(extra)) = (params.as_object_mut(), extra.as_object()) {
-            params.extend(extra.clone());
-        }
-        self.request(method, params)
-    }
-
-    /// Shut down and exit; returns the exit status.
-    fn finish(mut self, shutdown: bool) -> Option<i32> {
-        if shutdown {
-            assert_eq!(self.request("shutdown", Value::Null), Value::Null);
-        }
-        self.notify("exit", Value::Null);
-        drop(self.stdin.take());
-        let started = std::time::Instant::now();
-        loop {
-            if let Some(status) = self.child.try_wait().unwrap() {
-                return status.code();
-            }
-            assert!(started.elapsed() < WAIT, "the server did not exit");
-            std::thread::sleep(Duration::from_millis(20));
-        }
-    }
-}
-
-impl Drop for Client {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-fn range(start: (u32, u32), end: (u32, u32)) -> Value {
-    json!({
-        "start": {"line": start.0, "character": start.1},
-        "end": {"line": end.0, "character": end.1},
-    })
-}
-
-fn file_uri(path: &Path) -> String {
-    url::Url::from_file_path(path).unwrap().to_string()
-}
+use std::process::{Command, Stdio};
 
 #[test]
 fn diagnostics_follow_edits_and_clear_on_close() {
@@ -211,12 +33,13 @@ fn diagnostics_follow_edits_and_clear_on_close() {
             }),
         ]
     );
-    // An incomplete edit reports the syntax error at the end of the text.
+    // An incomplete edit reports the syntax error where `--check` does: at the
+    // end of the text, as `2:1`.
     let broken = client.change(&uri, 2, "Log |1\n");
     assert_eq!(broken.len(), 1, "{broken:?}");
     assert_eq!(broken[0]["code"], "BW1001");
     assert_eq!(broken[0]["severity"], 1);
-    assert_eq!(broken[0]["range"], range((0, 6), (1, 0)));
+    assert_eq!(broken[0]["range"], range((1, 0), (1, 0)));
     assert!(broken[0]["message"]
         .as_str()
         .unwrap()
@@ -401,4 +224,114 @@ fn the_server_flag_takes_no_other_options() {
         .unwrap();
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("--lsp"));
+}
+
+/// Publications until `uri`'s own, which comes last, by URI.
+fn publications(client: &mut Client, uri: &str) -> std::collections::BTreeMap<String, Value> {
+    let mut found = std::collections::BTreeMap::new();
+    loop {
+        let message = client.receive();
+        if message["method"] != "textDocument/publishDiagnostics" {
+            continue;
+        }
+        let published = message["params"]["uri"].as_str().unwrap().to_owned();
+        found.insert(published.clone(), message["params"]["diagnostics"].clone());
+        if published == uri {
+            return found;
+        }
+    }
+}
+
+#[test]
+fn module_problems_follow_their_importers_and_their_own_documents() {
+    let directory = tempfile::tempdir().unwrap();
+    let directory = std::fs::canonicalize(directory.path()).unwrap();
+    std::fs::create_dir(directory.join("lib")).unwrap();
+    let module = directory.join("lib/m.botwork");
+    std::fs::write(&module, "Double |x| { Return |x * y| }\n").unwrap();
+    let (main, module_uri) = (file_uri(&directory.join("main.botwork")), file_uri(&module));
+    let importing = "Import |\"lib/m.botwork\"| As |m|\nLog |@{ m::Double |2| }|\n";
+    let mut client = Client::start(&directory);
+    let warning = |published: &std::collections::BTreeMap<String, Value>| {
+        let diagnostics = published[&module_uri].as_array().unwrap().clone();
+        assert!(diagnostics.len() <= 1, "{diagnostics:?}");
+        diagnostics.first().map(|diagnostic| {
+            (
+                diagnostic["code"].as_str().unwrap().to_owned(),
+                diagnostic["range"].clone(),
+            )
+        })
+    };
+    let expected = Some(("BW2001".to_owned(), range((0, 25), (0, 26))));
+    client.notify(
+        "textDocument/didOpen",
+        json!({"textDocument": {"uri": main, "languageId": "botwork", "version": 1, "text": importing}}),
+    );
+    let published = publications(&mut client, &main);
+    assert_eq!(published[&main], json!([]));
+    assert_eq!(warning(&published), expected);
+    // Dropping the import clears the module's diagnostics; restoring it brings
+    // them back.
+    client.notify(
+        "textDocument/didChange",
+        json!({"textDocument": {"uri": main, "version": 2}, "contentChanges": [{"text": "Log |1|\n"}]}),
+    );
+    assert_eq!(warning(&publications(&mut client, &main)), None);
+    client.notify(
+        "textDocument/didChange",
+        json!({"textDocument": {"uri": main, "version": 3}, "contentChanges": [{"text": importing}]}),
+    );
+    assert_eq!(warning(&publications(&mut client, &main)), expected);
+    // A second importer finds the same warning, which is published once and
+    // stays while either importer is open.
+    let other = file_uri(&directory.join("other.botwork"));
+    client.notify(
+        "textDocument/didOpen",
+        json!({"textDocument": {"uri": other, "languageId": "botwork", "version": 1, "text": importing}}),
+    );
+    assert_eq!(warning(&publications(&mut client, &other)), expected);
+    let close = |client: &mut Client, uri: &str| {
+        client.notify(
+            "textDocument/didClose",
+            json!({"textDocument": {"uri": uri}}),
+        );
+        let published = publications(client, uri);
+        assert_eq!(published[uri], json!([]));
+        published
+    };
+    assert_eq!(warning(&close(&mut client, &main)), expected);
+    // With no importer open, nothing reaches the module.
+    assert_eq!(warning(&close(&mut client, &other)), None);
+    client.notify(
+        "textDocument/didOpen",
+        json!({"textDocument": {"uri": main, "languageId": "botwork", "version": 4, "text": importing}}),
+    );
+    let published = publications(&mut client, &main);
+    assert_eq!(warning(&published), expected);
+    // An open module shows its own text's problems, not the file on disk's.
+    let fixed = "Double |x| { Return |x * 2| }\n";
+    let diagnostics = client.open(&module_uri, fixed);
+    assert_eq!(diagnostics, Vec::<Value>::new());
+    // Closed again, it shows what the importer finds on disk.
+    client.notify(
+        "textDocument/didClose",
+        json!({"textDocument": {"uri": module_uri}}),
+    );
+    assert_eq!(warning(&publications(&mut client, &module_uri)), expected);
+    // Saving the fix re-analyzes the importer, which no longer finds it.
+    client.open(&module_uri, fixed);
+    std::fs::write(&module, fixed).unwrap();
+    client.notify(
+        "textDocument/didSave",
+        json!({"textDocument": {"uri": module_uri}}),
+    );
+    let published = publications(&mut client, &module_uri);
+    assert_eq!(published[&main], json!([]));
+    assert_eq!(warning(&published), None);
+    client.notify(
+        "textDocument/didClose",
+        json!({"textDocument": {"uri": module_uri}}),
+    );
+    assert_eq!(warning(&publications(&mut client, &module_uri)), None);
+    assert_eq!(client.finish(true), Some(0));
 }

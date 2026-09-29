@@ -1,5 +1,5 @@
 {
-  "version": 38,
+  "version": 39,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2966,15 +2966,8 @@
       "id": "lsp-problems-include-module-findings",
       "area": "lsp",
       "file": "src/core/language.rs",
-      "before": "                    .filter(|finding| finding.span.source().name() == name)\n",
-      "after": "                    .filter(|_| true)\n"
-    },
-    {
-      "id": "lsp-end-of-text-error-zero-width",
-      "area": "lsp",
-      "file": "src/core/language.rs",
-      "before": "                .map_or(0, |(index, _)| index),\n",
-      "after": "                .map_or(0, |(index, _)| index).max(text.len()),\n"
+      "before": "            Some(source) if source.name() != name => self\n",
+      "after": "            Some(source) if source.name() != name && false => self\n"
     },
     {
       "id": "lsp-reexports-not-followed",
@@ -3057,8 +3050,8 @@
       "id": "lsp-warnings-published-as-errors",
       "area": "lsp",
       "file": "src/lsp.rs",
-      "before": "                    \"severity\": if problem.severity == Severity::Error { 1 } else { 2 },\n",
-      "after": "                    \"severity\": if problem.severity == Severity::Error { 1 } else { 1 },\n"
+      "before": "        \"severity\": if problem.severity == Severity::Error { 1 } else { 2 },\n",
+      "after": "        \"severity\": if problem.severity == Severity::Error { 1 } else { 1 },\n"
     },
     {
       "id": "lsp-last-good-analysis-dropped",
@@ -3101,6 +3094,62 @@
       "file": "src/lsp.rs",
       "before": "            None if method == \"exit\" => return if server.shutdown { 0 } else { 1 },\n",
       "after": "            None if method == \"exit\" => return if server.shutdown { 0 } else { 0 },\n"
+    },
+    {
+      "id": "lsp-problem-spans-widened",
+      "area": "lsp-sharing",
+      "file": "src/core/language.rs",
+      "before": "        .map_or((0, 0), |span| (span.start(), span.end()));\n",
+      "after": "        .map_or((0, 0), |span| (span.start(), span.end().max(span.start() + 1)));\n"
+    },
+    {
+      "id": "lsp-module-parse-errors-dropped",
+      "area": "lsp-sharing",
+      "file": "src/core/language.rs",
+      "before": "                for diagnostic in &report.diagnostics {\n",
+      "after": "                for diagnostic in report.diagnostics.iter().filter(|_| false) {\n"
+    },
+    {
+      "id": "lsp-module-text-dropped",
+      "area": "lsp-sharing",
+      "file": "src/core/language.rs",
+      "before": "                    text: source.text().to_owned(),\n",
+      "after": "                    text: String::new(),\n"
+    },
+    {
+      "id": "lsp-stale-module-diagnostics-kept",
+      "area": "lsp-sharing",
+      "file": "src/lsp.rs",
+      "before": "        let mut affected = self.related(uri);\n",
+      "after": "        let mut affected = BTreeSet::new();\n"
+    },
+    {
+      "id": "lsp-new-module-diagnostics-unpublished",
+      "area": "lsp-sharing",
+      "file": "src/lsp.rs",
+      "before": "        affected.extend(self.related(uri));\n",
+      "after": "        affected.extend(BTreeSet::<String>::new());\n"
+    },
+    {
+      "id": "lsp-closed-importer-modules-kept",
+      "area": "lsp-sharing",
+      "file": "src/lsp.rs",
+      "before": "                let affected = self.related(&uri);\n",
+      "after": "                let affected = BTreeSet::new();\n"
+    },
+    {
+      "id": "lsp-saves-ignored",
+      "area": "lsp-sharing",
+      "file": "src/lsp.rs",
+      "before": "                    affected.extend(self.update(&other, text, version));\n",
+      "after": "                    drop((text, version));\n"
+    },
+    {
+      "id": "lsp-module-problems-duplicated",
+      "area": "lsp-sharing",
+      "file": "src/lsp.rs",
+      "before": "                if !diagnostics.contains(&value) {\n",
+      "after": "                if diagnostics.len() < usize::MAX {\n"
     }
   ]
 }

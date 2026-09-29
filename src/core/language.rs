@@ -1,7 +1,9 @@
 //! Editor support for one document: diagnostics, completion, hover,
 //! go-to-definition, and references. Diagnostics come from the same parser and
-//! [`Analyzer`] as `--check`; navigation comes from a symbol index that resolves
-//! names the way the runtime does. Offsets are UTF-8 byte offsets into the text.
+//! [`Analyzer`] as `--check`, with the same codes and spans, including the
+//! problems it finds in imported modules; navigation comes from a symbol index
+//! that resolves names the way the runtime does. Offsets are UTF-8 byte offsets
+//! into the text.
 use super::{
     analysis::{module_path, Analyzer, Severity},
     ast::{
@@ -84,10 +86,20 @@ const KEYWORDS: [&str; 12] = [
     "Else",
 ];
 
+/// Problems in a file the analysis reached, such as an imported module, and
+/// the text they were found in.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileProblems {
+    pub text: String,
+    pub problems: Vec<Problem>,
+}
+
 /// The analysis of one document.
 #[derive(Debug, Default)]
 pub struct Analysis {
     pub problems: Vec<Problem>,
+    /// Problems in other files, such as imported modules, by path.
+    pub related: BTreeMap<String, FileProblems>,
     /// Whether the document parsed; navigation needs a parsed document.
     pub parsed: bool,
     index: Index,
@@ -139,12 +151,8 @@ impl Language {
         match parsed {
             Ok((programs, report)) => {
                 analysis.parsed = true;
-                for finding in report
-                    .findings
-                    .iter()
-                    .filter(|finding| finding.span.source().name() == name)
-                {
-                    analysis.problems.push(Problem {
+                for finding in &report.findings {
+                    let problem = Problem {
                         start: finding.span.start(),
                         end: finding.span.end(),
                         severity: finding.severity(),
@@ -154,7 +162,12 @@ impl Language {
                         ),
                         message: format!("{} ({})", finding.message, finding.rule.as_str()),
                         help: finding.help.clone(),
-                    });
+                    };
+                    analysis.place(name, Some(&finding.span), problem);
+                }
+                // Modules that failed to parse, as `--check` reports them.
+                for diagnostic in &report.diagnostics {
+                    analysis.place(name, diagnostic.span.as_ref(), problem(diagnostic));
                 }
                 let mut builder = IndexBuilder {
                     language: self,
@@ -167,7 +180,7 @@ impl Language {
                 }
                 analysis.index = builder.index;
             }
-            Err(diagnostic) => analysis.problems.push(problem(&diagnostic, text)),
+            Err(diagnostic) => analysis.problems.push(problem(&diagnostic)),
         }
         analysis
     }
@@ -179,24 +192,12 @@ impl Language {
     }
 }
 
-/// A parse or validation error, placed at its span, or at the start when it
-/// has none.
-fn problem(diagnostic: &Diagnostic, text: &str) -> Problem {
+/// A parse or validation error at its span, or at the start when it has none.
+fn problem(diagnostic: &Diagnostic) -> Problem {
     let (start, end) = diagnostic
         .span
         .as_ref()
         .map_or((0, 0), |span| (span.start(), span.end()));
-    // An error at the end of the text covers its last character.
-    let (start, end) = match (end > start, start < text.len()) {
-        (true, _) => (start, end),
-        (false, true) => (start, next_char(text, start)),
-        (false, false) => (
-            text.char_indices()
-                .next_back()
-                .map_or(0, |(index, _)| index),
-            text.len(),
-        ),
-    };
     Problem {
         start,
         end,
@@ -205,15 +206,6 @@ fn problem(diagnostic: &Diagnostic, text: &str) -> Problem {
         message: diagnostic.error.to_string(),
         help: diagnostic.help(),
     }
-}
-
-fn next_char(text: &str, offset: usize) -> usize {
-    text[offset.min(text.len())..]
-        .chars()
-        .next()
-        .map_or(offset.min(text.len()), |character| {
-            offset + character.len_utf8()
-        })
 }
 
 #[derive(Clone, Debug)]
@@ -632,6 +624,23 @@ fn module_definition(module: &Path, exported: &str, depth: usize) -> Option<(Loc
 }
 
 impl Analysis {
+    /// Keep a problem with the document named `name`, or with the other file
+    /// its span is in.
+    fn place(&mut self, name: &str, span: Option<&Span>, problem: Problem) {
+        match span.map(|span| span.source()) {
+            Some(source) if source.name() != name => self
+                .related
+                .entry(source.name().to_owned())
+                .or_insert_with(|| FileProblems {
+                    text: source.text().to_owned(),
+                    problems: Vec::new(),
+                })
+                .problems
+                .push(problem),
+            _ => self.problems.push(problem),
+        }
+    }
+
     fn call_at(&self, offset: usize) -> Option<&CallSymbol> {
         // The innermost call covering the offset: calls nest inside arguments.
         self.index

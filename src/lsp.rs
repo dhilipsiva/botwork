@@ -1,16 +1,19 @@
 //! `--lsp`: a Language Server Protocol server on stdin and stdout.
 //!
 //! Documents are synchronized in full. Diagnostics come from the same parser and
-//! checks as `--check`. While a document does not parse, navigation uses its
-//! last version that did. Positions use UTF-16 code units, the protocol default.
+//! checks as `--check`, with the same codes and spans. Problems in an imported
+//! module are published for the module's file unless it is open, and cleared
+//! when no open document reaches it. While a document does not parse, navigation
+//! uses its last version that did. Positions use UTF-16 code units, the
+//! protocol default.
 use botwork::core::{
     analysis::Severity,
     format::SourceKind,
-    language::{Analysis, CompletionKind, Language, Location},
+    language::{Analysis, CompletionKind, Language, Location, Problem},
 };
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     io::{self, BufRead, Write},
     path::Path,
 };
@@ -123,32 +126,62 @@ struct Server {
 }
 
 impl Server {
+    /// The diagnostics for `uri`: an open document's own problems, or else the
+    /// problems that open documents' analyses found in that file.
     fn diagnostics(&self, uri: &str) -> Value {
-        let Some(document) = self.documents.get(uri) else {
-            return json!({"uri": uri, "diagnostics": []});
-        };
-        let diagnostics: Vec<Value> = document
-            .analysis
-            .problems
-            .iter()
-            .map(|problem| {
-                json!({
-                    "range": range(&document.text, problem.start, problem.end),
-                    "severity": if problem.severity == Severity::Error { 1 } else { 2 },
-                    "code": problem.code,
-                    "source": "botwork",
-                    "message": if problem.help.is_empty() {
-                        problem.message.clone()
-                    } else {
-                        format!("{}\nhelp: {}", problem.message, problem.help)
-                    },
-                })
-            })
-            .collect();
-        json!({"uri": uri, "version": document.version, "diagnostics": diagnostics})
+        if let Some(document) = self.documents.get(uri) {
+            let diagnostics: Vec<Value> = document
+                .analysis
+                .problems
+                .iter()
+                .map(|problem| diagnostic(&document.text, problem))
+                .collect();
+            return json!({"uri": uri, "version": document.version, "diagnostics": diagnostics});
+        }
+        let path = name_of(uri);
+        let mut diagnostics = Vec::new();
+        let mut uris: Vec<&String> = self.documents.keys().collect();
+        uris.sort();
+        for file in uris
+            .into_iter()
+            .filter_map(|uri| self.documents[uri].analysis.related.get(&path))
+        {
+            for problem in &file.problems {
+                let value = diagnostic(&file.text, problem);
+                if !diagnostics.contains(&value) {
+                    diagnostics.push(value);
+                }
+            }
+        }
+        json!({"uri": uri, "diagnostics": diagnostics})
     }
 
-    fn update(&mut self, uri: &str, text: String, version: Value) {
+    /// The URI of a file: its open document's, or its `file:` URI.
+    fn uri_for(&self, path: &str) -> String {
+        self.documents
+            .values()
+            .find(|document| document.name == path)
+            .map_or_else(|| uri_of(path), |document| document.uri.clone())
+    }
+
+    /// The other files whose problems a document's analysis found.
+    fn related(&self, uri: &str) -> BTreeSet<String> {
+        self.documents
+            .get(uri)
+            .map_or_else(BTreeSet::new, |document| {
+                document
+                    .analysis
+                    .related
+                    .keys()
+                    .map(|path| self.uri_for(path))
+                    .collect()
+            })
+    }
+
+    /// Analyze a document's new text; returns the other files whose
+    /// diagnostics may have changed.
+    fn update(&mut self, uri: &str, text: String, version: Value) -> BTreeSet<String> {
+        let mut affected = self.related(uri);
         let name = name_of(uri);
         let analysis = self.language.analyze(&name, &text, kind_of(uri));
         let navigation = match self.documents.remove(uri) {
@@ -168,6 +201,25 @@ impl Server {
                 navigation,
             },
         );
+        affected.extend(self.related(uri));
+        affected
+    }
+
+    /// Diagnostics for each affected file, then for `uri` itself.
+    fn publish(&self, affected: &BTreeSet<String>, uri: &str) -> Vec<Value> {
+        affected
+            .iter()
+            .filter(|other| *other != uri)
+            .map(String::as_str)
+            .chain([uri])
+            .map(|uri| {
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "textDocument/publishDiagnostics",
+                    "params": self.diagnostics(uri),
+                })
+            })
+            .collect()
     }
 
     /// The analysis to navigate with, its text, and the offset of a position.
@@ -204,7 +256,7 @@ impl Server {
             "initialize" => Ok(json!({
                 "capabilities": {
                     "positionEncoding": "utf-16",
-                    "textDocumentSync": {"openClose": true, "change": 1},
+                    "textDocumentSync": {"openClose": true, "change": 1, "save": {"includeText": false}},
                     "completionProvider": {"triggerCharacters": ["|", "@"]},
                     "hoverProvider": true,
                     "definitionProvider": true,
@@ -294,13 +346,13 @@ impl Server {
             .as_str()
             .unwrap_or_default()
             .to_owned();
-        match method {
+        let affected = match method {
             "textDocument/didOpen" => {
                 let text = parameters["textDocument"]["text"]
                     .as_str()
                     .unwrap_or_default()
                     .to_owned();
-                self.update(&uri, text, parameters["textDocument"]["version"].clone());
+                self.update(&uri, text, parameters["textDocument"]["version"].clone())
             }
             "textDocument/didChange" => {
                 let Some(text) = parameters["contentChanges"]
@@ -314,24 +366,45 @@ impl Server {
                     &uri,
                     text.to_owned(),
                     parameters["textDocument"]["version"].clone(),
-                );
+                )
             }
             "textDocument/didClose" => {
+                let affected = self.related(&uri);
                 self.documents.remove(&uri);
-                return vec![json!({
-                    "jsonrpc": "2.0",
-                    "method": "textDocument/publishDiagnostics",
-                    "params": {"uri": uri, "diagnostics": []},
-                })];
+                affected
+            }
+            // A saved file can change what other documents import from disk.
+            "textDocument/didSave" => {
+                let mut uris: Vec<String> = self.documents.keys().cloned().collect();
+                uris.sort();
+                let mut affected = BTreeSet::new();
+                for other in uris {
+                    let document = &self.documents[&other];
+                    let (text, version) = (document.text.clone(), document.version.clone());
+                    affected.extend(self.update(&other, text, version));
+                    affected.insert(other);
+                }
+                affected
             }
             _ => return vec![],
-        }
-        vec![json!({
-            "jsonrpc": "2.0",
-            "method": "textDocument/publishDiagnostics",
-            "params": self.diagnostics(&uri),
-        })]
+        };
+        self.publish(&affected, &uri)
     }
+}
+
+/// An LSP diagnostic for a problem found in `text`.
+fn diagnostic(text: &str, problem: &Problem) -> Value {
+    json!({
+        "range": range(text, problem.start, problem.end),
+        "severity": if problem.severity == Severity::Error { 1 } else { 2 },
+        "code": problem.code,
+        "source": "botwork",
+        "message": if problem.help.is_empty() {
+            problem.message.clone()
+        } else {
+            format!("{}\nhelp: {}", problem.message, problem.help)
+        },
+    })
 }
 
 /// Serve until `exit`; the status is 0 after a `shutdown` request, as the

@@ -1,4 +1,4 @@
-# Version 38: add a language server.
+# Version 39: share analysis between the check and the language server.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/core/language.rs",
@@ -154,6 +154,7 @@ additional_cargo_args = [
     "--test", "check",
     "--test", "format",
     "--test", "lsp",
+    "--test", "shared_analysis",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

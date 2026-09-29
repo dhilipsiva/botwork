@@ -393,6 +393,26 @@ and server unit tests as oracles; see [language server evidence](lsp-evidence.js
 `module_path` helper, and was updated in place and re-run against the full
 oracle set.
 
+Version 39 makes the language server and `--check` share one analysis. Its
+faults cover:
+
+- ranges widened past the span that `--check` reports;
+- module syntax errors dropped, and module problems reported without their
+  file's text;
+- stale module diagnostics kept after an edit or a close, and new ones left
+  unpublished;
+- saves that do not analyze open importers again;
+- a module problem published once per importer.
+
+Its 450-entry catalogue adds 8 faults and retires
+`lsp-end-of-text-error-zero-width`, whose widened end-of-text range was
+removed so that ranges match `--check`. The oracles are the `lsp` and
+`shared_analysis` suites and the language and server unit tests; see
+[shared analysis evidence](shared-analysis-evidence.json). Two version 38
+entries whose code moved, `lsp-problems-include-module-findings` and
+`lsp-warnings-published-as-errors`, were updated in place and re-run against
+the full oracle set.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,
