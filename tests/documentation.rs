@@ -334,6 +334,9 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
     assert!(
         include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/listeners.md\")]")
     );
+    assert!(
+        include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/secrets.md\")]")
+    );
     assert!(include_str!("../src/core/worker.rs")
         .contains("#![doc = include_str!(\"../../docs/isolated-workers.md\")]"));
     assert!(include_str!("../src/core/worker/protocol.rs")
@@ -356,7 +359,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/isolated-workers.md".to_owned(),
             "docs/worker-protocol.md".to_owned(),
             "docs/run-records.md".to_owned(),
-            "docs/listeners.md".to_owned()
+            "docs/listeners.md".to_owned(),
+            "docs/secrets.md".to_owned()
         ]),
         "include new Rust documentation examples in rustdoc before registering their files"
     );

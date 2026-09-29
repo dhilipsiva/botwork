@@ -35,7 +35,7 @@ bindings unchanged. Queued runs read their variable files when admitted.
 
 Malformed JSON, invalid names, range failures, unreadable/non-UTF-8 input files, and nesting beyond 128 containers return BW7001 and CLI status 1 before script effects or debug traces. The root object counts toward depth. Diagnostics identify the file or numbered `--var`, a collection path, and JSON syntax position when available; they avoid reproducing the complete input payload. Input validation precedes entry-script loading/parsing. Flag misuse returns Clap status 2; input flags conflict with statement-list/help modes.
 
-Input failure cannot be caught by the script because execution has not begun. Resource budgets below apply before publication; secret-marked redaction and broader interpreter limits remain separate TODOs.
+Input failure cannot be caught by the script because execution has not begun. Resource budgets below apply before publication. Mark inputs with `--secret NAME`, or define them from the environment with `--secret-env NAME=VARIABLE`, to mask their values from all output; see [secret inputs](secrets.md).
 
 ## Rust Hosts
 

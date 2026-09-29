@@ -3,7 +3,6 @@ use botwork::core::{
     diagnostic::Diagnostic,
     eval::{evaluate_program_async, Context, FixtureInputs},
     grammar::BWErr,
-    input::load_variables,
     listener::ListenerOptions,
     operation::OperationControl,
     report::{Recording, RunIdentity, RunRecord},
@@ -28,6 +27,7 @@ mod batch;
 mod interrupt;
 mod listener;
 mod report_json;
+mod secrets;
 mod suites;
 
 /// Run Botwork automation scripts.
@@ -105,6 +105,12 @@ struct Args {
     /// Read root variables from a JSON object (repeatable; later files override earlier)
     #[arg(long = "vars-file", value_name = "PATH")]
     variable_files: Vec<PathBuf>,
+    /// Mark an input variable secret: mask its values from all output (repeatable)
+    #[arg(long = "secret", value_name = "NAME", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    secrets: Vec<String>,
+    /// Define a secret string input from an environment variable (repeatable)
+    #[arg(long = "secret-env", value_name = "NAME=VARIABLE", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    secret_environment: Vec<String>,
     /// Maximum evaluation steps before terminating each run
     #[arg(long, default_value_t = DEFAULT_STEPS)]
     max_steps: u64,
@@ -274,12 +280,13 @@ async fn run_case_recorded(
         let mut context = Context::with_host_environment(configuration.limits.clone(), control)?;
         let variables = match &fixture {
             Some(_) => std::collections::BTreeMap::new(),
-            None => load_variables(&configuration.files, &configuration.settings)?,
+            None => secrets::load(&configuration.files, &configuration.settings)?,
         };
         let variables = case.bind_inputs(variables, &configuration.limits.values)?;
         let program = case.program();
         context.init_statements();
         context.set_input_variables(variables)?;
+        context.set_secrets(secrets::registry())?;
         if let Some(fixture) = fixture {
             fixture.inherit_into(&mut context)?;
         }
@@ -310,7 +317,7 @@ fn prepare(
     control: OperationControl,
 ) -> Result<(Program, Context), CliError> {
     let mut context = Context::with_host_environment(limits, control)?;
-    let variables = load_variables(files, settings)?;
+    let variables = secrets::load(files, settings)?;
     let mut bytes = Vec::new();
     let read_error = |source| CliError::Read {
         file: file.to_owned(),
@@ -335,6 +342,7 @@ fn prepare(
     let program = Program::parse_detailed(&file.display().to_string(), &source)?;
     context.init_statements();
     context.set_input_variables(variables)?;
+    context.set_secrets(secrets::registry())?;
     context.checkpoint()?;
     context.set_statement_tracing(debug);
     Ok((program, context))
@@ -383,6 +391,15 @@ fn main() -> ExitCode {
                         "Signal handling setup failed: {error}"
                     )))
                 })?;
+                // Register every secret before any run or output starts.
+                if !args.secrets.is_empty() || !args.secret_environment.is_empty() {
+                    secrets::prepare(
+                        &args.secrets,
+                        &args.secret_environment,
+                        &args.variable_files,
+                        &args.variables,
+                    )?;
+                }
                 // A batch selects at most as many runs as suites may, which bounds
                 // every per-run structure a report or summary keeps.
                 if args.file.len() > botwork::core::suite::MAX_SELECTED_CASES {
@@ -543,8 +560,10 @@ fn main() -> ExitCode {
         Err(error) => {
             // Failure reporting has its own bounded allowance, so an exhausted
             // script output budget does not hide the reason for failure.
-            let _ = Context::default()
-                .write_output(&mut io::stderr().lock(), format_args!("{error}\n"));
+            let _ = Context::default().write_output(
+                &mut secrets::registry().writer(io::stderr().lock()),
+                format_args!("{error}\n"),
+            );
             ExitCode::FAILURE
         }
     }

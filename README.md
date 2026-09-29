@@ -62,6 +62,9 @@ Ctrl-C cancels started runs cooperatively and still publishes the reports.
 unfinished runs as interrupted. Every report output has a documented
 [limit](docs/report-limits.md), so large suites and long loops keep reports
 bounded.
+Mark inputs as [secrets](docs/secrets.md) with `--secret NAME` or
+`--secret-env NAME=VARIABLE`. Their values are then masked as `***` in logs,
+diagnostics, traces, reports, listener events, and artifacts.
 
 Embedded hosts can request a versioned [run record](docs/run-records.md) of each run's
 statements, logs, timing, and outcome through `RunOptions::record`.

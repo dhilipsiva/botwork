@@ -127,8 +127,10 @@ pub(super) fn publish_report(
         (result, Ok(())) => result,
         (Ok(()), Err(error)) => Err(error),
         (Err(error), Err(publication)) => {
-            let _ = Context::default()
-                .write_output(&mut io::stderr().lock(), format_args!("{publication}\n"));
+            let _ = Context::default().write_output(
+                &mut super::secrets::registry().writer(io::stderr().lock()),
+                format_args!("{publication}\n"),
+            );
             Err(error)
         }
     }
@@ -235,9 +237,10 @@ impl Configuration {
             return;
         }
         let error = result.as_ref().err().map(|error| {
-            ErrorRecord::from_diagnostic(
+            ErrorRecord::masked(
                 &super::report_json::diagnostic(error),
                 &super::report_json::limits(),
+                super::secrets::registry(),
             )
         });
         let status = error
@@ -440,7 +443,7 @@ fn outcome(error: &CliError) -> &'static str {
 /// Write one console record; return the assertion artifacts it exported.
 fn write_report(message: Message) -> Result<Vec<PathBuf>, CliError> {
     let context = Context::default();
-    let mut stderr = io::stderr().lock();
+    let mut stderr = super::secrets::registry().writer(io::stderr().lock());
     let exported = match &message {
         Message::Finished(run, Err(error)) => run.artifacts.as_ref().map(|store| {
             store.write_error(

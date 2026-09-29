@@ -200,6 +200,8 @@ pub(super) struct Excerpt {
     before: String,
     marked: String,
     after: String,
+    /// The line held a secret: `after` is the whole masked line, unmarked.
+    masked: bool,
 }
 
 fn tail(text: &str, maximum: usize) -> String {
@@ -279,6 +281,17 @@ impl Sources {
             .get(line)
             .map_or(text.len(), |next| next - 1)
             .max(start);
+        // Mask the whole line before cutting it, so a cut never exposes part of
+        // a secret; such a line is shown masked and unmarked.
+        let full = text[line_start..line_end].trim_end_matches('\r');
+        if let std::borrow::Cow::Owned(masked) = crate::secrets::registry().redact(full) {
+            return Some(Excerpt {
+                before: String::new(),
+                marked: String::new(),
+                after: head(&masked, EXCERPT_BEFORE + EXCERPT_MARKED + EXCERPT_AFTER),
+                masked: true,
+            });
+        }
         let marked_end = end.min(line_end);
         Some(Excerpt {
             before: tail(&text[line_start..start], EXCERPT_BEFORE),
@@ -287,11 +300,19 @@ impl Sources {
                 text[marked_end..line_end].trim_end_matches('\r'),
                 EXCERPT_AFTER,
             ),
+            masked: false,
         })
     }
 
     fn render(&mut self, location: &SourceLocation, out: &mut String) {
         match self.excerpt(location) {
+            Some(excerpt) if excerpt.masked => {
+                let _ = write!(
+                    out,
+                    r#"<code class="source">{}</code>"#,
+                    Text(&excerpt.after)
+                );
+            }
             Some(excerpt) => {
                 let _ = write!(
                     out,

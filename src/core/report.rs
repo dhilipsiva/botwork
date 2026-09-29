@@ -7,6 +7,7 @@ use super::{
     },
     ast::{Span, STATEMENT_KIND_NAMES},
     diagnostic::{Diagnostic, DiagnosticCode},
+    secret::Secrets,
 };
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use std::{
@@ -122,6 +123,9 @@ pub struct RecordOptions {
     pub limits: RecordLimits,
     /// Receives each event as it is recorded.
     pub observer: Option<EventObserver>,
+    /// Masked from captured log text and error messages. Engine runs use
+    /// `RunOptions::secrets` instead.
+    pub secrets: Secrets,
 }
 
 /// Receives a run's events as they happen: exactly the events its record folds,
@@ -158,7 +162,18 @@ pub struct ErrorRecord {
 
 impl ErrorRecord {
     pub fn from_diagnostic(diagnostic: &Diagnostic, limits: &RecordLimits) -> Self {
-        let (message, truncated) = bounded(&diagnostic.error, limits.message_bytes);
+        Self::masked(diagnostic, limits, &Secrets::default())
+    }
+
+    /// Like [`ErrorRecord::from_diagnostic`], with `secrets` masked from the
+    /// message before it is bounded, so a cut never exposes part of a secret.
+    pub fn masked(diagnostic: &Diagnostic, limits: &RecordLimits, secrets: &Secrets) -> Self {
+        let (message, truncated) = if secrets.is_empty() {
+            bounded(&diagnostic.error, limits.message_bytes)
+        } else {
+            let text = diagnostic.error.to_string();
+            bounded(&secrets.redact(&text), limits.message_bytes)
+        };
         let mut causes = Vec::new();
         let mut omitted = 0u64;
         let mut pending: Vec<&Diagnostic> = diagnostic.causes.iter().rev().collect();
@@ -664,6 +679,7 @@ struct Live {
     start: Instant,
     statement: Option<(u64, Instant)>,
     observer: Option<EventObserver>,
+    secrets: Secrets,
 }
 
 impl Live {
@@ -694,7 +710,12 @@ impl Recording {
     /// Emit `RunStarted` now. An empty identity `id` stays empty.
     pub fn start(options: RecordOptions) -> Self {
         Self {
-            recorder: Recorder::start(options.identity, options.limits, options.observer),
+            recorder: Recorder::start(
+                options.identity,
+                options.limits,
+                options.observer,
+                options.secrets,
+            ),
             expectation: options.expectation,
         }
     }
@@ -726,6 +747,7 @@ impl Recorder {
         identity: RunIdentity,
         limits: RecordLimits,
         observer: Option<EventObserver>,
+        secrets: Secrets,
     ) -> Self {
         let started = SystemTime::now();
         let mut live = Live {
@@ -733,6 +755,7 @@ impl Recorder {
             start: Instant::now(),
             statement: None,
             observer,
+            secrets,
         };
         live.emit(Event::RunStarted {
             identity,
@@ -785,6 +808,13 @@ impl Recorder {
     /// Capture a successfully written Log value as bounded text.
     pub(crate) fn log(&self, value: &dyn fmt::Display) {
         let mut live = self.live();
+        // Mask the whole text before bounding it, as stdout received it.
+        let masked = (!live.secrets.is_empty())
+            .then(|| live.secrets.redact(&value.to_string()).into_owned());
+        let value: &dyn fmt::Display = match &masked {
+            Some(text) => text,
+            None => value,
+        };
         let limits = &live.record.limits;
         let room = limits
             .log_bytes
@@ -820,7 +850,7 @@ impl Recorder {
         let status = decide(result, expectation);
         let error = result
             .err()
-            .map(|error| ErrorRecord::from_diagnostic(error, &live.record.limits));
+            .map(|error| ErrorRecord::masked(error, &live.record.limits, &live.secrets));
         let finished = SystemTime::now();
         let duration_us = micros(live.start.elapsed());
         live.emit(Event::RunFinished {

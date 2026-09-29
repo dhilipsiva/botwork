@@ -48,6 +48,7 @@ pub(super) fn recording(identity: RunIdentity, observer: Option<EventObserver>) 
         identity,
         limits: limits(),
         observer,
+        secrets: super::secrets::registry().clone(),
         ..RecordOptions::default()
     })
 }

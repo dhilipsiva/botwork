@@ -168,6 +168,8 @@ pub struct RunOptions {
     pub limits: RunLimits,
     /// Some records this run's statements, logs, error, and timing in `RunResult::record`.
     pub record: Option<crate::core::report::RecordOptions>,
+    /// Texts masked from this run's output and record; see [`crate::core::secret`].
+    pub secrets: crate::core::secret::Secrets,
 }
 
 impl Default for RunOptions {
@@ -181,6 +183,7 @@ impl Default for RunOptions {
             timeout: None,
             limits: RunLimits::default(),
             record: None,
+            secrets: crate::core::secret::Secrets::default(),
         }
     }
 }
@@ -193,9 +196,32 @@ pub struct RunEnvironment {
     control: OperationControl,
     /// Shared by every worker, module, cleanup, and attempt context of a recorded run.
     pub(crate) recorder: Option<crate::core::report::Recorder>,
+    /// Masked from every output of the run and its workers.
+    pub(crate) secrets: crate::core::secret::Secrets,
 }
 
 impl Context {
+    /// Mask `secrets` from this context's output. The context needs a run
+    /// environment, as from [`Context::with_host_environment`].
+    pub fn set_secrets(&mut self, secrets: &crate::core::secret::Secrets) -> DiagnosticResult<()> {
+        let environment = self.environment.as_ref().ok_or_else(|| {
+            Diagnostic::new(BWErr::RunConfiguration(
+                "Secrets require a run environment".into(),
+            ))
+        })?;
+        let mut environment = RunEnvironment::clone(environment);
+        environment.secrets = secrets.clone();
+        self.environment = Some(Arc::new(environment));
+        Ok(())
+    }
+
+    /// The texts masked from this context's output.
+    pub(crate) fn secrets(&self) -> Option<&crate::core::secret::Secrets> {
+        self.environment
+            .as_ref()
+            .map(|environment| &environment.secrets)
+    }
+
     /// Record this context's statements and logs into `recording`. The context
     /// needs a run environment, as from [`Context::with_host_environment`].
     pub fn attach_recording(
@@ -242,6 +268,7 @@ impl RunEnvironment {
             variables: Arc::clone(&self.variables),
             control,
             recorder: self.recorder.clone(),
+            secrets: self.secrets.clone(),
         }
     }
     pub fn working_directory(&self) -> &Path {
@@ -342,6 +369,7 @@ impl RunEnvironment {
             variables: Arc::new(variables),
             control,
             recorder: None,
+            secrets: options.secrets.clone(),
         })
     }
 }

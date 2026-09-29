@@ -126,6 +126,7 @@ Each file has `format: "botwork-assertion"` and `version: 1`, with these fields:
 | `actual_excerpt`, `expected_excerpt` | Emergency operand text from an incomplete diagnostic; null otherwise and for legacy reason-only assertions |
 | `operands_complete` | True only when both operands were retained without diagnostic omissions |
 | `diagnostic_omissions` | Whether this diagnostic is an emergency omission summary |
+| `secrets_masked` | Whether a [secret input](secrets.md) was masked from the reason or operands; masked operands appear only as excerpts |
 
 Suite-owned fixture records use occurrence number 0, an empty identity file,
 and `suite_fixture`; they do not invent a case or dataset. The `source` field

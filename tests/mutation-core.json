@@ -1,5 +1,5 @@
 {
-  "version": 29,
+  "version": 30,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1335,8 +1335,8 @@
       "id": "assertion-actual-replaced",
       "area": "assertion-diagnostics",
       "file": "src/core/eval/builtins/assertions.rs",
-      "before": "full: format_args!(\"{}\", Typed(actual)),",
-      "after": "full: format_args!(\"{}\", Typed(expected)),"
+      "before": "full: format_args!(\"{}\", Typed(full_actual)),",
+      "after": "full: format_args!(\"{}\", Typed(full_expected)),"
     },
     {
       "id": "assertion-preview-unbounded",
@@ -1391,8 +1391,8 @@
       "id": "assertion-emergency-complete",
       "area": "assertion-diagnostics",
       "file": "src/assertion_artifacts.rs",
-      "before": " && diagnostic.omissions.is_none();",
-      "after": ";"
+      "before": "                && diagnostic.omissions.is_none()\n                && !secrets_masked;",
+      "after": "                && !secrets_masked;"
     },
     {
       "id": "assertion-record-boundary",
@@ -2310,6 +2310,153 @@
       "file": "src/atomic_file.rs",
       "before": "        if stale && entry.file_type()?.is_file() {",
       "after": "        if stale && !entry.file_type()?.is_dir() {"
+    },
+    {
+      "id": "secrets-json-spelling-unmasked",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "    texts.insert(json[1..json.len() - 1].to_owned());",
+      "after": "    let _ = &json;"
+    },
+    {
+      "id": "secrets-quoted-spelling-unmasked",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "    texts.insert(quoted[1..quoted.len() - 1].to_owned());",
+      "after": "    let _ = &quoted;"
+    },
+    {
+      "id": "secrets-url-spelling-unmasked",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "    texts.insert(url::form_urlencoded::byte_serialize(text.as_bytes()).collect());",
+      "after": "    let _ = url::form_urlencoded::byte_serialize(text.as_bytes());"
+    },
+    {
+      "id": "secrets-numbers-public",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "        Literal::Int(number) => spellings(&number.to_string(), texts),",
+      "after": "        Literal::Int(_) => {}"
+    },
+    {
+      "id": "secrets-nested-maps-public",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "        Literal::Map(entries) => entries.values().for_each(|item| leaves(item, texts)),",
+      "after": "        Literal::Map(_) => {}"
+    },
+    {
+      "id": "secrets-shorter-first",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "        ordered.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));",
+      "after": "        ordered.sort_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)));"
+    },
+    {
+      "id": "secrets-writer-passes-through",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "        if self.buffer.is_empty() && self.secrets.is_empty() {",
+      "after": "        if self.buffer.is_empty() {"
+    },
+    {
+      "id": "secrets-masked-copies-keep-strings",
+      "area": "secrets",
+      "file": "src/core/secret.rs",
+      "before": "            Literal::String(value) => text(value).map(Literal::String),",
+      "after": "            Literal::String(_) => None,"
+    },
+    {
+      "id": "secrets-assertion-reason-unmasked",
+      "area": "secrets",
+      "file": "src/core/eval/builtins/assertions.rs",
+      "before": "    let actual = masked_actual.as_ref().unwrap_or(actual);",
+      "after": "    let actual = masked_actual.as_ref().map_or(actual, |_| actual);"
+    },
+    {
+      "id": "secrets-log-output-unmasked",
+      "area": "secrets",
+      "file": "src/core/eval/builtins.rs",
+      "before": "                    &mut secrets.writer(io::stdout().lock()),",
+      "after": "                    &mut io::stdout().lock(),"
+    },
+    {
+      "id": "secrets-record-log-unmasked",
+      "area": "secrets",
+      "file": "src/core/report.rs",
+      "before": "        let masked = (!live.secrets.is_empty())",
+      "after": "        let masked = (false && !live.secrets.is_empty())"
+    },
+    {
+      "id": "secrets-record-error-unmasked",
+      "area": "secrets",
+      "file": "src/core/report.rs",
+      "before": "            .map(|error| ErrorRecord::masked(error, &live.record.limits, &live.secrets));",
+      "after": "            .map(|error| ErrorRecord::from_diagnostic(error, &live.record.limits));"
+    },
+    {
+      "id": "secrets-engine-record-unmasked",
+      "area": "secrets",
+      "file": "src/core/run/asynchronous.rs",
+      "before": "                secrets: options.secrets.clone(),\n",
+      "after": ""
+    },
+    {
+      "id": "secrets-console-unmasked",
+      "area": "secrets",
+      "file": "src/batch.rs",
+      "before": "    let mut stderr = super::secrets::registry().writer(io::stderr().lock());",
+      "after": "    let mut stderr = io::stderr().lock();"
+    },
+    {
+      "id": "secrets-fixture-error-unmasked",
+      "area": "secrets",
+      "file": "src/batch.rs",
+      "before": "                super::secrets::registry(),\n",
+      "after": "                &botwork::core::secret::Secrets::default(),\n"
+    },
+    {
+      "id": "secrets-artifacts-unmasked",
+      "area": "secrets",
+      "file": "src/assertion_artifacts.rs",
+      "before": "            let secrets = super::secrets::registry();",
+      "after": "            let secrets = &botwork::core::secret::Secrets::default();"
+    },
+    {
+      "id": "secrets-excerpts-unmasked",
+      "area": "secrets",
+      "file": "src/report_json/html.rs",
+      "before": "        if let std::borrow::Cow::Owned(masked) = crate::secrets::registry().redact(full) {",
+      "after": "        if let std::borrow::Cow::Owned(masked) = botwork::core::secret::Secrets::default().redact(full) {"
+    },
+    {
+      "id": "secrets-startup-registration-skipped",
+      "area": "secrets",
+      "file": "src/main.rs",
+      "before": "                if !args.secrets.is_empty() || !args.secret_environment.is_empty() {",
+      "after": "                if false {"
+    },
+    {
+      "id": "secrets-final-error-unmasked",
+      "area": "secrets",
+      "file": "src/main.rs",
+      "before": "                &mut secrets::registry().writer(io::stderr().lock()),",
+      "after": "                &mut io::stderr().lock(),"
+    },
+    {
+      "id": "secrets-file-context-unmasked",
+      "area": "secrets",
+      "file": "src/main.rs",
+      "before": "    context.set_input_variables(variables)?;\n    context.set_secrets(secrets::registry())?;\n    context.checkpoint()?;",
+      "after": "    context.set_input_variables(variables)?;\n    context.checkpoint()?;"
+    },
+    {
+      "id": "secrets-values-unregistered",
+      "area": "secrets",
+      "file": "src/secrets.rs",
+      "before": "        registry().add(value);",
+      "after": "        let _ = value;"
     }
   ]
 }

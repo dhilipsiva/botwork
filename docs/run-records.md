@@ -15,6 +15,7 @@ Set `RunOptions::record` to receive `RunResult::record`:
 | `expectation` | `CaseExpectation` that decides the terminal status (default: success required) |
 | `limits` | `RecordLimits` retention bounds (below) |
 | `observer` | An optional `EventObserver` that receives each event as it is recorded; see [listeners](listeners.md) |
+| `secrets` | A `Secrets` registry masked from captured log text and error messages; Engine runs use `RunOptions::secrets`. See [secret inputs](secrets.md) |
 
 Recording is off by default. Recording starts before run preparation, so a run
 whose limits, source, or environment are rejected still ends with one terminal

@@ -92,7 +92,12 @@ impl Builtin {
             Self::Process(kind) => kind.invoke(&values, context),
             Self::Log => {
                 let result = context.copy_temporary(&values[0])?;
-                write_log(&values[0], &mut io::stdout().lock(), context)?;
+                let secrets = context.secrets().cloned().unwrap_or_default();
+                write_log(
+                    &values[0],
+                    &mut secrets.writer(io::stdout().lock()),
+                    context,
+                )?;
                 if let Some(recorder) = context
                     .environment
                     .as_ref()

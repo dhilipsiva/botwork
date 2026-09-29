@@ -1,6 +1,8 @@
-# Version 29: bound report selections and pages, and sweep interrupted publications.
+# Version 30: mask secret-marked inputs from every output.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/secret.rs",
+    "src/secrets.rs",
     "src/interrupt.rs",
     "src/report_json/journal.rs",
     "src/report_json/html.rs",
@@ -66,6 +68,7 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/(core/secret|secrets).rs:',
     '^src/(core/)?listener.rs:',
     '^src/(report_json|atomic_file|report_json/html|report_json/journal|interrupt).rs:',
     '^src/core/report.rs:',
@@ -127,6 +130,7 @@ additional_cargo_args = [
     "--test", "html_report",
     "--test", "terminal_outcomes",
     "--test", "report_limits",
+    "--test", "secrets",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

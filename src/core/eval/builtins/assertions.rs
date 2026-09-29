@@ -15,6 +15,15 @@ pub(super) fn failure(
     condition: bool,
     context: &Context,
 ) -> RuntimeDiagnostic {
+    // The reason and previews use masked copies, so neither a cut preview nor a
+    // character-level difference reveals a secret; the full typed operands stay
+    // exact for hosts, and CLI artifacts mask them.
+    let secrets = context.secrets();
+    let masked_actual = secrets.and_then(|secrets| secrets.mask_value(actual));
+    let masked_expected = secrets.and_then(|secrets| secrets.mask_value(expected));
+    let (full_actual, full_expected) = (actual, expected);
+    let actual = masked_actual.as_ref().unwrap_or(actual);
+    let expected = masked_expected.as_ref().unwrap_or(expected);
     let reason = Reason {
         actual,
         expected,
@@ -30,11 +39,11 @@ pub(super) fn failure(
         [
             FormattedDetail::exact(format_args!("{reason}")),
             FormattedDetail {
-                full: format_args!("{}", Typed(actual)),
+                full: format_args!("{}", Typed(full_actual)),
                 summary: Some(format_args!("{}", Preview(Human(actual)))),
             },
             FormattedDetail {
-                full: format_args!("{}", Typed(expected)),
+                full: format_args!("{}", Typed(full_expected)),
                 summary: Some(format_args!("{}", Preview(Human(expected)))),
             },
         ],

@@ -87,16 +87,18 @@ impl Context {
             // The span retains the already-admitted source owner without a text copy.
             let source = Arc::clone(source);
             self.blocking(move |context| {
+                let secrets = context.secrets().cloned().unwrap_or_default();
                 context.write_output(
-                    &mut io::stderr().lock(),
+                    &mut secrets.writer(io::stderr().lock()),
                     format_args!("debug: {}:{line}:{column}: {kind}\n", source.name()),
                 )?;
                 Ok(())
             })
             .await
         } else {
+            let secrets = self.secrets().cloned().unwrap_or_default();
             self.write_output(
-                &mut io::stderr().lock(),
+                &mut secrets.writer(io::stderr().lock()),
                 format_args!("debug: {}:{line}:{column}: {kind}\n", source.name()),
             )?;
             Ok(())

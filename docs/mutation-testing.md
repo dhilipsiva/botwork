@@ -259,6 +259,23 @@ Version 29 adds report limits. Its faults cover:
 Its 330-entry catalogue adds 8 faults, with the `report_limits` suite as an
 oracle; see [report-limit evidence](report-limits-evidence.json).
 
+Version 30 adds secret masking. Its faults cover:
+
+- spellings: unmasked JSON, quoted, and URL spellings;
+- secret leaves: numbers or nested maps treated as public, and shorter secrets
+  matched first;
+- masking machinery: a writer that passes records through, masked copies that
+  keep strings, and an assertion reason built from the raw operand;
+- outputs: unmasked Log output, record logs, record errors, engine records,
+  console output, fixture errors, artifacts, HTML excerpts, and final errors;
+- CLI inputs: a skipped startup registration, a file context without secrets,
+  and values never registered.
+
+Its 351-entry catalogue adds 21 faults, with the `secrets` suite as an oracle;
+see [secret evidence](secrets-evidence.json). Two assertion entries whose code
+moved with this change were updated in place and re-run against the full oracle
+set.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

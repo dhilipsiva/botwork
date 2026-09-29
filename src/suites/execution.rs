@@ -147,10 +147,10 @@ async fn owner(
     let control = crate::run_control(configuration.suite_timeout_ms)?;
     let context = tokio::task::spawn_blocking(move || {
         let mut context = Context::with_host_environment(configuration.limits.clone(), control)?;
-        let variables =
-            botwork::core::input::load_variables(&configuration.files, &configuration.settings)?;
+        let variables = crate::secrets::load(&configuration.files, &configuration.settings)?;
         context.init_statements();
         context.set_input_variables(variables)?;
+        context.set_secrets(crate::secrets::registry())?;
         context.checkpoint()?;
         context.set_statement_tracing(configuration.debug);
         Ok::<_, CliError>(context)

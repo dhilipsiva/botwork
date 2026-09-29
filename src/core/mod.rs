@@ -12,6 +12,7 @@ pub mod operation;
 mod parser;
 pub mod report;
 pub mod run;
+pub mod secret;
 pub mod signature;
 pub mod syntax_limits;
 pub mod value_limits;

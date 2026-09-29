@@ -28,6 +28,7 @@ impl PendingRun {
             }
             crate::core::report::Recording::start(crate::core::report::RecordOptions {
                 identity,
+                secrets: options.secrets.clone(),
                 ..record
             })
         });

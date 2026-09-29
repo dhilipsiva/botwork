@@ -74,7 +74,8 @@ the location at the recorded line and column. A file changed during the run, an
 unreadable or synthetic source such as `<builtin>`, or a file beyond 4 MiB shows
 "source unavailable" instead of text that may no longer match. At most 64 files
 are read, and each excerpt keeps up to 60 characters before the statement, 120
-of it, and 40 after.
+of it, and 40 after. A line that contains a [secret input](secrets.md) is shown
+whole and masked, without the statement highlight.
 
 ## Rendering recorded content as text
 

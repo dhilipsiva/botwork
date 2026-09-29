@@ -80,6 +80,8 @@ struct Record<'a> {
     expected_excerpt: Option<&'a str>,
     operands_complete: bool,
     diagnostic_omissions: bool,
+    /// Secret texts were masked, so the operands are excerpts, not typed values.
+    secrets_masked: bool,
 }
 
 fn exceeded(resource: &str) -> io::Error {
@@ -162,6 +164,18 @@ impl Store {
             _ => None,
         };
         if let Some((reason, actual, expected)) = evidence {
+            // Masked operands are no longer the typed values, so they become excerpts.
+            let secrets = super::secrets::registry();
+            let (reason, actual, expected) = (
+                secrets.redact(reason),
+                actual.map(|text| secrets.redact(text)),
+                expected.map(|text| secrets.redact(text)),
+            );
+            let secrets_masked = [Some(&reason), actual.as_ref(), expected.as_ref()]
+                .into_iter()
+                .flatten()
+                .any(|text| matches!(text, std::borrow::Cow::Owned(_)));
+            let (reason, actual, expected) = (&*reason, actual.as_deref(), expected.as_deref());
             let mut used = self
                 .usage
                 .lock()
@@ -195,7 +209,10 @@ impl Store {
             } else {
                 None
             };
-            let complete = actual.is_some() && expected.is_some() && diagnostic.omissions.is_none();
+            let complete = actual.is_some()
+                && expected.is_some()
+                && diagnostic.omissions.is_none()
+                && !secrets_masked;
             let record = Record {
                 format: "botwork-assertion",
                 version: 1,
@@ -220,6 +237,7 @@ impl Store {
                 expected_excerpt: expected.filter(|_| !complete),
                 operands_complete: complete,
                 diagnostic_omissions: diagnostic.omissions.is_some(),
+                secrets_masked,
             };
             let destination = self
                 .directory
@@ -275,7 +293,7 @@ pub(super) fn write_single(
         let context = super::Context::default();
         for path in &paths {
             context.write_output(
-                &mut io::stderr().lock(),
+                &mut super::secrets::registry().writer(io::stderr().lock()),
                 format_args!("[assertion artifact] {path:?}\n"),
             )?;
         }
