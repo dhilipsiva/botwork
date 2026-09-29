@@ -185,6 +185,12 @@ escapes, byte order marks, CSV quote and line-ending rules, record width, header
 uniqueness, dataset row IDs, format dispatch, and per-format caching. Its
 237-entry catalogue adds 16 faults, with the `structured_data` suite as an oracle;
 see [structured-data evidence](structured-data-evidence.json).
+Version 23 adds run records. Its faults cover event ordering (late events,
+sequence gaps, overlapping statements), interrupted defaults, statement and log
+retention, byte counts, expectation decisions, and cause order. Further faults
+cover module statement exclusion, Log capture, and recorder propagation into
+scoped contexts. Its 249-entry catalogue adds 12 faults, with the `run_records`
+suite as an oracle; see [run-record evidence](run-records-evidence.json).
 
 ## First campaign — 2026-09-28
 

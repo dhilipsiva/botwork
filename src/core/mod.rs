@@ -9,6 +9,7 @@ pub mod grammar;
 pub mod input;
 pub mod operation;
 mod parser;
+pub mod report;
 pub mod run;
 pub mod signature;
 pub mod syntax_limits;

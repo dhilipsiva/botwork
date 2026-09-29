@@ -1,5 +1,5 @@
 {
-  "version": 22,
+  "version": 23,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1659,6 +1659,90 @@
       "file": "src/core/ast/suite/dataset.rs",
       "before": "            DatasetFormat::Json => Self::from_json(name, text),",
       "after": "            DatasetFormat::Json => Self::from_csv(name, text),"
+    },
+    {
+      "id": "record-late-events-accepted",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "        if self.terminal() {\n            return Err(RecordError::AfterTerminal);\n        }\n",
+      "after": ""
+    },
+    {
+      "id": "record-sequence-gap-accepted",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "        if record.sequence != self.events {",
+      "after": "        if false && record.sequence != self.events {"
+    },
+    {
+      "id": "record-statement-overlap",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "if self.open_statement.is_some() || *index != self.next_statement {",
+      "after": "if *index != self.next_statement {"
+    },
+    {
+      "id": "record-partial-pass",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "            status: CaseStatus::Interrupted,\n            complete: false,",
+      "after": "            status: CaseStatus::Succeeded,\n            complete: false,"
+    },
+    {
+      "id": "record-unbounded-statements",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "if self.statements.len() < self.limits.statements {",
+      "after": "if true || self.statements.len() < self.limits.statements {"
+    },
+    {
+      "id": "record-log-budget-ignored",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "if self.logs.len() < self.limits.logs && log.text.len() <= room {",
+      "after": "if self.logs.len() < self.limits.logs {"
+    },
+    {
+      "id": "record-logged-bytes-dropped",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "self.logged_bytes = self.logged_bytes.saturating_add(log.bytes);",
+      "after": "self.logged_bytes = self.logged_bytes.saturating_add(0);"
+    },
+    {
+      "id": "record-expectation-ignored",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "    .decide(expectation)\n}",
+      "after": "    .decide(&CaseExpectation::default())\n}"
+    },
+    {
+      "id": "record-cause-order",
+      "area": "run-records",
+      "file": "src/core/report.rs",
+      "before": "pending.extend(cause.causes.iter().rev());",
+      "after": "pending.extend(cause.causes.iter());"
+    },
+    {
+      "id": "record-module-statements",
+      "area": "run-records",
+      "file": "src/core/eval/execution.rs",
+      "before": "        .filter(|_| context.loading.is_empty())\n",
+      "after": ""
+    },
+    {
+      "id": "record-log-not-captured",
+      "area": "run-records",
+      "file": "src/core/eval/builtins.rs",
+      "before": "                    recorder.log(&*values[0]);\n",
+      "after": ""
+    },
+    {
+      "id": "record-attempt-recorder-dropped",
+      "area": "run-records",
+      "file": "src/core/run.rs",
+      "before": "            recorder: self.recorder.clone(),\n",
+      "after": "            recorder: None,\n"
     }
   ]
 }

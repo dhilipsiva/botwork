@@ -898,6 +898,31 @@ pub(super) async fn evaluate_statement_inner(
     }
 }
 
+/// Record a root program's top-level statement when recording is enabled. The
+/// ordinary path returns the statement's own boxed future, so programs, including
+/// imported modules, keep one await site and no recorder state in their frames.
+fn top_level_statement<'a>(
+    statement: &'a Statement,
+    context: &'a mut Context,
+) -> EvalFuture<'a, Completion> {
+    // Imported modules run with a nonempty loading stack; only the run's own
+    // program records statements, while module logs still reach the recorder.
+    let Some(recorder) = context
+        .environment
+        .as_ref()
+        .and_then(|environment| environment.recorder.clone())
+        .filter(|_| context.loading.is_empty())
+    else {
+        return evaluate_statement(statement, context);
+    };
+    Box::pin(async move {
+        recorder.statement_started(statement.kind_name(), &statement.span);
+        let completion = evaluate_statement(statement, context).await;
+        recorder.statement_finished(completion.as_ref().err().map(|error| &**error));
+        completion
+    })
+}
+
 pub(super) async fn execute_statement_runtime(
     statement: &Statement,
     context: &mut Context,
@@ -938,7 +963,7 @@ pub(crate) async fn evaluate_program_runtime(
             drop(result.take());
             context.trace_statement(statement, &program.source).await?;
             result = Some(finish_script(
-                evaluate_statement(statement, context).await?,
+                top_level_statement(statement, context).await?,
                 context,
                 &statement.span,
             )?);

@@ -1,25 +1,41 @@
 use super::*;
-use crate::core::eval::execution;
+use crate::core::{acceptance::CaseExpectation, eval::execution, report::Recorder};
 use std::future::Future;
 
 // Wrap host-owned trees before constructing a future, including an unpolled one.
+/// A recording run's live recorder and the expectation that decides its status.
+type Recording = Option<(Recorder, CaseExpectation)>;
+
 pub(super) struct PendingRun {
     options: RunOptions,
     variables: Owned<BTreeMap<String, Literal>>,
     start: Instant,
     control_start: tokio::time::Instant,
     environment: Option<RunEnvironment>,
+    recording: Recording,
 }
 
 impl PendingRun {
-    pub(super) fn new(mut options: RunOptions) -> Self {
+    /// Recording starts here, so failed preparation still yields a terminal record.
+    pub(super) fn new(mut options: RunOptions, name: &str) -> Self {
         let variables = Owned::new(std::mem::take(&mut options.variables));
+        let recording = options.record.take().map(|record| {
+            let mut identity = record.identity;
+            if identity.id.is_empty() {
+                identity.id = name.to_owned();
+            }
+            if identity.name.is_empty() {
+                identity.name = identity.id.clone();
+            }
+            (Recorder::start(identity, record.limits), record.expectation)
+        });
         Self {
             options,
             variables,
             start: Instant::now(),
             control_start: tokio::time::Instant::now(),
             environment: None,
+            recording,
         }
     }
 }
@@ -28,6 +44,7 @@ pub(super) struct ActiveRun {
     pub(super) context: Context,
     result_limits: ResultLimits,
     start: Instant,
+    recording: Recording,
 }
 
 impl ActiveRun {
@@ -39,12 +56,16 @@ impl ActiveRun {
         let steps = self.context.budget.as_ref().map_or(0, RunBudget::used);
         let (result, variables, snapshot_error) =
             self.context.finish_result(result, &self.result_limits);
+        let record = self.recording.map(|(recorder, expectation)| {
+            recorder.finish(result.as_ref().map(|_| ()), &expectation)
+        });
         RunResult {
             result,
             variables,
             snapshot_error,
             steps,
             elapsed: self.start.elapsed(),
+            record,
         }
     }
 }
@@ -67,6 +88,7 @@ impl Engine {
             start,
             control_start,
             environment,
+            recording,
         } = pending;
         let result_limits = options.limits.results.clone();
         // Successful setup installs its canonical snapshot below. Failed setup
@@ -76,10 +98,12 @@ impl Engine {
         let result = (|| {
             options.control.checkpoint()?;
             options.limits.validate()?;
-            let environment = Arc::new(match environment {
+            let mut environment = match environment {
                 Some(environment) => environment,
                 None => RunEnvironment::prepare(&options, control_start)?,
-            });
+            };
+            environment.recorder = recording.as_ref().map(|(recorder, _)| recorder.clone());
+            let environment = Arc::new(environment);
             context.working_directory = Ok(environment.working_directory().to_owned());
             context.budget = Some(RunBudget::new(options.limits, environment.control.clone()));
             context.environment = Some(environment);
@@ -93,6 +117,7 @@ impl Engine {
                 context,
                 result_limits,
                 start,
+                recording,
             },
             result,
         )
@@ -108,7 +133,7 @@ impl Engine {
         source: &'a str,
         options: RunOptions,
     ) -> impl Future<Output = RunResult> + 'a {
-        self.run_async(Input::Source(name, source), PendingRun::new(options))
+        self.run_async(Input::Source(name, source), PendingRun::new(options, name))
     }
 
     /// Reuse immutable syntax while keeping all mutable execution state local to this future.
@@ -117,7 +142,10 @@ impl Engine {
         program: &'a Program,
         options: RunOptions,
     ) -> impl Future<Output = RunResult> + 'a {
-        self.run_async(Input::Program(program), PendingRun::new(options))
+        self.run_async(
+            Input::Program(program),
+            PendingRun::new(options, program.source.name()),
+        )
     }
 
     /// Read and run a local file using bounded filesystem workers. Parsing remains
@@ -129,7 +157,7 @@ impl Engine {
     ) -> impl Future<Output = RunResult> + '_ {
         self.run_async(
             Input::File(path.as_ref().to_owned()),
-            PendingRun::new(options),
+            PendingRun::new(options, &path.as_ref().display().to_string()),
         )
     }
 
@@ -188,8 +216,10 @@ impl Engine {
         active.finish(result)
     }
 
-    async fn prepare_async(&self, pending: PendingRun) -> (ActiveRun, EvaluationResult<()>) {
+    async fn prepare_async(&self, mut pending: PendingRun) -> (ActiveRun, EvaluationResult<()>) {
         let start = pending.start;
+        // Keep the recorder outside the preparation worker so failures still finish it.
+        let recording = pending.recording.take();
         let result_limits = pending.options.limits.results.clone();
         let prepared = async {
             pending.options.control.checkpoint()?;
@@ -219,12 +249,16 @@ impl Engine {
         }
         .await;
         match prepared {
-            Ok(pending) => self.prepare_run(pending, true),
+            Ok(mut pending) => {
+                pending.recording = recording;
+                self.prepare_run(pending, true)
+            }
             Err(error) => (
                 ActiveRun {
                     context: Context::with_directory_snapshot(Ok(PathBuf::new())),
                     result_limits,
                     start,
+                    recording,
                 },
                 Err(error.into()),
             ),

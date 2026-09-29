@@ -166,6 +166,8 @@ pub struct RunOptions {
     pub control: OperationControl,
     pub timeout: Option<Duration>,
     pub limits: RunLimits,
+    /// Some records this run's statements, logs, error, and timing in `RunResult::record`.
+    pub record: Option<crate::core::report::RecordOptions>,
 }
 
 impl Default for RunOptions {
@@ -178,6 +180,7 @@ impl Default for RunOptions {
             control: OperationControl::default(),
             timeout: None,
             limits: RunLimits::default(),
+            record: None,
         }
     }
 }
@@ -188,6 +191,8 @@ pub struct RunEnvironment {
     directory: Arc<PathBuf>,
     variables: Arc<BTreeMap<OsString, OsString>>,
     control: OperationControl,
+    /// Shared by every worker, module, cleanup, and attempt context of a recorded run.
+    pub(crate) recorder: Option<crate::core::report::Recorder>,
 }
 
 impl Context {
@@ -219,6 +224,7 @@ impl RunEnvironment {
             directory: Arc::clone(&self.directory),
             variables: Arc::clone(&self.variables),
             control,
+            recorder: self.recorder.clone(),
         }
     }
     pub fn working_directory(&self) -> &Path {
@@ -318,6 +324,7 @@ impl RunEnvironment {
             directory: Arc::new(directory),
             variables: Arc::new(variables),
             control,
+            recorder: None,
         })
     }
 }
@@ -343,6 +350,8 @@ pub struct RunResult {
     pub snapshot_error: Option<Diagnostic>,
     pub steps: u64,
     pub elapsed: Duration,
+    /// Present when `RunOptions::record` requested recording.
+    pub record: Option<crate::core::report::RunRecord>,
 }
 
 impl RunResult {
@@ -414,7 +423,7 @@ impl Engine {
     }
 
     pub fn run_source(&self, name: &str, source: &str, options: RunOptions) -> RunResult {
-        self.run(options, |context| {
+        self.run(options, name, |context| {
             context.check_source_size(source.len())?;
             let program = context.parse_source(name, source)?;
             evaluate_program_runtime(&program, context)
@@ -422,7 +431,7 @@ impl Engine {
     }
 
     pub fn run_program(&self, program: &Program, options: RunOptions) -> RunResult {
-        self.run(options, |context| {
+        self.run(options, program.source.name(), |context| {
             context.check_source_size(program.source.text().len())?;
             context.check_syntax(program.source.name(), program.source.text())?;
             evaluate_program_runtime(program, context)
@@ -430,7 +439,8 @@ impl Engine {
     }
 
     pub fn run_file(&self, path: impl AsRef<Path>, options: RunOptions) -> RunResult {
-        self.run(options, |context| {
+        let name = path.as_ref().display().to_string();
+        self.run(options, &name, |context| {
             let path = context
                 .environment
                 .as_ref()
@@ -462,10 +472,11 @@ impl Engine {
     fn run(
         &self,
         options: RunOptions,
+        name: &str,
         execute: impl FnOnce(&mut Context) -> EvaluationResult<Literal>,
     ) -> RunResult {
         let (mut active, prepared) =
-            self.prepare_run(asynchronous::PendingRun::new(options), false);
+            self.prepare_run(asynchronous::PendingRun::new(options, name), false);
         let result = prepared.and_then(|()| execute(&mut active.context));
         active.finish(result)
     }

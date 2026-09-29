@@ -45,6 +45,9 @@ For complete tasks, [build a verified catalogue or check an HTTP response contra
 Both examples combine imported helpers, JSON input variables, assertions, and
 standard statements, with runnable local fixtures and failure demonstrations.
 
+Embedded hosts can request a versioned [run record](docs/run-records.md) of each run's
+statements, logs, timing, and outcome through `RunOptions::record`.
+
 Convert JSON and CSV test data with `Parse JSON`, `Format JSON`, and `Parse CSV`,
 or read suite rows directly with `Dataset |"id"| From JSON |"rows.json"|`. See
 [structured data](docs/structured-data.md) for the conversion rules.

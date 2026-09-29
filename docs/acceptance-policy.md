@@ -139,8 +139,10 @@ use this policy; embedded `RunResult::outcome` shares diagnostic classification.
 Current generic runtime errors do **not** identify assertions and never become
 expected failures. The suite grammar has no expected-failure declaration yet.
 [Standard assertions](builtins.md) now provide BW9001 and the conservative
-`FailureKind::from_diagnostic` classifier. Full JSON/HTML report files, statement events, artifact
-links, and expected-failure rerun selection remain the separate reporting work.
+`FailureKind::from_diagnostic` classifier. [Run records](run-records.md) define run
+and statement results and their ordered events with these statuses. Full JSON/HTML
+report files, artifact links, and expected-failure rerun selection remain the
+separate reporting work.
 These JSON projections and HTML fragments establish verdict consistency, not a
 complete report schema or report-delivery CLI option.
 

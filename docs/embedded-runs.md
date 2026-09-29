@@ -68,4 +68,4 @@ Entry-file path/read/UTF-8 error messages pass local diagnostic construction adm
 
 [Result export admission](result-limits.md) checks the complete terminal/root bundle before publication, moves uniquely owned names/values, and copies shared ones only after admission. If export fails, `variables` is empty and `snapshot_error` describes the omission. Preserve an earlier execution error/cancellation as primary; otherwise the export failure becomes `result`. Always inspect `snapshot_error` before treating the root map as complete. Bounded finalization occurs after the final execution checkpoint and retains its separate timing/ownership contract.
 
-Log still writes stdout. These results are the execution API contract; suite identities, events, reports, artifact handling, log capture, and serialization/versioning remain the reporting milestones.
+Log still writes stdout. Set `RunOptions::record` to also receive a versioned [run record](run-records.md) with statement results, captured logs, timing, and the error summary. Console, JSON, HTML, and listener reports built on that model remain the reporting milestones.

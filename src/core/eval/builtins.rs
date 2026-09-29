@@ -93,6 +93,13 @@ impl Builtin {
             Self::Log => {
                 let result = context.copy_temporary(&values[0])?;
                 write_log(&values[0], &mut io::stdout().lock(), context)?;
+                if let Some(recorder) = context
+                    .environment
+                    .as_ref()
+                    .and_then(|environment| environment.recorder.as_ref())
+                {
+                    recorder.log(&*values[0]);
+                }
                 Ok(result)
             }
             Self::Assert => {
