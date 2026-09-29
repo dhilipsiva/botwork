@@ -363,6 +363,36 @@ Version 37 adds the formatter. Its faults cover:
 Its 423-entry catalogue adds 18 faults, with the `format` suite and the
 formatter unit tests as oracles; see [format evidence](format-evidence.json).
 
+Version 38 adds the language server. Its faults cover:
+
+- problems: findings from imported modules shown in the importing file, and a
+  zero-width error at the end of the text;
+- navigation:
+  - the outermost call chosen instead of the innermost;
+  - re-exports not followed;
+  - a variable's first use taken as its binding;
+  - variables in other scopes merged;
+- references that always include the declaration, in the analysis and in the
+  server;
+- completion offered for the wrong context, and pipes inside strings opening a
+  parameter;
+- hover text that calls an assigned variable an input;
+- positions and offsets counted in UTF-8 bytes, and module ranges computed
+  against the open document;
+- protocol faults:
+  - case-sensitive headers;
+  - warnings published as errors;
+  - the last good analysis dropped;
+  - requests served after `shutdown`;
+  - malformed messages left unanswered;
+  - an exit status that ignores `shutdown`.
+
+Its 443-entry catalogue adds 20 faults, with the `lsp` suite and the language
+and server unit tests as oracles; see [language server evidence](lsp-evidence.json).
+`check-modules-resolved-from-working-directory` moved into the shared
+`module_path` helper, and was updated in place and re-run against the full
+oracle set.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

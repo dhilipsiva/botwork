@@ -636,9 +636,7 @@ impl Checker<'_, '_> {
             return None;
         };
         let directory = self.analyzer.directory.as_ref()?;
-        if path.contains("://")
-            || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
-        {
+        let Some(requested) = module_path(path_span.source().name(), directory, path) else {
             self.push(
                 Rule::ImportFailure,
                 path_span,
@@ -646,14 +644,7 @@ impl Checker<'_, '_> {
                 "Import a local .botwork file by a path relative to the importing file.",
             );
             return None;
-        }
-        let importer = Path::new(path_span.source().name());
-        let base = if importer.is_absolute() {
-            importer.parent().unwrap_or(Path::new("/")).to_owned()
-        } else {
-            directory.join(importer.parent().unwrap_or(Path::new("")))
         };
-        let requested = base.join(path);
         let canonical = match fs::canonicalize(&requested) {
             Ok(canonical) => canonical,
             Err(error) => {
@@ -1151,6 +1142,24 @@ impl Checker<'_, '_> {
             .collect();
         candidates.pop_first().map(|(_, header)| header)
     }
+}
+
+/// Where an import's module file is, as the runtime resolves it: relative to the
+/// importing file, whose relative name is relative to `directory`. None when
+/// `path` does not name a local `.botwork` file.
+pub(crate) fn module_path(importer: &str, directory: &Path, path: &str) -> Option<PathBuf> {
+    if path.contains("://")
+        || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
+    {
+        return None;
+    }
+    let importer = Path::new(importer);
+    let base = if importer.is_absolute() {
+        importer.parent().unwrap_or(Path::new("/")).to_owned()
+    } else {
+        directory.join(importer.parent().unwrap_or(Path::new("")))
+    };
+    Some(base.join(path))
 }
 
 /// A normalized signature's words without its parameter positions.

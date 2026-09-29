@@ -1,5 +1,5 @@
 {
-  "version": 37,
+  "version": 38,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2777,8 +2777,8 @@
       "id": "check-modules-resolved-from-working-directory",
       "area": "check",
       "file": "src/core/analysis.rs",
-      "before": "            importer.parent().unwrap_or(Path::new(\"/\")).to_owned()\n",
-      "after": "            directory.clone()\n"
+      "before": "        importer.parent().unwrap_or(Path::new(\"/\")).to_owned()\n",
+      "after": "        directory.to_owned()\n"
     },
     {
       "id": "check-module-reads-counted-as-inputs",
@@ -2961,6 +2961,146 @@
       "file": "src/formatting.rs",
       "before": "            .and_then(|()| fs::set_permissions(&temporary, permissions.clone()))\n",
       "after": "            .and_then(|()| Ok(()))\n"
+    },
+    {
+      "id": "lsp-problems-include-module-findings",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "                    .filter(|finding| finding.span.source().name() == name)\n",
+      "after": "                    .filter(|_| true)\n"
+    },
+    {
+      "id": "lsp-end-of-text-error-zero-width",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "                .map_or(0, |(index, _)| index),\n",
+      "after": "                .map_or(0, |(index, _)| index).max(text.len()),\n"
+    },
+    {
+      "id": "lsp-reexports-not-followed",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "        return module_definition(&fs::canonicalize(requested).ok()?, rest, depth + 1);\n",
+      "after": "        return fs::canonicalize(requested).ok().and(None);\n"
+    },
+    {
+      "id": "lsp-outermost-call-chosen",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "            .min_by_key(|call| call.span.1 - call.span.0)\n",
+      "after": "            .max_by_key(|call| call.span.1 - call.span.0)\n"
+    },
+    {
+      "id": "lsp-assigned-variables-hover-as-inputs",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "            let text = match variable.frame {\n",
+      "after": "            let text = match variable.frame.filter(|_| false) {\n"
+    },
+    {
+      "id": "lsp-variable-definition-is-first-use",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "                .filter(|(_, binding)| *binding)\n",
+      "after": "                .filter(|(_, binding)| !*binding)\n"
+    },
+    {
+      "id": "lsp-variable-references-ignore-frames",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "            .filter(|other| other.name == variable.name && other.frame == Some(frame))\n",
+      "after": "            .filter(|other| other.name == variable.name)\n"
+    },
+    {
+      "id": "lsp-references-always-include-declaration",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "        if let (true, Target::Definition(index)) = (declaration, &target) {\n",
+      "after": "        if let (true, Target::Definition(index)) = (true, &target) {\n"
+    },
+    {
+      "id": "lsp-completion-context-inverted",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "        if inside_parameter(text, offset) {\n",
+      "after": "        if !inside_parameter(text, offset) {\n"
+    },
+    {
+      "id": "lsp-string-pipes-open-parameters",
+      "area": "lsp",
+      "file": "src/core/language.rs",
+      "before": "            '|' if !string => inside = !inside,\n",
+      "after": "            '|' => inside = !inside,\n"
+    },
+    {
+      "id": "lsp-header-name-case-sensitive",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "            if name.eq_ignore_ascii_case(\"content-length\") {\n",
+      "after": "            if name == \"Content-Length\" {\n"
+    },
+    {
+      "id": "lsp-offsets-count-utf8-bytes",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "        units += value.len_utf16();\n",
+      "after": "        units += value.len_utf8();\n"
+    },
+    {
+      "id": "lsp-positions-count-utf8-bytes",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "    let character: usize = before[start..].chars().map(char::len_utf16).sum();\n",
+      "after": "    let character: usize = before[start..].chars().map(char::len_utf8).sum();\n"
+    },
+    {
+      "id": "lsp-warnings-published-as-errors",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "                    \"severity\": if problem.severity == Severity::Error { 1 } else { 2 },\n",
+      "after": "                    \"severity\": if problem.severity == Severity::Error { 1 } else { 1 },\n"
+    },
+    {
+      "id": "lsp-last-good-analysis-dropped",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "            Some(previous) if previous.analysis.parsed => Some((previous.text, previous.analysis)),\n",
+      "after": "            Some(previous) if previous.analysis.parsed => previous.text.get(..0).and(None),\n"
+    },
+    {
+      "id": "lsp-module-ranges-use-document-text",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "        json!({\"uri\": uri_of(&location.file), \"range\": range(&other, location.start, location.end)})\n",
+      "after": "        json!({\"uri\": uri_of(&location.file), \"range\": range(&other[..0], location.start, location.end)})\n"
+    },
+    {
+      "id": "lsp-requests-served-after-shutdown",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "        if self.shutdown {\n",
+      "after": "        if self.shutdown && false {\n"
+    },
+    {
+      "id": "lsp-declarations-always-included",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "                    .unwrap_or(false);\n",
+      "after": "                    .is_some();\n"
+    },
+    {
+      "id": "lsp-malformed-messages-unanswered",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "        if !message.is_object() {\n",
+      "after": "        if !message.is_object() && false {\n"
+    },
+    {
+      "id": "lsp-exit-status-ignores-shutdown",
+      "area": "lsp",
+      "file": "src/lsp.rs",
+      "before": "            None if method == \"exit\" => return if server.shutdown { 0 } else { 1 },\n",
+      "after": "            None if method == \"exit\" => return if server.shutdown { 0 } else { 0 },\n"
     }
   ]
 }

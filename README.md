@@ -27,7 +27,8 @@ script, reading failures, and a complete acceptance-test workflow with reports.
 The [syntax reference](docs/syntax.md) lists every form a script or suite can use,
 and the [statement reference](docs/statements.md) lists every built-in statement.
 `--check` [finds mistakes without running](docs/check.md) a file or suite, and
-`--format` rewrites files in [canonical layout](docs/format.md).
+`--format` rewrites files in [canonical layout](docs/format.md), and `--lsp`
+runs a [language server](docs/lsp.md) for editors.
 To look around quickly:
 
 1. Clone the repo
@@ -201,7 +202,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [HTML Reports](docs/html-report.md)
   - [x] [Report listeners](docs/listeners.md)
 - [ ] Tooling
-  - [ ] LSP support
+  - [x] [LSP support](docs/lsp.md)
   - [ ] Editor support (Mainly Helix/Vim/VS Code)
   - [x] [TreeSitter grammar](docs/tree-sitter.md)
   - [x] [Linting](docs/check.md)

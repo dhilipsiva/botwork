@@ -28,6 +28,7 @@ mod check;
 mod formatting;
 mod interrupt;
 mod listener;
+mod lsp;
 mod report_json;
 mod secrets;
 mod suites;
@@ -37,7 +38,7 @@ mod suites;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Botwork file to run (repeatable; each occurrence starts a fresh run)
-    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help", "reconcile_report"])]
+    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help", "reconcile_report", "lsp"])]
     file: Vec<PathBuf>,
     /// Discover cases from an explicit suite file (repeatable; paths keep their order)
     #[arg(long, conflicts_with_all = ["file", "list_statements", "statement_help"])]
@@ -51,6 +52,9 @@ struct Args {
     /// Exclude cases with any of these inherited or local tags (repeatable)
     #[arg(long, requires = "suite")]
     exclude_tag: Vec<String>,
+    /// Serve the Language Server Protocol on stdin and stdout
+    #[arg(long, exclusive = true)]
+    lsp: bool,
     /// Check files or suites without running them: syntax, control placement, and lint rules
     #[arg(long, conflicts_with_all = ["list_cases", "list_statements", "statement_help", "reconcile_report", "report_json", "report_html", "listener", "failures", "rerun_failed", "assertion_artifacts"])]
     check: bool,
@@ -420,6 +424,9 @@ fn main() -> ExitCode {
         return ExitCode::from(status);
     }
     let args = Args::parse();
+    if args.lsp {
+        return ExitCode::from(lsp::run() as u8);
+    }
     let output_limits = OutputLimits {
         record_bytes: args.max_output_record_bytes,
         total_bytes: args.max_output_bytes,
