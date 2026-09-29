@@ -26,15 +26,16 @@ async fn started_dns_retains_capacity_after_owner_drop_until_worker_result_is_de
     assert_eq!(slots.available_permits(), 0);
     assert!(Global::new(&context, 1).is_err());
     release.send(()).unwrap();
+    // Weak::upgrade fails once the strong count reaches zero, before the blocking
+    // thread has finished dropping Retention's fields; wait for the releases themselves.
     tokio::time::timeout(Duration::from_secs(2), async {
-        while weak.upgrade().is_some() {
+        while slots.available_permits() != 1 || Global::new(&context, GLOBAL_BYTES).is_err() {
             tokio::task::yield_now().await;
         }
     })
     .await
     .unwrap();
-    assert_eq!(slots.available_permits(), 1);
-    assert!(Global::new(&context, GLOBAL_BYTES).is_ok());
+    assert!(weak.upgrade().is_none());
 }
 
 #[test]
