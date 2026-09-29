@@ -1,5 +1,5 @@
 {
-  "version": 30,
+  "version": 31,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2457,6 +2457,20 @@
       "file": "src/secrets.rs",
       "before": "        registry().add(value);",
       "after": "        let _ = value;"
+    },
+    {
+      "id": "cancel-http-detached",
+      "area": "cancellation",
+      "file": "src/core/eval/builtins/http.rs",
+      "before": "        let control = parent.child(Some(",
+      "after": "        let control = crate::core::operation::OperationControl::default().child(Some("
+    },
+    {
+      "id": "cancel-cli-root-detached",
+      "area": "cancellation",
+      "file": "src/main.rs",
+      "before": "    let control = interrupt::root().child(deadline);",
+      "after": "    let control = OperationControl::default().child(deadline);"
     }
   ]
 }

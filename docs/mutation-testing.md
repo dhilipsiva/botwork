@@ -276,6 +276,13 @@ see [secret evidence](secrets-evidence.json). Two assertion entries whose code
 moved with this change were updated in place and re-run against the full oracle
 set.
 
+Version 31 adds cancellation propagation. Its faults detach HTTP requests from
+the run's control and detach CLI runs from the interrupt root. The `cancellation`
+and `resource_release` suites are the oracles, and leak-injection probes in the
+evidence confirm that the resource test detects leaked descriptors, threads, and
+child processes. Its 353-entry catalogue adds 2 faults; see
+[cancellation evidence](cancellation-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

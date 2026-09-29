@@ -1,4 +1,4 @@
-# Version 30: mask secret-marked inputs from every output.
+# Version 31: prove cancellation propagation and resource release.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/core/secret.rs",
@@ -131,6 +131,8 @@ additional_cargo_args = [
     "--test", "terminal_outcomes",
     "--test", "report_limits",
     "--test", "secrets",
+    "--test", "cancellation",
+    "--test", "resource_release",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",
