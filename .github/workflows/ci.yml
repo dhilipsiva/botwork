@@ -81,7 +81,7 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
       - name: Run tests and examples
-        run: cargo +stable test --locked --target ${{ matrix.target }} ${{ matrix.flags }}
+        run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
 
   tree-sitter:
     name: Tree-sitter grammars

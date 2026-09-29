@@ -45,6 +45,11 @@ unsafe impl GlobalAlloc for ObservedAllocator {
 static ALLOCATOR: ObservedAllocator = ObservedAllocator;
 
 fn observe<T>(threshold: usize, action: impl FnOnce() -> T) -> (T, usize) {
+    // The default panic hook captures a backtrace when RUST_BACKTRACE is set, and
+    // those allocations belong to the hook, not the library. Print panics without
+    // one for the whole test binary.
+    static QUIET: std::sync::Once = std::sync::Once::new();
+    QUIET.call_once(|| std::panic::set_hook(Box::new(|info| eprintln!("{info}"))));
     struct Reset;
     impl Drop for Reset {
         fn drop(&mut self) {
