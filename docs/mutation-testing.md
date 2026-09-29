@@ -171,6 +171,14 @@ quotas, privacy, exclusive publication, and dataset identity. Its 204-entry
 catalogue adds 14 assertion faults; the `assertion_diagnostics` and
 `assertion_artifacts` suites join the oracles. [Assertion evidence](assertion-diagnostics-evidence.json)
 records the focused campaign.
+Version 21 adds Eventually/Retry polling. Its faults cover deadline and attempt-limit
+boundaries, backoff exponent and cap, default and explicit retry classification,
+unretried and interrupted timeouts, resource-limit propagation, bounded history,
+synchronous rejection, and exhaustion categories. Further faults cover shared
+attempt steps, attempt deadlines, and parent cancellation, plus the placement and
+header span of the polling statement. Its 221-entry catalogue adds 17 polling
+faults, with the `polling` integration suite as an oracle; see
+[polling evidence](polling-evidence.json).
 
 ## First campaign — 2026-09-28
 

@@ -300,6 +300,14 @@ impl Statement {
             StatementKind::If { .. } => "if",
             StatementKind::For { .. } => "for",
             StatementKind::While { .. } => "while",
+            StatementKind::Poll {
+                mode: PollMode::Eventually,
+                ..
+            } => "eventually",
+            StatementKind::Poll {
+                mode: PollMode::Retry,
+                ..
+            } => "retry",
             StatementKind::Try { .. } => "try",
             StatementKind::Finally { .. } => "finally",
             StatementKind::Return(_) => "return",
@@ -333,6 +341,14 @@ pub enum StatementKind {
         condition: Expr,
         body: Block,
     },
+    /// Repeat the body until it completes, within the evaluated option bounds.
+    /// `header` spans the keyword and options for exhaustion diagnostics.
+    Poll {
+        mode: PollMode,
+        options: Expr,
+        body: Block,
+        header: Span,
+    },
     Try {
         body: Block,
         binding: Option<Name>,
@@ -351,6 +367,13 @@ pub enum StatementKind {
         path_span: Span,
         namespace: Name,
     },
+}
+
+/// Eventually observes a condition; Retry repeats an action with side effects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PollMode {
+    Eventually,
+    Retry,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -407,6 +430,15 @@ fn validate_statement(statement: &Statement, scope: ControlScope) -> Result<(), 
             &body.statements,
             ControlScope {
                 in_loop: true,
+                ..scope
+            },
+        ),
+        // Break/Continue/Rethrow cannot leave an attempt; Return completes it.
+        StatementKind::Poll { body, .. } => validate_statements(
+            &body.statements,
+            ControlScope {
+                in_loop: false,
+                in_catch: false,
                 ..scope
             },
         ),
@@ -814,6 +846,8 @@ pub(crate) fn from_pair_with_reporter<E>(
         | Rule::stmt_if
         | Rule::stmt_for
         | Rule::stmt_while
+        | Rule::stmt_eventually
+        | Rule::stmt_retry
         | Rule::stmt_try
         | Rule::stmt_return
         | Rule::stmt_break
@@ -938,6 +972,22 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, Lo
             condition: expression(required(&mut inner)?, source)?,
             body: block(required(&mut inner)?, source)?,
         },
+        Rule::stmt_eventually | Rule::stmt_retry => {
+            let options = required(&mut inner)?;
+            let header =
+                Span::from_source_range(Arc::clone(source), span.start(), options.as_span().end())
+                    .ok_or(LoweringFailure("polling header outside its source"))?;
+            StatementKind::Poll {
+                mode: if rule == Rule::stmt_retry {
+                    PollMode::Retry
+                } else {
+                    PollMode::Eventually
+                },
+                options: expression(options, source)?,
+                body: block(required(&mut inner)?, source)?,
+                header,
+            }
+        }
         Rule::stmt_try => {
             let body = block(required(&mut inner)?, source)?;
             let next = required(&mut inner)?;

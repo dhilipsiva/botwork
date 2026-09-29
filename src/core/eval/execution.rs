@@ -4,7 +4,7 @@ use std::{future::Future, pin::Pin};
 
 type EvalFuture<'a, T> = Pin<Box<dyn Future<Output = EvaluationResult<T>> + Send + 'a>>;
 
-async fn tick(context: &mut Context) -> EvaluationResult<()> {
+pub(super) async fn tick(context: &mut Context) -> EvaluationResult<()> {
     context.tick()?;
     if context.asynchronous
         && context
@@ -772,6 +772,21 @@ fn evaluate_definition(definition: &Arc<Definition>, context: &mut Context) -> C
     Ok(Completion::Normal(context.temporary(Literal::None)?))
 }
 
+/// Owned cleanup and polling share one boxed await site: every await arm in the
+/// recursive evaluator enlarges its unoptimized frame at each nesting level.
+fn boxed_statement<'a>(
+    statement: &'a Statement,
+    context: &'a mut Context,
+) -> EvalFuture<'a, Completion> {
+    match &statement.kind {
+        StatementKind::Finally { body, cleanup } => {
+            super::cleanup::evaluate(body, cleanup, context)
+        }
+        StatementKind::Poll { .. } => super::polling::evaluate(statement, context),
+        _ => unreachable!("only owned cleanup and polling statements are boxed here"),
+    }
+}
+
 pub(super) async fn evaluate_statement_inner(
     statement: &Statement,
     context: &mut Context,
@@ -836,8 +851,8 @@ pub(super) async fn evaluate_statement_inner(
             body,
         } => evaluate_for(&binding.text, iterable, body, context).await,
         StatementKind::While { condition, body } => evaluate_while(condition, body, context).await,
-        StatementKind::Finally { body, cleanup } => {
-            super::cleanup::evaluate(body, cleanup, context).await
+        StatementKind::Finally { .. } | StatementKind::Poll { .. } => {
+            boxed_statement(statement, context).await
         }
         StatementKind::Try {
             body,

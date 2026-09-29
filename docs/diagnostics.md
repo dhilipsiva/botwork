@@ -37,12 +37,16 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW8001 | Source/runtime resource limit | Reduce the workload or adjust configurable budgets within documented ceilings |
 | BW9001 | Assertion failure | Inspect the condition or compared values and repair the behavior or expectation |
 | BW9002 | Explicit failure | Inspect the reason and the path that reached Fail |
+| BW9004 | Eventually condition not met | Inspect the last attempt's failure (first cause) and `details.history`; fix the behavior or choose a deliberate deadline |
+| BW9005 | Retry attempts exhausted | Inspect the last attempt's failure; each attempt may have repeated the action's effects |
+
+BW9003 is not a public category: worker wire tag 9003 carries structured BW9001 assertion evidence. [Eventually and Retry](polling.md) failures expose `details.reason`, a decimal-string `details.attempts`, and `details.history`, a JSON array of up to 16 recent attempt records.
 
 Ordinary source calls with the wrong arity normally fail signature resolution as BW2002; BW2004 represents a resolved signature/count mismatch. Numeric conversion remains a runtime error despite the legacy `ParsingIntegerError` name. CLI argument parsing and entry-script file-loading errors are outside this language-error catalog. Variable-file loading/conversion uses BW7001 before execution, with origin/path/JSON position in `details.reason` and no DSL source span or call stack. Hints describe repairs without changing or automatically rerunning the script.
 
 ## Rust API
 
-Engine configuration/source errors use `details.reason`. BW8001 exposes `details.resource` and a decimal-string `details.limit`; source ranges and call frames are included when execution has entered source syntax. Run cancellation/deadline/resource exhaustion bypasses DSL handlers and preserves interpreter binding/frame cleanup. See [embedded runs](embedded-runs.md) for classification and cooperative limits.
+`DiagnosticCode::ALL` lists every public category in catalogue order, and `DiagnosticCode::parse` maps an exact `BWnnnn` identifier back to its category. Engine configuration/source errors use `details.reason`. BW8001 exposes `details.resource` and a decimal-string `details.limit`; source ranges and call frames are included when execution has entered source syntax. Run cancellation/deadline/resource exhaustion bypasses DSL handlers and preserves interpreter binding/frame cleanup. See [embedded runs](embedded-runs.md) for classification and cooperative limits.
 
 `core::diagnostic::Diagnostic` contains:
 

@@ -56,9 +56,49 @@ pub enum DiagnosticCode {
     ResourceLimit,
     Assertion,
     ExplicitFailure,
+    ConditionNotMet,
+    RetriesExhausted,
 }
 
 impl DiagnosticCode {
+    /// Every public category in catalogue order.
+    pub const ALL: [Self; 29] = [
+        Self::Syntax,
+        Self::InvalidControl,
+        Self::DuplicateParameter,
+        Self::Signature,
+        Self::UndefinedVariable,
+        Self::UndefinedStatement,
+        Self::DuplicateStatement,
+        Self::ParameterCount,
+        Self::InvalidNumber,
+        Self::Arithmetic,
+        Self::IncompatibleType,
+        Self::CollectionAccess,
+        Self::Output,
+        Self::Native,
+        Self::NativePanic,
+        Self::Cancelled,
+        Self::Timeout,
+        Self::AsyncRuntime,
+        Self::ImportRead,
+        Self::ImportCycle,
+        Self::DuplicateNamespace,
+        Self::Input,
+        Self::RunConfiguration,
+        Self::SourceRead,
+        Self::ResourceLimit,
+        Self::Assertion,
+        Self::ExplicitFailure,
+        Self::ConditionNotMet,
+        Self::RetriesExhausted,
+    ];
+
+    /// The public category with this exact `BWnnnn` identifier.
+    pub fn parse(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|known| known.as_str() == code)
+    }
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Syntax => "BW1001",
@@ -88,6 +128,9 @@ impl DiagnosticCode {
             Self::ResourceLimit => "BW8001",
             Self::Assertion => "BW9001",
             Self::ExplicitFailure => "BW9002",
+            // BW9003 is never public: wire tag 9003 carries structured BW9001 evidence.
+            Self::ConditionNotMet => "BW9004",
+            Self::RetriesExhausted => "BW9005",
         }
     }
 }
@@ -127,6 +170,8 @@ impl BWErr {
             Self::SourceRead(_) => DiagnosticCode::SourceRead,
             Self::AssertionFailed(_) | Self::AssertionMismatch { .. } => DiagnosticCode::Assertion,
             Self::ExplicitFailure(_) => DiagnosticCode::ExplicitFailure,
+            Self::ConditionNotMet { .. } => DiagnosticCode::ConditionNotMet,
+            Self::RetriesExhausted { .. } => DiagnosticCode::RetriesExhausted,
             Self::ResourceLimit { .. } => DiagnosticCode::ResourceLimit,
         }
     }
@@ -169,6 +214,8 @@ impl fmt::Display for Help<'_> {
             BWErr::SourceRead(_) => "Use a readable UTF-8 source file relative to the run's working directory.",
             BWErr::AssertionFailed(_) | BWErr::AssertionMismatch { .. } => "Inspect the condition or compared values; fix the behavior or update the expectation deliberately.",
             BWErr::ExplicitFailure(_) => "Inspect the explicit failure reason and the path that reached Fail.",
+            BWErr::ConditionNotMet { .. } => "Inspect the last attempt's failure and the attempt history; fix the behavior or give the condition a deliberate deadline.",
+            BWErr::RetriesExhausted { .. } => "Inspect the last attempt's failure; each attempt may have repeated the action's effects before the next retry.",
             BWErr::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.",
             BWErr::ImportRead(_) => "Use a readable local .botwork file, resolving relative paths from the importing source file.",
             BWErr::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.",

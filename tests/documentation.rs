@@ -57,6 +57,13 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             ),
         ),
         (
+            "polling-statements",
+            (
+                "docs/polling.md",
+                include_bytes!("doc-examples/polling-statements.stdout").as_slice(),
+            ),
+        ),
+        (
             "process-statements",
             (
                 "docs/processes.md",

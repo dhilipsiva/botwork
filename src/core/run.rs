@@ -32,6 +32,7 @@ use super::{
 mod tests;
 
 mod asynchronous;
+mod attempt;
 mod cleanup;
 pub use cleanup::CleanupLimits;
 pub(crate) mod blocking_io;
@@ -473,7 +474,8 @@ impl Engine {
 struct BudgetState {
     limits: RunLimits,
     control: OperationControl,
-    used: AtomicU64,
+    // Shared by polling attempts; clones and cleanup allowances own fresh counters.
+    used: Arc<AtomicU64>,
     active: AtomicUsize,
     output: Arc<AtomicUsize>,
     imports: Arc<Mutex<[usize; 5]>>,
@@ -498,7 +500,7 @@ impl Clone for RunBudget {
         Self(Arc::new(BudgetState {
             limits: self.0.limits.clone(),
             control: self.0.control.clone(),
-            used: AtomicU64::new(self.0.used.load(Ordering::Relaxed)),
+            used: Arc::new(AtomicU64::new(self.0.used.load(Ordering::Relaxed))),
             active: AtomicUsize::new(0),
             output: Arc::new(AtomicUsize::new(self.0.output.load(Ordering::Relaxed))),
             imports: Arc::new(Mutex::new(
@@ -549,7 +551,7 @@ impl RunBudget {
             )),
             limits,
             control,
-            used: AtomicU64::new(0),
+            used: Arc::new(AtomicU64::new(0)),
             active: AtomicUsize::new(0),
             output: Arc::new(AtomicUsize::new(0)),
             imports: Arc::new(Mutex::new([0; 5])),

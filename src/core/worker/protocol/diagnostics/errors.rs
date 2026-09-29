@@ -13,7 +13,7 @@ impl<'a> WireError<'a> {
     ) -> DiagnosticResult<Self> {
         let code = u16::from_le_bytes(input.take(2)?.try_into().unwrap());
         let count = match code {
-            1003 | 2003 | 3004 | 6003 | 9003 => 3,
+            1003 | 2003 | 3004 | 6003 | 9003 | 9004 | 9005 => 3,
             1001 | 1002 | 1004 | 2001 | 2002 | 2004 | 3001 | 3002 | 3003 | 4001 | 4002 | 4003
             | 5001 | 5002 | 5003 | 6001 | 6002 | 7001 | 7002 | 7003 | 8001 | 9001 | 9002 => 1,
             _ => return Err(invalid("Unknown worker diagnostic code")),
@@ -83,6 +83,16 @@ impl<'a> WireError<'a> {
                 actual: self.fields[1].into(),
                 expected: self.fields[2].into(),
             },
+            9004 => BWErr::ConditionNotMet {
+                reason: self.fields[0].into(),
+                attempts: self.fields[1].into(),
+                history: self.fields[2].into(),
+            },
+            9005 => BWErr::RetriesExhausted {
+                reason: self.fields[0].into(),
+                attempts: self.fields[1].into(),
+                history: self.fields[2].into(),
+            },
             1003 => BWErr::DuplicateParameter {
                 name: self.fields[0].into(),
                 original: self.fields[1].into(),
@@ -136,6 +146,20 @@ pub(super) fn encode(
             output.string(reason)?;
             output.string(actual)?;
             output.string(expected)
+        }
+        BWErr::ConditionNotMet {
+            reason,
+            attempts,
+            history,
+        }
+        | BWErr::RetriesExhausted {
+            reason,
+            attempts,
+            history,
+        } => {
+            output.string(reason)?;
+            output.string(attempts)?;
+            output.string(history)
         }
         BWErr::ParsingError(text)
         | BWErr::ControlFlowError(text)

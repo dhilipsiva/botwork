@@ -238,6 +238,16 @@ fn all_diagnostic_categories_preserve_exact_fields() {
             resource: "value nodes",
             limit: u64::MAX,
         },
+        BWErr::ConditionNotMet {
+            reason: "é".into(),
+            attempts: "1".into(),
+            history: "[\0]".into(),
+        },
+        BWErr::RetriesExhausted {
+            reason: "a".into(),
+            attempts: "b".into(),
+            history: "c".into(),
+        },
     ];
     let categories: [fn(String) -> BWErr; 22] = [
         BWErr::ParsingError,

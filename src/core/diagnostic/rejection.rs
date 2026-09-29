@@ -62,6 +62,24 @@ fn error_summary(error: &BWErr, shortened: &mut usize) -> BWErr {
             actual: detail(actual),
             expected: detail(expected),
         },
+        BWErr::ConditionNotMet {
+            reason,
+            attempts,
+            history,
+        } => BWErr::ConditionNotMet {
+            reason: detail(reason),
+            attempts: detail(attempts),
+            history: detail(history),
+        },
+        BWErr::RetriesExhausted {
+            reason,
+            attempts,
+            history,
+        } => BWErr::RetriesExhausted {
+            reason: detail(reason),
+            attempts: detail(attempts),
+            history: detail(history),
+        },
         BWErr::VariableNotDefined(value) => BWErr::VariableNotDefined(detail(value)),
         BWErr::StatementNotDefined(value) => BWErr::StatementNotDefined(detail(value)),
         BWErr::DuplicateStatement {

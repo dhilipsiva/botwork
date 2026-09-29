@@ -48,7 +48,7 @@ impl RunBudget {
         Ok(Self(Arc::new(BudgetState {
             limits,
             control,
-            used: AtomicU64::new(0),
+            used: Arc::new(AtomicU64::new(0)),
             active: AtomicUsize::new(self.0.active.load(Ordering::Relaxed)),
             output: Arc::clone(&self.0.output),
             imports: Arc::clone(&self.0.imports),

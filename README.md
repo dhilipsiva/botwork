@@ -45,6 +45,10 @@ For complete tasks, [build a verified catalogue or check an HTTP response contra
 Both examples combine imported helpers, JSON input variables, assertions, and
 standard statements, with runnable local fixtures and failure demonstrations.
 
+Wait for eventual conditions with `Eventually` and repeat side-effecting actions with
+`Retry`. Both use bounded [deadlines, attempts, and backoff](docs/polling.md) and
+report the last failure together with the recent attempt history.
+
 [Assertion diagnostics](docs/assertion-diagnostics.md) show nested value differences
 and case/dataset identity. Add `--assertion-artifacts PATH` to retain full permitted
 operands from unhandled assertions in separate JSON files.

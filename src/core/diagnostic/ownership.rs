@@ -69,6 +69,16 @@ fn error_text(error: &BWErr) -> [&str; 3] {
             actual,
             expected,
         } => [reason, actual, expected],
+        BWErr::ConditionNotMet {
+            reason,
+            attempts,
+            history,
+        }
+        | BWErr::RetriesExhausted {
+            reason,
+            attempts,
+            history,
+        } => [reason, attempts, history],
         BWErr::DuplicateStatement {
             signature,
             original,

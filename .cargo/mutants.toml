@@ -1,6 +1,8 @@
-# Version 20: add structured assertion diagnostics and bounded artifact publication.
+# Version 21: add bounded Eventually/Retry polling with scoped attempt budgets.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/eval/polling.rs",
+    "src/core/run/attempt.rs",
     "src/core/eval/builtins/assertions.rs",
     "src/assertion_artifacts.rs",
     "src/core/eval/builtins/http.rs",
@@ -52,6 +54,8 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/core/eval/polling.rs:',
+    '^src/core/run/attempt.rs:',
     '^src/core/eval/builtins/assertions.rs:',
     '^src/assertion_artifacts.rs:',
     '^src/core/eval/builtins/http(\.rs|/(config|output|transport)\.rs):',
@@ -99,6 +103,7 @@ additional_cargo_args = [
     "--test", "setup_failure",
     "--test", "acceptance_policy",
     "--test", "builtins",
+    "--test", "polling",
     "--test", "assertion_diagnostics",
     "--test", "assertion_artifacts",
     "--test", "collections",

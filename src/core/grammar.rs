@@ -56,6 +56,8 @@ impl pest::Parser<Rule> for BWParser {
                     | Rule::stmt_else
                     | Rule::stmt_for
                     | Rule::stmt_while
+                    | Rule::stmt_eventually
+                    | Rule::stmt_retry
                     | Rule::stmt_try
                     | Rule::stmt_catch
                     | Rule::stmt_finally
@@ -166,6 +168,21 @@ pub enum BWErr {
     },
     #[error("Explicit failure: {0}")]
     ExplicitFailure(String),
+    /// Eventually found no successful attempt: bounded reason, decimal attempt
+    /// count, and a JSON array of the most recent attempt records.
+    #[error("Condition not met: {reason}")]
+    ConditionNotMet {
+        reason: String,
+        attempts: String,
+        history: String,
+    },
+    /// Retry ran its action without success; fields match ConditionNotMet.
+    #[error("Retries exhausted: {reason}")]
+    RetriesExhausted {
+        reason: String,
+        attempts: String,
+        history: String,
+    },
     #[error("Native operation failed: {0}")]
     NativeError(String),
     #[error("Native callback panicked: {0}")]

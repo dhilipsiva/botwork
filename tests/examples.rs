@@ -496,6 +496,11 @@ fn setup_failure_example_reports_both_errors_and_skips_unentered_cases() {
 }
 
 #[test]
+fn polling_example_observes_readiness_retries_an_action_and_catches_exhaustion() {
+    assert_example("38-polling.botwork", &["3", "2", "BW9004", "2", "BW9001"]);
+}
+
+#[test]
 fn builtins_example_demonstrates_checks_inspection_recovery_and_waiting() {
     assert_example(
         "28-builtins.botwork",

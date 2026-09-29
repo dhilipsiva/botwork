@@ -59,7 +59,7 @@ Outside strings, `|` delimits parameters/expressions, braces delimit blocks or m
 
 Expression keywords are lowercase: `true`, `false`, `and`, and `or`. They are reserved as complete identifiers, so `|or| = |7|` is invalid, while `order`, `trueValue`, `falsehood`, and `android` are valid names. An expression keyword cannot be immediately followed by an identifier continuation, including a combining mark. This prevents `true andfalse` from being read as `true and false`. Variables remain case-sensitive; `True` is an identifier, not a boolean literal.
 
-Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, `Catch`, `Finally`, and `Rethrow`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
+Control keywords (`If`, `Else`, `For`, `Break`, `Return`, `Continue`, `While`, `Try`, `Catch`, `Finally`, `Rethrow`, `Import`, `Eventually`, and `Retry`) are case-insensitive and reserved at the start of a statement. They must be contiguous and followed by a space, tab, line ending, parameter pipe, brace, comment marker, or end of input. `If|true|{}` is valid. `Format report`, `Elsewhere`, `Break!`, and `Return-value` are whole custom statement names. Spaces or comments between letters do not form a control keyword; a name such as `I f` can be defined as a custom statement.
 
 `In` follows the same keyword rules within `For |item| In |items| { ... }`, but remains available in custom names such as `In order`. Comments may separate complete tokens. Parentheses can delimit boolean operators: `(true)and(false)` is valid. See [the keyword example](../examples/06-keywords.botwork).
 
@@ -239,6 +239,10 @@ If, While, and Try/Catch bodies share their enclosing invocation or script frame
 
 `Return` inside a loop exits its containing custom statement. Loops consume only their own `Break` and `Continue`; a custom call cannot transfer those controls to its caller's loop.
 
+## Eventually and Retry
+
+`Eventually |{timeout_ms: 5000}| { ... }` repeats its block until one attempt completes, for conditions that become true over time. `Retry |{attempts: 3}| { ... }` repeats an action with side effects. Attempts share the enclosing variables, back off by `interval_ms`/`backoff`, and stop at the deadline or attempt limit. Exhaustion raises catchable BW9004 or BW9005 with the last failure as its first cause. Both require asynchronous execution; see [polling semantics](polling.md).
+
 ## Returns and Control Flow
 
 `Return |value|` evaluates its expression once and returns that exact value from the containing custom statement. It crosses nested `If`, `For`, `While`, `Try`, and `Catch` blocks, skipping every remaining statement in the invocation. A return at the end of a body behaves identically to one followed by unreachable statements. The caller resumes after its call.
@@ -249,7 +253,7 @@ No pending control state survives an invocation, and its local variables and def
 
 ## Control-Placement Validation
 
-The complete program is checked before any execution. `Return` requires a custom-statement body; top-level Return is invalid, including inside a script-level loop. `Break` and `Continue` require an enclosing For/While in the same invocation. Rethrow requires a Catch handler in the same invocation. A nested custom definition starts its own control scope and cannot control an outer loop or rethrow an outer handler's error, even if that definition is unused.
+The complete program is checked before any execution. `Return` requires a custom-statement body; top-level Return is invalid, including inside a script-level loop. `Break` and `Continue` require an enclosing For/While in the same invocation. Rethrow requires a Catch handler in the same invocation. `Break`, `Continue`, and `Rethrow` cannot leave an `Eventually` or `Retry` block, although `Return` can. A nested custom definition starts its own control scope and cannot control an outer loop or rethrow an outer handler's error, even if that definition is unused.
 
 Validation checks unused definitions, unselected branches, handlers that never run, and unreachable statements. For example, `Unused { Break }` fails even without a call to `Unused`. A valid `Break` inside `While |false| { Break }` remains allowed because the enclosing loop is present.
 

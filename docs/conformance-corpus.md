@@ -1,6 +1,6 @@
 # Core Conformance Corpus
 
-`tests/conformance/cases.rs` registers 194 cases against the 77 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
+`tests/conformance/cases.rs` registers 197 cases against the 78 rule IDs in the [core specification](language-specification.md). Each rule has positive, invalid-input, and boundary evidence. The corpus provides a traceable baseline alongside the more detailed unit/contract matrices; this inventory alone does not establish exhaustive clause coverage or a 9.5 quality score.
 
 ## Rule Traceability
 
@@ -16,6 +16,7 @@ Names below are stable corpus case IDs. One script can exercise several related 
 | B7 | http-statements | http-invalid-method | http-zero-deadline |
 | B8 | assertion-artifacts | assertion-invalid-condition | assertion-empty-array-difference |
 | F10 | cleanup-return | cleanup-control, cleanup-secondary-failure | cleanup-empty-and-catch |
+| F11 | polling-statements | polling-invalid-options, polling-single-attempt | polling-single-attempt |
 | B6 | process-statements | process-invalid-argument | process-empty |
 | E1 | control | incomplete-continuation | recovery |
 | E2 | values | return-operand-order | recovery |
@@ -180,3 +181,5 @@ Four B3 CLI cases exercise named formatting, literal transformations, Unicode sl
 Three B6 CLI cases execute text/binary capture and nonzero status, exact empty captures, and rejection of a non-String argument before launch. Lifecycle, environment, admission, and async scheduling use the dedicated process and worker matrices.
 
 Three B8 cases preserve full Bool operands through Catch, reject a non-Bool condition, and diagnose an extra element against an empty array. Dedicated assertion/CLI matrices cover nested differences, Unicode, budgets, artifacts, and dataset identity.
+
+Three F11 cases poll until a third check passes, reject Retry options without `attempts` before the block runs, and exhaust a single-attempt Retry with BW9005. The polling matrix covers exact schedules, deadlines, cancellation, limits, and failure evidence.

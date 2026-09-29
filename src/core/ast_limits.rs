@@ -235,6 +235,16 @@ impl<'a, 'limits> Walk<'a, 'limits> {
                             self.push(Item::Block(body), next);
                             self.push(Item::Expression(condition), next);
                         }
+                        StatementKind::Poll {
+                            options,
+                            body,
+                            header,
+                            ..
+                        } => {
+                            self.push(Item::Block(body), next);
+                            self.push(Item::Expression(options), next);
+                            self.push(Item::Span(header), next);
+                        }
                         StatementKind::Try {
                             body,
                             binding,

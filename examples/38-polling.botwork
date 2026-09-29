@@ -1,0 +1,27 @@
+# Observe a service until it reports ready, then retry a transient action.
+Read Status |check| {
+    If |check < 3| { Return |{state: "starting"}| }
+    Return |{state: "ready"}|
+}
+|checks| = |0|
+Eventually |{timeout_ms: 5000, interval_ms: 20, backoff: 1.5}| {
+    |checks| = |checks + 1|
+    |status| = Read Status |checks|
+    Assert |status| Equals |{state: "ready"}|
+}
+Log |checks|
+|deliveries| = |0|
+Retry |{attempts: 4, interval_ms: 10, retry_on: ["BW9002"]}| {
+    |deliveries| = |deliveries + 1|
+    If |deliveries < 2| { Fail |"broker unavailable"| }
+}
+Log |deliveries|
+Try {
+    Eventually |{timeout_ms: 5000, interval_ms: 10, attempts: 2}| {
+        Assert |{state: "degraded"}| Equals |{state: "ready"}|
+    }
+} Catch |error| {
+    Log |error.code|
+    Log |error.details.attempts|
+    Log |error.causes[0].code|
+}

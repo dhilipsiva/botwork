@@ -181,6 +181,14 @@ fn failure(
 
 pub fn cases() -> Vec<Case> {
     vec![
+        success("polling-statements", r#"|checks| = |0|
+Eventually |{timeout_ms: 5000, interval_ms: 1}| {
+    |checks| = |checks + 1|
+    Assert |checks| Equals |3|
+}
+Log |checks|"#, "3\n", &["F11"], &[]),
+        failure("polling-invalid-options", "Retry |{timeout_ms: 10}| { |ran| = |true| }", "", "BW3003", "Retry requires attempts", &["F11"]),
+        Case { id: "polling-single-attempt", positive: &[], invalid: &["F11"], boundary: &["F11"], input: Input::Script(r#"Retry |{attempts: 1, interval_ms: 0}| { Fail |"once"| }"#), stdout: "", code: Some("BW9005"), error: Some("the action failed in 1 attempt (the attempt limit)") },
         success("assertion-artifacts", r#"Try { Assert |false| } Catch |error| {
 Log |error.details.actual|
 Log |error.details.expected|

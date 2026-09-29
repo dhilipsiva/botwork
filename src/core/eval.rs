@@ -17,6 +17,7 @@ pub(crate) mod execution;
 mod filesystem;
 mod imports;
 mod output;
+mod polling;
 mod results;
 mod snapshots;
 mod temporaries;

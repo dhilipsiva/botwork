@@ -141,6 +141,24 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             Signature,
             "BW1004",
         ),
+        (
+            BWErr::ConditionNotMet {
+                reason: "no attempt succeeded".into(),
+                attempts: "2".into(),
+                history: "[]".into(),
+            },
+            ConditionNotMet,
+            "BW9004",
+        ),
+        (
+            BWErr::RetriesExhausted {
+                reason: "the action failed".into(),
+                attempts: "3".into(),
+                history: "[]".into(),
+            },
+            RetriesExhausted,
+            "BW9005",
+        ),
     ];
     let mut unique = BTreeSet::new();
     for (error, category, code) in entries {
@@ -207,6 +225,7 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "BW3004" => &["path", "reason", "segment"],
             "BW6003" => &["duplicate", "namespace", "original"],
             "BW8001" => &["limit", "resource"],
+            "BW9004" | "BW9005" => &["attempts", "history", "reason"],
             _ => &["reason"],
         };
         assert_eq!(
@@ -226,6 +245,14 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
         assert!(diagnostic.to_string().contains("\n  help: "));
         assert_eq!(diagnostic.into_error().code(), category);
     }
+    assert_eq!(
+        unique,
+        DiagnosticCode::ALL
+            .map(DiagnosticCode::as_str)
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        "pin every public category"
+    );
 }
 
 #[test]

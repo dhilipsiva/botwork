@@ -351,6 +351,16 @@ fn complete_control_keywords_preserve_their_statement_layout() {
             Rule::stmt_while,
             vec![Rule::param_invoke, Rule::stmt_block],
         ),
+        (
+            "eVeNtUaLlY|{}|{}",
+            Rule::stmt_eventually,
+            vec![Rule::param_invoke, Rule::stmt_block],
+        ),
+        (
+            "rEtRy\t|{}|\n{}",
+            Rule::stmt_retry,
+            vec![Rule::param_invoke, Rule::stmt_block],
+        ),
         ("bReAk", Rule::stmt_break, vec![]),
         ("Break# comment\n", Rule::stmt_break, vec![]),
         ("cOnTiNuE # comment\r\n", Rule::stmt_continue, vec![]),

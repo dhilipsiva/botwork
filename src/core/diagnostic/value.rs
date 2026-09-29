@@ -196,6 +196,20 @@ impl<'a> Node<'a> {
                     ("actual", text(actual)),
                     ("expected", text(expected)),
                 ],
+                BWErr::ConditionNotMet {
+                    reason,
+                    attempts,
+                    history,
+                }
+                | BWErr::RetriesExhausted {
+                    reason,
+                    attempts,
+                    history,
+                } => vec![
+                    ("reason", text(reason)),
+                    ("attempts", text(attempts)),
+                    ("history", text(history)),
+                ],
                 BWErr::VariableNotDefined(name) => vec![("name", text(name))],
                 BWErr::StatementNotDefined(call) => vec![("call", text(call))],
                 BWErr::DuplicateStatement {

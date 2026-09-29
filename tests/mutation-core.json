@@ -1,5 +1,5 @@
 {
-  "version": 20,
+  "version": 21,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1428,6 +1428,125 @@
       "file": "src/batch.rs",
       "before": "dataset: run.dataset.as_ref().map(|(id, _)| id.as_str()),",
       "after": "dataset: None,"
+    },
+    {
+      "id": "polling-deadline-boundary",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "} else if deadline.is_some_and(|deadline| next >= deadline) {",
+      "after": "} else if deadline.is_some_and(|deadline| next > deadline) {"
+    },
+    {
+      "id": "polling-attempt-limit",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": ".is_some_and(|limit| history.attempts >= limit)",
+      "after": ".is_some_and(|limit| history.attempts > limit)"
+    },
+    {
+      "id": "polling-retry-timeouts-by-default",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "None => self.mode == PollMode::Eventually || code != Code::Timeout,",
+      "after": "None => true,"
+    },
+    {
+      "id": "polling-retry-on-ignored",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "Some(codes) => codes.contains(&code),",
+      "after": "Some(_) => true,"
+    },
+    {
+      "id": "polling-backoff-exponent",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "let exponent = failures.saturating_sub(1).min(1024) as i32;",
+      "after": "let exponent = failures.min(1024) as i32;"
+    },
+    {
+      "id": "polling-uncapped-delay",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "scaled.min(self.max_interval_ms as f64) as u64",
+      "after": "scaled as u64"
+    },
+    {
+      "id": "polling-unbounded-history",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "if self.recent.len() == HISTORY_RECORDS {",
+      "after": "if false && self.recent.len() == HISTORY_RECORDS {"
+    },
+    {
+      "id": "polling-unretried-timeout-catchable",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "if let (Some(stop), Some(budget)) = (local, &context.budget) {",
+      "after": "if let (Some(stop), Some(budget)) = (None::<BWErr>, &context.budget) {"
+    },
+    {
+      "id": "polling-interruption-boundary",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "Some(BWErr::Timeout(_)) if deadline.is_some_and(|deadline| Instant::now() >= deadline) => {",
+      "after": "Some(BWErr::Timeout(_)) if deadline.is_some_and(|deadline| Instant::now() > deadline) => {"
+    },
+    {
+      "id": "polling-local-limit-retried",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "                budget.stop(stop);\n            }\n            Outcome::Stopped(error)",
+      "after": "                budget.stop(stop);\n            }\n            Outcome::Failed(error, None)"
+    },
+    {
+      "id": "polling-sync-accepted",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "if !context.asynchronous {",
+      "after": "if false && !context.asynchronous {"
+    },
+    {
+      "id": "polling-category-swapped",
+      "area": "polling",
+      "file": "src/core/eval/polling.rs",
+      "before": "PollMode::Eventually => |[reason, attempts, history]| BWErr::ConditionNotMet {",
+      "after": "PollMode::Eventually => |[reason, attempts, history]| BWErr::RetriesExhausted {"
+    },
+    {
+      "id": "attempt-private-steps",
+      "area": "polling",
+      "file": "src/core/run/attempt.rs",
+      "before": "used: Arc::clone(&self.0.used),",
+      "after": "used: Arc::new(AtomicU64::new(0)),"
+    },
+    {
+      "id": "attempt-deadline-ignored",
+      "area": "polling",
+      "file": "src/core/run/attempt.rs",
+      "before": "control: self.0.control.child(deadline),",
+      "after": "control: self.0.control.child(None),"
+    },
+    {
+      "id": "attempt-detached-cancellation",
+      "area": "polling",
+      "file": "src/core/run/attempt.rs",
+      "before": "control: self.0.control.child(deadline),",
+      "after": "control: OperationControl::default().child(deadline),"
+    },
+    {
+      "id": "poll-loop-controls-escape",
+      "area": "polling",
+      "file": "src/core/ast.rs",
+      "before": "                in_loop: false,\n                in_catch: false,\n                ..scope",
+      "after": "                in_catch: false,\n                ..scope"
+    },
+    {
+      "id": "poll-header-span",
+      "area": "polling",
+      "file": "src/core/ast.rs",
+      "before": "span.start(), options.as_span().end())",
+      "after": "span.start(), options.as_span().start())"
     }
   ]
 }
