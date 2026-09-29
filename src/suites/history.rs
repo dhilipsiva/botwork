@@ -1,6 +1,6 @@
 //! Bounded rerun selection, with an incomplete marker before case effects.
 use super::*;
-use crate::atomic_json::AtomicJson;
+use crate::atomic_file::AtomicFile;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{collections::HashSet, fs::OpenOptions, io::Read, path::Path};
 
@@ -103,7 +103,7 @@ pub(super) fn load(path: &Path) -> Result<Vec<String>, CliError> {
 }
 
 pub(super) struct History {
-    file: AtomicJson,
+    file: AtomicFile,
 }
 
 impl History {
@@ -112,7 +112,7 @@ impl History {
             return Err(suite::configuration("Failed-case output needs a filename").into());
         }
         // Do not overwrite unrelated existing files.
-        let file = AtomicJson::begin(path, "Failed-case record", "botwork-failures", |path| {
+        let file = AtomicFile::begin(path, "Failed-case record", "botwork-failures", |path| {
             read(path).map(|_| ())
         })?;
         let history = Self { file };

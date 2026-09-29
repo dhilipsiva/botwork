@@ -1,4 +1,4 @@
-//! Exclusive, atomically replaced JSON outputs: a persistent lock sidecar, an
+//! Exclusive, atomically replaced report outputs: a persistent lock sidecar, an
 //! incomplete marker written before any effects, and fsync'd rename publication.
 use super::{BWErr, CliError, Diagnostic};
 use serde::Serialize;
@@ -11,7 +11,7 @@ use std::{
 
 pub(crate) static TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
-pub(super) struct AtomicJson {
+pub(super) struct AtomicFile {
     path: PathBuf,
     /// Names the output in errors, such as `Failed-case record`.
     label: &'static str,
@@ -22,7 +22,7 @@ pub(super) struct AtomicJson {
     _lock: File,
 }
 
-impl AtomicJson {
+impl AtomicFile {
     /// Lock `path` and accept an existing file only when `existing` recognizes it,
     /// so unrelated files are never overwritten.
     pub(super) fn begin(
@@ -81,12 +81,32 @@ impl AtomicJson {
         })
     }
 
+    /// The output's canonical directory.
+    pub(super) fn directory(&self) -> &Path {
+        self.path.parent().expect("canonical parent")
+    }
+
     pub(super) fn error(&self, error: impl std::fmt::Display) -> CliError {
         output_error(self.label, &self.path, &error)
     }
 
     /// Publish `value` as one JSON line by fsync'd temporary file and rename.
     pub(super) fn write(&self, value: &impl Serialize) -> Result<(), CliError> {
+        self.publish(|writer| {
+            serde_json::to_writer(&mut *writer, value)?;
+            writer.write_all(b"\n")
+        })
+    }
+
+    /// Publish `bytes` by fsync'd temporary file and rename.
+    pub(super) fn write_bytes(&self, bytes: &[u8]) -> Result<(), CliError> {
+        self.publish(|writer| writer.write_all(bytes))
+    }
+
+    fn publish(
+        &self,
+        fill: impl FnOnce(&mut io::BufWriter<&mut File>) -> io::Result<()>,
+    ) -> Result<(), CliError> {
         let parent = self.path.parent().expect("canonical parent");
         for _ in 0..64 {
             let temporary = parent.join(format!(
@@ -107,11 +127,10 @@ impl AtomicJson {
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(error) => return Err(self.error(error)),
             };
+            let mut fill = Some(fill);
             let result = (|| -> Result<(), CliError> {
                 let mut writer = io::BufWriter::new(&mut file);
-                serde_json::to_writer(&mut writer, value).map_err(|error| self.error(error))?;
-                writer
-                    .write_all(b"\n")
+                (fill.take().expect("one publication"))(&mut writer)
                     .and_then(|_| writer.flush())
                     .map_err(|error| self.error(error))?;
                 drop(writer);

@@ -7,7 +7,8 @@ runs. The document holds the same verdict and exit status as the
 of each run. CI systems and other tools can read it without parsing console
 text. Consumers can validate a report against
 [`json-report.schema.json`](json-report.schema.json), a JSON Schema (draft
-2020-12) for this version.
+2020-12) for this version. `--report-html PATH` renders the same document as a
+self-contained [HTML report](html-report.md).
 
 ## Example
 

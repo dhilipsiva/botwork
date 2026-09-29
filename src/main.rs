@@ -23,7 +23,7 @@ use std::{
 };
 
 mod assertion_artifacts;
-mod atomic_json;
+mod atomic_file;
 mod batch;
 mod listener;
 mod report_json;
@@ -63,6 +63,9 @@ struct Args {
     /// Write a versioned botwork-report JSON document; mark it incomplete before running
     #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     report_json: Option<PathBuf>,
+    /// Write a self-contained HTML report; mark it incomplete before running
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
+    report_html: Option<PathBuf>,
     /// Stream execution events as JSON Lines to PROGRAM's stdin (run without a shell)
     #[arg(long, value_name = "PROGRAM", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     listener: Option<PathBuf>,
@@ -361,11 +364,15 @@ fn main() -> ExitCode {
                     (true, 1) => "file",
                     _ => "batch",
                 };
-                // Mark the report incomplete before discovery or any run effects.
-                let report = args
-                    .report_json
-                    .clone()
-                    .map(|path| report_json::Report::begin(path, mode))
+                // Mark the reports incomplete before discovery or any run effects.
+                let report = (args.report_json.is_some() || args.report_html.is_some())
+                    .then(|| {
+                        report_json::Report::begin(
+                            args.report_json.clone(),
+                            args.report_html.clone(),
+                            mode,
+                        )
+                    })
                     .transpose()?
                     .map(std::sync::Arc::new);
                 // Start the listener before discovery, so its stream covers every run.

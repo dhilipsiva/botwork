@@ -1,6 +1,8 @@
-//! The versioned JSON report: one `botwork-report` document per invocation,
+//! The versioned JSON report and the HTML report: one document per invocation,
 //! built from run records and the verdict that decides the exit status.
-use super::{atomic_json::AtomicJson, BWErr, CliError, Diagnostic};
+use super::{atomic_file::AtomicFile, BWErr, CliError, Diagnostic};
+
+mod html;
 use botwork::core::{
     acceptance::{CaseStatus, RunVerdict, SkipReason},
     report::{
@@ -147,7 +149,8 @@ struct Collected {
 }
 
 pub(super) struct Report {
-    file: AtomicJson,
+    json: Option<AtomicFile>,
+    html: Option<AtomicFile>,
     mode: &'static str,
     started_at: String,
     start: Instant,
@@ -183,11 +186,23 @@ fn recognized(path: &Path) -> Result<(), CliError> {
 }
 
 impl Report {
-    /// Lock the output and publish an incomplete marker before any run starts.
-    pub(super) fn begin(path: PathBuf, mode: &'static str) -> Result<Self, CliError> {
-        let file = AtomicJson::begin(path, "JSON report", "botwork-report", recognized)?;
+    /// Lock the outputs and publish incomplete markers before any run starts.
+    pub(super) fn begin(
+        json: Option<PathBuf>,
+        html: Option<PathBuf>,
+        mode: &'static str,
+    ) -> Result<Self, CliError> {
+        let json = json
+            .map(|path| AtomicFile::begin(path, "JSON report", "botwork-report", recognized))
+            .transpose()?;
+        let html = html
+            .map(|path| {
+                AtomicFile::begin(path, "HTML report", "botwork-report-html", html::recognized)
+            })
+            .transpose()?;
         let report = Self {
-            file,
+            json,
+            html,
             mode,
             started_at: timestamp(SystemTime::now()),
             start: Instant::now(),
@@ -268,7 +283,12 @@ impl Report {
     pub(super) fn finish(&self, verdict: &RunVerdict, expected: usize) -> Result<(), CliError> {
         let recorded = self.collected().runs.len();
         if recorded != expected {
-            return Err(self.file.error(format_args!(
+            let file = self
+                .json
+                .as_ref()
+                .or(self.html.as_ref())
+                .expect("an output");
+            return Err(file.error(format_args!(
                 "{recorded} of {expected} runs have records; the report stays incomplete"
             )));
         }
@@ -290,7 +310,7 @@ impl Report {
             })
             .collect();
         let finished = verdict.map(|_| SystemTime::now());
-        self.file.write(&Document {
+        let document = Document {
             format: FORMAT,
             version: VERSION,
             complete: verdict.is_some(),
@@ -304,7 +324,16 @@ impl Report {
             runs,
             omitted_run_details: omitted,
             fixtures: &collected.fixtures,
-        })
+        };
+        // Attempt every output; the first failure is the result.
+        let json = self
+            .json
+            .as_ref()
+            .map_or(Ok(()), |json| json.write(&document));
+        let html = self.html.as_ref().map_or(Ok(()), |html| {
+            html.write_bytes(html::render(&document, html.directory()).as_bytes())
+        });
+        json.and(html)
     }
 }
 
@@ -348,7 +377,7 @@ mod tests {
     fn details_beyond_the_run_budget_become_summaries() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("report.json");
-        let mut report = Report::begin(path.clone(), "batch").unwrap();
+        let mut report = Report::begin(Some(path.clone()), None, "batch").unwrap();
         // Identical sizes: exactly one run fits, and only when the budget is
         // charged. Run 3 finishes first, so it keeps its details.
         let mut failed = record("run", "Log |\"one\"|\nAssert |false|");
@@ -389,7 +418,7 @@ mod tests {
     fn missing_records_keep_the_report_incomplete() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("report.json");
-        let report = Report::begin(path.clone(), "batch").unwrap();
+        let report = Report::begin(Some(path.clone()), None, "batch").unwrap();
         let marker = read(&path);
         assert_eq!(marker["complete"], false);
         assert!(marker["exit_code"].is_null() && marker["verdict"].is_null());
@@ -405,7 +434,7 @@ mod tests {
     fn artifacts_beyond_the_limit_are_counted() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("report.json");
-        let report = Report::begin(path.clone(), "file").unwrap();
+        let report = Report::begin(Some(path.clone()), None, "file").unwrap();
         let artifacts: Vec<_> = (0..limits().artifacts + 3)
             .map(|index| PathBuf::from(format!("assertion-{index}.json")))
             .collect();
@@ -427,16 +456,20 @@ mod tests {
         let path = directory.path().join("report.json");
         for existing in ["not json", "{}", r#"{"format":"botwork-failed-cases"}"#] {
             fs::write(&path, existing).unwrap();
-            let error = Report::begin(path.clone(), "file").err().expect("rejected");
+            let error = Report::begin(Some(path.clone()), None, "file")
+                .err()
+                .expect("rejected");
             assert!(error.to_string().contains("never replaced"), "{error}");
             assert_eq!(fs::read_to_string(&path).unwrap(), existing);
         }
         fs::write(&path, r#"{"format":"botwork-report","version":1}"#).unwrap();
-        drop(Report::begin(path.clone(), "file").unwrap());
+        drop(Report::begin(Some(path.clone()), None, "file").unwrap());
         assert_eq!(read(&path)["complete"], false);
         fs::remove_file(&path).unwrap();
         fs::create_dir(&path).unwrap();
-        let error = Report::begin(path, "file").err().expect("rejected");
+        let error = Report::begin(Some(path), None, "file")
+            .err()
+            .expect("rejected");
         assert!(error.to_string().contains("ordinary file"), "{error}");
     }
 }

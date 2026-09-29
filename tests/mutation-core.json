@@ -1,5 +1,5 @@
 {
-  "version": 26,
+  "version": 27,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1866,7 +1866,7 @@
     {
       "id": "json-report-existing-file-unchecked",
       "area": "json-report",
-      "file": "src/atomic_json.rs",
+      "file": "src/atomic_file.rs",
       "before": "            Ok(_) => existing(&path)?,",
       "after": "            Ok(_) => {}"
     },
@@ -2030,6 +2030,97 @@
       "file": "src/main.rs",
       "before": "                                    .map_or(defaults.capacity, |events| events as usize),",
       "after": "                                    .map_or(defaults.capacity, |_| defaults.capacity),"
+    },
+    {
+      "id": "html-less-than-unescaped",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "                b'<' => \"&lt;\",",
+      "after": "                b'<' => \"<\","
+    },
+    {
+      "id": "html-quote-unescaped",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "                b'\"' => \"&quot;\",",
+      "after": "                b'\"' => \"\\\"\","
+    },
+    {
+      "id": "html-foreign-page-replaced",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "    if String::from_utf8_lossy(&start).contains(GENERATOR) {",
+      "after": "    if true {"
+    },
+    {
+      "id": "html-link-bytes-unencoded",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "        if byte.is_ascii_alphanumeric() || b\"-._~/\".contains(&byte) {",
+      "after": "        if byte != b'%' {"
+    },
+    {
+      "id": "html-links-always-absolute",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "        Ok(relative)\n            if relative",
+      "after": "        Ok(relative)\n            if false && relative"
+    },
+    {
+      "id": "html-moved-source-excerpted",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "        if (line, column) != (location.line, location.column) {",
+      "after": "        if false {"
+    },
+    {
+      "id": "html-timeline-dropped",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "        if record.duration_us.is_some() {",
+      "after": "        if false {"
+    },
+    {
+      "id": "html-policy-dropped",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "         <meta http-equiv=\\\"Content-Security-Policy\\\" content=\\\"default-src 'none'; style-src 'unsafe-inline'\\\">\\",
+      "after": "         <meta name=\\\"policy\\\" content=\\\"none\\\">\\"
+    },
+    {
+      "id": "html-failures-collapsed",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "                    if record.status.failed() { \" open\" } else { \"\" },",
+      "after": "                    if false { \" open\" } else { \"\" },"
+    },
+    {
+      "id": "html-final-page-unpublished",
+      "area": "html-report",
+      "file": "src/report_json.rs",
+      "before": "        let html = self.html.as_ref().map_or(Ok(()), |html| {",
+      "after": "        let html = self.html.as_ref().filter(|_| verdict.is_none()).map_or(Ok(()), |html| {"
+    },
+    {
+      "id": "html-source-file-limit-boundary",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "            if self.files.len() >= MAX_SOURCE_FILES {",
+      "after": "            if self.files.len() > MAX_SOURCE_FILES {"
+    },
+    {
+      "id": "html-source-size-unchecked",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "                        .filter(|_| text.len() as u64 <= MAX_SOURCE_BYTES)",
+      "after": "                        .filter(|_| true)"
+    },
+    {
+      "id": "html-line-prefix-unbounded",
+      "area": "html-report",
+      "file": "src/report_json/html.rs",
+      "before": "        if start - line_start > MAX_LINE_PREFIX_BYTES {",
+      "after": "        if false {"
     }
   ]
 }

@@ -217,6 +217,14 @@ failure, unstreamed skips and fixtures, and an ignored queue option. Its 290-ent
 catalogue adds 18 faults, with the `listeners` suite as an oracle; see
 [listener evidence](listeners-evidence.json). The JSON-report entries whose code
 moved with this change were updated in place.
+Version 27 adds the HTML report. Its faults cover unescaped `<` and `"`, replaced
+foreign pages, unencoded or always-absolute artifact links, and excerpts of moved
+source. Further faults cover a dropped timeline, a dropped Content-Security-Policy,
+collapsed failures, and an unpublished final page. The rest cover unbounded source
+files, sizes, and line prefixes. Its 303-entry catalogue adds 13 faults, with the
+`html_report` suite as an oracle; see [HTML-report evidence](html-report-evidence.json).
+The failed-case history writer's module was renamed `atomic_file`, and its entry
+now names that file.
 
 ## First campaign — 2026-09-28
 

@@ -97,6 +97,16 @@ pub enum Delivery {
     Interrupted,
 }
 
+impl Delivery {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Failed => "failed",
+            Self::Interrupted => "interrupted",
+        }
+    }
+}
+
 /// Final verdict requires successful outcome/report/history delivery. A failed
 /// writer or interrupted owner cannot publish a complete successful execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -120,6 +130,9 @@ impl RunVerdict {
     }
     pub fn fixture_failures(&self) -> usize {
         self.fixture_failures
+    }
+    pub fn delivery(&self) -> Delivery {
+        self.delivery
     }
     pub fn exit_code(&self) -> u8 {
         self.status.exit_code()

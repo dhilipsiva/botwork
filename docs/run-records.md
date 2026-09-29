@@ -225,8 +225,8 @@ assert!(skipped.started_at.is_none());
 ## Current boundary
 
 The CLI [JSON report](json-report.md) records every file and case run, and
-[listeners](listeners.md) receive the same events live. HTML reports are a
-separate roadmap task built on this model. Suite case programs run as one merged program, so their records do not
+[listeners](listeners.md) receive the same events live, and the
+[HTML report](html-report.md) renders the records for people. Suite case programs run as one merged program, so their records do not
 yet separate setup, body, and teardown phases. Engine runs cannot be reconciled
 after a forced process termination, because their records live in memory.
 
