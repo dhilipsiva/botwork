@@ -287,11 +287,31 @@ pub struct Statement {
     pub(crate) kind: StatementKind,
 }
 
+/// Every name [`Statement::kind_name`] reports, as run records store them.
+pub const STATEMENT_KIND_NAMES: [&str; 15] = [
+    "assignment",
+    "definition",
+    "call",
+    "if",
+    "for",
+    "while",
+    "eventually",
+    "retry",
+    "try",
+    "finally",
+    "return",
+    "break",
+    "continue",
+    "rethrow",
+    "import",
+];
+
 impl Statement {
     pub fn kind(&self) -> &StatementKind {
         &self.kind
     }
 
+    /// One of [`STATEMENT_KIND_NAMES`].
     pub fn kind_name(&self) -> &'static str {
         match self.kind {
             StatementKind::Assign { .. } => "assignment",

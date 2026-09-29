@@ -56,6 +56,10 @@ logs, and artifact links. `--listener PROGRAM` streams the same execution events
 to a [report listener](docs/listeners.md), as JSON Lines on its stdin. The stream
 has defined ordering, and slow or failing listeners are detached without slowing
 the runs.
+Every started run ends with exactly one [terminal outcome](docs/terminal-outcomes.md).
+Ctrl-C cancels started runs cooperatively and still publishes the reports.
+`--reconcile-report PATH` finishes reports after a forced termination, marking
+unfinished runs as interrupted.
 
 Embedded hosts can request a versioned [run record](docs/run-records.md) of each run's
 statements, logs, timing, and outcome through `RunOptions::record`.

@@ -23,7 +23,7 @@
     "format": { "const": "botwork-report" },
     "version": { "const": 1 },
     "complete": {
-      "description": "True once the document is final: every selected run has a record and the verdict is decided.",
+      "description": "True once the document is final and every selected run has a record.",
       "type": "boolean"
     },
     "mode": { "enum": ["file", "batch", "suites"] },

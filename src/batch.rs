@@ -47,15 +47,48 @@ enum Input {
     Case(SelectedCase),
 }
 
+/// Why an invocation did not deliver every selected run's outcome normally.
+pub(super) enum Stop {
+    /// A console report or failed-case record could not be written.
+    Delivery(CliError),
+    /// A signal stopped admission and cancelled started runs.
+    Interrupted,
+}
+
 pub(super) struct Outcome {
     pub(super) totals: CaseTotals,
     pub(super) fixtures_failed: usize,
     pub(super) failed_cases: Vec<String>,
+    /// Runs selected for the invocation, whether or not they started.
+    pub(super) selected: usize,
+    pub(super) stop: Option<Stop>,
 }
 
 impl Outcome {
+    pub(super) fn delivery(&self) -> Delivery {
+        match self.stop {
+            None => Delivery::Complete,
+            Some(Stop::Delivery(_)) => Delivery::Failed,
+            Some(Stop::Interrupted) => Delivery::Interrupted,
+        }
+    }
+
     /// The exit decision comes from the same verdict as the printed summary.
     pub(super) fn result(self) -> Result<(), CliError> {
+        match self.stop {
+            Some(Stop::Delivery(error)) => return Err(error),
+            Some(Stop::Interrupted) => {
+                let (recorded, selected) = (self.totals.total(), self.selected);
+                return Err(CliError::Interrupted(if recorded == selected {
+                    format!("Interrupted: all {selected} selected runs have outcomes")
+                } else {
+                    format!(
+                        "Interrupted: {recorded} of {selected} selected runs have outcomes; the others never started"
+                    )
+                }));
+            }
+            None => {}
+        }
         let skipped = self.totals.count(CaseStatus::Skipped);
         let total = self.totals.total();
         let unsuccessful = total
@@ -101,25 +134,28 @@ pub(super) fn publish_report(
     }
 }
 
-/// Finish the listener, then publish the JSON report. The listener hears the
-/// execution outcome; its delivery then decides the verdict the report records,
+/// Finish the listener, then publish the reports. The listener hears the
+/// execution outcome; its delivery then decides the verdict the reports record,
 /// which is also the one that decides the exit status.
 pub(super) fn deliver(
     report: Option<&super::report_json::Report>,
     listener: Option<&super::listener::Hub>,
     totals: CaseTotals,
     fixtures_failed: usize,
+    delivery: Delivery,
+    selected: usize,
 ) -> Result<(), CliError> {
     let listened = listener.map_or(Ok(()), |hub| {
-        hub.finish(Some(&totals.finish(fixtures_failed, Delivery::Complete)))
+        hub.finish(Some(&totals.finish(fixtures_failed, delivery)))
     });
-    let delivery = if listened.is_ok() {
-        Delivery::Complete
-    } else {
-        Delivery::Failed
+    let journal_failed = report.is_some_and(super::report_json::Report::journal_failed);
+    let delivery = match (delivery, &listened) {
+        (Delivery::Complete, Err(_)) => Delivery::Failed,
+        (Delivery::Complete, _) if journal_failed => Delivery::Failed,
+        (delivery, _) => delivery,
     };
     let reported = report.map_or(Ok(()), |report| {
-        report.finish(&totals.finish(fixtures_failed, delivery), totals.total())
+        report.finish(&totals.finish(fixtures_failed, delivery), selected)
     });
     publish_report(listened, reported)
 }
@@ -134,12 +170,15 @@ pub(super) async fn finish_outputs(
         return Ok(());
     }
     let (totals, fixtures_failed) = (outcome.totals, outcome.fixtures_failed);
+    let (delivery, selected) = (outcome.delivery(), outcome.selected);
     tokio::task::spawn_blocking(move || {
         deliver(
             report.as_deref(),
             listener.as_deref(),
             totals,
             fixtures_failed,
+            delivery,
+            selected,
         )
     })
     .await
@@ -147,20 +186,29 @@ pub(super) async fn finish_outputs(
 }
 
 /// Start recording run `number` when a report or listener consumes records.
+/// The report journals the start, so a forced termination leaves evidence.
 pub(super) fn recording(
-    report: bool,
+    report: Option<&super::report_json::Report>,
     listener: Option<&super::listener::Hub>,
     number: usize,
     identity: RunIdentity,
 ) -> Option<Recording> {
-    (report || listener.is_some())
-        .then(|| super::report_json::recording(identity, listener.map(|hub| hub.observer(number))))
+    if report.is_none() && listener.is_none() {
+        return None;
+    }
+    if let Some(report) = report {
+        report.started(number, &identity);
+    }
+    Some(super::report_json::recording(
+        identity,
+        listener.map(|hub| hub.observer(number)),
+    ))
 }
 
 impl Configuration {
     pub(super) fn recording(&self, number: usize, identity: RunIdentity) -> Option<Recording> {
         recording(
-            self.report.is_some(),
+            self.report.as_deref(),
             self.listener.as_deref(),
             number,
             identity,
@@ -608,6 +656,9 @@ async fn run_inputs(
         .into());
     }
     let total = inputs.len();
+    if let Some(report) = &configuration.report {
+        report.selected(total);
+    }
     let configuration = Arc::new(configuration);
     let mut pending = inputs.into_iter().enumerate();
     let mut running = JoinSet::new();
@@ -616,7 +667,9 @@ async fn run_inputs(
     let mut failed_cases = Vec::new();
     let mut reporting_error = None;
     loop {
-        while reporting_error.is_none() && running.len() < jobs {
+        // A signal or reporting failure stops admission; started runs drain.
+        while reporting_error.is_none() && !super::interrupt::interrupted() && running.len() < jobs
+        {
             let Some((index, input)) = pending.next() else {
                 break;
             };
@@ -694,28 +747,37 @@ async fn run_inputs(
                 failed_cases.push((identity.number, id.clone()));
             }
         }
+        let mut exported = Vec::new();
         if reporting_error.is_none() {
             match report(Message::Finished(identity, result)).await {
-                Ok(exported) => {
-                    if let (Some(report), Some(record)) = (&configuration.report, record) {
-                        report.run(number, record, &exported);
-                    }
-                }
+                Ok(paths) => exported = paths,
                 Err(error) => reporting_error = Some(error),
             }
+        }
+        // Every started run keeps its one record, even after the console fails.
+        if let (Some(report), Some(record)) = (&configuration.report, record) {
+            report.run(number, record, &exported);
         }
         // After a reporting failure, drain every admitted run without admitting
         // queued paths or detaching callbacks. The original reporting error wins.
     }
-    if let Some(error) = reporting_error {
-        return Err(error);
-    }
-    debug_assert_eq!(tally.totals.total(), total);
-    report(tally.summary(cases)).await?;
     failed_cases.sort_unstable_by_key(|(number, _)| *number);
-    Ok(Outcome {
+    let mut outcome = Outcome {
         totals: tally.totals,
         fixtures_failed: 0,
         failed_cases: failed_cases.into_iter().map(|(_, id)| id).collect(),
-    })
+        selected: total,
+        stop: None,
+    };
+    if let Some(error) = reporting_error {
+        outcome.stop = Some(Stop::Delivery(error));
+        return Ok(outcome);
+    }
+    report(tally.summary(cases)).await?;
+    if super::interrupt::interrupted() {
+        outcome.stop = Some(Stop::Interrupted);
+    } else {
+        debug_assert_eq!(outcome.totals.total(), total);
+    }
+    Ok(outcome)
 }

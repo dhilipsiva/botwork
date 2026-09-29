@@ -112,18 +112,26 @@ pub(super) async fn run(
         .into());
     }
     let (report, listener) = (configuration.report.clone(), configuration.listener.clone());
-    let outcome = if has_fixtures {
+    let mut outcome = if has_fixtures {
         execution::run(discovered.cases, jobs, configuration).await?
     } else {
         batch::run_cases(discovered.cases, jobs, configuration).await?
     };
-    if let Some(history) = discovered.history {
+    // A stopped invocation leaves the failed-case record incomplete, so no rerun
+    // selection is taken from partial results.
+    if let Some(history) = discovered.history.filter(|_| outcome.stop.is_none()) {
         let failed = outcome.failed_cases.clone();
-        tokio::task::spawn_blocking(move || history.finish(failed))
+        let written = tokio::task::spawn_blocking(move || history.finish(failed))
             .await
             .map_err(|_| {
-                Diagnostic::new(BWErr::AsyncRuntime("Failed-case writer failed".into()))
-            })??;
+                CliError::from(Diagnostic::new(BWErr::AsyncRuntime(
+                    "Failed-case writer failed".into(),
+                )))
+            })
+            .and_then(|written| written);
+        if let Err(error) = written {
+            outcome.stop = Some(batch::Stop::Delivery(error));
+        }
     }
     let published = batch::finish_outputs(report, listener, &outcome).await;
     batch::publish_report(outcome.result(), published)

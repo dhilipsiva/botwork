@@ -70,6 +70,11 @@ including skipped work, exits 1, and command-line usage errors exit 2. When
 reporting itself fails, admission stops and started work drains. The command
 then exits 1 without claiming a complete summary.
 
+After an [interruption](terminal-outcomes.md#interruption), the console prints
+`[interrupted] stopping runs; interrupt again to exit at once`. The summary then
+covers the runs that started, and a closing line reports how many selected runs
+have outcomes.
+
 For machine consumption, `--report-json PATH` writes the same verdict and exit
 status in a versioned [JSON report](json-report.md).
 

@@ -81,6 +81,8 @@ fn summary_and_exit_decision_share_one_verdict() {
             totals,
             fixtures_failed: fixtures,
             failed_cases: vec![],
+            selected: totals.total(),
+            stop: None,
         };
         assert_eq!(outcome.result().is_ok(), success, "{line}");
     }
@@ -88,6 +90,8 @@ fn summary_and_exit_decision_share_one_verdict() {
         totals: totals(&[(CaseStatus::Succeeded, 1), (CaseStatus::TimedOut, 2)]),
         fixtures_failed: 0,
         failed_cases: vec![],
+        selected: 3,
+        stop: None,
     }
     .result()
     .unwrap_err();

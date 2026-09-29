@@ -521,6 +521,18 @@ pub(super) fn render(document: &Document<'_>, directory: &Path) -> String {
         );
         return out;
     };
+    if verdict.delivery() == botwork::core::acceptance::Delivery::Interrupted {
+        out.push_str(
+            "<p class=\"banner\">This invocation was interrupted. Runs still running were \
+             cancelled, or are shown as interrupted when a forced termination was reconciled.</p>",
+        );
+    }
+    if !document.complete {
+        out.push_str(
+            "<p class=\"banner\">Not every selected run has a record: runs that never \
+             started are not shown.</p>",
+        );
+    }
     out.push_str("<h2>Summary</h2><table><tr>");
     let counted: Vec<_> = STATUSES
         .iter()
@@ -572,7 +584,7 @@ pub(super) fn render(document: &Document<'_>, directory: &Path) -> String {
                 summary.number,
                 &summary.identity,
                 summary.status,
-                summary.error,
+                summary.error.as_deref(),
                 None,
             ),
         };

@@ -99,6 +99,10 @@ The HTML report follows the JSON report's [lifecycle](json-report.md#lifecycle):
   `<meta name="generator" content="botwork-report-html 1">`. Other files,
   directories, and special files are refused before any run starts.
 - **Shared paths.** The same lock rejects using one path for two outputs.
+- **Stopped invocations.** After an interruption or a reconciliation, a banner
+  says the invocation was interrupted. A second banner notes that runs without a
+  record are missing when not every selected run started. See
+  [terminal outcomes](terminal-outcomes.md).
 
 The page grows with the retained records. The JSON report's per-run retention
 and run detail budget bound it.

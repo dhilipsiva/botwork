@@ -1,6 +1,8 @@
-# Version 27: add the HTML report.
+# Version 28: add terminal outcomes, interruption, and report reconciliation.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/interrupt.rs",
+    "src/report_json/journal.rs",
     "src/report_json/html.rs",
     "src/listener.rs",
     "src/core/listener.rs",
@@ -65,7 +67,7 @@ examine_globs = [
 ]
 examine_re = [
     '^src/(core/)?listener.rs:',
-    '^src/(report_json|atomic_file|report_json/html).rs:',
+    '^src/(report_json|atomic_file|report_json/html|report_json/journal|interrupt).rs:',
     '^src/core/report.rs:',
     '^src/core/eval/builtins/data(\.rs|/csv\.rs):',
     '^src/core/csv.rs:',
@@ -123,6 +125,7 @@ additional_cargo_args = [
     "--test", "json_report",
     "--test", "listeners",
     "--test", "html_report",
+    "--test", "terminal_outcomes",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

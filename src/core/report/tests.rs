@@ -304,3 +304,100 @@ fn error_causes_are_listed_depth_first_within_the_limit() {
     );
     assert!(limited.truncated && limited.message.ends_with("…[truncated]"));
 }
+
+#[test]
+fn stored_records_round_trip_and_reject_unknown_values() {
+    let error = ErrorRecord {
+        code: "BW9001",
+        status: CaseStatus::Failed,
+        message: "Assertion failed".into(),
+        truncated: false,
+        location: Some(location()),
+        causes: vec!["BW2001", "BW5002"],
+        omitted_causes: 1,
+    };
+    let record = fold(vec![
+        started(),
+        statement(0),
+        Event::Log(LogRecord {
+            statement: Some(0),
+            offset_us: 3,
+            bytes: 2,
+            text: "hi".into(),
+            truncated: false,
+        }),
+        finished_statement(0, CaseStatus::Failed),
+        Event::RunFinished {
+            status: CaseStatus::Failed,
+            finished_at: "2026-01-01T00:00:01.000000Z".into(),
+            duration_us: 9,
+            error: Some(error),
+        },
+    ])
+    .unwrap();
+    let stored = serde_json::to_value(&record).unwrap();
+    let loaded: RunRecord = serde_json::from_value(stored.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&loaded).unwrap(), stored);
+    assert_eq!(loaded.error.as_ref().unwrap().causes, ["BW2001", "BW5002"]);
+    for (field, value) in [
+        ("/format", serde_json::json!("other-run")),
+        ("/version", serde_json::json!(2)),
+        ("/error/code", serde_json::json!("BW0000")),
+        ("/error/causes/0", serde_json::json!("E1")),
+        ("/statements/0/kind", serde_json::json!("loop")),
+        ("/statements/0/code", serde_json::json!("BW99")),
+        ("/status", serde_json::json!("passed")),
+    ] {
+        let mut changed = stored.clone();
+        *changed.pointer_mut(field).unwrap() = value;
+        assert!(
+            serde_json::from_value::<RunRecord>(changed).is_err(),
+            "{field} must be validated"
+        );
+    }
+    let mut extended = stored;
+    extended["added_later"] = serde_json::json!(true);
+    assert!(
+        serde_json::from_value::<RunRecord>(extended).is_ok(),
+        "readers ignore fields added within a version"
+    );
+}
+
+#[test]
+fn every_recordable_statement_kind_has_a_stored_name() {
+    let program = crate::core::ast::Program::parse_detailed(
+        "kinds.botwork",
+        "|x| = |1|\nShout |value| { Log |value| }\nNo Operation\nIf |x == 1| { No Operation }\n\
+         For |item| In |[1]| { No Operation }\nWhile |false| { No Operation }\n\
+         Eventually |{timeout_ms: 10}| { No Operation }\nRetry |{attempts: 1}| { No Operation }\n\
+         Try { No Operation } Catch |error| { No Operation }\nTry { No Operation } Finally { No Operation }\n",
+    )
+    .unwrap();
+    let kinds: Vec<_> = program
+        .statements
+        .iter()
+        .map(|statement| statement.kind_name())
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            "assignment",
+            "definition",
+            "call",
+            "if",
+            "for",
+            "while",
+            "eventually",
+            "retry",
+            "try",
+            "finally"
+        ]
+    );
+    for kind in kinds {
+        assert!(STATEMENT_KIND_NAMES.contains(&kind));
+    }
+    let mut unique = STATEMENT_KIND_NAMES.to_vec();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(unique.len(), STATEMENT_KIND_NAMES.len());
+}

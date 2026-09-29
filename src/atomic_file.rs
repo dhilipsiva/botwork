@@ -81,6 +81,11 @@ impl AtomicFile {
         })
     }
 
+    /// The output's path in its canonical directory.
+    pub(super) fn path(&self) -> &Path {
+        &self.path
+    }
+
     /// The output's canonical directory.
     pub(super) fn directory(&self) -> &Path {
         self.path.parent().expect("canonical parent")

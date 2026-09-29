@@ -198,24 +198,35 @@ exits 1 and writes the following. Timestamps and durations vary between runs:
    marker is published. This happens before suite discovery, input loading, or any
    script effect. The marker has `complete: false`; `finished_at`, `duration_us`,
    `exit_code`, and `verdict` are `null`; `runs` and `fixtures` are empty.
-2. **During the invocation.** Bounded records are kept in memory as runs finish;
-   the file is not rewritten per run.
-3. **After the verdict.** Once every selected run has a record, the complete
-   report replaces the marker. The new file is written beside the target,
-   `fsync`ed, and renamed over it, so readers see either the marker or the complete
-   report, never a partial file.
+2. **During the invocation.** Bounded records are kept in memory as runs finish,
+   and a [journal](terminal-outcomes.md#forced-termination-and-reconciliation)
+   beside the report records each run as it starts and finishes. The report file
+   itself is not rewritten per run.
+3. **After the verdict.** The final report replaces the marker, and the journal
+   is removed. The new file is written beside the target, `fsync`ed, and renamed
+   over it, so readers see either the marker or the final report, never a
+   partial file.
 
-When the invocation stops early, the marker stays. Causes include:
+The final report is also published when admission stopped early:
 
-- a discovery or configuration error;
-- a console reporting failure;
-- a failed `--failures` record;
-- a lost run task;
-- process termination.
+- after an [interruption](terminal-outcomes.md#interruption), with
+  `verdict.delivery: "interrupted"`;
+- after a console reporting failure or a failed `--failures` record, with
+  `verdict.delivery: "failed"`.
 
-A run count that does not match the selection also keeps the marker, and the
-command reports the mismatch. **Consumers must check `complete` before trusting
-any count.**
+Every run that started then has its one record. The report is `complete` only
+when every selected run has one.
+
+The marker stays in these cases:
+
+- a discovery or configuration error before any run;
+- a lost run task, whose missing record the command reports;
+- a forced termination. Its journal remains, and
+  `botwork --reconcile-report PATH` finishes the report with the started runs
+  `interrupted`; until then, new invocations refuse the path.
+
+**Consumers must check `complete` and `verdict.delivery` before trusting that
+the report covers every selected run.**
 
 Command-line usage errors exit 2 before the report path is touched.
 
@@ -236,7 +247,7 @@ Command-line usage errors exit 2 before the report path is touched.
 | Field | Contents |
 | --- | --- |
 | `format`, `version` | `"botwork-report"`, `1` |
-| `complete` | `true` once the document is final: every selected run has a record and the verdict is decided |
+| `complete` | `true` once the document is final and every selected run has a record |
 | `mode` | `"file"` (one `--file`), `"batch"` (several), or `"suites"` |
 | `started_at`, `finished_at` | RFC 3339 UTC times with microseconds; `finished_at` is `null` in the marker |
 | `duration_us` | Monotonic invocation duration in microseconds, or `null` |
@@ -249,10 +260,17 @@ Command-line usage errors exit 2 before the report path is touched.
 The verdict is the `RunVerdict` that also decides the console summary and the
 exit status; see [acceptance policy](acceptance-policy.md). In a complete report,
 `exit_code` always equals the process exit status. `verdict.cases.total` always
-equals the number of `runs`. When a [listener](listeners.md) fails,
-`verdict.delivery` is `failed`, `verdict.complete` is `false`, and the verdict
-fails with `exit_code` 1. The document itself is still complete, and its counts
-still describe every run.
+equals the number of `runs`.
+
+`verdict.delivery` is one of these values:
+
+- `complete`;
+- `failed`, when the console report, a `--failures` record, a
+  [listener](listeners.md), or the journal could not be delivered;
+- `interrupted`, after a signal or a reconciliation.
+
+In the last two cases the verdict fails with `exit_code` 1. The counts still
+describe every run that has a record.
 
 ## Runs
 

@@ -225,6 +225,28 @@ files, sizes, and line prefixes. Its 303-entry catalogue adds 13 faults, with th
 `html_report` suite as an oracle; see [HTML-report evidence](html-report-evidence.json).
 The failed-case history writer's module was renamed `atomic_file`, and its entry
 now names that file.
+Version 28 adds terminal outcomes. Its faults cover:
+
+- admission and cancellation: batch and suite admission after an interrupt, runs
+  left running, and an ignored second signal;
+- console failures: records dropped after a console failure, and reports
+  abandoned after one;
+- interrupted outcomes: unmarked batch and single-file interrupts, partial
+  reports that claim completeness, and reruns selected from partial results;
+- the journal: unjournaled starts, journals kept after the report, replaced
+  pending journals, and a forgotten journal write failure;
+- reconciliation: dropped started runs, a complete delivery, and a torn final
+  line that is parsed;
+- stored records: unchecked codes and versions.
+
+Its 322-entry catalogue adds 19 faults, with the `terminal_outcomes` suite as an
+oracle; see [terminal-outcome evidence](terminal-outcomes-evidence.json). Seven
+entries whose code moved with this change were updated in place:
+
+- `parallel-admission-unbounded`;
+- `parallel-report-failure-skips-drain`;
+- four JSON-report entries;
+- one listener entry.
 
 ## First campaign — 2026-09-28
 

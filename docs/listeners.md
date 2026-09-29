@@ -87,6 +87,9 @@ and `event` names the kind:
   delivery can still fail after the trailer, and the exit status then becomes 1.
   A listener that received `stream_finished` and exits 0 in time has seen the
   final verdict.
+- **Interruption.** After an [interruption](terminal-outcomes.md#interruption),
+  cancelled runs still end with `run_finished`, and `stream_finished` reports
+  `status: "interrupted"`.
 - **Incomplete streams.** A stream that ends without `stream_finished` is
   incomplete. This happens when the invocation stopped early, for example after a
   discovery error. The listener still sees the end of its input.

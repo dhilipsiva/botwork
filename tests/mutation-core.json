@@ -1,5 +1,5 @@
 {
-  "version": 27,
+  "version": 28,
   "mutations": [
     {
       "id": "precedence-products",
@@ -159,8 +159,8 @@
       "id": "parallel-admission-unbounded",
       "area": "isolation",
       "file": "src/batch.rs",
-      "before": "while reporting_error.is_none() && running.len() < jobs {",
-      "after": "while reporting_error.is_none() {"
+      "before": "        while reporting_error.is_none() && !super::interrupt::interrupted() && running.len() < jobs\n",
+      "after": "        while reporting_error.is_none() && !super::interrupt::interrupted()\n"
     },
     {
       "id": "parallel-identity-lost",
@@ -180,8 +180,8 @@
       "id": "parallel-report-failure-skips-drain",
       "area": "cleanup",
       "file": "src/batch.rs",
-      "before": "                Err(error) => reporting_error = Some(error),\n            }\n        }\n        // After a reporting failure",
-      "after": "                Err(error) => return Err(error),\n            }\n        }\n        // After a reporting failure"
+      "before": "                Err(error) => reporting_error = Some(error),\n            }\n        }\n        // Every started run",
+      "after": "                Err(error) => return Err(error),\n            }\n        }\n        // Every started run"
     },
     {
       "id": "parallel-report-runs-inline",
@@ -1804,14 +1804,14 @@
       "id": "json-report-record-count-unchecked",
       "area": "json-report",
       "file": "src/report_json.rs",
-      "before": "        if recorded != expected {",
-      "after": "        if false && recorded != expected {"
+      "before": "        if recorded != selected && verdict.delivery() == Delivery::Complete {",
+      "after": "        if false && recorded != selected && verdict.delivery() == Delivery::Complete {"
     },
     {
       "id": "json-report-marker-claims-completion",
       "area": "json-report",
       "file": "src/report_json.rs",
-      "before": "            complete: verdict.is_some(),",
+      "before": "            complete: verdict.is_some() && complete,",
       "after": "            complete: true,"
     },
     {
@@ -1846,7 +1846,7 @@
       "id": "json-report-summary-drops-error",
       "area": "json-report",
       "file": "src/report_json.rs",
-      "before": "                error: record.error.as_ref().map(|error| error.code),",
+      "before": "                error: record.error.as_ref().map(|error| error.code.to_owned()),",
       "after": "                error: None,"
     },
     {
@@ -1874,8 +1874,8 @@
       "id": "json-report-batch-artifacts-detached",
       "area": "json-report",
       "file": "src/batch.rs",
-      "before": "                        report.run(number, record, &exported);",
-      "after": "                        report.run(number, record, &[]);"
+      "before": "            report.run(number, record, &exported);",
+      "after": "            report.run(number, record, &[]);"
     },
     {
       "id": "json-report-case-row-dropped",
@@ -2007,8 +2007,8 @@
       "id": "listeners-report-ignores-listener",
       "area": "listeners",
       "file": "src/batch.rs",
-      "before": "    let delivery = if listened.is_ok() {",
-      "after": "    let delivery = if true {"
+      "before": "        (Delivery::Complete, Err(_)) => Delivery::Failed,",
+      "after": "        (Delivery::Complete, Err(_)) => Delivery::Complete,"
     },
     {
       "id": "listeners-skip-not-streamed",
@@ -2121,6 +2121,139 @@
       "file": "src/report_json/html.rs",
       "before": "        if start - line_start > MAX_LINE_PREFIX_BYTES {",
       "after": "        if false {"
+    },
+    {
+      "id": "outcomes-batch-admits-after-interrupt",
+      "area": "terminal-outcomes",
+      "file": "src/batch.rs",
+      "before": "        while reporting_error.is_none() && !super::interrupt::interrupted() && running.len() < jobs\n",
+      "after": "        while reporting_error.is_none() && running.len() < jobs\n"
+    },
+    {
+      "id": "outcomes-runs-keep-running",
+      "area": "terminal-outcomes",
+      "file": "src/interrupt.rs",
+      "before": "    INTERRUPTED.store(true, Ordering::SeqCst);\n    root().cancel();",
+      "after": "    INTERRUPTED.store(true, Ordering::SeqCst);\n    let _ = root();"
+    },
+    {
+      "id": "outcomes-second-signal-ignored",
+      "area": "terminal-outcomes",
+      "file": "src/interrupt.rs",
+      "before": "        if RECEIVED.fetch_add(1, Ordering::SeqCst) != 0 {",
+      "after": "        if RECEIVED.fetch_add(1, Ordering::SeqCst) == usize::MAX {"
+    },
+    {
+      "id": "outcomes-records-dropped-after-console-failure",
+      "area": "terminal-outcomes",
+      "file": "src/batch.rs",
+      "before": "        if let (Some(report), Some(record)) = (&configuration.report, record) {\n            report.run(number, record, &exported);",
+      "after": "        if let (Some(report), Some(record)) = (configuration.report.as_ref().filter(|_| reporting_error.is_none()), record) {\n            report.run(number, record, &exported);"
+    },
+    {
+      "id": "outcomes-console-failure-drops-reports",
+      "area": "terminal-outcomes",
+      "file": "src/batch.rs",
+      "before": "        outcome.stop = Some(Stop::Delivery(error));\n        return Ok(outcome);",
+      "after": "        return Err(error);"
+    },
+    {
+      "id": "outcomes-interrupt-unmarked",
+      "area": "terminal-outcomes",
+      "file": "src/batch.rs",
+      "before": "    if super::interrupt::interrupted() {\n        outcome.stop = Some(Stop::Interrupted);",
+      "after": "    if false {\n        outcome.stop = Some(Stop::Interrupted);"
+    },
+    {
+      "id": "outcomes-single-file-interrupt-unmarked",
+      "area": "terminal-outcomes",
+      "file": "src/main.rs",
+      "before": "                    let delivery = if interrupt::interrupted() {",
+      "after": "                    let delivery = if false {"
+    },
+    {
+      "id": "outcomes-partial-report-claims-complete",
+      "area": "terminal-outcomes",
+      "file": "src/report_json.rs",
+      "before": "        self.publish(Some(verdict), recorded == selected)?;",
+      "after": "        self.publish(Some(verdict), true)?;"
+    },
+    {
+      "id": "outcomes-reruns-from-partial-results",
+      "area": "terminal-outcomes",
+      "file": "src/suites.rs",
+      "before": "    if let Some(history) = discovered.history.filter(|_| outcome.stop.is_none()) {",
+      "after": "    if let Some(history) = discovered.history {"
+    },
+    {
+      "id": "outcomes-start-unjournaled",
+      "area": "terminal-outcomes",
+      "file": "src/batch.rs",
+      "before": "    if let Some(report) = report {\n        report.started(number, &identity);",
+      "after": "    if let Some(report) = report.filter(|_| false) {\n        report.started(number, &identity);"
+    },
+    {
+      "id": "outcomes-journal-kept-after-report",
+      "area": "terminal-outcomes",
+      "file": "src/report_json.rs",
+      "before": "        journal.finish()?;",
+      "after": "        let _ = journal;"
+    },
+    {
+      "id": "outcomes-pending-journal-replaced",
+      "area": "terminal-outcomes",
+      "file": "src/report_json/journal.rs",
+      "before": "        options.write(true).create_new(true);",
+      "after": "        options.write(true).create(true).truncate(true);"
+    },
+    {
+      "id": "outcomes-started-runs-dropped",
+      "area": "terminal-outcomes",
+      "file": "src/report_json.rs",
+      "before": "                if collected.runs.contains_key(&number) {",
+      "after": "                if true || collected.runs.contains_key(&number) {"
+    },
+    {
+      "id": "outcomes-reconciled-delivery-complete",
+      "area": "terminal-outcomes",
+      "file": "src/report_json.rs",
+      "before": "            let verdict = totals.finish(fixture_failures, Delivery::Interrupted);",
+      "after": "            let verdict = totals.finish(fixture_failures, Delivery::Complete);"
+    },
+    {
+      "id": "outcomes-torn-line-parsed",
+      "area": "terminal-outcomes",
+      "file": "src/report_json/journal.rs",
+      "before": "        .rposition(|byte| *byte == b'\\n')\n        .map_or(0, |end| end + 1);",
+      "after": "        .rposition(|byte| *byte == b'\\n')\n        .map_or(bytes.len(), |_| bytes.len());"
+    },
+    {
+      "id": "outcomes-journal-failure-forgotten",
+      "area": "terminal-outcomes",
+      "file": "src/report_json/journal.rs",
+      "before": "            state.error = Some(error.to_string());",
+      "after": "            drop(error);"
+    },
+    {
+      "id": "outcomes-stored-code-unchecked",
+      "area": "terminal-outcomes",
+      "file": "src/core/report.rs",
+      "before": "    DiagnosticCode::parse(text)\n        .map(DiagnosticCode::as_str)\n        .ok_or_else(|| E::custom(format!(\"unknown diagnostic code {text:?}\")))",
+      "after": "    Ok::<_, E>(DiagnosticCode::parse(text).map_or(\"BW9001\", DiagnosticCode::as_str))"
+    },
+    {
+      "id": "outcomes-stored-version-unchecked",
+      "area": "terminal-outcomes",
+      "file": "src/core/report.rs",
+      "before": "        if stored.format != RECORD_FORMAT || stored.version != RECORD_VERSION {",
+      "after": "        if stored.format != RECORD_FORMAT {"
+    },
+    {
+      "id": "outcomes-suite-admits-after-interrupt",
+      "area": "terminal-outcomes",
+      "file": "src/suites/execution.rs",
+      "before": "            |error: &Option<CliError>| error.is_some() || crate::interrupt::interrupted();",
+      "after": "            |error: &Option<CliError>| error.is_some();"
     }
   ]
 }

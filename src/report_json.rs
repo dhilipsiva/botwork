@@ -3,14 +3,16 @@
 use super::{atomic_file::AtomicFile, BWErr, CliError, Diagnostic};
 
 mod html;
+mod journal;
 use botwork::core::{
-    acceptance::{CaseStatus, RunVerdict, SkipReason},
+    acceptance::{CaseStatus, CaseTotals, Delivery, RunVerdict, SkipReason},
     report::{
         timestamp, ArtifactRecord, ErrorRecord, Event, EventObserver, EventRecord, RecordLimits,
         RecordOptions, Recording, RunIdentity, RunRecord,
     },
 };
-use serde::Serialize;
+use journal::{Journal, Line, Stored};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs::OpenOptions,
@@ -72,6 +74,15 @@ pub(super) fn diagnostic(error: &CliError) -> Diagnostic {
     }
 }
 
+/// What reconciliation found in a journal.
+pub(super) struct Reconciled {
+    pub(super) recorded: usize,
+    pub(super) interrupted: usize,
+    pub(super) selected: Option<usize>,
+    /// Bytes of a final line that the termination cut short.
+    pub(super) torn: usize,
+}
+
 /// A run record with its CLI occurrence number.
 #[derive(Serialize)]
 struct Entry<'a> {
@@ -81,13 +92,13 @@ struct Entry<'a> {
 }
 
 /// The identity and outcome of a run whose details exceeded the report budget.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Summary {
     number: usize,
     identity: RunIdentity,
     status: CaseStatus,
     complete: bool,
-    error: Option<&'static str>,
+    error: Option<String>,
     details_omitted: bool,
 }
 
@@ -116,7 +127,7 @@ impl Write for Counter {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Fixture {
     suite: String,
     status: CaseStatus,
@@ -127,9 +138,9 @@ struct Fixture {
 struct Document<'a> {
     format: &'static str,
     version: u32,
-    /// True once the document is final: every selected run has a record.
+    /// True once the document is final and every selected run has a record.
     complete: bool,
-    mode: &'static str,
+    mode: &'a str,
     started_at: &'a str,
     finished_at: Option<String>,
     duration_us: Option<u64>,
@@ -151,9 +162,12 @@ struct Collected {
 pub(super) struct Report {
     json: Option<AtomicFile>,
     html: Option<AtomicFile>,
-    mode: &'static str,
+    mode: String,
     started_at: String,
-    start: Instant,
+    /// Absent for a reconciled report, whose duration is unknown.
+    start: Option<Instant>,
+    /// Absent for a reconciled report, whose journal is being consumed.
+    journal: Option<Journal>,
     /// Serialized run bytes retained in full; `MAX_RUN_BYTES` outside tests.
     budget: usize,
     collected: Mutex<Collected>,
@@ -200,17 +214,60 @@ impl Report {
                 AtomicFile::begin(path, "HTML report", "botwork-report-html", html::recognized)
             })
             .transpose()?;
+        let started_at = timestamp(SystemTime::now());
+        let first = json.as_ref().or(html.as_ref()).expect("an output");
+        let journal = Journal::create(
+            journal::path_for(first.path()),
+            &Line::Header {
+                format: journal::FORMAT,
+                version: journal::VERSION,
+                mode,
+                started_at: &started_at,
+                json: json.as_ref().map(AtomicFile::path),
+                html: html.as_ref().map(AtomicFile::path),
+            },
+        )?;
         let report = Self {
             json,
             html,
-            mode,
-            started_at: timestamp(SystemTime::now()),
-            start: Instant::now(),
+            mode: mode.to_owned(),
+            started_at,
+            start: Some(Instant::now()),
+            journal: Some(journal),
             budget: MAX_RUN_BYTES,
             collected: Mutex::default(),
         };
-        report.publish(None)?;
+        report.publish(None, false)?;
         Ok(report)
+    }
+
+    fn journal(&self, line: &Line<'_>) {
+        if let Some(journal) = &self.journal {
+            journal.append(line);
+        }
+    }
+
+    /// Whether journaling failed, so a forced termination could not have been
+    /// reconciled; delivery is then incomplete.
+    pub(super) fn journal_failed(&self) -> bool {
+        self.journal
+            .as_ref()
+            .is_some_and(|journal| journal.failure().is_some())
+    }
+
+    /// The number of runs selected, once discovery knows it.
+    pub(super) fn selected(&self, count: usize) {
+        self.journal(&Line::Selected { count });
+    }
+
+    /// Run `number` started; reconciliation treats it as interrupted until it
+    /// has a record.
+    pub(super) fn started(&self, number: usize, identity: &RunIdentity) {
+        self.journal(&Line::Started {
+            number,
+            identity,
+            started_at: &timestamp(SystemTime::now()),
+        });
     }
 
     fn collected(&self) -> std::sync::MutexGuard<'_, Collected> {
@@ -250,16 +307,22 @@ impl Report {
         let mut collected = self.collected();
         let kept = if size <= self.budget.saturating_sub(collected.retained) {
             collected.retained += size;
+            self.journal(&Line::Run {
+                number,
+                record: &record,
+            });
             Kept::Full(Box::new(record))
         } else {
-            Kept::Summary(Summary {
+            let summary = Summary {
                 number,
                 status: record.status,
                 complete: record.complete,
-                error: record.error.as_ref().map(|error| error.code),
+                error: record.error.as_ref().map(|error| error.code.to_owned()),
                 identity: record.identity,
                 details_omitted: true,
-            })
+            };
+            self.journal(&Line::Summary { summary: &summary });
+            Kept::Summary(summary)
         };
         collected.runs.insert(number, kept);
     }
@@ -272,30 +335,172 @@ impl Report {
     }
 
     pub(super) fn fixture(&self, suite: &str, status: CaseStatus, error: Option<ErrorRecord>) {
-        self.collected().fixtures.push(Fixture {
+        let fixture = Fixture {
             suite: suite.to_owned(),
             status,
             error,
-        });
+        };
+        self.journal(&Line::Fixture { fixture: &fixture });
+        self.collected().fixtures.push(fixture);
     }
 
-    /// Publish the complete report. `expected` runs must all have records.
-    pub(super) fn finish(&self, verdict: &RunVerdict, expected: usize) -> Result<(), CliError> {
+    /// Fold the journal an interrupted invocation left beside `path` into its
+    /// final report(s). Started runs without a record become interrupted, and
+    /// the verdict is interrupted, so partial output never reads as a pass.
+    pub(super) fn reconcile(path: &Path) -> Result<Reconciled, CliError> {
+        let journal_path = journal::path_for(path);
+        let contents = journal::read(&journal_path)?;
+        let mut entries = contents.entries.into_iter();
+        let Some(Stored::Header {
+            mode,
+            started_at,
+            json,
+            html,
+            ..
+        }) = entries.next()
+        else {
+            unreachable!("the journal reader checks the header")
+        };
+        if !matches!(mode.as_str(), "file" | "batch" | "suites") {
+            return Err(Diagnostic::new(BWErr::OutputError(format!(
+                "Report journal {}: unknown mode {mode:?}",
+                journal_path.display()
+            )))
+            .into());
+        }
+        // The locks also prove that the invocation that wrote the journal ended.
+        let json = json
+            .map(|path| AtomicFile::begin(path, "JSON report", "botwork-report", recognized))
+            .transpose()?;
+        let html = html
+            .map(|path| {
+                AtomicFile::begin(path, "HTML report", "botwork-report-html", html::recognized)
+            })
+            .transpose()?;
+        if json.is_none() && html.is_none() {
+            return Err(Diagnostic::new(BWErr::OutputError(format!(
+                "Report journal {}: the header names no report",
+                journal_path.display()
+            )))
+            .into());
+        }
+        let report = Self {
+            json,
+            html,
+            mode,
+            started_at,
+            start: None,
+            journal: None,
+            budget: MAX_RUN_BYTES,
+            collected: Mutex::default(),
+        };
+        let mut selected = None;
+        let mut started = BTreeMap::new();
+        {
+            let mut collected = report.collected();
+            for entry in entries {
+                match entry {
+                    Stored::Header { .. } => unreachable!("one header"),
+                    Stored::Selected { count } => selected = Some(count),
+                    Stored::Started {
+                        number,
+                        identity,
+                        started_at,
+                    } => {
+                        started.insert(number, (identity, started_at));
+                    }
+                    Stored::Run { number, record } => {
+                        collected.runs.insert(number, Kept::Full(record));
+                    }
+                    Stored::Summary { summary } => {
+                        collected
+                            .runs
+                            .insert(summary.number, Kept::Summary(summary));
+                    }
+                    Stored::Fixture { fixture } => collected.fixtures.push(fixture),
+                }
+            }
+            let mut interrupted = 0;
+            for (number, (identity, started_at)) in started {
+                if collected.runs.contains_key(&number) {
+                    continue;
+                }
+                let event = EventRecord {
+                    sequence: 0,
+                    event: Event::RunStarted {
+                        identity: identity.clone(),
+                        started_at,
+                    },
+                };
+                let record = RunRecord::from_events(identity, limits(), [&event])
+                    .expect("a started record has one event");
+                collected.runs.insert(number, Kept::Full(Box::new(record)));
+                interrupted += 1;
+            }
+            let mut totals = CaseTotals::default();
+            for kept in collected.runs.values() {
+                totals.record(match kept {
+                    Kept::Full(record) => record.status,
+                    Kept::Summary(summary) => summary.status,
+                })?;
+            }
+            let fixture_failures = collected
+                .fixtures
+                .iter()
+                .filter(|fixture| fixture.status.failed())
+                .count();
+            let recorded = collected.runs.len();
+            drop(collected);
+            let verdict = totals.finish(fixture_failures, Delivery::Interrupted);
+            let complete = selected == Some(recorded);
+            report.publish(Some(&verdict), complete)?;
+            std::fs::remove_file(&journal_path).map_err(|error| {
+                CliError::from(Diagnostic::new(BWErr::OutputError(format!(
+                    "Report journal {}: {error}",
+                    journal_path.display()
+                ))))
+            })?;
+            Ok(Reconciled {
+                recorded,
+                interrupted,
+                selected,
+                torn: contents.torn,
+            })
+        }
+    }
+
+    fn first(&self) -> &AtomicFile {
+        self.json
+            .as_ref()
+            .or(self.html.as_ref())
+            .expect("an output")
+    }
+
+    /// Publish the final report. With complete delivery every selected run must
+    /// have a record; after an interruption or a delivery failure, runs that
+    /// never started have none and the report says so.
+    pub(super) fn finish(&self, verdict: &RunVerdict, selected: usize) -> Result<(), CliError> {
         let recorded = self.collected().runs.len();
-        if recorded != expected {
-            let file = self
-                .json
-                .as_ref()
-                .or(self.html.as_ref())
-                .expect("an output");
-            return Err(file.error(format_args!(
-                "{recorded} of {expected} runs have records; the report stays incomplete"
+        if recorded != selected && verdict.delivery() == Delivery::Complete {
+            return Err(self.first().error(format_args!(
+                "{recorded} of {selected} runs have records; the report stays incomplete"
             )));
         }
-        self.publish(Some(verdict))
+        self.publish(Some(verdict), recorded == selected)?;
+        let Some(journal) = &self.journal else {
+            return Ok(());
+        };
+        let failed = journal.failure();
+        journal.finish()?;
+        match failed {
+            Some(error) => Err(self.first().error(format_args!(
+                "the journal failed ({error}), so a forced termination could not have been reconciled"
+            ))),
+            None => Ok(()),
+        }
     }
 
-    fn publish(&self, verdict: Option<&RunVerdict>) -> Result<(), CliError> {
+    fn publish(&self, verdict: Option<&RunVerdict>, complete: bool) -> Result<(), CliError> {
         let collected = self.collected();
         let mut omitted = 0;
         let runs = collected
@@ -313,12 +518,13 @@ impl Report {
         let document = Document {
             format: FORMAT,
             version: VERSION,
-            complete: verdict.is_some(),
-            mode: self.mode,
+            complete: verdict.is_some() && complete,
+            mode: &self.mode,
             started_at: &self.started_at,
             finished_at: finished.map(timestamp),
             duration_us: finished
-                .map(|_| u64::try_from(self.start.elapsed().as_micros()).unwrap_or(u64::MAX)),
+                .and(self.start)
+                .map(|start| u64::try_from(start.elapsed().as_micros()).unwrap_or(u64::MAX)),
             exit_code: verdict.map(RunVerdict::exit_code),
             verdict,
             runs,
@@ -340,10 +546,7 @@ impl Report {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use botwork::core::{
-        acceptance::{CaseTotals, Delivery},
-        run::{Engine, RunOptions},
-    };
+    use botwork::core::run::{Engine, RunOptions};
     use std::fs;
 
     fn record(name: &str, source: &str) -> RunRecord {
@@ -471,5 +674,135 @@ mod tests {
             .err()
             .expect("rejected");
         assert!(error.to_string().contains("ordinary file"), "{error}");
+    }
+
+    fn interrupted(statuses: &[CaseStatus]) -> RunVerdict {
+        let mut totals = CaseTotals::default();
+        for status in statuses {
+            totals.record(*status).unwrap();
+        }
+        totals.finish(0, Delivery::Interrupted)
+    }
+
+    #[test]
+    fn stopped_deliveries_publish_final_reports_without_every_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("report.json");
+        let report = Report::begin(Some(path.clone()), None, "batch").unwrap();
+        report.selected(3);
+        report.started(1, &RunIdentity::new("one", "one"));
+        report.run(1, record("one", "No Operation"), &[]);
+        report
+            .finish(&interrupted(&[CaseStatus::Succeeded]), 3)
+            .unwrap();
+        let value = read(&path);
+        assert_eq!(value["complete"], false, "two selected runs never started");
+        assert_eq!(value["verdict"]["delivery"], "interrupted");
+        assert_eq!(value["verdict"]["status"], "interrupted");
+        assert_eq!(value["exit_code"], 1);
+        assert!(
+            !journal::path_for(&path).exists(),
+            "a final report needs no journal"
+        );
+    }
+
+    /// Start a report whose run 1 finished and run 2 was still running when the
+    /// invocation ended without finishing its report.
+    fn abandoned(directory: &Path) -> (PathBuf, PathBuf) {
+        let (json, html) = (directory.join("report.json"), directory.join("report.html"));
+        let report = Report::begin(Some(json.clone()), Some(html.clone()), "batch").unwrap();
+        report.selected(3);
+        report.started(1, &RunIdentity::new("one", "one"));
+        report.run(1, record("one", "Log |\"done\"|"), &[]);
+        report.started(2, &RunIdentity::new("two", "two"));
+        report.fixture("suite", CaseStatus::Succeeded, None);
+        drop(report);
+        (json, html)
+    }
+
+    #[test]
+    fn journals_reconcile_started_runs_as_interrupted() {
+        let directory = tempfile::tempdir().unwrap();
+        let (json, html) = abandoned(directory.path());
+        assert_eq!(read(&json)["complete"], false);
+        assert!(read(&json)["verdict"].is_null(), "the marker stays");
+        let found = Report::reconcile(&json).unwrap();
+        assert_eq!(
+            (
+                found.recorded,
+                found.interrupted,
+                found.selected,
+                found.torn
+            ),
+            (2, 1, Some(3), 0)
+        );
+        let value = read(&json);
+        assert_eq!(value["complete"], false);
+        assert_eq!(value["exit_code"], 1);
+        assert!(value["duration_us"].is_null() && value["finished_at"].is_string());
+        assert_eq!(value["verdict"]["status"], "interrupted");
+        assert_eq!(value["verdict"]["delivery"], "interrupted");
+        assert_eq!(value["runs"][0]["status"], "succeeded");
+        assert_eq!(value["runs"][0]["logs"][0]["text"], "done");
+        let two = &value["runs"][1];
+        assert_eq!(
+            (two["number"].clone(), two["status"].clone()),
+            (2.into(), "interrupted".into())
+        );
+        assert_eq!(two["complete"], false);
+        assert!(two["started_at"].is_string() && two["finished_at"].is_null());
+        assert_eq!(value["fixtures"][0]["suite"], "suite");
+        let page = fs::read_to_string(&html).unwrap();
+        assert!(page.contains("<title>Botwork report: interrupted</title>"));
+        assert!(page.contains("This invocation was interrupted."));
+        assert!(!journal::path_for(&json).exists());
+        assert!(
+            Report::reconcile(&json).is_err(),
+            "nothing is left to reconcile"
+        );
+    }
+
+    #[test]
+    fn torn_final_lines_are_ignored_and_corrupt_journals_refused() {
+        let directory = tempfile::tempdir().unwrap();
+        let (json, _) = abandoned(directory.path());
+        let journal = journal::path_for(&json);
+        let original = fs::read(&journal).unwrap();
+        let mut corrupt = original.clone();
+        corrupt.extend_from_slice(b"not json\n{\"entry\":\"selected\",\"count\":1}\n");
+        fs::write(&journal, &corrupt).unwrap();
+        let error = Report::reconcile(&json).err().expect("corrupt journal");
+        assert!(error.to_string().contains("line 7"), "{error}");
+        assert_eq!(fs::read(&journal).unwrap(), corrupt, "nothing changes");
+        assert!(read(&json)["verdict"].is_null());
+        let torn = br#"{"entry":"run","num"#;
+        fs::write(&journal, [original.as_slice(), torn].concat()).unwrap();
+        let found = Report::reconcile(&json).unwrap();
+        assert_eq!((found.interrupted, found.torn), (1, torn.len()));
+    }
+
+    #[test]
+    fn a_pending_journal_blocks_new_reports_but_not_its_reconciliation() {
+        let directory = tempfile::tempdir().unwrap();
+        let (json, _) = abandoned(directory.path());
+        let error = Report::begin(Some(json.clone()), None, "file")
+            .err()
+            .expect("blocked");
+        assert!(error.to_string().contains("--reconcile-report"), "{error}");
+        assert!(read(&json)["verdict"].is_null(), "the marker is untouched");
+        Report::reconcile(&json).unwrap();
+        drop(Report::begin(Some(json), None, "file").unwrap());
+    }
+
+    #[test]
+    fn reports_without_started_runs_leave_no_journal() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("report.json");
+        let report = Report::begin(Some(path.clone()), None, "suites").unwrap();
+        assert!(journal::path_for(&path).exists());
+        report.selected(2);
+        drop(report);
+        assert!(!journal::path_for(&path).exists(), "nothing to reconcile");
+        assert!(read(&path)["verdict"].is_null(), "the marker stays");
     }
 }

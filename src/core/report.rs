@@ -5,10 +5,10 @@ use super::{
     acceptance::{
         CaseCompletion, CaseExpectation, CaseStatus, FailureKind, PhaseOutcome, SkipReason,
     },
-    ast::Span,
-    diagnostic::Diagnostic,
+    ast::{Span, STATEMENT_KIND_NAMES},
+    diagnostic::{Diagnostic, DiagnosticCode},
 };
-use serde::Serialize;
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use std::{
     fmt::{self, Write},
     sync::{Arc, Mutex},
@@ -26,7 +26,7 @@ const TRUNCATED: &str = "…[truncated]";
 
 /// Stable run identity: a script name or `suite/case[/row]` ID, a display name,
 /// and the dataset row when present.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunIdentity {
     pub id: String,
     pub name: String,
@@ -52,7 +52,7 @@ impl RunIdentity {
 }
 
 /// A source range with byte offsets and one-based line/Unicode-scalar columns.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceLocation {
     pub file: String,
     pub start_byte: usize,
@@ -196,7 +196,7 @@ pub struct StatementRecord {
 }
 
 /// A written Log record: a bounded text prefix and the full UTF-8 byte count.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogRecord {
     /// The top-level statement that was running, if any.
     pub statement: Option<u64>,
@@ -207,7 +207,7 @@ pub struct LogRecord {
 }
 
 /// A file or resource produced by the run, such as an assertion artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArtifactRecord {
     pub kind: String,
     pub path: String,
@@ -257,6 +257,122 @@ pub struct EventRecord {
     pub event: Event,
 }
 
+fn code<E: serde::de::Error>(text: &str) -> Result<&'static str, E> {
+    DiagnosticCode::parse(text)
+        .map(DiagnosticCode::as_str)
+        .ok_or_else(|| E::custom(format!("unknown diagnostic code {text:?}")))
+}
+
+impl<'de> Deserialize<'de> for ErrorRecord {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Stored {
+            code: String,
+            status: CaseStatus,
+            message: String,
+            truncated: bool,
+            location: Option<SourceLocation>,
+            causes: Vec<String>,
+            omitted_causes: u64,
+        }
+        let stored = Stored::deserialize(deserializer)?;
+        Ok(Self {
+            code: code(&stored.code)?,
+            status: stored.status,
+            message: stored.message,
+            truncated: stored.truncated,
+            location: stored.location,
+            causes: stored
+                .causes
+                .iter()
+                .map(|cause| code(cause))
+                .collect::<Result<_, _>>()?,
+            omitted_causes: stored.omitted_causes,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for StatementRecord {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Stored {
+            index: u64,
+            kind: String,
+            location: SourceLocation,
+            offset_us: u64,
+            duration_us: Option<u64>,
+            status: Option<CaseStatus>,
+            code: Option<String>,
+        }
+        let stored = Stored::deserialize(deserializer)?;
+        Ok(Self {
+            index: stored.index,
+            kind: STATEMENT_KIND_NAMES
+                .iter()
+                .copied()
+                .find(|name| *name == stored.kind)
+                .ok_or_else(|| {
+                    D::Error::custom(format!("unknown statement kind {:?}", stored.kind))
+                })?,
+            location: stored.location,
+            offset_us: stored.offset_us,
+            duration_us: stored.duration_us,
+            status: stored.status,
+            code: stored.code.as_deref().map(code).transpose()?,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for RunRecord {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Stored {
+            format: String,
+            version: u32,
+            identity: RunIdentity,
+            status: CaseStatus,
+            complete: bool,
+            skip_reason: Option<SkipReason>,
+            started_at: Option<String>,
+            finished_at: Option<String>,
+            duration_us: Option<u64>,
+            statements: Vec<StatementRecord>,
+            omitted_statements: u64,
+            logs: Vec<LogRecord>,
+            omitted_logs: u64,
+            logged_bytes: u64,
+            error: Option<ErrorRecord>,
+            artifacts: Vec<ArtifactRecord>,
+            omitted_artifacts: u64,
+            events: u64,
+        }
+        let stored = Stored::deserialize(deserializer)?;
+        if stored.format != RECORD_FORMAT || stored.version != RECORD_VERSION {
+            return Err(D::Error::custom(format!(
+                "unsupported record {} version {}",
+                stored.format, stored.version
+            )));
+        }
+        let mut record = Self::new(stored.identity, RecordLimits::default());
+        record.status = stored.status;
+        record.complete = stored.complete;
+        record.skip_reason = stored.skip_reason;
+        record.started_at = stored.started_at;
+        record.finished_at = stored.finished_at;
+        record.duration_us = stored.duration_us;
+        record.statements = stored.statements;
+        record.omitted_statements = stored.omitted_statements;
+        record.logs = stored.logs;
+        record.omitted_logs = stored.omitted_logs;
+        record.logged_bytes = stored.logged_bytes;
+        record.error = stored.error;
+        record.artifacts = stored.artifacts;
+        record.omitted_artifacts = stored.omitted_artifacts;
+        record.events = stored.events;
+        Ok(record)
+    }
+}
+
 /// An event that breaks run ordering; the record is left unchanged.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RecordError {
@@ -274,6 +390,9 @@ pub enum RecordError {
 
 /// The folded result of one run. Until a terminal event arrives, its status is
 /// `interrupted` and `complete` is false: partial output never implies a pass.
+///
+/// A deserialized record is a stored snapshot: its format, version, codes, and
+/// statement kinds are validated, and further events fold with default limits.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RunRecord {
     pub format: &'static str,

@@ -25,6 +25,7 @@ use std::{
 mod assertion_artifacts;
 mod atomic_file;
 mod batch;
+mod interrupt;
 mod listener;
 mod report_json;
 mod suites;
@@ -34,7 +35,7 @@ mod suites;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Botwork file to run (repeatable; each occurrence starts a fresh run)
-    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help"])]
+    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help", "reconcile_report"])]
     file: Vec<PathBuf>,
     /// Discover cases from an explicit suite file (repeatable; paths keep their order)
     #[arg(long, conflicts_with_all = ["file", "list_statements", "statement_help"])]
@@ -66,6 +67,9 @@ struct Args {
     /// Write a self-contained HTML report; mark it incomplete before running
     #[arg(long, value_name = "PATH", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     report_html: Option<PathBuf>,
+    /// Finish a report whose invocation was forcibly terminated: started runs without an outcome become interrupted
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["file", "suite", "list_statements", "statement_help", "report_json", "report_html", "listener", "assertion_artifacts"])]
+    reconcile_report: Option<PathBuf>,
     /// Stream execution events as JSON Lines to PROGRAM's stdin (run without a shell)
     #[arg(long, value_name = "PROGRAM", conflicts_with_all = ["list_cases", "list_statements", "statement_help"])]
     listener: Option<PathBuf>,
@@ -142,6 +146,12 @@ enum CliError {
     },
     #[error("Batch failed: {failed} of {total} runs failed")]
     Batch { failed: usize, total: usize },
+    /// A signal stopped the invocation; the summary has already been printed.
+    #[error("{0}")]
+    Interrupted(String),
+    /// Reconciliation succeeded; its verdict is interrupted, so the status is 1.
+    #[error("{0}")]
+    Reconciled(String),
     #[error("{file}: {source}")]
     Read { file: PathBuf, source: io::Error },
     #[error(transparent)]
@@ -229,7 +239,7 @@ fn run_control(timeout_ms: Option<u64>) -> Result<OperationControl, CliError> {
                 })
         })
         .transpose()?;
-    let control = OperationControl::default().child(deadline);
+    let control = interrupt::root().child(deadline);
     control.checkpoint()?;
     Ok(control)
 }
@@ -341,6 +351,25 @@ fn main() -> ExitCode {
     };
     let result = if args.list_statements || args.statement_help.is_some() {
         statement_help(args.statement_help.as_deref(), output_limits)
+    } else if let Some(path) = &args.reconcile_report {
+        report_json::Report::reconcile(path).and_then(|found| {
+            let selected = found
+                .selected
+                .map_or_else(|| "an unknown number of".to_owned(), |count| count.to_string());
+            let mut message = format!(
+                "Reconciled {}: {} of {selected} selected runs have records, {} of them interrupted",
+                path.display(),
+                found.recorded,
+                found.interrupted
+            );
+            if found.torn != 0 {
+                message.push_str(&format!(
+                    "; ignored a {}-byte final journal line cut short by the termination",
+                    found.torn
+                ));
+            }
+            Err(CliError::Reconciled(message))
+        })
     } else {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -349,6 +378,11 @@ fn main() -> ExitCode {
                 CliError::Script(Diagnostic::new(BWErr::AsyncRuntime(error.to_string())))
             })
             .and_then(|runtime| {
+                interrupt::install().map_err(|error| {
+                    Diagnostic::new(BWErr::AsyncRuntime(format!(
+                        "Signal handling setup failed: {error}"
+                    )))
+                })?;
                 let artifacts = args
                     .assertion_artifacts
                     .as_deref()
@@ -426,8 +460,11 @@ fn main() -> ExitCode {
                     ))
                 } else if args.file.len() == 1 {
                     let path = args.file[0].display().to_string();
+                    if let Some(report) = &report {
+                        report.selected(1);
+                    }
                     let recording = batch::recording(
-                        report.is_some(),
+                        report.as_deref(),
                         listener.as_deref(),
                         1,
                         RunIdentity::new(path.clone(), path),
@@ -454,8 +491,20 @@ fn main() -> ExitCode {
                     }
                     let mut totals = botwork::core::acceptance::CaseTotals::default();
                     totals.record(status)?;
-                    let delivered =
-                        batch::deliver(report.as_deref(), listener.as_deref(), totals, 0);
+                    // A single run needs no admission; a signal still marks it interrupted.
+                    let delivery = if interrupt::interrupted() {
+                        botwork::core::acceptance::Delivery::Interrupted
+                    } else {
+                        botwork::core::acceptance::Delivery::Complete
+                    };
+                    let delivered = batch::deliver(
+                        report.as_deref(),
+                        listener.as_deref(),
+                        totals,
+                        0,
+                        delivery,
+                        1,
+                    );
                     batch::publish_report(result, delivered)
                 } else {
                     runtime.block_on(batch::run(

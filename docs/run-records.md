@@ -170,7 +170,11 @@ bounded by these limits rather than by run length.
 ## Serialization and compatibility
 
 Records and events serialize with serde, using snake_case field and status
-names. An event is tagged by its `event` field. Adding fields or event kinds
+names. `RunRecord` and its parts also deserialize, so hosts can store records and
+load them back. Loading validates the format and version, every diagnostic code
+and statement kind (`ast::STATEMENT_KIND_NAMES`), and the status vocabulary.
+Unknown fields are ignored. A loaded record is a finished snapshot: further
+events fold with default limits. An event is tagged by its `event` field. Adding fields or event kinds
 keeps `version` 1; removing or reinterpreting a field increments it. Consumers
 should ignore unknown fields and check `format`, `version`, and `complete` first.
 

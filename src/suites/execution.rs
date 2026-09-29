@@ -1,7 +1,7 @@
 //! Suite owners retain their context while cases borrow immutable inputs. Only
 //! setup, case execution, and teardown occupy the bounded execution slots.
 use super::*;
-use crate::batch::{Identity, Message, Outcome, Tally};
+use crate::batch::{Identity, Message, Outcome, Stop, Tally};
 use botwork::core::{
     acceptance::SkipReason,
     eval::{evaluate_suite_fixture_async, FixtureInputs},
@@ -205,6 +205,9 @@ pub(super) async fn run(
         group.indices.push(index);
         group.pending.push_back(index);
     }
+    if let Some(report) = &configuration.report {
+        report.selected(cases.len());
+    }
     let configuration = Arc::new(configuration);
     let (ready_tx, mut ready_rx) = mpsc::channel(suite::MAX_SUITES);
     let mut running = JoinSet::new();
@@ -214,18 +217,22 @@ pub(super) async fn run(
     let mut failed_ids = vec![false; cases.len()];
     let mut reporting_error = None;
     loop {
-        if reporting_error.is_some() {
+        // A reporting failure or signal stops admission; started work and
+        // teardown of ready fixtures still finish.
+        let stopping =
+            |error: &Option<CliError>| error.is_some() || crate::interrupt::interrupted();
+        if stopping(&reporting_error) {
             for group in &mut groups {
                 group.pending.clear();
             }
         }
         while work < jobs {
-            if reporting_error.is_some() {
+            if stopping(&reporting_error) {
                 for group in &mut groups {
                     group.pending.clear();
                 }
             }
-            let Some(action) = action(&groups, reporting_error.is_some()) else {
+            let Some(action) = action(&groups, stopping(&reporting_error)) else {
                 break;
             };
             match action {
@@ -351,12 +358,7 @@ pub(super) async fn run(
             }
         }
     }
-    if let Some(error) = reporting_error {
-        return Err(error);
-    }
-    debug_assert_eq!(tally.totals.total(), cases.len());
-    batch::report(tally.summary(true)).await?;
-    Ok(Outcome {
+    let mut outcome = Outcome {
         totals: tally.totals,
         fixtures_failed: tally.fixtures_failed,
         failed_cases: cases
@@ -365,5 +367,18 @@ pub(super) async fn run(
             .filter(|(_, failed)| *failed)
             .map(|(case, _)| case.id())
             .collect(),
-    })
+        selected: cases.len(),
+        stop: None,
+    };
+    if let Some(error) = reporting_error {
+        outcome.stop = Some(Stop::Delivery(error));
+        return Ok(outcome);
+    }
+    batch::report(tally.summary(true)).await?;
+    if crate::interrupt::interrupted() {
+        outcome.stop = Some(Stop::Interrupted);
+    } else {
+        debug_assert_eq!(outcome.totals.total(), cases.len());
+    }
+    Ok(outcome)
 }
