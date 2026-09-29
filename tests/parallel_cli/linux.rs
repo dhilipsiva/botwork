@@ -240,7 +240,7 @@ fn queued_runs_receive_a_fresh_timeout_after_an_expired_read_drains() {
     assert!(stderr.contains("[run 1] timed out:"), "{stderr}");
     assert!(stderr.contains("[run 2] succeeded:"), "{stderr}");
     assert!(
-        stderr.ends_with("[batch] 2 runs: 1 succeeded, 1 failed\n"),
+        stderr.ends_with("[batch] 2 runs: 1 succeeded, 0 failed, 1 timed out\n"),
         "{stderr}"
     );
 }

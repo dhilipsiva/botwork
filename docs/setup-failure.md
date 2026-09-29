@@ -108,7 +108,8 @@ Suite |"environment"| {
 
 Stdout contains `open demo` then `close demo`. Stderr preserves `BW2001` for the
 undefined setup variable, followed by the `BW2002` cleanup cause, two skipped
-case records, and this summary:
+case records, a [failure recap](console-report.md#failure-recap) naming the suite
+fixture, and this summary:
 
 ```text
 [cases] 2 selected: 0 succeeded, 0 failed, 2 skipped; 1 suite fixtures failed

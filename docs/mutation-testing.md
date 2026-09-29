@@ -191,6 +191,11 @@ retention, byte counts, expectation decisions, and cause order. Further faults
 cover module statement exclusion, Log capture, and recorder propagation into
 scoped contexts. Its 249-entry catalogue adds 12 faults, with the `run_records`
 suite as an oracle; see [run-record evidence](run-records-evidence.json).
+Version 24 adds the console report. Its faults cover hidden stop categories, stops
+counted as failures, recap bounds, exit decisions that ignore fixtures, synthetic
+locations, uncounted fixture and skip outcomes, and empty recaps. Its 257-entry
+catalogue adds 8 faults, with the `console_report` suite as an oracle; see
+[console-report evidence](console-report-evidence.json).
 
 ## First campaign — 2026-09-28
 

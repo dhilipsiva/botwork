@@ -70,10 +70,11 @@ results after the first failing script. Reporting failure has the distinct
 admission/draining behavior described below.
 
 With working status delivery, every file occurrence receives one started record
-and one terminal record. The final summary follows all terminal records and
-counts timeouts, resource stops, and other run errors as failed; successful plus
-failed equals the number of requested runs. Completion order does not change
-these counts. Failed-run records include the original diagnostic;
+and one terminal record. The final [console report](console-report.md) summary
+follows all terminal records, after a recap of unsuccessful runs. It counts each
+status separately: timeouts, cancellations, and resource stops have their own
+counts instead of joining `failed`, and all counts sum to the number of requested
+runs. Completion order does not change these counts. Failed-run records include the original diagnostic;
 timeout/resource failures have explicit terminal labels.
 
 | Exit status | Meaning |

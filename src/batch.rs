@@ -45,47 +45,194 @@ enum Input {
 }
 
 pub(super) struct Outcome {
-    pub(super) total: usize,
-    pub(super) failed: usize,
-    pub(super) skipped: usize,
+    pub(super) totals: CaseTotals,
     pub(super) fixtures_failed: usize,
     pub(super) failed_cases: Vec<String>,
 }
 
 impl Outcome {
+    /// The exit decision comes from the same verdict as the printed summary.
     pub(super) fn result(self) -> Result<(), CliError> {
-        let succeeded = self
-            .total
-            .checked_sub(self.failed)
-            .and_then(|remaining| remaining.checked_sub(self.skipped))
-            .ok_or_else(|| {
-                Diagnostic::new(BWErr::RunConfiguration(
-                    "Inconsistent acceptance result counts".into(),
-                ))
-            })?;
-        let mut totals = CaseTotals::default();
-        totals.record_many(CaseStatus::Succeeded, succeeded)?;
-        totals.record_many(CaseStatus::Failed, self.failed)?;
-        totals.record_many(CaseStatus::Skipped, self.skipped)?;
+        let skipped = self.totals.count(CaseStatus::Skipped);
+        let total = self.totals.total();
+        let unsuccessful = total
+            - self.totals.count(CaseStatus::Succeeded)
+            - self.totals.count(CaseStatus::ExpectedFailure)
+            - skipped;
         // The scheduler returns Outcome only after owners and reports drain.
-        if !totals
+        if !self
+            .totals
             .finish(self.fixtures_failed, Delivery::Complete)
             .failed()
         {
             Ok(())
-        } else if self.skipped != 0 || self.fixtures_failed != 0 {
+        } else if skipped != 0 || self.fixtures_failed != 0 {
             Err(CliError::Suites {
-                failed: self.failed,
-                skipped: self.skipped,
+                failed: unsuccessful,
+                skipped,
                 fixtures_failed: self.fixtures_failed,
             })
         } else {
             Err(CliError::Batch {
-                failed: self.failed,
-                total: self.total,
+                failed: unsuccessful,
+                total,
             })
         }
     }
+}
+
+/// Failure recap lines kept for the final console summary.
+const RECAP_LINES: usize = 50;
+
+/// Terminal observations for one CLI invocation, in completion order.
+#[derive(Default)]
+pub(super) struct Tally {
+    pub(super) totals: CaseTotals,
+    pub(super) fixtures_failed: usize,
+    recap: Vec<String>,
+    omitted: usize,
+}
+
+/// The console status of a finished run, from its diagnostic code alone.
+pub(super) fn status(result: &Result<(), CliError>) -> CaseStatus {
+    result
+        .as_ref()
+        .err()
+        .map_or(CaseStatus::Succeeded, error_status)
+}
+
+fn error_status(error: &CliError) -> CaseStatus {
+    match error {
+        CliError::Script(error) => CaseStatus::from_diagnostic_code(error.code()),
+        CliError::SourceLimit { source, .. } => CaseStatus::from_diagnostic_code(source.code()),
+        _ => CaseStatus::Failed,
+    }
+}
+
+/// ` (BWnnnn at file:line:column)` when the failure has a diagnostic. Recap lines
+/// never repeat a progress line's `label:` form, so progress lines stay unique.
+struct Cause<'a>(&'a CliError);
+impl std::fmt::Display for Cause<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let diagnostic = match self.0 {
+            CliError::Script(error) => error,
+            CliError::SourceLimit { source, .. } => source,
+            _ => return Ok(()),
+        };
+        write!(f, " ({}", diagnostic.code())?;
+        // Stops inside built-ins point at synthetic sources such as `<builtin>`;
+        // report the innermost script call site instead.
+        let real = |span: &&botwork::core::ast::Span| !span.source().name().starts_with('<');
+        let span = diagnostic.span.as_ref().filter(real).or_else(|| {
+            diagnostic
+                .call_stack
+                .iter()
+                .rev()
+                .map(|frame| &frame.call_site)
+                .find(real)
+        });
+        if let Some(span) = span {
+            write!(f, " at {}", span.location())?;
+        }
+        f.write_str(")")
+    }
+}
+
+impl Tally {
+    pub(super) fn finished(
+        &mut self,
+        identity: &Identity,
+        result: &Result<(), CliError>,
+    ) -> Result<(), CliError> {
+        let status = status(result);
+        self.totals.record(status)?;
+        if let Err(error) = result {
+            let line = match &identity.case {
+                Some((id, _)) => format!("[case {id}] {}{}", status.label(), Cause(error)),
+                None => format!(
+                    "[run {}] {} {:?}{}",
+                    identity.number,
+                    status.label(),
+                    identity.path,
+                    Cause(error)
+                ),
+            };
+            self.remember(line);
+        }
+        Ok(())
+    }
+
+    pub(super) fn skipped(&mut self) -> Result<(), CliError> {
+        Ok(self.totals.record(CaseStatus::Skipped)?)
+    }
+
+    pub(super) fn fixture(&mut self, suite: &str, result: &Result<(), CliError>) {
+        if let Err(error) = result {
+            self.fixtures_failed += 1;
+            let line = format!(
+                "[suite {suite}] fixture {}{}",
+                status(result).label(),
+                Cause(error)
+            );
+            self.remember(line);
+        }
+    }
+
+    fn remember(&mut self, line: String) {
+        if self.recap.len() < RECAP_LINES {
+            self.recap.push(line);
+        } else {
+            self.omitted += 1;
+        }
+    }
+
+    pub(super) fn summary(&mut self, cases: bool) -> Message {
+        Message::Summary {
+            cases,
+            totals: self.totals,
+            fixtures_failed: self.fixtures_failed,
+            recap: std::mem::take(&mut self.recap),
+            omitted: self.omitted,
+        }
+    }
+}
+
+/// `[batch] N runs: …` or `[cases] N selected: …`, listing stop categories only when present.
+fn summary(cases: bool, totals: &CaseTotals, fixtures_failed: usize) -> String {
+    use std::fmt::Write;
+    let mut line = String::new();
+    let _ = if cases {
+        write!(line, "[cases] {} selected: ", totals.total())
+    } else {
+        write!(line, "[batch] {} runs: ", totals.total())
+    };
+    let _ = write!(
+        line,
+        "{} succeeded, {} failed",
+        totals.count(CaseStatus::Succeeded),
+        totals.count(CaseStatus::Failed)
+    );
+    for status in [
+        CaseStatus::ExpectedFailure,
+        CaseStatus::UnexpectedPass,
+        CaseStatus::Cancelled,
+        CaseStatus::TimedOut,
+        CaseStatus::LimitExceeded,
+        CaseStatus::Interrupted,
+    ] {
+        let count = totals.count(status);
+        if count != 0 {
+            let _ = write!(line, ", {count} {}", status.label());
+        }
+    }
+    let skipped = totals.count(CaseStatus::Skipped);
+    if cases && (skipped != 0 || fixtures_failed != 0) {
+        let _ = write!(
+            line,
+            ", {skipped} skipped; {fixtures_failed} suite fixtures failed"
+        );
+    }
+    line
 }
 
 pub(super) enum Message {
@@ -100,12 +247,11 @@ pub(super) enum Message {
         Option<Arc<super::assertion_artifacts::Store>>,
     ),
     Summary {
-        total: usize,
-        succeeded: usize,
-        failed: usize,
         cases: bool,
-        skipped: usize,
+        totals: CaseTotals,
         fixtures_failed: usize,
+        recap: Vec<String>,
+        omitted: usize,
     },
 }
 
@@ -117,12 +263,7 @@ pub(super) fn task_failure() -> CliError {
 }
 
 fn outcome(error: &CliError) -> &'static str {
-    let code = match error {
-        CliError::Script(error) => error.code(),
-        CliError::SourceLimit { source, .. } => source.code(),
-        _ => return CaseStatus::Failed.label(),
-    };
-    CaseStatus::from_diagnostic_code(code).label()
+    error_status(error).label()
 }
 
 fn write_report(message: Message) -> Result<(), CliError> {
@@ -175,11 +316,30 @@ fn write_report(message: Message) -> Result<(), CliError> {
     })?
     .unwrap_or_default();
     let result = match message {
-        Message::SuiteStarted(id) => context.write_output(&mut stderr, format_args!("[suite {id}] setup started\n")),
-        Message::SuiteReady(id) => context.write_output(&mut stderr, format_args!("[suite {id}] setup succeeded\n")),
-        Message::SuiteFinished(id, Ok(()), _) => context.write_output(&mut stderr, format_args!("[suite {id}] teardown succeeded\n")),
-        Message::SuiteFinished(id, Err(error), _) => context.write_output(&mut stderr, format_args!("[suite {id}] fixture {}:\n{error}\n", outcome(&error))),
-        Message::Skipped(Identity { case: Some((id, name)), .. }, reason) => context.write_output(&mut stderr, format_args!("[case {id}] skipped: {name:?}: {reason}\n")),
+        Message::SuiteStarted(id) => {
+            context.write_output(&mut stderr, format_args!("[suite {id}] setup started\n"))
+        }
+        Message::SuiteReady(id) => {
+            context.write_output(&mut stderr, format_args!("[suite {id}] setup succeeded\n"))
+        }
+        Message::SuiteFinished(id, Ok(()), _) => context.write_output(
+            &mut stderr,
+            format_args!("[suite {id}] teardown succeeded\n"),
+        ),
+        Message::SuiteFinished(id, Err(error), _) => context.write_output(
+            &mut stderr,
+            format_args!("[suite {id}] fixture {}:\n{error}\n", outcome(&error)),
+        ),
+        Message::Skipped(
+            Identity {
+                case: Some((id, name)),
+                ..
+            },
+            reason,
+        ) => context.write_output(
+            &mut stderr,
+            format_args!("[case {id}] skipped: {name:?}: {reason}\n"),
+        ),
         Message::Skipped(_, _) => unreachable!("only cases are skipped by suite fixtures"),
         Message::Started(Identity {
             case: Some((id, name)),
@@ -199,7 +359,11 @@ fn write_report(message: Message) -> Result<(), CliError> {
             ),
             Err(error) => context.write_output(
                 &mut stderr,
-                format_args!("[case {id}] {}: {name:?}{}\n{error}\n", outcome(&error), DatasetLabel(&dataset)),
+                format_args!(
+                    "[case {id}] {}: {name:?}{}\n{error}\n",
+                    outcome(&error),
+                    DatasetLabel(&dataset)
+                ),
             ),
         },
         Message::Started(run) => context.write_output(
@@ -219,29 +383,32 @@ fn write_report(message: Message) -> Result<(), CliError> {
                 run.path
             ),
         ),
-        Message::Summary { total, succeeded, failed, cases: true, skipped, fixtures_failed }
-            if skipped != 0 || fixtures_failed != 0 => context.write_output(&mut stderr,
-                format_args!("[cases] {total} selected: {succeeded} succeeded, {failed} failed, {skipped} skipped; {fixtures_failed} suite fixtures failed\n")),
         Message::Summary {
-            total,
-            succeeded,
-            failed,
-            cases: true,
-            ..
-        } => context.write_output(
-            &mut stderr,
-            format_args!("[cases] {total} selected: {succeeded} succeeded, {failed} failed\n"),
-        ),
-        Message::Summary {
-            total,
-            succeeded,
-            failed,
-            cases: false,
-            ..
-        } => context.write_output(
-            &mut stderr,
-            format_args!("[batch] {total} runs: {succeeded} succeeded, {failed} failed\n"),
-        ),
+            cases,
+            totals,
+            fixtures_failed,
+            recap,
+            omitted,
+        } => {
+            // Failures scroll past with their full diagnostics; recap them before
+            // the summary so the final lines explain the exit status.
+            if !recap.is_empty() {
+                context.write_output(
+                    &mut stderr,
+                    format_args!("[failures] {}:\n", recap.len() + omitted),
+                )?;
+                for line in &recap {
+                    context.write_output(&mut stderr, format_args!("  {line}\n"))?;
+                }
+                if omitted != 0 {
+                    context.write_output(&mut stderr, format_args!("  …and {omitted} more\n"))?;
+                }
+            }
+            context.write_output(
+                &mut stderr,
+                format_args!("{}\n", summary(cases, &totals, fixtures_failed)),
+            )
+        }
     }
     .map(|_| ())
     .map_err(CliError::from);
@@ -307,7 +474,7 @@ async fn run_inputs(
     let mut pending = inputs.into_iter().enumerate();
     let mut running = JoinSet::new();
     let mut identities = HashMap::new();
-    let mut failed = 0;
+    let mut tally = Tally::default();
     let mut failed_cases = Vec::new();
     let mut reporting_error = None;
     loop {
@@ -368,8 +535,8 @@ async fn run_inputs(
             Err(error) => (error.id(), Err(task_failure())),
         };
         let identity = identities.remove(&task).expect("admitted run identity");
+        tally.finished(&identity, &result)?;
         if result.is_err() {
-            failed += 1;
             if let Some((id, _)) = &identity.case {
                 failed_cases.push((identity.number, id.clone()));
             }
@@ -385,20 +552,11 @@ async fn run_inputs(
     if let Some(error) = reporting_error {
         return Err(error);
     }
-    report(Message::Summary {
-        total,
-        succeeded: total - failed,
-        failed,
-        cases,
-        skipped: 0,
-        fixtures_failed: 0,
-    })
-    .await?;
+    debug_assert_eq!(tally.totals.total(), total);
+    report(tally.summary(cases)).await?;
     failed_cases.sort_unstable_by_key(|(number, _)| *number);
     Ok(Outcome {
-        total,
-        failed,
-        skipped: 0,
+        totals: tally.totals,
         fixtures_failed: 0,
         failed_cases: failed_cases.into_iter().map(|(_, id)| id).collect(),
     })

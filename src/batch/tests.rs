@@ -1,39 +1,166 @@
 use super::*;
 use botwork::core::diagnostic::DiagnosticCode;
 
+fn totals(statuses: &[(CaseStatus, usize)]) -> CaseTotals {
+    let mut totals = CaseTotals::default();
+    for &(status, count) in statuses {
+        totals.record_many(status, count).unwrap();
+    }
+    totals
+}
+
 #[test]
-fn aggregate_verdict_controls_cli_success_and_rejects_inconsistent_counts() {
-    for (total, failed, skipped, fixtures_failed, success) in [
-        (0, 0, 0, 0, true),
-        (3, 0, 0, 0, true),
-        (3, 1, 0, 0, false),
-        (3, 0, 1, 0, false),
-        (3, 0, 0, 1, false),
-        (3, 1, 1, 2, false),
+fn summary_and_exit_decision_share_one_verdict() {
+    use CaseStatus::*;
+    for (statuses, fixtures, cases, line, success) in [
+        (
+            vec![],
+            0,
+            false,
+            "[batch] 0 runs: 0 succeeded, 0 failed",
+            true,
+        ),
+        (
+            vec![(Succeeded, 3)],
+            0,
+            false,
+            "[batch] 3 runs: 3 succeeded, 0 failed",
+            true,
+        ),
+        (
+            vec![(Succeeded, 2), (Failed, 1)],
+            0,
+            false,
+            "[batch] 3 runs: 2 succeeded, 1 failed",
+            false,
+        ),
+        (
+            vec![
+                (Succeeded, 1),
+                (TimedOut, 1),
+                (Cancelled, 2),
+                (LimitExceeded, 1),
+            ],
+            0,
+            false,
+            "[batch] 5 runs: 1 succeeded, 0 failed, 2 cancelled, 1 timed out, 1 limit exceeded",
+            false,
+        ),
+        (
+            vec![(Succeeded, 2), (Skipped, 1)],
+            0,
+            true,
+            "[cases] 3 selected: 2 succeeded, 0 failed, 1 skipped; 0 suite fixtures failed",
+            false,
+        ),
+        (
+            vec![(Succeeded, 2)],
+            1,
+            true,
+            "[cases] 2 selected: 2 succeeded, 0 failed, 0 skipped; 1 suite fixtures failed",
+            false,
+        ),
+        (
+            vec![(Succeeded, 1), (ExpectedFailure, 1), (Interrupted, 1)],
+            0,
+            true,
+            "[cases] 3 selected: 1 succeeded, 0 failed, 1 expected failure, 1 interrupted",
+            false,
+        ),
+        (
+            vec![(Succeeded, 1), (ExpectedFailure, 2)],
+            0,
+            true,
+            "[cases] 3 selected: 1 succeeded, 0 failed, 2 expected failure",
+            true,
+        ),
     ] {
+        let totals = totals(&statuses);
+        assert_eq!(summary(cases, &totals, fixtures), line);
         let outcome = Outcome {
-            total,
-            failed,
-            skipped,
-            fixtures_failed,
+            totals,
+            fixtures_failed: fixtures,
             failed_cases: vec![],
         };
-        assert_eq!(outcome.result().is_ok(), success);
+        assert_eq!(outcome.result().is_ok(), success, "{line}");
     }
-    for (total, failed, skipped) in [(0, 1, 0), (0, 0, 1), (2, 1, 2), (usize::MAX, usize::MAX, 1)] {
-        let error = Outcome {
-            total,
-            failed,
-            skipped,
-            fixtures_failed: 0,
-            failed_cases: vec![],
+    let error = Outcome {
+        totals: totals(&[(CaseStatus::Succeeded, 1), (CaseStatus::TimedOut, 2)]),
+        fixtures_failed: 0,
+        failed_cases: vec![],
+    }
+    .result()
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        CliError::Batch {
+            failed: 2,
+            total: 3
         }
-        .result()
+    ));
+}
+
+#[test]
+fn failure_recap_names_each_unsuccessful_run_and_bounds_its_length() {
+    let identity = |number: usize, case: Option<&str>| Identity {
+        number,
+        path: Arc::new(PathBuf::from("a.botwork")),
+        case: case.map(|id| (id.to_owned(), id.to_owned())),
+        dataset: None,
+        artifacts: None,
+    };
+    let source = botwork::core::run::Engine::default()
+        .run_source(
+            "a.botwork",
+            "No Operation\nAssert |false|",
+            Default::default(),
+        )
+        .result
         .unwrap_err();
-        assert!(
-            matches!(error, CliError::Script(ref error) if error.code() == DiagnosticCode::RunConfiguration)
-        );
+    let mut tally = Tally::default();
+    tally.finished(&identity(1, None), &Ok(())).unwrap();
+    tally
+        .finished(&identity(2, None), &Err(CliError::Script(source.clone())))
+        .unwrap();
+    tally
+        .finished(
+            &identity(3, Some("s/c")),
+            &Err(CliError::Script(Diagnostic::new(BWErr::Timeout(
+                "t".into(),
+            )))),
+        )
+        .unwrap();
+    tally.fixture("s", &Err(CliError::Script(source)));
+    tally.fixture("ok", &Ok(()));
+    tally.skipped().unwrap();
+    let Message::Summary {
+        totals,
+        fixtures_failed,
+        recap,
+        omitted,
+        ..
+    } = tally.summary(true)
+    else {
+        panic!("summary")
+    };
+    assert_eq!(
+        recap,
+        [
+            "[run 2] failed \"a.botwork\" (BW9001 at a.botwork:2:1)",
+            "[case s/c] timed out (BW5002)",
+            "[suite s] fixture failed (BW9001 at a.botwork:2:1)",
+        ]
+    );
+    assert_eq!((omitted, fixtures_failed, totals.total()), (0, 1, 4));
+    let mut many = Tally::default();
+    for number in 0..RECAP_LINES + 3 {
+        many.finished(&identity(number, None), &Err(task_failure()))
+            .unwrap();
     }
+    let Message::Summary { recap, omitted, .. } = many.summary(false) else {
+        panic!("summary")
+    };
+    assert_eq!((recap.len(), omitted), (RECAP_LINES, 3));
 }
 
 #[test]

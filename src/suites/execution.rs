@@ -1,7 +1,7 @@
 //! Suite owners retain their context while cases borrow immutable inputs. Only
 //! setup, case execution, and teardown occupy the bounded execution slots.
 use super::*;
-use crate::batch::{Identity, Message, Outcome};
+use crate::batch::{Identity, Message, Outcome, Tally};
 use botwork::core::eval::{evaluate_suite_fixture_async, FixtureInputs};
 use std::collections::{HashMap, VecDeque};
 use tokio::{
@@ -106,12 +106,14 @@ async fn skip(
     group: &mut Group,
     cases: &[SelectedCase],
     failed: &mut [bool],
-    count: &mut usize,
+    tally: &mut Tally,
     reporting_error: &mut Option<CliError>,
     reason: &'static str,
 ) {
     for index in group.pending.drain(..) {
-        *count += 1;
+        if let Err(error) = tally.skipped() {
+            reporting_error.get_or_insert(error);
+        }
         failed[index] = true;
         report(
             Message::Skipped(identity(index, cases), reason),
@@ -193,9 +195,7 @@ pub(super) async fn run(
     let mut running = JoinSet::new();
     let mut identities = HashMap::new();
     let mut work = 0;
-    let mut failed = 0;
-    let mut skipped = 0;
-    let mut fixtures_failed = 0;
+    let mut tally = Tally::default();
     let mut failed_ids = vec![false; cases.len()];
     let mut reporting_error = None;
     loop {
@@ -230,7 +230,7 @@ pub(super) async fn run(
                         &mut groups[group],
                         &cases,
                         &mut failed_ids,
-                        &mut skipped,
+                        &mut tally,
                         &mut reporting_error,
                         "suite control stopped",
                     )
@@ -302,22 +302,25 @@ pub(super) async fn run(
                     Task::Case { group, index } => {
                         work -= 1;
                         groups[group].active -= 1;
-                        if result.is_err() { failed += 1; failed_ids[index] = true; }
+                        if result.is_err() { failed_ids[index] = true; }
                         let mut run_identity = identity(index, &cases);
                         run_identity.artifacts = configuration.artifacts.clone();
+                        if let Err(error) = tally.finished(&run_identity, &result) {
+                            reporting_error.get_or_insert(error);
+                        }
                         report(Message::Finished(run_identity, result), &mut reporting_error).await;
                     }
                     Task::Owner(group) => {
                         if matches!(groups[group].state, State::SettingUp | State::Finishing) { work -= 1; }
+                        tally.fixture(groups[group].suite.metadata().id(), &result);
                         if result.is_err() {
-                            fixtures_failed += 1;
                             // A failed shared fixture affects every selected borrower,
                             // including passed cases that need the fixture on a rerun.
                             for &index in &groups[group].indices { failed_ids[index] = true; }
                         }
                         groups[group].state = State::Done;
                         report(Message::SuiteFinished(groups[group].suite.metadata().id().into(), result, configuration.artifacts.clone()), &mut reporting_error).await;
-                        skip(&mut groups[group], &cases, &mut failed_ids, &mut skipped, &mut reporting_error, "suite setup did not complete").await;
+                        skip(&mut groups[group], &cases, &mut failed_ids, &mut tally, &mut reporting_error, "suite setup did not complete").await;
                     }
                 }
             }
@@ -326,20 +329,11 @@ pub(super) async fn run(
     if let Some(error) = reporting_error {
         return Err(error);
     }
-    batch::report(Message::Summary {
-        total: cases.len(),
-        succeeded: cases.len() - failed - skipped,
-        failed,
-        skipped,
-        fixtures_failed,
-        cases: true,
-    })
-    .await?;
+    debug_assert_eq!(tally.totals.total(), cases.len());
+    batch::report(tally.summary(true)).await?;
     Ok(Outcome {
-        total: cases.len(),
-        failed,
-        skipped,
-        fixtures_failed,
+        totals: tally.totals,
+        fixtures_failed: tally.fixtures_failed,
         failed_cases: cases
             .iter()
             .zip(failed_ids)

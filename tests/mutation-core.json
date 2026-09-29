@@ -1,5 +1,5 @@
 {
-  "version": 23,
+  "version": 24,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1743,6 +1743,62 @@
       "file": "src/core/run.rs",
       "before": "            recorder: self.recorder.clone(),\n",
       "after": "            recorder: None,\n"
+    },
+    {
+      "id": "console-stop-categories-hidden",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "        if count != 0 {\n            let _ = write!(line, \", {count} {}\", status.label());",
+      "after": "        if false && count != 0 {\n            let _ = write!(line, \", {count} {}\", status.label());"
+    },
+    {
+      "id": "console-stops-counted-as-failed",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "        CliError::Script(error) => CaseStatus::from_diagnostic_code(error.code()),\n        CliError::SourceLimit { source, .. } => CaseStatus::from_diagnostic_code(source.code()),\n        _ => CaseStatus::Failed,",
+      "after": "        CliError::Script(_) => CaseStatus::Failed,\n        CliError::SourceLimit { source, .. } => CaseStatus::from_diagnostic_code(source.code()),\n        _ => CaseStatus::Failed,"
+    },
+    {
+      "id": "console-unbounded-recap",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "if self.recap.len() < RECAP_LINES {",
+      "after": "if true || self.recap.len() < RECAP_LINES {"
+    },
+    {
+      "id": "console-exit-ignores-fixtures",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "            .finish(self.fixtures_failed, Delivery::Complete)",
+      "after": "            .finish(0, Delivery::Complete)"
+    },
+    {
+      "id": "console-synthetic-location",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "let span = diagnostic.span.as_ref().filter(real).or_else(|| {",
+      "after": "let span = diagnostic.span.as_ref().or_else(|| {"
+    },
+    {
+      "id": "console-fixture-not-counted",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "            self.fixtures_failed += 1;\n",
+      "after": ""
+    },
+    {
+      "id": "console-empty-recap-printed",
+      "area": "console-report",
+      "file": "src/batch.rs",
+      "before": "            if !recap.is_empty() {",
+      "after": "            if true {"
+    },
+    {
+      "id": "console-skips-not-counted",
+      "area": "console-report",
+      "file": "src/suites/execution.rs",
+      "before": "        if let Err(error) = tally.skipped() {",
+      "after": "        if let Err(error) = Ok::<(), CliError>(()) {"
     }
   ]
 }

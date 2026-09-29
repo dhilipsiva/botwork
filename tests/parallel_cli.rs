@@ -113,7 +113,7 @@ fn syntax_io_and_timeout_failures_do_not_cancel_successful_siblings() {
     assert!(stderr.contains("BW1001"), "{stderr}");
     assert!(stderr.contains("BW5002"), "{stderr}");
     assert!(
-        stderr.ends_with("[batch] 4 runs: 1 succeeded, 3 failed\n"),
+        stderr.ends_with("[batch] 4 runs: 1 succeeded, 2 failed, 1 timed out\n"),
         "{stderr}"
     );
 }
@@ -141,7 +141,7 @@ fn output_budgets_are_fresh_per_run_and_status_reporting_has_its_own_allowance()
     assert!(stderr.contains("[run 1] limit exceeded:"), "{stderr}");
     assert!(stderr.contains("[run 2] limit exceeded:"), "{stderr}");
     assert!(
-        stderr.ends_with("[batch] 2 runs: 0 succeeded, 2 failed\n"),
+        stderr.ends_with("[batch] 2 runs: 0 succeeded, 0 failed, 2 limit exceeded\n"),
         "{stderr}"
     );
 }
@@ -170,7 +170,7 @@ fn oversized_source_is_reported_as_a_limit_before_utf8_and_leaves_siblings_runni
         "{stderr}"
     );
     assert!(!stderr.contains("invalid utf-8"), "{stderr}");
-    assert!(stderr.ends_with("[batch] 2 runs: 1 succeeded, 1 failed\n"));
+    assert!(stderr.ends_with("[batch] 2 runs: 1 succeeded, 0 failed, 1 limit exceeded\n"));
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn invalid_inputs_fail_each_run_before_script_effects_and_debug_traces() {
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert_eq!(stderr.matches("BW7001").count(), 2, "{stderr}");
+    assert_eq!(stderr.matches("[BW7001]").count(), 2, "{stderr}");
     assert!(!stderr.contains("debug:"), "{stderr}");
     assert!(!stderr.contains("No such file"), "{stderr}");
 }

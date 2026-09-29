@@ -504,7 +504,7 @@ Case |"c"| Using |"d"| As |data| { Log |data| }
     assert_eq!(output.stdout, b"7\n7\n42\n");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("output record bytes"), "{stderr}");
-    assert!(stderr.ends_with("[cases] 2 selected: 1 succeeded, 1 failed\n"));
+    assert!(stderr.ends_with("[cases] 2 selected: 1 succeeded, 0 failed, 1 limit exceeded\n"));
     assert_eq!(state(&harness)["failed"], json!(["s/c/too-large"]));
 }
 

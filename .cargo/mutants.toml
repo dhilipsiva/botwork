@@ -1,4 +1,4 @@
-# Version 23: add run and statement records.
+# Version 24: add the console failure recap and status summary.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/core/report.rs",
@@ -112,6 +112,7 @@ additional_cargo_args = [
     "--test", "setup_failure",
     "--test", "acceptance_policy",
     "--test", "builtins",
+    "--test", "console_report",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",
