@@ -266,6 +266,7 @@ The exit status tells a CI job what happened:
 
 - [Syntax reference](syntax.md): every form a script or suite can use.
 - [Checking scripts](check.md): find mistakes without running a script.
+- [Formatting](format.md): rewrite files in canonical layout.
 - [Statement reference](statements.md): every built-in statement's signature,
   kinds, errors, and an example.
 - [Language guide](language.md): values, operators, control flow, and errors.

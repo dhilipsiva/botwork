@@ -1,5 +1,5 @@
 {
-  "version": 36,
+  "version": 37,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2835,6 +2835,132 @@
       "file": "src/check.rs",
       "before": "                for diagnostic in &report.diagnostics {\n                    errors += 1;\n",
       "after": "                for diagnostic in &report.diagnostics {\n"
+    },
+    {
+      "id": "format-strings-scanned-for-comments",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "            Rule::stmt_block | Rule::string | Rule::string_content => return,\n",
+      "after": "            Rule::stmt_block => return,\n"
+    },
+    {
+      "id": "format-trailing-comments-moved",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "                if !comment.own_line && !(top && lines.is_empty()) {\n",
+      "after": "                if false {\n"
+    },
+    {
+      "id": "format-first-comment-dropped",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "                if !comment.own_line && !(top && lines.is_empty()) {\n",
+      "after": "                if !comment.own_line {\n"
+    },
+    {
+      "id": "format-blank-lines-dropped",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "            if newlines > 1 && lines.last().is_some_and(|line| !line.is_empty()) {\n",
+      "after": "            if false {\n"
+    },
+    {
+      "id": "format-blocks-not-indented",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "        let (opening, lines) = self.sequence(members, start, end, level + 1, false);\n",
+      "after": "        let (opening, lines) = self.sequence(members, start, end, level, false);\n"
+    },
+    {
+      "id": "format-empty-blocks-opened",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "            return \"{}\".into();\n",
+      "after": "            return \"{\\n}\".into();\n"
+    },
+    {
+      "id": "format-collections-flattened",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "        let multiline = pair.as_str().contains('\\n');\n",
+      "after": "        let multiline = false;\n"
+    },
+    {
+      "id": "format-wrap-ignores-long-pieces",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "|| !fits",
+      "after": "|| false && !fits"
+    },
+    {
+      "id": "format-wrap-disabled",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "        if wrap == 0 || width <= MAX_WIDTH",
+      "after": "        if true || width <= MAX_WIDTH"
+    },
+    {
+      "id": "format-sentence-spacing-kept",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "                        .filter(|word| !word.is_empty())\n",
+      "after": "                        .filter(|_| true)\n"
+    },
+    {
+      "id": "format-crlf-line-endings",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "    let mut output = lines.join(\"\\n\");\n",
+      "after": "    let mut output = lines.join(\"\\r\\n\");\n"
+    },
+    {
+      "id": "format-inner-comments-dropped",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "            for comment in hoisted {\n",
+      "after": "            for comment in hoisted.into_iter().filter(|_| false) {\n"
+    },
+    {
+      "id": "format-fixture-keyword-lowercase",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "                    Rule::suite_setup => \"SuiteSetup\",\n",
+      "after": "                    Rule::suite_setup => \"suitesetup\",\n"
+    },
+    {
+      "id": "format-dataset-format-case-kept",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "                            text.push_str(&child.as_str().to_uppercase());\n",
+      "after": "                            text.push_str(child.as_str());\n"
+    },
+    {
+      "id": "format-operators-unspaced",
+      "area": "format",
+      "file": "src/core/format.rs",
+      "before": "        parts.join(\" \")\n",
+      "after": "        parts.join(\"\")\n"
+    },
+    {
+      "id": "format-check-writes",
+      "area": "format",
+      "file": "src/formatting.rs",
+      "before": "                if check {\n",
+      "after": "                if false {\n"
+    },
+    {
+      "id": "format-check-passes-changes",
+      "area": "format",
+      "file": "src/formatting.rs",
+      "before": "    if errors != 0 || (check && changed != 0) {\n",
+      "after": "    if errors != 0 {\n"
+    },
+    {
+      "id": "format-permissions-reset",
+      "area": "format",
+      "file": "src/formatting.rs",
+      "before": "            .and_then(|()| fs::set_permissions(&temporary, permissions.clone()))\n",
+      "after": "            .and_then(|()| Ok(()))\n"
     }
   ]
 }

@@ -178,6 +178,28 @@ fn metadata(
 }
 
 impl Suite {
+    /// What this suite declares, without source positions.
+    pub(crate) fn fingerprint(&self) -> String {
+        let mut shape = format!("{:?}", self.metadata);
+        for dataset in &self.datasets {
+            shape.push_str(&dataset.fingerprint());
+            shape.push(';');
+        }
+        let fixtures = self.fixture_programs();
+        shape.push_str(&crate::core::format::program_shape(&fixtures.setup));
+        shape.push_str(&crate::core::format::program_shape(&fixtures.teardown));
+        for (index, case) in self.cases.iter().enumerate() {
+            let binding = case
+                .parameters
+                .as_ref()
+                .map(|parameters| (parameters.dataset, parameters.binding.text.as_str()));
+            shape.push_str(&format!("{:?}{binding:?}", case.metadata));
+            shape.push_str(&crate::core::format::program_shape(
+                &self.program(index).expect("case"),
+            ));
+        }
+        shape
+    }
     /// Discover declarations without evaluating imports, definitions, or case bodies.
     pub fn parse(name: &str, text: &str) -> DiagnosticResult<Self> {
         check_source(name, text, DEFAULT_SOURCE_BYTES, &SyntaxLimits::default())?;

@@ -6,6 +6,7 @@ pub mod ast_limits;
 pub(crate) mod csv;
 pub mod diagnostic;
 pub mod eval;
+pub mod format;
 pub mod grammar;
 pub mod input;
 pub mod listener;

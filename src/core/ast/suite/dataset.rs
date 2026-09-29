@@ -394,6 +394,14 @@ impl DatasetDefinition {
     pub fn id(&self) -> &str {
         &self.id
     }
+    /// What this declaration says, without source positions.
+    pub(crate) fn fingerprint(&self) -> String {
+        match (&self.data, &self.external) {
+            (Some(data), _) => crate::core::format::dataset_shape(data),
+            (None, Some((path, _, format))) => format!("{} from {format:?} {path:?}", self.id),
+            (None, None) => self.id.clone(),
+        }
+    }
     pub fn data(&self) -> Option<&Arc<Dataset>> {
         self.data.as_ref()
     }

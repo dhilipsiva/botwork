@@ -25,6 +25,7 @@ mod assertion_artifacts;
 mod atomic_file;
 mod batch;
 mod check;
+mod formatting;
 mod interrupt;
 mod listener;
 mod report_json;
@@ -53,6 +54,12 @@ struct Args {
     /// Check files or suites without running them: syntax, control placement, and lint rules
     #[arg(long, conflicts_with_all = ["list_cases", "list_statements", "statement_help", "reconcile_report", "report_json", "report_html", "listener", "failures", "rerun_failed", "assertion_artifacts"])]
     check: bool,
+    /// Rewrite files or suites in canonical layout; `*.dataset.botwork` files are datasets
+    #[arg(long, conflicts_with_all = ["check", "format_check", "list_cases", "list_statements", "statement_help", "reconcile_report", "report_json", "report_html", "listener", "failures", "rerun_failed", "assertion_artifacts"])]
+    format: bool,
+    /// Report files or suites whose layout is not canonical, without changing them
+    #[arg(long, conflicts_with_all = ["check", "list_cases", "list_statements", "statement_help", "reconcile_report", "report_json", "report_html", "listener", "failures", "rerun_failed", "assertion_artifacts"])]
+    format_check: bool,
     /// List selected case metadata as JSON lines without executing libraries or cases
     #[arg(long, requires = "suite", conflicts_with_all = ["jobs", "failures", "debug", "variables", "variable_files", "max_steps", "max_call_depth", "max_evaluation_depth", "timeout_ms"])]
     list_cases: bool,
@@ -421,6 +428,9 @@ fn main() -> ExitCode {
         statement_help(args.statement_help.as_deref(), output_limits)
     } else if args.check {
         check::run(&args.file, &args.suite)
+    } else if args.format || args.format_check {
+        let files: Vec<_> = args.file.iter().chain(&args.suite).cloned().collect();
+        formatting::run(&files, args.format_check)
     } else if let Some(path) = &args.reconcile_report {
         report_json::Report::reconcile(path).and_then(|found| {
             let selected = found

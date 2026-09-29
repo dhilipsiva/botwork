@@ -26,7 +26,8 @@ The [getting-started guide](docs/getting-started.md) covers installation, a firs
 script, reading failures, and a complete acceptance-test workflow with reports.
 The [syntax reference](docs/syntax.md) lists every form a script or suite can use,
 and the [statement reference](docs/statements.md) lists every built-in statement.
-`--check` [finds mistakes without running](docs/check.md) a file or suite.
+`--check` [finds mistakes without running](docs/check.md) a file or suite, and
+`--format` rewrites files in [canonical layout](docs/format.md).
 To look around quickly:
 
 1. Clone the repo

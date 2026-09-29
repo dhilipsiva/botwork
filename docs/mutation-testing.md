@@ -348,6 +348,21 @@ moved with this change were updated in place and re-run against the full oracle
 set: `lint-outer-definitions-ignored`, `lint-imports-ignored`, and
 `check-parse-errors-uncounted`.
 
+Version 37 adds the formatter. Its faults cover:
+
+- comments: read from inside strings, moved off their line, dropped at the top
+  of a file, or dropped from inside statements;
+- layout: blank lines dropped, blocks not indented, empty blocks opened, and
+  multi-line collections flattened;
+- wrapping: disabled, or applied to pieces that cannot fit;
+- spacing: sentence spacing kept, and operators unspaced;
+- CRLF output and keyword case;
+- a check mode that writes or passes changed files, and rewrites that reset
+  permissions.
+
+Its 423-entry catalogue adds 18 faults, with the `format` suite and the
+formatter unit tests as oracles; see [format evidence](format-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

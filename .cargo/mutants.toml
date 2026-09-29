@@ -1,6 +1,8 @@
-# Version 36: check imported modules and report what stays unchecked.
+# Version 37: format files canonically.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
+    "src/core/format.rs",
+    "src/formatting.rs",
     "src/core/analysis.rs",
     "src/check.rs",
     "src/core/operation.rs",
@@ -73,6 +75,7 @@ examine_globs = [
     "src/core/run/blocking_io.rs",
 ]
 examine_re = [
+    '^src/(core/format|formatting).rs:',
     '^src/(core/analysis|check).rs:',
     ' (OperationControl::(stop_grace|with_stop_grace|abandoned|abandonment|within_grace|child)|prepared|run_case_recorded)( ->|$)',
     ' <impl Drop for Runtime>::drop with \(\)$',
@@ -146,6 +149,7 @@ additional_cargo_args = [
     "--test", "shutdown",
     "--test", "stress",
     "--test", "check",
+    "--test", "format",
     "--test", "run_records",
     "--test", "structured_data",
     "--test", "polling",

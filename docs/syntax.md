@@ -18,6 +18,8 @@ page.
   and maps may span lines without it.
 - **Comments.** `#` starts a comment that runs to the end of the line.
   `###` opens a block comment that ends at the next `###`.
+- **Canonical layout.** `botwork --format` rewrites a file in one layout; see
+  [formatting](format.md).
 
 See [whitespace, lines, and comments](language.md#whitespace-lines-and-comments).
 
