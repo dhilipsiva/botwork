@@ -1,4 +1,4 @@
-# Version 35: check scripts without running them.
+# Version 36: check imported modules and report what stays unchecked.
 # Tool: cargo-mutants 27.1.0; keep the complete generated inventory for these functions.
 examine_globs = [
     "src/core/analysis.rs",

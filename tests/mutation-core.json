@@ -1,5 +1,5 @@
 {
-  "version": 35,
+  "version": 36,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2665,8 +2665,8 @@
       "id": "lint-outer-definitions-ignored",
       "area": "lint",
       "file": "src/core/analysis.rs",
-      "before": "            .skip(1)\n",
-      "after": "            .skip(usize::MAX)\n"
+      "before": "            .skip(1)\n            .any(|outer| outer.names.definitions.contains_key(signature))\n",
+      "after": "            .skip(usize::MAX)\n            .any(|outer| outer.names.definitions.contains_key(signature))\n"
     },
     {
       "id": "lint-suite-inputs-ignored",
@@ -2714,8 +2714,8 @@
       "id": "lint-imports-ignored",
       "area": "lint",
       "file": "src/core/analysis.rs",
-      "before": "            if !frame.imports(namespace) {\n",
-      "after": "            if true {\n"
+      "before": "            match frame.namespace(namespace, call.span.start()) {\n",
+      "after": "            match Namespace::Missing {\n"
     },
     {
       "id": "lint-first-definition-duplicated",
@@ -2742,8 +2742,99 @@
       "id": "check-parse-errors-uncounted",
       "area": "lint",
       "file": "src/check.rs",
-      "before": "                errors += 1;\n",
-      "after": "                let _ = errors;\n"
+      "before": "            Err(error) => {\n                errors += 1;\n",
+      "after": "            Err(error) => {\n"
+    },
+    {
+      "id": "check-module-exports-ignored",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "                    if !exports.contains_key(exported) {\n",
+      "after": "                    if false && !exports.contains_key(exported) {\n"
+    },
+    {
+      "id": "check-reexports-dropped",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "                exports.insert(\n                    format!(\"{alias}::{signature}\"),\n                    format!(\"{alias}::{header}\"),\n                );\n",
+      "after": "                let _ = (signature, header);\n"
+    },
+    {
+      "id": "check-import-order-ignored",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "            if imports.iter().any(|import| import.span.start() < position) {\n",
+      "after": "            if true {\n"
+    },
+    {
+      "id": "check-duplicate-namespaces-ignored",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "            for duplicate in &imports[1..] {\n",
+      "after": "            for duplicate in &imports[imports.len()..] {\n"
+    },
+    {
+      "id": "check-modules-resolved-from-working-directory",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "            importer.parent().unwrap_or(Path::new(\"/\")).to_owned()\n",
+      "after": "            directory.clone()\n"
+    },
+    {
+      "id": "check-module-reads-counted-as-inputs",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "if !frame.binds(name) && self.entry {",
+      "after": "if !frame.binds(name) {"
+    },
+    {
+      "id": "check-external-calls-uncounted",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "*self.report.external.entry(*external).or_default() += 1;",
+      "after": "let _ = external;"
+    },
+    {
+      "id": "check-unchecked-imports-uncounted",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "                Namespace::Imported(None) => self.report.unchecked_imports += 1,\n",
+      "after": "                Namespace::Imported(None) => {}\n"
+    },
+    {
+      "id": "check-module-diagnostics-dropped",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "                self.report.diagnostics.push(diagnostic);\n",
+      "after": "                drop(diagnostic);\n"
+    },
+    {
+      "id": "check-module-findings-first",
+      "area": "check",
+      "file": "src/core/analysis.rs",
+      "before": "entry.as_deref() != Some(name)",
+      "after": "entry.as_deref() == Some(name)"
+    },
+    {
+      "id": "check-cli-modules-uncounted",
+      "area": "check",
+      "file": "src/check.rs",
+      "before": "                modules.extend(report.modules);\n",
+      "after": "                modules.extend(report.modules.into_iter().filter(|_| false));\n"
+    },
+    {
+      "id": "check-cli-inputs-unlisted",
+      "area": "check",
+      "file": "src/check.rs",
+      "before": "    if !variables.is_empty() {\n",
+      "after": "    if false {\n"
+    },
+    {
+      "id": "check-cli-module-diagnostics-uncounted",
+      "area": "check",
+      "file": "src/check.rs",
+      "before": "                for diagnostic in &report.diagnostics {\n                    errors += 1;\n",
+      "after": "                for diagnostic in &report.diagnostics {\n"
     }
   ]
 }

@@ -332,6 +332,22 @@ Version 35 adds static checks. Its faults cover:
 Its 392-entry catalogue adds 17 faults, with the `check` suite and the analysis
 unit tests as oracles; see [check evidence](check-evidence.json).
 
+Version 36 extends the check to imported modules. Its faults cover:
+
+- module statements, re-exports, import order, and duplicate aliases that go
+  unchecked;
+- modules resolved from the working directory instead of the importing file;
+- module reads counted as input variables;
+- uncounted external calls, unchecked imports, and module syntax errors;
+- module findings sorted before the checked file's;
+- a CLI summary that omits modules, input variables, or module errors.
+
+Its 405-entry catalogue adds 13 faults, with the same oracles; see
+[module check evidence](check-modules-evidence.json). Three entries whose code
+moved with this change were updated in place and re-run against the full oracle
+set: `lint-outer-definitions-ignored`, `lint-imports-ignored`, and
+`check-parse-errors-uncounted`.
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

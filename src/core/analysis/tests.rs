@@ -262,7 +262,25 @@ fn every_rule_has_a_distinct_name_severity_and_code() {
             "undefined-statement",
             "duplicate-statement",
             "argument-kind",
-            "condition-kind"
+            "condition-kind",
+            "import-failure",
+            "import-cycle",
+            "duplicate-namespace"
+        ]
+    );
+    assert_eq!(
+        Rule::ALL.map(|rule| rule.code().map(|code| code.as_str())),
+        [
+            Some("BW2002"),
+            Some("BW2002"),
+            Some("BW2001"),
+            Some("BW2003"),
+            None,
+            Some("BW3003"),
+            Some("BW3003"),
+            Some("BW6001"),
+            Some("BW6002"),
+            Some("BW6003")
         ]
     );
     assert_eq!(Severity::Error.as_str(), "error");
@@ -307,6 +325,235 @@ fn suites_share_setup_variables_and_row_bindings_and_report_library_findings_onc
         [
             (Rule::UndefinedStatement, "Undefined helper "),
             (Rule::UndefinedVariable, "row"),
+        ]
+    );
+}
+
+/// A checked program named `main.botwork` in `directory`, with its modules.
+fn report_in(directory: &std::path::Path, source: &str) -> Report {
+    Analyzer::default()
+        .with_modules(directory)
+        .report_program(&Program::parse_detailed("main.botwork", source).unwrap())
+}
+
+fn write(directory: &std::path::Path, name: &str, text: &str) {
+    let path = directory.join(name);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, text).unwrap();
+}
+
+fn file_name(finding: &Finding) -> String {
+    let name = finding.span.source().name();
+    std::path::Path::new(name)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn modules_are_checked_and_their_exports_resolve_qualified_calls() {
+    let directory = tempfile::tempdir().unwrap();
+    write(
+        directory.path(),
+        "lib/math.botwork",
+        "Double |x| { Return |x * 2| }\n",
+    );
+    write(
+        directory.path(),
+        "lib/wrap.botwork",
+        "Import |\"math.botwork\"| As |m|\nQuad |x| { Return |@{ m::Double |@{ m::Double |x| }| }| }\nLog |module_input|\n",
+    );
+    let report = report_in(
+        directory.path(),
+        "Import |\"lib/wrap.botwork\"| As |w|\nLog |@{ w::Quad |2| }|\nLog |@{ w::m::Double |2| }|\nLog |@{ w::quad |1| |2| }|\nLog |@{ w::Triple |1| }|\n",
+    );
+    let found: Vec<_> = report
+        .findings
+        .iter()
+        .map(|finding| {
+            (
+                finding.rule,
+                file_name(finding),
+                finding.span.text().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (
+                Rule::UndefinedStatement,
+                "main.botwork".into(),
+                "w::quad |1| |2|".into()
+            ),
+            (
+                Rule::UndefinedStatement,
+                "main.botwork".into(),
+                "w::Triple |1|".into()
+            ),
+            (
+                Rule::UndefinedVariable,
+                "wrap.botwork".into(),
+                "module_input".into()
+            ),
+        ]
+    );
+    assert!(
+        report.findings[0]
+            .help
+            .contains("Did you mean `w::Quad |x|`?"),
+        "{}",
+        report.findings[0].help
+    );
+    // The module's own reads are not the checked file's input variables.
+    assert!(report.inputs.is_empty());
+    let modules: Vec<_> = report
+        .modules
+        .iter()
+        .map(|path| path.file_name().unwrap().to_str().unwrap())
+        .collect();
+    assert_eq!(modules, ["math.botwork", "wrap.botwork"]);
+    assert!(report.modules.iter().all(|path| path.is_absolute()));
+    assert_eq!((report.errors(), report.warnings()), (2, 1));
+}
+
+#[test]
+fn imports_that_cannot_load_cycle_or_collide_are_reported() {
+    let directory = tempfile::tempdir().unwrap();
+    write(
+        directory.path(),
+        "a.botwork",
+        "Import |\"b.botwork\"| As |b|\n",
+    );
+    write(
+        directory.path(),
+        "b.botwork",
+        "Import |\"a.botwork\"| As |a|\n",
+    );
+    write(directory.path(), "broken.botwork", "Log |1\n");
+    write(directory.path(), "one.botwork", "One { Return |1| }\n");
+    let report = report_in(
+        directory.path(),
+        r#"Import |"missing.botwork"| As |missing|
+Import |"http://x/y.botwork"| As |remote|
+Import |"one.txt"| As |text|
+Import |"a.botwork"| As |a|
+Import |"broken.botwork"| As |broken|
+Log |@{ early::One }|
+Import |"one.botwork"| As |early|
+Import |"one.botwork"| As |early|
+"#,
+    );
+    let found: Vec<_> = report
+        .findings
+        .iter()
+        .map(|finding| (finding.rule, finding.span.text().to_owned()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (Rule::ImportFailure, "\"missing.botwork\"".into()),
+            (Rule::ImportFailure, "\"http://x/y.botwork\"".into()),
+            (Rule::ImportFailure, "\"one.txt\"".into()),
+            (Rule::StatementBeforeDefinition, "early::One ".into()),
+            (Rule::DuplicateNamespace, "early".into()),
+            (Rule::ImportCycle, "\"a.botwork\"".into()),
+        ]
+    );
+    assert!(
+        report.findings[0].message.contains("missing.botwork: "),
+        "{}",
+        report.findings[0].message
+    );
+    let cycle = &report.findings[5];
+    assert_eq!(file_name(cycle), "b.botwork");
+    assert!(
+        cycle.message.starts_with("Import cycle: ") && cycle.message.matches(" -> ").count() == 2,
+        "{}",
+        cycle.message
+    );
+    // The module's syntax error is reported as the run would report it.
+    assert_eq!(report.diagnostics.len(), 1);
+    assert_eq!(report.diagnostics[0].code(), DiagnosticCode::Syntax);
+    assert_eq!(report.errors(), 6);
+}
+
+#[test]
+fn without_module_analysis_qualified_calls_are_counted_as_unchecked() {
+    let program = Program::parse_detailed(
+        "main.botwork",
+        "Import |\"helpers.botwork\"| As |h|\nLog |@{ h::Anything |1| }|\nLog |@{ h::Other }|\n",
+    )
+    .unwrap();
+    let report = Analyzer::default().report_program(&program);
+    assert!(report.findings.is_empty(), "{:?}", report.findings);
+    assert_eq!(report.unchecked_imports, 2);
+    assert!(report.modules.is_empty());
+}
+
+#[test]
+fn inputs_and_calls_that_depend_on_the_outside_world_are_reported() {
+    let program = Program::parse_detailed(
+        "main.botwork",
+        r#"Log |@{ Read File |path| }|
+Log |@{ Read File |"b.txt"| }|
+Log |@{ HTTP Request |"GET"| To |url| }|
+Log |@{ Current Date Time In |"UTC"| }|
+Log |@{ Join Path |["a", "b"]| }|
+Log |@{ Get Environment Variable |"HOME"| }|
+"#,
+    )
+    .unwrap();
+    let report = Analyzer::default().report_program(&program);
+    assert_eq!(report.inputs.iter().collect::<Vec<_>>(), ["path", "url"]);
+    assert_eq!(
+        report.external.into_iter().collect::<Vec<_>>(),
+        [
+            (External::Files, 2),
+            (External::Environment, 1),
+            (External::Network, 1),
+            (External::Clock, 1)
+        ]
+    );
+}
+
+#[test]
+fn every_external_statement_is_a_built_in() {
+    let mut context = Context::with_limits(RunLimits::default()).unwrap();
+    context.init_statements();
+    let catalogue: HashSet<String> = context
+        .statement_signatures()
+        .into_iter()
+        .map(|signature| signature.normalized().to_owned())
+        .collect();
+    for (header, _) in EXTERNAL_STATEMENTS {
+        let normalized = StatementSignature::native(header)
+            .unwrap()
+            .normalized()
+            .to_owned();
+        assert!(catalogue.contains(&normalized), "{header}");
+    }
+    assert_eq!(
+        Analyzer::default().external.len(),
+        EXTERNAL_STATEMENTS.len()
+    );
+    assert_eq!(
+        [
+            External::Files,
+            External::Environment,
+            External::Processes,
+            External::Network,
+            External::Clock
+        ]
+        .map(External::as_str),
+        [
+            "files",
+            "the environment",
+            "processes",
+            "the network",
+            "the clock"
         ]
     );
 }

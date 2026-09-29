@@ -1,5 +1,7 @@
 //! Static checks over parsed scripts and suites. Nothing is executed: no
-//! statement runs, no module is loaded, and no host operation is called.
+//! statement runs, no module initializes, and no host operation is called.
+//! With [`Analyzer::with_modules`], imported local modules are read and checked
+//! too; otherwise calls into them are left unchecked.
 //!
 //! Each finding names a stable rule. A finding that predicts a runtime error
 //! carries that error's diagnostic code, so `--check` and a failing run agree.
@@ -11,14 +13,18 @@ use super::{
         normalize_sentence, suite::Suite, AccessSegment, AssignmentValue, Block, Call, ElseBranch,
         Expr, ExprKind, Program, Span, Statement, StatementKind, UnaryOp,
     },
-    diagnostic::DiagnosticCode,
+    diagnostic::{Diagnostic, DiagnosticCode},
     eval::Context,
     run::RunLimits,
     signature::{StatementSignature, ValueKind},
+    syntax_limits::DEFAULT_SOURCE_BYTES,
 };
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    fmt,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    fmt, fs,
+    io::Read,
+    path::{Path, PathBuf},
+    rc::Rc,
 };
 
 /// How serious a finding is. Errors predict a failing run; warnings flag code
@@ -57,10 +63,16 @@ pub enum Rule {
     /// A literal `If`/`While` condition that is not a boolean, or a literal
     /// `For` input that is not an array.
     ConditionKind,
+    /// An import that cannot load: not a local `.botwork` path, or unreadable.
+    ImportFailure,
+    /// An import that reaches a module already being imported.
+    ImportCycle,
+    /// A second import under an alias already imported in the same scope.
+    DuplicateNamespace,
 }
 
 impl Rule {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 10] = [
         Self::UndefinedStatement,
         Self::StatementBeforeDefinition,
         Self::UndefinedVariable,
@@ -68,6 +80,9 @@ impl Rule {
         Self::UnreachableCode,
         Self::ArgumentKind,
         Self::ConditionKind,
+        Self::ImportFailure,
+        Self::ImportCycle,
+        Self::DuplicateNamespace,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -79,6 +94,9 @@ impl Rule {
             Self::UnreachableCode => "unreachable-code",
             Self::ArgumentKind => "argument-kind",
             Self::ConditionKind => "condition-kind",
+            Self::ImportFailure => "import-failure",
+            Self::ImportCycle => "import-cycle",
+            Self::DuplicateNamespace => "duplicate-namespace",
         }
     }
 
@@ -87,7 +105,10 @@ impl Rule {
             Self::UndefinedStatement
             | Self::DuplicateStatement
             | Self::ArgumentKind
-            | Self::ConditionKind => Severity::Error,
+            | Self::ConditionKind
+            | Self::ImportFailure
+            | Self::ImportCycle
+            | Self::DuplicateNamespace => Severity::Error,
             Self::StatementBeforeDefinition | Self::UndefinedVariable | Self::UnreachableCode => {
                 Severity::Warning
             }
@@ -103,6 +124,9 @@ impl Rule {
             Self::UndefinedVariable => Some(DiagnosticCode::UndefinedVariable),
             Self::DuplicateStatement => Some(DiagnosticCode::DuplicateStatement),
             Self::ArgumentKind | Self::ConditionKind => Some(DiagnosticCode::IncompatibleType),
+            Self::ImportFailure => Some(DiagnosticCode::ImportRead),
+            Self::ImportCycle => Some(DiagnosticCode::ImportCycle),
+            Self::DuplicateNamespace => Some(DiagnosticCode::DuplicateNamespace),
             Self::UnreachableCode => None,
         }
     }
@@ -141,9 +165,129 @@ impl fmt::Display for Finding {
     }
 }
 
+/// What a built-in statement's result depends on outside the script. The check
+/// cannot know these results without running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum External {
+    Files,
+    Environment,
+    Processes,
+    Network,
+    Clock,
+}
+
+impl External {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Files => "files",
+            Self::Environment => "the environment",
+            Self::Processes => "processes",
+            Self::Network => "the network",
+            Self::Clock => "the clock",
+        }
+    }
+}
+
+/// Built-ins whose results depend on the outside world. Lexical path statements,
+/// the operating system name, and the path separator are fixed per build.
+pub const EXTERNAL_STATEMENTS: [(&str, External); 33] = [
+    ("Absolute Path |path|", External::Files),
+    ("Append To File |path| Text |text|", External::Files),
+    ("Canonical Path |path|", External::Files),
+    ("Copy File |source| To |destination|", External::Files),
+    ("Create Directory |path|", External::Files),
+    ("Create File |path| Text |text|", External::Files),
+    (
+        "Create Temporary Directory In |directory| Prefix |prefix|",
+        External::Files,
+    ),
+    ("Directory Exists |path|", External::Files),
+    ("File Exists |path|", External::Files),
+    ("File Size |path|", External::Files),
+    ("List Directory |path|", External::Files),
+    ("Move Path |source| To |destination|", External::Files),
+    ("Path Exists |path|", External::Files),
+    ("Path Kind |path|", External::Files),
+    ("Read Binary File |path|", External::Files),
+    ("Read File |path|", External::Files),
+    (
+        "Remove Directory |path| Recursively |recursive|",
+        External::Files,
+    ),
+    ("Remove File |path|", External::Files),
+    ("Working Directory", External::Files),
+    ("Write Binary File |path| Bytes |bytes|", External::Files),
+    ("Write File |path| Text |text|", External::Files),
+    ("Environment Variable Exists |name|", External::Environment),
+    ("Environment Variables", External::Environment),
+    ("Get Environment Variable |name|", External::Environment),
+    (
+        "Run Process |executable| With Arguments |arguments|",
+        External::Processes,
+    ),
+    (
+        "Run Process |executable| With Arguments |arguments| Options |options|",
+        External::Processes,
+    ),
+    (
+        "Run Binary Process |executable| With Arguments |arguments|",
+        External::Processes,
+    ),
+    (
+        "Run Binary Process |executable| With Arguments |arguments| Options |options|",
+        External::Processes,
+    ),
+    ("HTTP Request |method| To |url|", External::Network),
+    (
+        "HTTP Request |method| To |url| Options |options|",
+        External::Network,
+    ),
+    ("HTTP Binary Request |method| To |url|", External::Network),
+    (
+        "HTTP Binary Request |method| To |url| Options |options|",
+        External::Network,
+    ),
+    ("Current Date Time In |zone|", External::Clock),
+];
+
+/// Everything a check established, and what it could not.
+#[derive(Debug, Default)]
+pub struct Report {
+    /// Findings, the checked file's first and then each module's, in source order.
+    pub findings: Vec<Finding>,
+    /// Modules that failed to parse or validate, as the run would report them.
+    pub diagnostics: Vec<Diagnostic>,
+    /// Variables read but never assigned: they must arrive as input variables.
+    pub inputs: BTreeSet<String>,
+    /// Calls to built-ins whose results depend on the outside world.
+    pub external: BTreeMap<External, usize>,
+    /// Imported local modules that were read and checked, by canonical path.
+    pub modules: BTreeSet<PathBuf>,
+    /// Calls into imported modules that were not checked.
+    pub unchecked_imports: usize,
+}
+
+impl Report {
+    /// Findings of error severity plus modules that failed to parse.
+    pub fn errors(&self) -> usize {
+        self.diagnostics.len()
+            + self
+                .findings
+                .iter()
+                .filter(|finding| finding.severity() == Severity::Error)
+                .count()
+    }
+
+    pub fn warnings(&self) -> usize {
+        self.findings.len() - (self.errors() - self.diagnostics.len())
+    }
+}
+
 /// Checks programs against a statement catalogue.
 pub struct Analyzer {
     builtins: HashMap<String, StatementSignature>,
+    external: HashMap<String, External>,
+    directory: Option<PathBuf>,
 }
 
 impl Default for Analyzer {
@@ -161,22 +305,54 @@ impl Analyzer {
     pub fn with_statements<'a>(
         signatures: impl IntoIterator<Item = &'a StatementSignature>,
     ) -> Self {
+        let builtins: HashMap<String, StatementSignature> = signatures
+            .into_iter()
+            .map(|signature| (signature.normalized().to_owned(), signature.clone()))
+            .collect();
+        let external = EXTERNAL_STATEMENTS
+            .iter()
+            .filter_map(|(header, external)| {
+                let normalized = StatementSignature::native(header)
+                    .ok()?
+                    .normalized()
+                    .to_owned();
+                builtins
+                    .contains_key(&normalized)
+                    .then_some((normalized, *external))
+            })
+            .collect();
         Self {
-            builtins: signatures
-                .into_iter()
-                .map(|signature| (signature.normalized().to_owned(), signature.clone()))
-                .collect(),
+            builtins,
+            external,
+            directory: None,
         }
+    }
+
+    /// Read and check imported local modules, resolving relative source names
+    /// against `directory` as a run in that directory would.
+    pub fn with_modules(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.directory = Some(directory.into());
+        self
     }
 
     /// Findings for a script, in source order.
     pub fn check_program(&self, program: &Program) -> Vec<Finding> {
+        self.report_program(program).findings
+    }
+
+    /// A script's findings and what the check could not establish.
+    pub fn report_program(&self, program: &Program) -> Report {
         self.check(&[(program, &HashSet::new())])
     }
 
     /// Findings for a suite's setup, teardown, and every case, in source order.
     /// Cases see the variables their suite setup assigns and their row binding.
     pub fn check_suite(&self, suite: &Suite) -> Vec<Finding> {
+        self.report_suite(suite).findings
+    }
+
+    /// A suite's findings and what the check could not establish.
+    pub fn report_suite(&self, suite: &Suite) -> Report {
         let fixtures = suite.fixture_programs();
         let mut shared = HashSet::new();
         collect_frame(
@@ -203,21 +379,22 @@ impl Analyzer {
         self.check(&programs)
     }
 
-    fn check(&self, programs: &[(&Program, &HashSet<String>)]) -> Vec<Finding> {
-        let mut findings = Vec::new();
+    fn check(&self, programs: &[(&Program, &HashSet<String>)]) -> Report {
+        let mut report = Report::default();
+        let mut modules = Modules::default();
         for (program, inputs) in programs {
             let mut checker = Checker {
-                builtins: &self.builtins,
-                findings: &mut findings,
+                analyzer: self,
+                report: &mut report,
+                modules: &mut modules,
                 reported: HashSet::new(),
+                entry: true,
             };
-            let frame = Frame::new(None, &program.statements, &[], inputs);
-            checker.duplicates(&frame, true);
-            checker.block(&program.statements, &frame);
+            checker.program(program, inputs);
         }
         // Library and fixture statements appear in every case program.
         let mut seen = HashSet::new();
-        findings.retain(|finding| {
+        report.findings.retain(|finding| {
             seen.insert((
                 finding.rule,
                 finding.span.source().name().to_owned(),
@@ -225,15 +402,39 @@ impl Analyzer {
                 finding.message.clone(),
             ))
         });
-        findings.sort_by_key(|finding| (finding.span.start(), finding.rule));
-        findings
+        let entry = programs
+            .first()
+            .map(|(program, _)| program.source.name().to_owned());
+        report.findings.sort_by(|left, right| {
+            let key = |finding: &Finding| {
+                let name = finding.span.source().name();
+                (
+                    entry.as_deref() != Some(name),
+                    name.to_owned(),
+                    finding.span.start(),
+                    finding.rule,
+                )
+            };
+            key(left).cmp(&key(right))
+        });
+        report
     }
 }
 
 #[derive(Default)]
 struct FrameNames<'a> {
     definitions: HashMap<&'a str, Vec<&'a Statement>>,
-    namespaces: HashSet<String>,
+    /// Import statements by normalized alias, in source order.
+    namespaces: HashMap<String, Vec<&'a Statement>>,
+}
+
+/// Exported statements of a module: normalized signature to display header.
+type Exports = HashMap<String, String>;
+
+#[derive(Default)]
+struct Modules {
+    checked: HashMap<PathBuf, Option<Rc<Exports>>>,
+    loading: Vec<PathBuf>,
 }
 
 /// Collect what one invocation frame binds. Control blocks share their frame;
@@ -291,9 +492,11 @@ fn collect_frame<'a>(
                 collect_frame(&body.statements, names, variables);
                 collect_frame(&cleanup.statements, names, variables);
             }
-            StatementKind::Import { namespace, .. } => {
-                names.namespaces.insert(normalize_sentence(&namespace.text));
-            }
+            StatementKind::Import { namespace, .. } => names
+                .namespaces
+                .entry(normalize_sentence(&namespace.text))
+                .or_default()
+                .push(statement),
             StatementKind::Invoke(_)
             | StatementKind::Return(_)
             | StatementKind::Break
@@ -308,6 +511,15 @@ struct Frame<'a> {
     names: FrameNames<'a>,
     variables: HashSet<&'a str>,
     inputs: &'a HashSet<String>,
+    /// Each alias's module exports; None when the module was not checked.
+    exports: HashMap<String, Option<Rc<Exports>>>,
+}
+
+/// How a qualified call's alias resolves at the call.
+enum Namespace<'f> {
+    Imported(Option<&'f Rc<Exports>>),
+    Later(&'f Statement),
+    Missing,
 }
 
 impl<'a> Frame<'a> {
@@ -326,6 +538,7 @@ impl<'a> Frame<'a> {
             names,
             variables,
             inputs,
+            exports: HashMap::new(),
         }
     }
 
@@ -338,9 +551,27 @@ impl<'a> Frame<'a> {
             .any(|frame| frame.variables.contains(variable) || frame.inputs.contains(variable))
     }
 
-    fn imports(&self, namespace: &str) -> bool {
+    /// Imports register when they run: an earlier import in this frame, or any
+    /// import in an enclosing one, serves the call.
+    fn namespace(&self, namespace: &str, position: usize) -> Namespace<'_> {
+        if let Some(imports) = self.names.namespaces.get(namespace) {
+            if imports.iter().any(|import| import.span.start() < position) {
+                return Namespace::Imported(self.exports.get(namespace).and_then(Option::as_ref));
+            }
+            if self
+                .chain()
+                .skip(1)
+                .all(|outer| !outer.names.namespaces.contains_key(namespace))
+            {
+                return Namespace::Later(imports[0]);
+            }
+        }
         self.chain()
-            .any(|frame| frame.names.namespaces.contains(namespace))
+            .skip(1)
+            .find(|outer| outer.names.namespaces.contains_key(namespace))
+            .map_or(Namespace::Missing, |outer| {
+                Namespace::Imported(outer.exports.get(namespace).and_then(Option::as_ref))
+            })
     }
 
     /// The user definition a call reaches: its own frame first, then enclosing ones.
@@ -355,16 +586,183 @@ impl<'a> Frame<'a> {
     }
 }
 
-struct Checker<'a, 'f> {
-    builtins: &'a HashMap<String, StatementSignature>,
-    findings: &'f mut Vec<Finding>,
+struct Checker<'a, 'r> {
+    analyzer: &'a Analyzer,
+    report: &'r mut Report,
+    modules: &'r mut Modules,
     /// Undefined variables are reported at their first read only.
     reported: HashSet<String>,
+    /// Whether this is the checked file rather than an imported module; only
+    /// its unassigned variables can be input variables.
+    entry: bool,
 }
 
 impl Checker<'_, '_> {
+    fn program(&mut self, program: &Program, inputs: &HashSet<String>) {
+        let frame = self.frame(None, &program.statements, &[], inputs);
+        self.duplicates(&frame, true);
+        self.block(&program.statements, &frame);
+    }
+
+    /// A frame with its imports' modules checked and their exports recorded.
+    fn frame<'p>(
+        &mut self,
+        parent: Option<&'p Frame<'p>>,
+        statements: &'p [Statement],
+        parameters: &'p [super::ast::Name],
+        inputs: &'p HashSet<String>,
+    ) -> Frame<'p> {
+        let mut frame = Frame::new(parent, statements, parameters, inputs);
+        let mut imports: Vec<_> = frame
+            .names
+            .namespaces
+            .iter()
+            .map(|(alias, imports)| (alias.clone(), imports[0]))
+            .collect();
+        imports.sort_by_key(|(_, import)| import.span.start());
+        for (alias, import) in imports {
+            let exports = self.module(import);
+            frame.exports.insert(alias, exports);
+        }
+        frame
+    }
+
+    /// Read, parse, and check an imported module once, returning its exports.
+    fn module(&mut self, import: &Statement) -> Option<Rc<Exports>> {
+        let StatementKind::Import {
+            path, path_span, ..
+        } = import.kind()
+        else {
+            return None;
+        };
+        let directory = self.analyzer.directory.as_ref()?;
+        if path.contains("://")
+            || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
+        {
+            self.push(
+                Rule::ImportFailure,
+                path_span,
+                format!("Loading module failed: `{path}` must name a local .botwork file"),
+                "Import a local .botwork file by a path relative to the importing file.",
+            );
+            return None;
+        }
+        let importer = Path::new(path_span.source().name());
+        let base = if importer.is_absolute() {
+            importer.parent().unwrap_or(Path::new("/")).to_owned()
+        } else {
+            directory.join(importer.parent().unwrap_or(Path::new("")))
+        };
+        let requested = base.join(path);
+        let canonical = match fs::canonicalize(&requested) {
+            Ok(canonical) => canonical,
+            Err(error) => {
+                self.push(
+                    Rule::ImportFailure,
+                    path_span,
+                    format!("Loading module failed: {}: {error}", requested.display()),
+                    "Check the path; it is relative to the importing file's directory.",
+                );
+                return None;
+            }
+        };
+        if let Some(start) = self
+            .modules
+            .loading
+            .iter()
+            .position(|loading| *loading == canonical)
+        {
+            let chain: Vec<String> = self.modules.loading[start..]
+                .iter()
+                .chain(std::iter::once(&canonical))
+                .map(|path| path.display().to_string())
+                .collect();
+            self.push(
+                Rule::ImportCycle,
+                path_span,
+                format!("Import cycle: {}", chain.join(" -> ")),
+                "Break the cycle; move shared statements into a module that imports neither.",
+            );
+            return None;
+        }
+        if let Some(checked) = self.modules.checked.get(&canonical) {
+            return checked.clone();
+        }
+        let text = fs::File::open(&canonical)
+            .and_then(|file| {
+                let mut bytes = Vec::new();
+                file.take(DEFAULT_SOURCE_BYTES as u64 + 1)
+                    .read_to_end(&mut bytes)?;
+                Ok(bytes)
+            })
+            .map_err(|error| error.to_string())
+            .and_then(|bytes| {
+                if bytes.len() > DEFAULT_SOURCE_BYTES {
+                    return Err(format!("larger than {DEFAULT_SOURCE_BYTES} bytes"));
+                }
+                String::from_utf8(bytes).map_err(|error| error.to_string())
+            });
+        let text = match text {
+            Ok(text) => text,
+            Err(error) => {
+                self.push(
+                    Rule::ImportFailure,
+                    path_span,
+                    format!("Loading module failed: {}: {error}", canonical.display()),
+                    "Check that the module is a readable UTF-8 file.",
+                );
+                self.modules.checked.insert(canonical, None);
+                return None;
+            }
+        };
+        let name = canonical.to_string_lossy().into_owned();
+        let program = match Program::parse_detailed(&name, &text) {
+            Ok(program) => program,
+            Err(diagnostic) => {
+                self.report.diagnostics.push(diagnostic);
+                self.modules.checked.insert(canonical, None);
+                return None;
+            }
+        };
+        self.modules.loading.push(canonical.clone());
+        let inputs = HashSet::new();
+        let mut nested = Checker {
+            analyzer: self.analyzer,
+            report: &mut *self.report,
+            modules: &mut *self.modules,
+            reported: HashSet::new(),
+            entry: false,
+        };
+        let frame = nested.frame(None, &program.statements, &[], &inputs);
+        nested.duplicates(&frame, true);
+        nested.block(&program.statements, &frame);
+        // A module publishes its root definitions and, qualified, its imports'.
+        let mut exports = Exports::new();
+        for (signature, definitions) in &frame.names.definitions {
+            if let StatementKind::Define(definition) = definitions[0].kind() {
+                exports.insert(
+                    (*signature).to_owned(),
+                    definition.header.text().trim().to_owned(),
+                );
+            }
+        }
+        for (alias, imported) in &frame.exports {
+            for (signature, header) in imported.iter().flat_map(|exports| exports.iter()) {
+                exports.insert(
+                    format!("{alias}::{signature}"),
+                    format!("{alias}::{header}"),
+                );
+            }
+        }
+        self.modules.loading.pop();
+        self.report.modules.insert(canonical.clone());
+        let exports = Some(Rc::new(exports));
+        self.modules.checked.insert(canonical, exports.clone());
+        exports
+    }
+
     fn push(&mut self, rule: Rule, span: &Span, message: String, help: impl Into<String>) {
-        self.findings.push(Finding {
+        self.report.findings.push(Finding {
             rule,
             span: span.clone(),
             message,
@@ -377,7 +775,7 @@ impl Checker<'_, '_> {
         signatures.sort_by_key(|(_, statements)| statements[0].span.start());
         for (signature, statements) in signatures {
             if root {
-                if let Some(builtin) = self.builtins.get(*signature) {
+                if let Some(builtin) = self.analyzer.builtins.get(*signature) {
                     self.push(
                         Rule::DuplicateStatement,
                         &statements[0].span,
@@ -399,6 +797,23 @@ impl Checker<'_, '_> {
                     ),
                     "Rename this definition or remove it; the first one stays registered.",
                 );
+            }
+        }
+        let mut namespaces: Vec<_> = frame.names.namespaces.iter().collect();
+        namespaces.sort_by_key(|(_, imports)| imports[0].span.start());
+        for (alias, imports) in namespaces {
+            for duplicate in &imports[1..] {
+                if let StatementKind::Import { namespace, .. } = duplicate.kind() {
+                    self.push(
+                        Rule::DuplicateNamespace,
+                        &namespace.span,
+                        format!(
+                            "Duplicate namespace `{alias}`; first imported at {}",
+                            imports[0].span.location()
+                        ),
+                        "Import each module under its own alias.",
+                    );
+                }
             }
         }
     }
@@ -443,7 +858,7 @@ impl Checker<'_, '_> {
             StatementKind::Invoke(call) => {
                 call.signature == "fail|param|"
                     && frame.definition(&call.signature).is_none()
-                    && self.builtins.contains_key(&call.signature)
+                    && self.analyzer.builtins.contains_key(&call.signature)
             }
             StatementKind::If {
                 then_branch,
@@ -470,7 +885,7 @@ impl Checker<'_, '_> {
                 AssignmentValue::Call(call) => self.call(call, frame),
             },
             StatementKind::Define(definition) => {
-                let child = Frame::new(
+                let child = self.frame(
                     Some(frame),
                     &definition.body.statements,
                     &definition.parameters,
@@ -546,6 +961,9 @@ impl Checker<'_, '_> {
     fn expression(&mut self, expression: &Expr, frame: &Frame<'_>) {
         match &expression.kind {
             ExprKind::Variable(name) => {
+                if !frame.binds(name) && self.entry {
+                    self.report.inputs.insert(name.clone());
+                }
                 if !frame.binds(name) && self.reported.insert(name.clone()) {
                     self.push(
                         Rule::UndefinedVariable,
@@ -585,16 +1003,46 @@ impl Checker<'_, '_> {
             .iter()
             .for_each(|argument| self.expression(argument, frame));
         let signature = call.signature.as_str();
-        if let Some((namespace, _)) = signature.split_once("::") {
-            if !frame.imports(namespace) {
-                self.push(
+        if let Some((namespace, exported)) = signature.split_once("::") {
+            match frame.namespace(namespace, call.span.start()) {
+                Namespace::Imported(Some(exports)) => {
+                    if !exports.contains_key(exported) {
+                        let words = |signature: &str| sentence_words(signature);
+                        let suggestion = exports
+                            .iter()
+                            .filter(|(candidate, _)| words(candidate) == words(exported))
+                            .map(|(_, header)| header)
+                            .min();
+                        let help = match suggestion {
+                            Some(header) => format!("Did you mean `{namespace}::{header}`? The module exports statements by their words and parameter positions."),
+                            None => format!("The module imported as `{namespace}` does not define this statement."),
+                        };
+                        self.push(
+                            Rule::UndefinedStatement,
+                            &call.span,
+                            format!("Statement not defined: {}", call.span.text().trim()),
+                            help,
+                        );
+                    }
+                }
+                Namespace::Imported(None) => self.report.unchecked_imports += 1,
+                Namespace::Later(import) => self.push(
+                    Rule::StatementBeforeDefinition,
+                    &call.span,
+                    format!(
+                        "`{}` is called before its import at {} runs",
+                        call.span.text().trim(),
+                        import.span.location()
+                    ),
+                    "Imports register when they run; move the import above this call.",
+                ),
+                Namespace::Missing => self.push(
                     Rule::UndefinedStatement,
                     &call.span,
                     format!("No module is imported as `{namespace}`"),
                     format!("Import a module with `Import |\"file.botwork\"| As |{namespace}|` before calling it."),
-                );
+                ),
             }
-            // Imported statements are checked with their module.
             return;
         }
         // Resolution order at the moment of the call: a definition this frame
@@ -611,8 +1059,11 @@ impl Checker<'_, '_> {
         {
             return;
         }
-        if let Some(builtin) = self.builtins.get(signature) {
+        if let Some(builtin) = self.analyzer.builtins.get(signature) {
             self.arguments(call, builtin);
+            if let Some(external) = self.analyzer.external.get(signature) {
+                *self.report.external.entry(*external).or_default() += 1;
+            }
             return;
         }
         if let Some(definitions) = own {
@@ -676,14 +1127,7 @@ impl Checker<'_, '_> {
 
     /// A known statement with the same words but other parameter positions.
     fn suggestion(&self, signature: &str, frame: &Frame<'_>) -> Option<String> {
-        let words = |signature: &str| {
-            signature
-                .replace("|param|", " ")
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-        };
-        let wanted = words(signature);
+        let wanted = sentence_words(signature);
         let defined =
             frame.chain().flat_map(|frame| {
                 frame.names.definitions.iter().filter_map(
@@ -696,17 +1140,26 @@ impl Checker<'_, '_> {
                 )
             });
         let mut candidates: BTreeSet<(String, String)> = defined
-            .chain(self.builtins.iter().map(|(candidate, builtin)| {
+            .chain(self.analyzer.builtins.iter().map(|(candidate, builtin)| {
                 (
                     candidate.as_str(),
                     builtin.header().text().trim().to_owned(),
                 )
             }))
-            .filter(|(candidate, _)| words(candidate) == wanted)
+            .filter(|(candidate, _)| sentence_words(candidate) == wanted)
             .map(|(candidate, header)| (candidate.to_owned(), header))
             .collect();
         candidates.pop_first().map(|(_, header)| header)
     }
+}
+
+/// A normalized signature's words without its parameter positions.
+fn sentence_words(signature: &str) -> String {
+    signature
+        .replace("|param|", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The kind of a literal expression, including a negated number.
