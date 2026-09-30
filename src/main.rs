@@ -419,10 +419,30 @@ fn prepare(
     Ok((program, context))
 }
 
+/// The CLI's stack, the same on every platform, so programs reach the same
+/// depth limits everywhere; Windows gives a main thread only 1 MiB.
+const STACK_BYTES: usize = 8 * 1024 * 1024;
+
 fn main() -> ExitCode {
     if let Some(status) = botwork::core::worker::guardian_main() {
         return ExitCode::from(status);
     }
+    let thread = std::thread::Builder::new()
+        .name("botwork".into())
+        .stack_size(STACK_BYTES)
+        .spawn(cli);
+    match thread {
+        Ok(thread) => thread
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+        Err(error) => {
+            eprintln!("Starting the CLI thread failed: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn cli() -> ExitCode {
     let args = Args::parse();
     // Show imported modules, named by their full path, like the files given here.
     if let Ok(directory) = std::env::current_dir() {

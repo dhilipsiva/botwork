@@ -24,6 +24,7 @@ use super::{
     grammar::{BWErr, Literal, LiteralResult},
     operation::OperationControl,
     signature::StatementSignature,
+    stack,
     syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
     value_limits::{Owned, ValueLimits},
 };
@@ -151,6 +152,7 @@ impl RunLimits {
             ));
         }
         super::syntax_limits::check("", self.source_bytes, &self.syntax, false)
+            .map(|_| ())
             .map_err(|violation| Diagnostic::new(violation.error))
     }
 }
@@ -725,7 +727,13 @@ impl RunBudget {
                 (active < self.0.limits.evaluation_depth).then(|| active + 1)
             })
             .map_err(|_| self.limit("evaluation depth", self.0.limits.evaluation_depth as u64))?;
-        Ok(EvaluationGuard(self.shared()))
+        let guard = EvaluationGuard(self.shared());
+        // Depth alone cannot bound the stack: frame sizes vary by target and
+        // profile, and hosts choose their threads' stacks.
+        if stack::short_of(stack::LEVEL) {
+            return Err(self.limit(stack::RESOURCE, stack::LEVEL as u64));
+        }
+        Ok(guard)
     }
 
     pub(crate) fn check_parser_entry(&self) -> DiagnosticResult<()> {

@@ -98,7 +98,7 @@ The library's program evaluator returns the final top-level statement's normal r
 
 ## Runtime Bounds
 
-**R3 — Shared runtime budgets.** Apply default step/call limits, combined evaluation depth, active import depth, and parser-entry stack headroom to Engine, CLI, and Context execution. Configure limits locally; reject unsupported ceilings before effects. Count active statements, expressions, and dispatch wrappers together, including re-exports. Share budgets across imported contexts; persist counters across low-level evaluations. Release depth guards and restore temporary bindings during unwinding. Latched resource/cancellation/deadline stops bypass Catch. [Runtime rules](embedded-runs.md) define exact defaults, counting, CLI flags, cloning, cooperative deadlines, and remaining aggregate/host limits.
+**R3 — Shared runtime budgets.** Apply default step/call limits, combined evaluation depth, active import depth, and parser-entry stack headroom to Engine, CLI, and Context execution. Configure limits locally; reject unsupported ceilings before effects. Count active statements, expressions, and dispatch wrappers together, including re-exports. Share budgets across imported contexts; persist counters across low-level evaluations. Release depth guards and restore temporary bindings during unwinding. Latched resource/cancellation/deadline stops bypass Catch. Check the current thread's [stack headroom](embedded-runs.md#stack-headroom) at each evaluation level, before parsing, and before JSON decoding, so deep work stops with BW8001 on any thread stack. [Runtime rules](embedded-runs.md) define exact defaults, counting, CLI flags, cloning, cooperative deadlines, and remaining aggregate/host limits.
 
 ## Owned Syntax Bounds
 

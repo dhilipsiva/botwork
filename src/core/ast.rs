@@ -269,7 +269,25 @@ pub(crate) fn check_source_with_reporter<E>(
     limits: &SyntaxLimits,
     report: impl Fn(AstFailure<'_>) -> E,
 ) -> Result<(), E> {
-    super::syntax_limits::check(source, source_bytes, limits, false).map_err(|violation| {
+    guard_source(name, source, source_bytes, limits, true, report)
+}
+
+/// The syntax preflight, and with `stack` the headroom the parser will need.
+fn guard_source<E>(
+    name: &str,
+    source: &str,
+    source_bytes: usize,
+    limits: &SyntaxLimits,
+    stack: bool,
+    report: impl Fn(AstFailure<'_>) -> E,
+) -> Result<(), E> {
+    let checked = super::syntax_limits::check(source, source_bytes, limits, false);
+    let checked = if stack {
+        checked.and_then(super::syntax_limits::check_stack)
+    } else {
+        checked.map(|_| ())
+    };
+    checked.map_err(|violation| {
         let end = violation.offset
             + source[violation.offset..]
                 .chars()
@@ -1158,7 +1176,16 @@ pub(crate) struct NativeSignature {
 }
 
 pub(crate) fn native_signature(name: &str, text: &str) -> DiagnosticResult<NativeSignature> {
-    check_source(name, text, DEFAULT_SOURCE_BYTES, &SyntaxLimits::default())?;
+    // Signature headers cannot nest, so their parse needs no headroom check,
+    // which could otherwise fail the lazily built fixed catalogue.
+    guard_source(
+        name,
+        text,
+        DEFAULT_SOURCE_BYTES,
+        &SyntaxLimits::default(),
+        false,
+        |failure| failure.default_diagnostic(),
+    )?;
     let source = Arc::new(SourceFile {
         name: name.into(),
         text: text.into(),

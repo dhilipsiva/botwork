@@ -89,6 +89,9 @@ One invocation does one of these things:
 | `--max-cleanup-steps <MAX_CLEANUP_STEPS>` | 10000 | Evaluation steps for each independent `Finally` cleanup. | [Cleanup](cleanup.md) |
 | `--cleanup-timeout-ms <CLEANUP_TIMEOUT_MS>` | 5000 | Cooperative timeout for each independent `Finally` cleanup, in milliseconds. | [Cleanup](cleanup.md) |
 
+Runs execute on the CLI's own 8 MiB thread, so programs reach the same depth
+limits on every platform; see [stack headroom](embedded-runs.md#stack-headroom).
+
 ### Information
 
 | Option | Default | Effect | Details |

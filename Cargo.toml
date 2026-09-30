@@ -21,6 +21,11 @@ name = "botwork"
 name = "runtime"
 harness = false
 
+# Runs on the process's main thread, which the test harness does not use.
+[[test]]
+name = "main_thread_stack"
+harness = false
+
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 chrono-tz = "0.10.4"
@@ -47,11 +52,11 @@ webpki-roots = "1.0.9"
 url = "2.5.8"
 futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2.189"
 
 [dev-dependencies]
-tokio = { version = "1.53.1", features = ["rt", "sync", "time", "macros", "net", "io-util", "test-util"] }
+tokio = { version = "1.53.1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util", "test-util"] }
 
 # The distributed binary (roadmap decision D19): one codegen unit with fat LTO
 # makes it smaller and faster to start. `release` stays the quick default, so

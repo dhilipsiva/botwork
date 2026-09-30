@@ -44,6 +44,45 @@ File reads retain at most `source_bytes + 1` bytes before reporting BW8001, incl
 
 Native template storage defaults to the registry budgets above; `Engine::with_registry_limits` configures registration separately. Each run checks template table-copy budgets before admitting custom signatures in normalized order, ahead of inputs/effects. The fixed 100-statement built-in catalogue is exempt from registry retention budgets, preserving infallible initialization; its copied table slots still count toward snapshot work. Infallible host Context/Engine Clone operations remain host-owned; `Context::try_clone()` admits table/path work before copying.
 
+## Stack Headroom
+
+Depth limits bound recursion but not the stack itself. How much stack each
+level takes depends on the target and the build profile, and the host picks each
+thread's stack size. Botwork therefore also checks the stack left on the current
+thread, so deep work stops with BW8001 `stack headroom bytes` instead of
+overflowing the stack and aborting the process.
+
+| Check | Stack kept free, optimized builds | Unoptimized builds |
+| --- | --- | --- |
+| Entering each evaluation level | 128 KiB | 256 KiB |
+| Parsing a script, module, suite, or dataset | 48 KiB, plus 6 KiB per unit of peak syntax complexity | 128 KiB, plus 26 KiB per unit |
+| Decoding JSON: `Parse JSON`, input variables, and datasets | 48 KiB, plus 2 KiB per nesting level | 128 KiB, plus 21 KiB per level |
+
+Peak syntax complexity is the [combined measure](syntax-limits.md): twice the
+nesting plus the operators, at most 66. JSON counts at most 64 levels, the value
+depth ceiling, since conversion stops there. The largest reserves are therefore
+444 KiB and 1.8 MiB. The error's `limit` is the reserve that was needed. Like the
+other resource limits it latches: the run stops, and Catch cannot handle it.
+Signature headers are parsed without the check, since their grammar cannot nest.
+
+The reserves are worst cases measured on x86_64 (nested arrays cost the most per
+syntax unit), with half again as much for other targets. Each thread's stack
+extent is read once, from the pthread attributes on Linux and macOS and from
+`GetCurrentThreadStackLimits` on Windows. A Linux main thread grows on demand up
+to the soft `RLIMIT_STACK`, so that limit sets its extent, and an unlimited one
+goes unchecked. Asynchronous runs check the thread polling them, so
+work-stealing runtimes are covered.
+
+Optimized builds reach every documented depth limit on a 2 MiB thread, the
+default for Rust and Tokio threads. Unoptimized builds need about 3 MiB. The CLI
+runs on its own 8 MiB thread, so programs reach the same limits on every
+platform; a Windows main thread has only 1 MiB. Work outside the checked
+recursion needs a base of about 128 KiB optimized, or 256 KiB unoptimized for an
+asynchronous run. `tests/stack_headroom.rs` runs deep evaluation, parsing, and
+JSON on every thread size from there to 4 MiB, synchronously and on Tokio
+workers, and `tests/main_thread_stack.rs` checks a main thread under a generous
+and a small stack limit.
+
 ## CLI and Low-Level Contexts
 
 The CLI accepts `--max-steps`, `--max-call-depth`, `--max-evaluation-depth`, and `--timeout-ms`. For example, `cargo run -- --file examples/02-syntaxes.botwork --max-steps 10000 --timeout-ms 2000`. Limits produce BW8001/status 1; unsupported ceilings produce BW7002/status 1; malformed numbers or conflicts with statement-help modes produce status 2. Timeouts include loading/parsing but are observed cooperatively.

@@ -64,12 +64,13 @@ struct Frame {
 /// Lexical bounds are intentionally conservative. Operator symbols and and/or
 /// words count throughout each pipe expression, including nested call arguments.
 /// The grammar remains responsible for checking malformed tokens/delimiters.
+/// Returns the peak combined syntax complexity, for [`check_stack`].
 pub(crate) fn check(
     source: &str,
     source_bytes: usize,
     limits: &SyntaxLimits,
     expression_root: bool,
-) -> Result<(), Violation> {
+) -> Result<usize, Violation> {
     if limits.nesting > MAX_SYNTAX_NESTING || limits.operators > MAX_EXPRESSION_OPERATORS {
         return Err(Violation { offset: 0, error: Diagnostic::formatted(BWErr::RunConfiguration, format_args!(
             "Syntax limits cannot exceed nesting {MAX_SYNTAX_NESTING} or operators {MAX_EXPRESSION_OPERATORS}"
@@ -81,7 +82,7 @@ pub(crate) fn check(
         expression: expression_root,
         ..Frame::default()
     }];
-    let (mut index, mut pending_else) = (0, None);
+    let (mut index, mut pending_else, mut peak) = (0, None, 0);
     while index < bytes.len() {
         let byte = bytes[index];
         if byte.is_ascii_whitespace() {
@@ -222,6 +223,17 @@ pub(crate) fn check(
                 MAX_SYNTAX_COMPLEXITY,
             ));
         }
+        peak = peak.max(2 * depth + operators);
+    }
+    Ok(peak)
+}
+
+/// Whether the current thread has the stack to parse a source of this peak
+/// complexity: the recursive parser and AST lowering follow. See super::stack.
+pub(crate) fn check_stack(complexity: usize) -> Result<(), Violation> {
+    let needed = super::stack::parser(complexity);
+    if super::stack::short_of(needed) {
+        return Err(Violation::limit(0, super::stack::RESOURCE, needed));
     }
     Ok(())
 }

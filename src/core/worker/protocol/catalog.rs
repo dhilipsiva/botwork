@@ -71,6 +71,7 @@ pub(super) const RESOURCES: &[&str] = &[
     "snapshot path bytes",
     "snapshot table entries",
     "source bytes",
+    "stack headroom bytes",
     "syntax nesting",
     "temporary value nodes",
     "temporary value payload bytes",

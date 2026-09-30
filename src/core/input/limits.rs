@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::value_limits::ValueLimits;
+use crate::core::{stack, value_limits::ValueLimits};
 
 #[cfg(test)]
 mod tests;
@@ -119,7 +119,7 @@ impl<'a> Budget<'a> {
     ) -> DiagnosticResult<()> {
         let bytes = text.as_bytes();
         let mut frames: Vec<(u8, usize)> = vec![];
-        let mut index = 0;
+        let (mut index, mut deepest) = (0, 0);
         while index < bytes.len() {
             let byte = bytes[index];
             match byte {
@@ -148,6 +148,7 @@ impl<'a> Budget<'a> {
                         return Err(invalid(origin, "$", "JSON exceeds 128 nested containers"));
                     }
                     frames.push((byte, 0));
+                    deepest = deepest.max(frames.len());
                     index += 1;
                 }
                 b'"' => {
@@ -179,6 +180,11 @@ impl<'a> Budget<'a> {
                     }
                 }
             }
+        }
+        // Decoding recurses once per nested container; see crate::core::stack.
+        let needed = stack::json(deepest);
+        if stack::short_of(needed) {
+            return Err(exceeded(origin, stack::RESOURCE, needed));
         }
         Ok(())
     }

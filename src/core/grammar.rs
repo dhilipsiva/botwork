@@ -30,7 +30,9 @@ impl pest::Parser<Rule> for BWParser {
         rule: Rule,
         input: &str,
     ) -> Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>> {
-        use super::syntax_limits::{check, check_size, SyntaxLimits, DEFAULT_SOURCE_BYTES};
+        use super::syntax_limits::{
+            check, check_size, check_stack, SyntaxLimits, DEFAULT_SOURCE_BYTES,
+        };
         let expression_root = matches!(
             rule,
             Rule::expression
@@ -74,6 +76,7 @@ impl pest::Parser<Rule> for BWParser {
                 &SyntaxLimits::default(),
                 expression_root,
             )
+            .and_then(check_stack)
         } else {
             check_size(input, DEFAULT_SOURCE_BYTES)
         };

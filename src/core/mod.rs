@@ -17,6 +17,7 @@ pub mod report;
 pub mod run;
 pub mod secret;
 pub mod signature;
+pub(crate) mod stack;
 pub(crate) mod suggest;
 pub mod syntax_limits;
 pub mod value_limits;

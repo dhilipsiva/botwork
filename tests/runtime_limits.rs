@@ -11,6 +11,20 @@ use botwork::core::{
 use cli_harness::Harness;
 use std::{fs, time::Duration};
 
+/// Run `work` on a thread with a large stack, so the depth limits rather than
+/// the stack headroom checks stop it in every build profile and on every
+/// target; tests/stack_headroom.rs covers small stacks.
+fn on_large_stack<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn_scoped(scope, work)
+            .unwrap()
+            .join()
+            .unwrap()
+    })
+}
+
 #[test]
 fn zero_and_exact_evaluation_depth_boundaries_are_enforced_before_effects() {
     for (depth, source, expected) in [
@@ -99,17 +113,19 @@ fn combined_statement_and_call_depth_stops_before_stack_exhaustion() {
         "If |true| {".repeat(16),
         "}".repeat(16)
     );
-    let run = Engine::default().run_source(
-        "nested",
-        &source,
-        RunOptions {
-            limits: RunLimits {
-                call_depth: 10000,
-                ..RunLimits::default()
+    let run = on_large_stack(|| {
+        Engine::default().run_source(
+            "nested",
+            &source,
+            RunOptions {
+                limits: RunLimits {
+                    call_depth: 10000,
+                    ..RunLimits::default()
+                },
+                ..RunOptions::default()
             },
-            ..RunOptions::default()
-        },
-    );
+        )
+    });
     assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
     assert!(run
         .result
@@ -130,13 +146,15 @@ fn combined_module_loading_and_parser_depth_stops_before_stack_exhaustion() {
         );
         fs::write(harness.workspace.join(format!("{index}.botwork")), source).unwrap();
     }
-    let run = Engine::default().run_file(
-        "0.botwork",
-        RunOptions {
-            working_directory: Some(harness.workspace.clone()),
-            ..RunOptions::default()
-        },
-    );
+    let run = on_large_stack(|| {
+        Engine::default().run_file(
+            "0.botwork",
+            RunOptions {
+                working_directory: Some(harness.workspace.clone()),
+                ..RunOptions::default()
+            },
+        )
+    });
     assert_eq!(run.outcome(), RunOutcome::LimitExceeded);
     assert!(run
         .result
@@ -225,14 +243,16 @@ fn imports_under_recursive_calls_reserve_stack_space_before_parsing() {
     .unwrap();
     for depth in 0..=30 {
         let source = format!("Load |n| {{ If |n > 0| {{ Load |n - 1| }} Else {{ Import |\"module.botwork\"| As |module| }} }}\nLoad |{depth}|");
-        let run = Engine::default().run_source(
-            "recursive-import",
-            &source,
-            RunOptions {
-                working_directory: Some(harness.workspace.clone()),
-                ..RunOptions::default()
-            },
-        );
+        let run = on_large_stack(|| {
+            Engine::default().run_source(
+                "recursive-import",
+                &source,
+                RunOptions {
+                    working_directory: Some(harness.workspace.clone()),
+                    ..RunOptions::default()
+                },
+            )
+        });
         match run.outcome() {
             RunOutcome::Succeeded => assert!(depth < 10),
             RunOutcome::LimitExceeded => assert!(run

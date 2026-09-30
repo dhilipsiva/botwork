@@ -498,6 +498,16 @@ message locations, rendered call frames and sites, and `--check` findings.
 Its 524-entry catalogue adds 7 faults, with the `check` suite and the library
 tests as oracles; see [shown paths evidence](shown-paths-evidence.json).
 
+Version 45 stops deep work before a thread's stack runs out. Its faults skip
+each of the three checks, ignore the parser's peak complexity or count it without
+operators, ignore or uncap JSON depth, make the reserve boundary inclusive, drop
+the parser's per-unit reserve, overstate the stack left, check signature headers,
+and leave the CLI on a default-size thread.
+
+Its 536-entry catalogue adds 12 faults, with the library tests and the
+`stack_headroom` suite as oracles; see
+[stack headroom evidence](stack-headroom-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

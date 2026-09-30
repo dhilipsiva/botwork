@@ -33,6 +33,9 @@ same value:
   document, including trailing values, is an error.
 - Documents may nest at most 128 containers, and the result must also fit the
   value depth limit (64 by default).
+- Decoding needs stack in proportion to the nesting. A thread without enough
+  gets BW8001 `stack headroom bytes` before decoding starts; see
+  [stack headroom](embedded-runs.md#stack-headroom).
 
 Errors include a JSON path and serde's line and column, for example
 `Parse JSON: $["a"]["b"]: integer is outside -2147483648..2147483647` or

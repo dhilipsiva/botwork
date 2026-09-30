@@ -1,5 +1,5 @@
 {
-  "version": 44,
+  "version": 45,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3668,6 +3668,90 @@
       "file": "src/core/analysis.rs",
       "before": "            crate::core::diagnostic::shown_path(self.span.source().name()),\n",
       "after": "            self.span.source().name(),\n"
+    },
+    {
+      "id": "evaluation-headroom-unchecked",
+      "area": "stack-headroom",
+      "file": "src/core/run.rs",
+      "before": "        if stack::short_of(stack::LEVEL) {\n",
+      "after": "        if stack::short_of(stack::LEVEL) && false {\n"
+    },
+    {
+      "id": "parser-headroom-unchecked",
+      "area": "stack-headroom",
+      "file": "src/core/syntax_limits.rs",
+      "before": "    if super::stack::short_of(needed) {\n",
+      "after": "    if super::stack::short_of(needed) && false {\n"
+    },
+    {
+      "id": "parser-peak-ignored",
+      "area": "stack-headroom",
+      "file": "src/core/syntax_limits.rs",
+      "before": "        peak = peak.max(2 * depth + operators);\n",
+      "after": "        peak = peak.max(0);\n"
+    },
+    {
+      "id": "parser-peak-without-operators",
+      "area": "stack-headroom",
+      "file": "src/core/syntax_limits.rs",
+      "before": "        peak = peak.max(2 * depth + operators);\n",
+      "after": "        peak = peak.max(2 * depth);\n"
+    },
+    {
+      "id": "json-headroom-unchecked",
+      "area": "stack-headroom",
+      "file": "src/core/input/limits.rs",
+      "before": "        if stack::short_of(needed) {\n",
+      "after": "        if stack::short_of(needed) && false {\n"
+    },
+    {
+      "id": "json-depth-ignored",
+      "area": "stack-headroom",
+      "file": "src/core/input/limits.rs",
+      "before": "                    deepest = deepest.max(frames.len());\n",
+      "after": "                    deepest = deepest.max(0);\n"
+    },
+    {
+      "id": "json-depth-uncapped",
+      "area": "stack-headroom",
+      "file": "src/core/stack.rs",
+      "before": "    let depth = if depth < MAX_VALUE_DEPTH {\n",
+      "after": "    let depth = if depth < usize::MAX {\n"
+    },
+    {
+      "id": "reserve-boundary-inclusive",
+      "area": "stack-headroom",
+      "file": "src/core/stack.rs",
+      "before": "    remaining().is_some_and(|left| left < needed)\n",
+      "after": "    remaining().is_some_and(|left| left <= needed)\n"
+    },
+    {
+      "id": "parser-unit-dropped",
+      "area": "stack-headroom",
+      "file": "src/core/stack.rs",
+      "before": "    PARSER_BASE + complexity * PARSER_UNIT\n",
+      "after": "    PARSER_BASE + complexity\n"
+    },
+    {
+      "id": "remaining-overstated",
+      "area": "stack-headroom",
+      "file": "src/core/stack.rs",
+      "before": "    Some(here.saturating_sub(lowest))\n",
+      "after": "    Some(here.saturating_sub(lowest) * 2)\n"
+    },
+    {
+      "id": "signature-headroom-checked",
+      "area": "stack-headroom",
+      "file": "src/core/ast.rs",
+      "before": "        &SyntaxLimits::default(),\n        false,\n",
+      "after": "        &SyntaxLimits::default(),\n        true,\n"
+    },
+    {
+      "id": "cli-default-thread-stack",
+      "area": "stack-headroom",
+      "file": "src/main.rs",
+      "before": "        .stack_size(STACK_BYTES)\n",
+      "after": "        .stack_size(2 * 1024 * 1024)\n"
     }
   ]
 }

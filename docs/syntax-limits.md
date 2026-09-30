@@ -13,6 +13,8 @@ A pipe itself consumes one nesting level, so a normal pipe expression accepts 31
 
 The guard recognizes ASCII layout, line/block comments, escaped quotes, and the switch from an expression to sentence text inside `@{ ... }`. A quote in a sentence is ordinary text, including inside a call expression; it cannot hide a deeply nested parameter from the guard. Newlines/comments cannot reset a still-open expression's counter. The grammar still checks syntax validity; a preflight limit may take priority over a later syntax/control error.
 
+Parsing also needs stack in proportion to the peak combined complexity. A thread without enough gets BW8001 `stack headroom bytes` before the parser starts; see [stack headroom](embedded-runs.md#stack-headroom).
+
 ## Rust Configuration and Errors
 
 `Program::parse`/`parse_detailed` use defaults. `Program::parse_bounded(name, source, source_bytes, &SyntaxLimits)` can change the byte budget and tighten nesting/operator bounds. `RunLimits::syntax` supplies the same local options for Engine source/file/import parsing and checks reusable programs' original source before execution. Syntax values above the fixed ceilings return BW7002. Changing configuration never alters a global parser setting.
