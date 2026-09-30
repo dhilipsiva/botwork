@@ -24,6 +24,11 @@ I wanted:
 
 The [getting-started guide](docs/getting-started.md) covers installation, a first
 script, reading failures, and a complete acceptance-test workflow with reports.
+The [documentation index](docs/README.md) lists every page, including the
+[command-line reference](docs/cli.md), [configuration](docs/configuration.md),
+[reports and outputs](docs/reporting.md), [extending Botwork](docs/extending.md),
+[installation and distribution](docs/distribution.md), and
+[compatibility](docs/compatibility.md).
 The [syntax reference](docs/syntax.md) lists every form a script or suite can use,
 and the [statement reference](docs/statements.md) lists every built-in statement.
 `--check` [finds mistakes without running](docs/check.md) a file or suite, and

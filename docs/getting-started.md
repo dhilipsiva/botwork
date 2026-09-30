@@ -264,7 +264,12 @@ The exit status tells a CI job what happened:
 
 ## Where next
 
+The [documentation index](README.md) lists every page. Good next steps:
+
 - [Syntax reference](syntax.md): every form a script or suite can use.
+- [Command-line reference](cli.md): every option and exit status.
+- [Configuration](configuration.md): inputs, secrets, environment, and limits.
+- [Reports and outputs](reporting.md): choosing a report and reading its version.
 - [Checking scripts](check.md): find mistakes without running a script.
 - [Formatting](format.md): rewrite files in canonical layout.
 - [Language server](lsp.md): diagnostics, completion, hover, and navigation
