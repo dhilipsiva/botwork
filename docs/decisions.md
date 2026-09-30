@@ -100,8 +100,10 @@ Times are rounded to 0.01 ms, and memory and size are rounded up. The budget
 check computes the same values from the recorded campaign. A later campaign on
 the reference host fails the gate when any workload's p95 time or peak heap,
 or the binary's size, exceeds its budget. It also fails when any of them
-regresses more than 10% against the accepted baseline without an explanation
-(milestone 6). Peak RSS is recorded but not budgeted.
+regresses more than 10% without an explanation (milestone 6): median time
+against [paired baseline runs](#paired-time-comparisons), and peak heap and
+binary size against the accepted baseline. Peak RSS is recorded but not
+budgeted.
 
 Peak heap is the most memory a run's allocations hold at once. Unlike peak
 RSS, it leaves out the binary's pages, so budgeting it separately from the
@@ -129,7 +131,36 @@ features. The owner chose to:
 
 [Measurement protocol 2](performance.md) implements both.
 
-**Original decision.** The campaign in [performance evidence](performance-evidence.json),
+#### Paired time comparisons
+
+*Decided by the owner on 2026-09-30, after the first campaign the gate checked
+failed with no runtime change.*
+
+Load on the reference host moves p95 times between campaigns by more than the
+10% limit. Three campaigns of byte-identical CLI binaries measured startup p95
+at 3.164, 3.086, and 3.490 ms, and the first gated campaign failed its parse
+(+17.8%) and calls (+16.2%) p95 against the recorded baseline without a change
+to the runtime. Peak heap and binary size reproduce exactly.
+
+Time regressions are therefore judged against the baseline's committed source,
+revision `b49116c`, whose fingerprinted inputs match the baseline campaign's.
+A campaign builds it with the same profile and runs it alternately with the
+new build, round by round, so both see the same load.
+
+Pairing removed the drift, but not the noise in the slowest samples. In a
+paired campaign of byte-identical code, the ratio of the two builds' p95 times
+ranged from 0.857 to 1.012, while their medians agreed within 1.5%. Resampling
+that campaign's rounds put the chance that identical code exceeds 10% at 15% to
+35% per workload for p95, for four of the six workloads, and at most 0.1% for
+the median. So the 10% limit compares the new build's median time with the
+median of its paired runs, and p95 stays gated by its absolute budget. This
+revises the roadmap's "p95 regressions" to median regressions; the owner
+chose it on 2026-09-30. Budgets, peak heap, and binary size still compare with
+the recorded baseline.
+
+#### Original decision
+
+The campaign in [performance evidence](performance-evidence.json),
 captured on 2026-09-28 at revision `2aed64d` with protocol 1 and the `release`
 build, was the accepted baseline. Each workload's budget was its p95 workload
 time × 1.25 and its maximum peak resident memory × 1.25:

@@ -12,8 +12,8 @@ This is measurement protocol version 2. The workload sizes, sample counts,
 statistics, correctness checks, and timing boundaries below are fixed before
 the full campaign. The recorded campaign below is the accepted baseline for the
 [registered budgets](#registered-budgets), which every later campaign on the
-reference host is checked against. The scaling gates and release performance
-acceptance remain open.
+reference host is checked against, and [scaling](#scaling) campaigns check how
+each workload grows when doubled. Release performance acceptance remains open.
 
 Protocol 2 changes three things from version 1, whose record is kept
 [as history](#protocol-1-measurements):
@@ -126,7 +126,9 @@ percentiles/outliers, and watchdog reaping. It also builds the heap counter and
 checks that it reports a child's own allocations, releases freed blocks, counts
 growth through `realloc`, and writes nothing without `BOTWORK_HEAP_REPORT`; that a counter report must be
 a positive byte count; and that a workload has peak heap in every observation
-or none. `python3 scripts/performance.py
+or none. It checks scaled sizes, the scaling limits, and that time regressions
+are judged only by medians against paired runs of the baseline's source, whose
+extracted tree must match the baseline's fingerprints. `python3 scripts/performance.py
 --smoke` executes all workload shapes with reduced sizes, one sample, and no
 warmups; its evidence is explicitly marked `smoke`. It is never a performance
 baseline. CI runs that correctness check in GNU/musl debug/release; performance
@@ -250,7 +252,12 @@ budgets, which budgeted peak RSS, are kept with
 
 ### Checking a campaign
 
-Run a campaign, then check its record:
+A full campaign ends by checking itself against the budgets, and records the
+verdict in its summary as `budget_check`. It prints `budget check passed`, or
+prints each problem and exits 1, which blocks the change it measured until the
+regression is fixed or explained. A campaign that is not comparable, such as
+one on another host or at another scale, prints why and exits 0. To check a
+recorded campaign again, with explanations:
 
 ```sh
 python3 scripts/performance.py
@@ -261,22 +268,106 @@ The check prints `budget check passed` and exits 0, or prints each problem and
 exits 1:
 
 - **Not comparable.** A campaign counts only when it is a complete protocol 2
-  measurement on the reference host. That means the same CPU model and number
-  of visible CPUs, the GNU target, and the `dist` profile. Any other campaign,
-  including the protocol 1 record, is reported as not comparable.
+  measurement at scale 1 on the reference host. That means the same CPU model
+  and number of visible CPUs, the GNU target, and the `dist` profile. Any other
+  campaign, including the protocol 1 record, is reported as not comparable.
 - **Over budget.** A workload's p95 time or peak heap, or the CLI binary's
   size, exceeds its budget. Explaining the change does not excuse it.
-- **Unexplained regression.** One of those values is more than 10% above the
-  baseline. To accept such a regression, name the workload (or `binary` for
-  the binary's size) and its cause, for example
+- **Unexplained regression.** A workload's median time is more than 10%
+  above the median of its [paired baseline runs](#paired-baseline-runs), or its
+  peak heap or the binary's size is more than 10% above the recorded baseline. To
+  accept such a regression, name the workload (or `binary` for the binary's
+  size) and its cause, for example
   `--explain calls="profiled: a new cancellation checkpoint"`. The check prints
   each explanation so that it can be kept with the campaign.
-- **Not measured.** A budgeted workload, or its peak heap, is missing.
+- **Not measured.** A budgeted workload, its peak heap, or its paired
+  baseline runs are missing, or the paired runs did not build the baseline's
+  source.
 
 Peak RSS is recorded but not budgeted: it mixes the binary's own pages, which
 the size budget covers, with the heap, which the heap budget covers.
 
-Use the same protocol and environment for changes, then perform the roadmap's
-doubling/scaling and regression checks. These samples do not prove
-bounded long-run memory, cross-platform parity, production tail latency, or the
-separate performance acceptance gates.
+### Paired baseline runs
+
+Load on the reference host moves p95 times between campaigns by more than 10%:
+three campaigns of byte-identical CLI binaries measured startup p95 at 3.164,
+3.086, and 3.490 ms. So a full campaign at scale 1 on the budgets' target and
+profile also measures the baseline itself, under the same load
+([D4](decisions.md#d4-budgets-and-baseline)).
+
+- It extracts the baseline's committed source (revision `b49116c`, named in
+  `benches/runtime/budgets.json`) with `git archive` into
+  `~/.cache/botwork/performance/` (or `$XDG_CACHE_HOME`), outside the checkout
+  so that only the baseline's own `.cargo/config.toml` applies, and checks its
+  fingerprinted inputs against the baseline campaign's.
+- It builds that source with the same profile and target.
+- In each round, right before or after each workload's timed run, it times the
+  baseline build on the same input. Even-numbered rounds run the new build
+  first, odd-numbered rounds the baseline's. The counted run follows both.
+
+The regression limit then compares the new build's median time with the
+median of those paired runs. Medians, because even paired, the p95 of thirty
+samples swings past 10% on noise: in a paired campaign of byte-identical code,
+the two builds' p95 times differed by up to 14% while their medians agreed
+within 1.5%, and resampling its rounds gave identical code a 15% to 35% chance
+per workload of a p95 "regression" and at most 0.1% for the median. The p95
+still has its absolute budget. A campaign takes about half as long again, and
+the first one also builds the baseline.
+
+These samples do not prove cross-platform parity, production tail latency, or
+the separate performance acceptance gates.
+
+## Scaling
+
+`--scale 2` and `--scale 4` multiply each workload's size: the statements
+parsed, the calls, the loop iterations, the source loads, and the concurrent
+waiting runs. CLI startup has no size and stays the same, and each source load
+stays 256 KiB. Budgets apply only at scale 1.
+
+```sh
+python3 scripts/performance.py --scale 2
+python3 scripts/performance.py --scaling BASE/summary.json DOUBLED/summary.json
+```
+
+`--scaling` compares two complete campaigns with the same protocol, host,
+target, and profile, the second at twice the first's scale. For each scaled
+workload it prints how many times its median time, peak heap, and peak RSS
+grew, then `scaling check passed`, or each problem and exit status 1:
+
+- **Superlinear time.** A median time grew more than 2.5 times. A linear cost
+  doubles, and a quadratic one quadruples. Medians are compared because the
+  question is how the work grows, not how scheduling varies; p95 is budgeted
+  at scale 1.
+- **Unbounded memory.** The calls, the loop, and the source loads keep the
+  same live data however long they run, so their peak heap and peak RSS may
+  grow at most 1.1 times.
+- **Excess memory.** The parse and the waiting runs hold data in proportion to
+  their size, so their peak heap and peak RSS may grow at most 2.5 times.
+
+### Recorded scaling
+
+Three campaigns on the reference host measured each workload at 1×, 2×, and 4×
+its size; the 1× campaign was paired and passed its gate. Both doublings pass:
+
+| Workload | Size at 1×, 2×, 4× | Median time | Peak heap | Time growth per doubling | Heap growth per doubling |
+| --- | --- | --- | --- | ---: | ---: |
+| Parse | 10,000, 20,000, 40,000 statements | 27.58, 55.06, 109.8 ms | 14,508, 28,897, 57,674 KiB | 2.00 / 1.99 | 1.99 / 2.00 |
+| Custom calls | 100,000, 200,000, 400,000 calls | 300.9, 601.7, 1,207.3 ms | 162, 162, 162 KiB | 2.00 / 2.01 | 1.00 / 1.00 |
+| Loop | 1,000,000, 2,000,000, 4,000,000 iterations | 1,880.7, 3,757.6, 7,483.0 ms | 156, 156, 156 KiB | 2.00 / 1.99 | 1.00 / 1.00 |
+| 256 KiB source loads | 16, 32, 64 loads | 5.85, 11.16, 21.40 ms | 932, 932, 933 KiB | 1.91 / 1.92 | 1.00 / 1.00 |
+| Waiting runs | 100, 200, 400 concurrent runs | 19.18, 25.50, 37.76 ms | 4,270, 8,368, 16,536 KiB | 1.33 / 1.48 | 1.96 / 1.98 |
+
+- **No superlinear growth.** Parsing, calls, and the loop double exactly. The
+  source loads grow a little less: about 0.54 ms of their time is spent once,
+  not per load (twice the 1× time less the 2× time). The waiting runs grow least: their 10 ms hold does not scale, and even
+  without it they grow 1.69 and 1.79 times, so part of their setup is fixed too.
+- **Bounded memory in long runs.** The loop holds the same 156 KiB of heap
+  through 4,000,000 iterations, and the calls and source loads keep theirs, so a
+  long-running loop with bounded live data keeps bounded memory. Peak heap is
+  exact to the KiB, so the loop's extra 3,000,000 iterations retained less than
+  1 KiB in all, under a byte per 2,900 iterations.
+- **Proportional memory.** The parse holds about 1.45 KiB per statement at
+  every size, and each waiting run about 41 KiB.
+
+Peak RSS grows less than peak heap for the parse and waiting runs (1.57 and
+1.72, 1.35 and 1.51 times) because it includes the binary's constant pages.

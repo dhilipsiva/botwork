@@ -31,17 +31,33 @@ BUDGETS = ROOT / "benches/runtime/budgets.json"
 # unexplained regressions of more than 10% against the baseline.
 BUDGET_FACTOR = 1.25
 REGRESSION_LIMIT = 0.10
+# Item 249: a doubled campaign may take at most 2.5 times as long per workload
+# (a quadratic cost takes 4). Workloads whose live data does not depend on their
+# size must keep their peak heap and RSS within 1.1 times; those that hold data
+# in proportion to it, within 2.5 times. Startup has no size and is not scaled.
+SCALES = (1, 2, 4)
+TIME_RATIO_LIMIT = 2.5
+MEMORY_RATIO_LIMITS = {"parse": 2.5, "calls": 1.1, "loop": 1.1, "source-io": 1.1, "waiting": 2.5}
+# Owner decisions (D4, 2026-09-30): load on the reference host moves times
+# between campaigns by more than the regression limit, so time regressions
+# compare with the baseline's committed source, built and run alternately in the
+# same campaign. Even paired, a p95 of 30 samples swings past 10% on noise
+# alone, so the limit applies to medians; p95 stays under its absolute budget.
+# Budgets, peak heap, and binary size compare with the recorded baseline. The
+# build lives outside the checkout, so its configuration is only the baseline's.
+PAIRED_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "botwork/performance"
 # Peak heap comes from a second, counted run of each observation's command with
 # benches/runtime/heap.c preloaded, so the counter never touches the timed run.
 # GNU builds only: static binaries cannot preload.
 HEAP_COUNTER = ROOT / "benches/runtime/heap.c"
 
 
-def workloads(smoke=False):
+def workloads(smoke=False, scale=1):
     parse, calls, loops, reads, size, waiting = (
         (100, 100, 1000, 1, 4096, 4) if smoke else
         (10_000, 100_000, 1_000_000, 16, 256 * 1024, 100)
     )
+    parse, calls, loops, reads, waiting = (units * scale for units in (parse, calls, loops, reads, waiting))
     definitions = [
         ("cli-startup", 1, "Log |42|\n", 42),
         ("parse", parse, "".join(f"|value| = |{i}|\n" for i in range(parse)), parse),
@@ -241,12 +257,14 @@ def aggregate(rows, definitions, samples, warmups):
     for case in definitions:
         measured = [row for row in rows if row["phase"] == "measured" and row["workload"] == case["id"]]
         metrics = ["workload_elapsed_ns", "process_elapsed_ns", "peak_rss_kib"]
-        # Static builds have no counted runs, so no peak heap at all.
-        counted = {"heap_kib" in row for row in measured}
-        if counted == {True}:
-            metrics.append("heap_kib")
-        elif counted != {False}:
-            raise ValueError(f"{case['id']}: peak heap missing from some observations")
+        # Static builds have no counted runs, so no peak heap; only scale 1
+        # campaigns on the budgets' target and profile have paired runs.
+        for metric in ("heap_kib", "paired_elapsed_ns"):
+            present = {metric in row for row in measured}
+            if present == {True}:
+                metrics.append(metric)
+            elif present != {False}:
+                raise ValueError(f"{case['id']}: {metric} missing from some observations")
         result[case["id"]] = {metric: statistics([row[metric] for row in measured]) for metric in metrics}
     return result
 
@@ -267,10 +285,12 @@ def budgets_from(baseline):
         raise ValueError(f"budgets need a protocol {VERSION} campaign")
     binary = baseline["binaries"]["botwork"]["bytes"]
     return {
-        "schema": 2, "protocol": VERSION, "decision": "D4",
+        "schema": 3, "protocol": VERSION, "decision": "D4",
         "baseline": {"record": str(BASELINE.relative_to(ROOT)),
                      "base_revision": baseline["base_revision"],
-                     "captured_at": baseline["captured_at"]},
+                     "captured_at": baseline["captured_at"],
+                     "source_revision": baseline["committed_source"]["revision"],
+                     "inputs_sha256": inputs_digest(baseline["input_sha256"])},
         "host": host(baseline), "budget_factor": BUDGET_FACTOR,
         "regression_limit": REGRESSION_LIMIT,
         "binary": {"baseline_bytes": binary, "budget_bytes": math.ceil(binary * BUDGET_FACTOR)},
@@ -287,33 +307,52 @@ def check(campaign, budgets, explained=()):
     """Why a campaign fails the registered budgets, or an empty list.
 
     A campaign counts only when it is a complete measurement with the budgets'
-    protocol on their host, target, and profile. Each workload's p95 time and
-    peak heap, and the CLI binary's size, must be within budget, and none
-    may regress more than the limit against the baseline unless the regression
-    is explained (by workload name, or `binary` for the binary's size). Peak
-    RSS is recorded, not budgeted: it is mostly the binary's own pages."""
+    protocol, at scale 1, on their host, target, and profile. Each workload's
+    p95 time and peak heap, and the CLI binary's size, must be within budget.
+    None may regress more than the limit unless the regression is explained
+    (by workload name, or `binary` for the binary's size): median time against
+    baseline runs paired in the same campaign, and peak heap and binary size
+    against the recorded baseline. Peak RSS is recorded, not budgeted: it mixes
+    the binary's pages and the heap, which have their own budgets."""
     if campaign.get("kind") != "measurement" or not campaign.get("complete"):
         return ["not a complete measurement campaign"]
     if campaign.get("schema") != budgets["protocol"]:
         return [f"not comparable: protocol {campaign.get('schema')}, budgets use protocol {budgets['protocol']}"]
+    if campaign.get("scale", 1) != 1:
+        return [f"not comparable: scale {campaign['scale']}, budgets apply at scale 1"]
     if host(campaign) != budgets["host"]:
         return [f"not comparable: measured on {host(campaign)}, budgets are for {budgets['host']}"]
     problems = []
     limit = budgets["regression_limit"]
+    paired = campaign.get("paired")
+    if paired and paired.get("inputs_sha256") != budgets["baseline"]["inputs_sha256"]:
+        problems.append("paired runs did not build the baseline's source")
+        paired = None
+
+    def regressed(name, metric, value, base, against):
+        if value > base * (1 + limit) and name not in explained:
+            problems.append(f"{name}: {metric} regressed {100 * (value / base - 1):.1f}% against {against}, more than {100 * limit:.0f}%, without an explanation")
 
     def compare(name, metric, value, unit, budget, base):
         if value > budget:
             problems.append(f"{name}: {metric} {value} {unit} exceeds its budget of {budget} {unit}")
-        if value > base * (1 + limit) and name not in explained:
-            problems.append(f"{name}: {metric} regressed {100 * (value / base - 1):.1f}% against the baseline, more than {100 * limit:.0f}%, without an explanation")
+        regressed(name, metric, value, base, "the baseline")
 
     for name, budget in budgets["workloads"].items():
         stats = campaign["statistics"].get(name)
         if stats is None:
             problems.append(f"{name}: not measured")
             continue
-        compare(name, "p95", stats["workload_elapsed_ns"]["p95"], "ns",
-                budget["p95_budget_ns"], budget["baseline_p95_ns"])
+        times = stats["workload_elapsed_ns"]
+        if times["p95"] > budget["p95_budget_ns"]:
+            problems.append(f"{name}: p95 {times['p95']} ns exceeds its budget of {budget['p95_budget_ns']} ns")
+        # Time regressions compare medians with the paired baseline runs,
+        # taken under the same load.
+        if paired and "paired_elapsed_ns" in stats:
+            regressed(name, "median time", times["p50"], stats["paired_elapsed_ns"]["p50"],
+                      "the paired baseline runs")
+        else:
+            problems.append(f"{name}: median time regression not checked: no paired baseline runs")
         if "heap_kib" not in stats:
             problems.append(f"{name}: peak heap not measured")
             continue
@@ -324,19 +363,100 @@ def check(campaign, budgets, explained=()):
     return problems
 
 
-def fingerprints():
-    paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", ".cargo/config.toml",
-                                      "scripts/performance.py")]
-    paths.extend(path for path in (ROOT / "benches").rglob("*") if path.suffix in (".rs", ".c"))
-    paths.extend(path for path in (ROOT / "src").rglob("*") if path.is_file())
-    return {str(path.relative_to(ROOT)): digest(path) for path in sorted(paths)}
+def gate(campaign, budgets):
+    """A finished campaign's verdict against the budgets: `passed`, `failed`,
+    or `not comparable` (another host, profile, scale, or protocol), with the
+    check's problems. Only a failure blocks."""
+    problems = check(campaign, budgets)
+    if not problems:
+        return "passed", []
+    if len(problems) == 1 and problems[0].startswith("not comparable"):
+        return "not comparable", problems
+    return "failed", problems
 
+
+def scaling(base, doubled):
+    """Each scaled workload's ratios between a campaign and one at twice its
+    scale, and why they fail the scaling limits, if they do."""
+    for record in (base, doubled):
+        if record.get("kind") != "measurement" or not record.get("complete"):
+            return {}, ["not a complete measurement campaign"]
+    if (base.get("schema"), host(base)) != (doubled.get("schema"), host(doubled)):
+        return {}, ["not comparable: the campaigns differ in protocol, host, target, or profile"]
+    if doubled.get("scale", 1) != 2 * base.get("scale", 1):
+        return {}, [f"not a doubling: scale {base.get('scale', 1)} to {doubled.get('scale', 1)}"]
+    ratios, problems = {}, []
+    for name, memory_limit in MEMORY_RATIO_LIMITS.items():
+        before, after = base["statistics"].get(name), doubled["statistics"].get(name)
+        if before is None or after is None or "heap_kib" not in before or "heap_kib" not in after:
+            problems.append(f"{name}: not measured with peak heap in both campaigns")
+            continue
+        ratio = {"p50_time": after["workload_elapsed_ns"]["p50"] / before["workload_elapsed_ns"]["p50"],
+                 "peak_heap": after["heap_kib"]["max"] / before["heap_kib"]["max"],
+                 "peak_rss": after["peak_rss_kib"]["max"] / before["peak_rss_kib"]["max"]}
+        ratios[name] = {key: round(value, 3) for key, value in ratio.items()}
+        if ratio["p50_time"] > TIME_RATIO_LIMIT:
+            problems.append(f"{name}: median time grew {ratio['p50_time']:.2f} times when doubled, more than {TIME_RATIO_LIMIT}")
+        for metric in ("peak_heap", "peak_rss"):
+            if ratio[metric] > memory_limit:
+                problems.append(f"{name}: {metric.replace('_', ' ')} grew {ratio[metric]:.2f} times when doubled, more than {memory_limit}")
+    return ratios, problems
+
+
+def fingerprints(root=ROOT):
+    paths = [root / name for name in ("Cargo.toml", "Cargo.lock", ".cargo/config.toml",
+                                      "scripts/performance.py")]
+    paths.extend(path for path in (root / "benches").rglob("*") if path.suffix in (".rs", ".c"))
+    paths.extend(path for path in (root / "src").rglob("*") if path.is_file())
+    return {str(path.relative_to(root)): digest(path) for path in sorted(paths)}
+
+
+def inputs_digest(inputs):
+    """One digest for a campaign's fingerprinted inputs."""
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+
+
+def build(root, target, profile, prefix):
+    """Build the CLI and the workload driver in `root`; the build record and executables."""
+    command = ["cargo", "build", "--locked", "--bin", "botwork", "--bench", "runtime",
+               "--target", target, "--profile", "dev" if profile == "debug" else profile,
+               "--message-format=json-render-diagnostics"]
+    record = execute(command, root, prefix, 900)
+    if record["returncode"] or record["timeout"]:
+        raise ValueError(f"benchmark build failed; see {prefix.name}.stderr")
+    artifacts = [json.loads(line) for line in Path(record["stdout"]).read_text().splitlines()]
+    executables = {item["target"]["name"]: item["executable"] for item in artifacts
+                   if item.get("reason") == "compiler-artifact" and item.get("executable")}
+    if set(executables) != {"botwork", "runtime"}:
+        raise ValueError("build did not produce exactly the CLI and workload driver")
+    return record, executables
+
+
+def baseline_tree(budgets):
+    """The baseline's committed source, extracted once into the cache and
+    checked against the fingerprints of the baseline campaign."""
+    revision = budgets["baseline"]["source_revision"]
+    tree = PAIRED_CACHE / f"baseline-{revision}"
+    if not tree.exists():
+        PAIRED_CACHE.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix="extract-", dir=PAIRED_CACHE))
+        archive = subprocess.run(["git", "archive", "--format=tar", revision], cwd=ROOT,
+                                 capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(staging)], input=archive, check=True)
+        staging.rename(tree)
+    if inputs_digest(fingerprints(tree)) != budgets["baseline"]["inputs_sha256"]:
+        raise ValueError(f"{tree} does not hold the baseline's fingerprinted inputs")
+    return tree
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--smoke", action="store_true", help="small correctness check; never a performance baseline")
     parser.add_argument("--target", choices=TARGETS, default=TARGETS[0])
     parser.add_argument("--profile", choices=PROFILES, default="dist")
+    parser.add_argument("--scale", type=int, choices=SCALES, default=1,
+                        help="multiply every workload's size except startup; budgets apply at scale 1")
+    parser.add_argument("--scaling", nargs=2, metavar=("BASE", "DOUBLED"), type=Path,
+                        help="check two campaigns' summary.json files, the second at twice the first's scale")
     parser.add_argument("--check", metavar="SUMMARY", type=Path,
                         help="check a completed campaign's summary.json against the registered budgets")
     parser.add_argument("--explain", metavar="WORKLOAD=REASON", action="append", default=[],
@@ -348,6 +468,16 @@ def main():
     if args.write_budgets:
         BUDGETS.write_text(json.dumps(budgets_from(json.loads(BASELINE.read_text())), indent=2) + "\n")
         print(f"wrote {BUDGETS.relative_to(ROOT)}")
+        return
+    if args.scaling:
+        ratios, problems = scaling(*(json.loads(path.read_text()) for path in args.scaling))
+        for name, ratio in ratios.items():
+            print(f"{name}: median time x{ratio['p50_time']}, peak heap x{ratio['peak_heap']}, peak RSS x{ratio['peak_rss']}")
+        for problem in problems:
+            print(f"scaling check failed: {problem}")
+        if problems:
+            sys.exit(1)
+        print("scaling check passed")
         return
     if args.check:
         explained = {}
@@ -370,7 +500,7 @@ def main():
         parser.error("measurements require Linux wait4/pidfd support and Python 3.9+")
     if not args.smoke and args.profile != "dist":
         parser.error("full performance campaigns require the dist profile")
-    definitions = workloads(args.smoke)
+    definitions = workloads(args.smoke, args.scale)
     samples, warmups, wait_ms = (1, 0, 1) if args.smoke else (30, 3, 10)
     output_root = ROOT / "target/performance"
     output_root.mkdir(parents=True, exist_ok=True)
@@ -388,7 +518,7 @@ def main():
         "worktree_status": capture("git", "status", "--porcelain"),
         "input_sha256": fingerprints(), "platform": platform.platform(),
         "rustc": capture("rustc", "-Vv"), "cargo": capture("cargo", "-V"),
-        "python": sys.version, "target": args.target, "profile": args.profile,
+        "python": sys.version, "target": args.target, "profile": args.profile, "scale": args.scale,
         "machine": {"cpuinfo": Path("/proc/cpuinfo").read_text(),
                     "meminfo": Path("/proc/meminfo").read_text(),
                     "cpu_affinity": sorted(os.sched_getaffinity(0)),
@@ -417,21 +547,22 @@ def main():
     summary.write_text(json.dumps(record, indent=2) + "\n")
     print(f"campaign record: {summary}", flush=True)
     try:
-        command = ["cargo", "build", "--locked", "--bin", "botwork", "--bench", "runtime",
-                   "--target", args.target, "--profile", "dev" if args.profile == "debug" else args.profile,
-                   "--message-format=json-render-diagnostics"]
-        build = execute(command, ROOT, output / "build", 900)
-        record["build"] = build
-        if build["returncode"] or build["timeout"]:
-            raise ValueError("benchmark build failed; see build.stderr")
-        artifacts = [json.loads(line) for line in Path(build["stdout"]).read_text().splitlines()]
-        executables = {item["target"]["name"]: item["executable"] for item in artifacts
-                       if item.get("reason") == "compiler-artifact" and item.get("executable")}
-        if set(executables) != {"botwork", "runtime"}:
-            raise ValueError("build did not produce exactly the CLI and workload driver")
+        record["build"], executables = build(ROOT, args.target, args.profile, output / "build")
         record["binaries"] = {name: {"path": path, "sha256": digest(Path(path)),
                                      "bytes": Path(path).stat().st_size}
                               for name, path in executables.items()}
+        budgets = json.loads(BUDGETS.read_text())
+        baseline = None
+        if not args.smoke and args.scale == 1 and (args.target, args.profile) == (
+                budgets["host"]["target"], budgets["host"]["profile"]):
+            tree = baseline_tree(budgets)
+            paired_build, baseline = build(tree, args.target, args.profile, output / "paired-build")
+            record["paired"] = {"revision": budgets["baseline"]["source_revision"], "tree": str(tree),
+                                "inputs_sha256": inputs_digest(fingerprints(tree)), "build": paired_build,
+                                "binaries": {name: {"path": path, "sha256": digest(Path(path)),
+                                                    "bytes": Path(path).stat().st_size}
+                                             for name, path in baseline.items()},
+                                "order": "even-numbered rounds run this campaign's build first, odd-numbered rounds the baseline's"}
         counter = None
         if "gnu" in args.target:
             counter = output / "heap.so"
@@ -446,20 +577,35 @@ def main():
         for phase, count in [("warmup", warmups), ("measured", samples)]:
             for index in range(count):
                 for case in definitions:
-                    command = ([executables["botwork"], "--file", case["source_path"]]
-                               if case["id"] == "cli-startup" else
-                               [executables["runtime"], case["id"], case["source_path"],
-                                str(case["units"]), "--wait-ms", str(wait_ms)])
+                    def command(binaries):
+                        return ([binaries["botwork"], "--file", case["source_path"]]
+                                if case["id"] == "cli-startup" else
+                                [binaries["runtime"], case["id"], case["source_path"],
+                                 str(case["units"]), "--wait-ms", str(wait_ms)])
+
                     prefix = output / f"{phase}-{index:02}-{case['id']}"
-                    row = measured(command, sources, prefix, executables["runtime"])
+
+                    def paired_run():
+                        sample = measured(command(baseline), sources, prefix.with_name(prefix.name + "-paired"),
+                                          executables["runtime"])
+                        sample["workload_elapsed_ns"] = verify(sample, case, Path(sample["stdout"]).read_text(),
+                                                               Path(sample["stderr"]).read_text())
+                        return sample
+
+                    # The two timed runs are adjacent, the counted run after both.
+                    paired = paired_run() if baseline and index % 2 else None
+                    row = measured(command(executables), sources, prefix, executables["runtime"])
                     row.update(phase=phase, index=index, workload=case["id"], verified=False)
                     record["observations"].append(row)
                     row["workload_elapsed_ns"] = verify(row, case, Path(row["stdout"]).read_text(),
                                                         Path(row["stderr"]).read_text())
+                    if baseline:
+                        row["paired"] = paired or paired_run()
+                        row["paired_elapsed_ns"] = row["paired"]["workload_elapsed_ns"]
                     if counter:
                         # The same command again, counted, with the same checks.
                         heap = prefix.with_name(prefix.name + "-heap")
-                        counted = measured(command, sources, heap, executables["runtime"], counter)
+                        counted = measured(command(executables), sources, heap, executables["runtime"], counter)
                         row["heap_run"] = counted
                         verify(counted, case, Path(counted["stdout"]).read_text(),
                                Path(counted["stderr"]).read_text())
@@ -474,7 +620,7 @@ def main():
         for case in definitions:
             if digest(Path(case["source_path"])) != case["source_sha256"]:
                 raise ValueError("workload input changed during the campaign")
-        for binary in record["binaries"].values():
+        for binary in [*record["binaries"].values(), *record.get("paired", {}).get("binaries", {}).values()]:
             if digest(Path(binary["path"])) != binary["sha256"]:
                 raise ValueError("measured binary changed during the campaign")
         record["complete"] = True
@@ -485,6 +631,18 @@ def main():
         record["machine"]["load_average_after"] = os.getloadavg()
         summary.write_text(json.dumps(record, indent=2) + "\n")
     print(json.dumps(record["statistics"], indent=2), flush=True)
+    if not args.smoke:
+        # Item 249: a campaign on the reference host is the regression gate.
+        verdict, problems = gate(record, json.loads(BUDGETS.read_text()))
+        record["budget_check"] = {"verdict": verdict, "problems": problems}
+        summary.write_text(json.dumps(record, indent=2) + "\n")
+        for problem in problems:
+            print(f"budget check {'failed' if verdict == 'failed' else 'skipped'}: {problem}")
+        if verdict == "failed":
+            print("explain an accepted regression with --check SUMMARY --explain WORKLOAD=REASON")
+            sys.exit(1)
+        if verdict == "passed":
+            print("budget check passed")
 
 
 if __name__ == "__main__":

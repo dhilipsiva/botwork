@@ -13608,6 +13608,10 @@
       "waiting": 19.269
     }
   },
+  "committed_source": {
+    "revision": "b49116c285408aceb80a811bebd30a63fb15eb58",
+    "verified": "all 212 fingerprinted inputs at this revision match input_sha256"
+  },
   "boundaries": [
     "Budgets apply to GNU dist campaigns on the reference host (D3) only; musl campaigns record no peak heap and are correctness smoke checks.",
     "Peak heap counts allocations through malloc (usable sizes); thread stacks and other mappings are not counted. Peak RSS is recorded, not budgeted.",

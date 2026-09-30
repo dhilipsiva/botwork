@@ -1,11 +1,13 @@
 {
-  "schema": 2,
+  "schema": 3,
   "protocol": 2,
   "decision": "D4",
   "baseline": {
     "record": "docs/performance-baseline-evidence.json",
     "base_revision": "628b7825c3cf436160339a071b7720b986670168",
-    "captured_at": "2026-09-30T11:19:31.986875+00:00"
+    "captured_at": "2026-09-30T11:19:31.986875+00:00",
+    "source_revision": "b49116c285408aceb80a811bebd30a63fb15eb58",
+    "inputs_sha256": "37e97a762c21177b39bf1dfc501b748937554368af329427fd6d359e9b194dbe"
   },
   "host": {
     "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",

@@ -1,10 +1,12 @@
 //! Correctness-checked workload driver; orchestrated by scripts/performance.py.
 use botwork::core::{
     ast::Program,
+    ast_limits::{AstLimits, DEFAULT_AST_NODES},
     grammar::Literal,
     operation::NativeOperation,
     run::{Engine, RunLimits, RunOptions, RunOutcome, RunResult},
     signature::{StatementSignature, ValueKind},
+    syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
 };
 use clap::Parser;
 use std::{
@@ -26,7 +28,8 @@ mod probe;
 struct Args {
     workload: String,
     source: PathBuf,
-    #[arg(value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
+    // Up to the largest registered size: the 1,000,000-iteration loop at scale 4.
+    #[arg(value_parser = clap::value_parser!(u32).range(1..=4_000_000))]
     units: u32,
     #[arg(long, default_value_t = 10, value_parser = clap::value_parser!(u32).range(1..=1000))]
     wait_ms: u32,
@@ -59,7 +62,7 @@ impl Drop for Active {
 }
 
 async fn waiting(program: Arc<Program>, count: usize, wait_ms: u32) -> u64 {
-    assert!(count <= 100, "registered workload bounds concurrent runs");
+    assert!(count <= 400, "registered workloads bound concurrent runs");
     let active = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&active);
     let gate = Arc::new(tokio::sync::Semaphore::new(0));
@@ -137,8 +140,21 @@ fn main() {
     let engine = Engine::default();
     let (elapsed, checksum) = match args.workload.as_str() {
         "parse" => {
+            // Scaled parses outgrow the default AST node budget (three nodes per
+            // statement), so it is raised only above the default, never below.
+            let ast_limits = AstLimits {
+                nodes: DEFAULT_AST_NODES.max(4 * args.units as usize),
+                ..AstLimits::default()
+            };
             let start = Instant::now();
-            let program = Program::parse_detailed("parse", black_box(&source)).unwrap();
+            let program = Program::parse_with_budgets(
+                "parse",
+                black_box(&source),
+                DEFAULT_SOURCE_BYTES,
+                &SyntaxLimits::default(),
+                &ast_limits,
+            )
+            .unwrap();
             let elapsed = start.elapsed();
             assert_eq!(program.statements.len(), args.units as usize);
             (elapsed, black_box(program.statements.len() as u64))
