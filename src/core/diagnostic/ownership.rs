@@ -100,8 +100,10 @@ fn error_text(error: &BWErr) -> [&str; 3] {
             duplicate,
         } => [namespace, original, duplicate],
         BWErr::ResourceLimit { resource, .. } => [resource, "", ""],
-        BWErr::VariableNotDefined(text)
-        | BWErr::StatementNotDefined(text)
+        BWErr::VariableNotDefined { name, suggestion } => {
+            [name, suggestion.as_deref().unwrap_or_default(), ""]
+        }
+        BWErr::StatementNotDefined(text)
         | BWErr::ParameterMissingError(text)
         | BWErr::ParsingError(text)
         | BWErr::SignatureError(text)

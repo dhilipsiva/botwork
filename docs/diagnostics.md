@@ -89,7 +89,21 @@ Each handled cause retains its own code and guidance; a handler's undefined-vari
 
 A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `line`, `column`, `end_line`, and `end_column`. Coordinates are decimal strings, not i32 values, so metadata never truncates a source offset. Byte and end-position semantics match `Span`. Missing source/definition sites are present with None values; they are not absent keys.
 
-`details` contains `name` for BW2001; `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. A file cannot catch its own pre-execution syntax/validation failure. An importer can inspect such a failure during runtime loading, retaining its original code.
+`details` contains `name` for BW2001, and `suggestion` when a variable the read can reach has a [near name](#near-name-suggestions); `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. A file cannot catch its own pre-execution syntax/validation failure. An importer can inspect such a failure during runtime loading, retaining its original code.
+
+### Near-name suggestions
+
+When a variable is undefined, Botwork looks for a variable the read could reach
+whose name is at most a third of its length away in edits: inserted, deleted,
+changed, or swapped adjacent characters, with a case change counting as one.
+The nearest such name, with ties going to the one that sorts first, leads the
+help as ``Did you mean `discount`?`` and is kept in `details.suggestion`.
+Only names in the frames the read searches are candidates, so a caller's
+variables are never offered to a statement it calls. Names longer than 64
+characters are neither suggested nor given suggestions, and at most 4,096
+candidates are compared, those that sort first. `--check` and the language server offer the same
+suggestion for their `undefined-variable` warning. A suggestion does not cross
+the [worker protocol](worker-protocol.md), which carries the name alone.
 
 Metadata copies have no mutable connection to the active error. Rethrow uses that error's shared identity, retains its original span/stack/causes, and adds a related rethrow location. The same error is not appended as its own cause. Fresh errors, even at identical source locations, remain distinct. The Rust diagnostic error field now uses `Arc<BWErr>` so cloning a diagnostic preserves identity; legacy `BWErr` APIs retain their return types and categories.
 

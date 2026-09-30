@@ -557,3 +557,50 @@ fn every_external_statement_is_a_built_in() {
         ]
     );
 }
+
+#[test]
+fn undefined_variables_suggest_a_near_name_their_scope_reaches() {
+    let help = |source: &str| {
+        let findings = check(source);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].rule, Rule::UndefinedVariable);
+        findings[0].help.clone()
+    };
+    assert_eq!(
+        help("|discount| = |2|\nLog |10 - discont|\n"),
+        "Did you mean `discount`? Otherwise, assign it first, or supply it as an input variable with --var or --vars-file."
+    );
+    // A definition's parameter, and a variable of the enclosing frame.
+    assert!(
+        help("Total |quantity| {\n    Return |quantity * prcie|\n}\n|price| = |4|\n")
+            .starts_with("Did you mean `price`?")
+    );
+    // Another definition's parameter is out of reach.
+    assert_eq!(
+        help("Outer |discount| {\n    Return |discount|\n}\nInner |x| {\n    Return |x - discont|\n}\n"),
+        "Assign it first, or supply it as an input variable with --var or --vars-file."
+    );
+}
+
+#[test]
+fn suite_inputs_are_suggested_for_misread_bindings() {
+    let suite = Suite::parse(
+        "suggest.suite.botwork",
+        r#"Suite |"s"| {
+    Dataset |"d"| {
+        Row |"r"| Values |{total: 1}|
+    }
+    Case |"c"| Using |"d"| As |order| {
+        Log |ordr.total|
+    }
+}"#,
+    )
+    .unwrap();
+    let findings = Analyzer::default().check_suite(&suite);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(
+        findings[0].help.starts_with("Did you mean `order`?"),
+        "{}",
+        findings[0].help
+    );
+}

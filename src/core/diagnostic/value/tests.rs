@@ -5,7 +5,7 @@ use std::fmt::Write;
 fn diagnostic() -> Diagnostic {
     let program = Program::parse("é.botwork", "# தமிழ்\r\n\t|x| = |1|").unwrap();
     let span = program.statements[0].span.clone();
-    let mut value = Diagnostic::new(BWErr::VariableNotDefined("café".into())).at(&span);
+    let mut value = Diagnostic::new(BWErr::undefined_variable("café".into())).at(&span);
     value.call_stack.push(CallFrame {
         signature: "read ||".into(),
         call_site: span.clone(),
@@ -93,7 +93,7 @@ fn every_value_quota_has_an_exact_boundary() {
 
 #[test]
 fn help_formatting_is_counted_before_copy_and_depth_configuration_is_validated() {
-    let diagnostic = Diagnostic::new(BWErr::VariableNotDefined("λ".repeat(100)));
+    let diagnostic = Diagnostic::new(BWErr::undefined_variable("λ".repeat(100)));
     let mut limits = DiagnosticValueLimits::default();
     limits.values.string_bytes = diagnostic.help().len();
     measure(&diagnostic, &limits).unwrap();

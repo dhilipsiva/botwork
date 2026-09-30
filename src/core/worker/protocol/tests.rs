@@ -253,7 +253,7 @@ fn all_diagnostic_categories_preserve_exact_fields() {
         BWErr::ParsingError,
         BWErr::ControlFlowError,
         BWErr::SignatureError,
-        BWErr::VariableNotDefined,
+        BWErr::undefined_variable,
         BWErr::StatementNotDefined,
         BWErr::ParameterMissingError,
         BWErr::ParsingIntegerError,
@@ -283,6 +283,24 @@ fn all_diagnostic_categories_preserve_exact_fields() {
         assert_eq!(format!("{:?}", result.error), format!("{:?}", error.error));
         assert_eq!(protocol.encode_response(Err(&result)).unwrap(), frame);
     }
+}
+
+#[test]
+fn suggestions_stay_on_the_side_that_computed_them() {
+    let protocol = WorkerProtocol::default();
+    let suggested = Diagnostic::new(BWErr::VariableNotDefined {
+        name: "discont".into(),
+        suggestion: Some("discount".into()),
+    });
+    let frame = protocol.encode_response(Err(&suggested)).unwrap();
+    let result = protocol.decode_response(&frame).unwrap().unwrap_err();
+    assert!(matches!(
+        result.error.as_ref(),
+        BWErr::VariableNotDefined { name, suggestion: None } if name == "discont"
+    ));
+    // The wire format is unchanged: the frame is the one without a suggestion.
+    let plain = Diagnostic::new(BWErr::undefined_variable("discont".into()));
+    assert_eq!(protocol.encode_response(Err(&plain)).unwrap(), frame);
 }
 
 #[test]

@@ -44,7 +44,7 @@ fn recursive_calls_keep_their_parameters_and_locals() {
     assert!(matches!(variable(&context, "n"), Literal::Int(99)));
     assert!(matches!(
         context.get_variable("previous"),
-        Err(BWErr::VariableNotDefined(_))
+        Err(BWErr::VariableNotDefined { .. })
     ));
     assert_eq!(context.frames.len(), 1);
     assert_eq!(context.current, 0);
@@ -152,7 +152,7 @@ fn failed_arguments_install_no_frame_or_partial_bindings_and_stop_in_order() {
     .unwrap();
     context.expression_visits.borrow_mut().clear();
     let result = evaluate("Triple |x + 1| with |missing| and |1 / 0|", &mut context);
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+    assert!(matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing"));
     let visits: Vec<_> = context
         .expression_visits
         .borrow()
@@ -203,7 +203,7 @@ fn for_restores_present_absent_and_none_bindings_on_every_completion() {
                         matches!(&result, Ok(Completion::Normal(value)) if matches!(&**value, Literal::None)),
                     "return" =>
                         matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::Int(7))),
-                    "error" => matches!(result, Err(BWErr::VariableNotDefined(_))),
+                    "error" => matches!(result, Err(BWErr::VariableNotDefined { .. })),
                     _ => unreachable!(),
                 },
                 "{body}: {result:?}"
@@ -211,7 +211,7 @@ fn for_restores_present_absent_and_none_bindings_on_every_completion() {
             let restored = context.get_variable("item");
             assert!(
                 match &previous {
-                    None => matches!(restored, Err(BWErr::VariableNotDefined(_))),
+                    None => matches!(restored, Err(BWErr::VariableNotDefined { .. })),
                     Some(Literal::None) => matches!(restored, Ok(Literal::None)),
                     Some(Literal::Int(10)) => matches!(restored, Ok(Literal::Int(10))),
                     _ => unreachable!(),
@@ -443,7 +443,7 @@ fn collection_equality_is_structural_with_exact_numeric_leaves() {
 fn equality_evaluates_both_operands_and_all_collection_values_before_comparing() {
     let mut context = Context::default();
     let result = evaluate("|answer| = |[1, 2] == [3, missing]|", &mut context);
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+    assert!(matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing"));
     let visits: Vec<_> = context
         .expression_visits
         .borrow()
@@ -456,7 +456,9 @@ fn equality_evaluates_both_operands_and_all_collection_values_before_comparing()
         "|answer| = |[missing_first] != [missing_second]|",
         &mut context,
     );
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_first"));
+    assert!(
+        matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing_first")
+    );
     let result = evaluate("|answer| = |true or [1] == [missing]|", &mut context);
     assert!(matches!(result, Ok(Literal::Bool(true))));
 }
@@ -596,7 +598,7 @@ fn computed_access_stops_at_the_first_error_and_preserves_assignments() {
         evaluate("|data| = |{items: [7]}|\n|answer| = |99|", &mut context).unwrap();
         let error = evaluate(&format!("|answer| = |{expression}|"), &mut context).unwrap_err();
         let actual = match error {
-            BWErr::VariableNotDefined(name) => format!("variable:{name}"),
+            BWErr::VariableNotDefined { name, .. } => format!("variable:{name}"),
             BWErr::CollectionAccessError { segment, .. } => format!("access:{segment}"),
             BWErr::ArithmeticError(_) => "arithmetic".into(),
             BWErr::ParsingIntegerError(_) => "integer".into(),
@@ -690,7 +692,9 @@ fn quoted_map_keys_use_existing_string_decoding_and_source_order() {
             &format!("|answer| = |{expression}|"),
             &mut Context::default(),
         );
-        assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_first"));
+        assert!(
+            matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing_first")
+        );
     }
 }
 
@@ -756,7 +760,7 @@ fn collection_access_errors_identify_the_first_failing_segment() {
         "|answer| = |missing.items.99999999999999999999999|",
         &mut Context::default(),
     );
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+    assert!(matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing"));
 }
 
 #[test]
@@ -1069,7 +1073,7 @@ fn required_boolean_operands_preserve_errors_and_type_requirements() {
             &mut Context::default(),
         );
         assert!(
-            matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"),
+            matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing"),
             "{expression}"
         );
     }
@@ -1129,7 +1133,7 @@ fn short_circuiting_follows_precedence_parentheses_and_unary_grouping() {
     }
     assert!(
         matches!(evaluate("|answer| = |(true or false) and missing|", &mut Context::default()),
-        Err(BWErr::VariableNotDefined(name)) if name == "missing")
+        Err(BWErr::VariableNotDefined { name, .. }) if name == "missing")
     );
 }
 
@@ -1156,7 +1160,7 @@ fn ordinary_binary_operators_still_evaluate_the_right_operand() {
     for expression in ["false == missing", "true != missing", "1 + missing"] {
         let mut context = Context::default();
         let result = evaluate(&format!("|answer| = |{expression}|"), &mut context);
-        assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing"));
+        assert!(matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing"));
         assert_eq!(context.expression_visits.borrow().len(), 3);
         assert_eq!(context.expression_visits.borrow()[2].trim(), "missing");
     }
@@ -1190,7 +1194,7 @@ fn short_circuiting_composes_in_collections_and_custom_arguments() {
 fn binary_evaluation_does_not_visit_the_right_operand_after_a_left_error() {
     let mut context = Context::default();
     let error = evaluate("|answer| = |missing_left + (1 / 0)|", &mut context).unwrap_err();
-    assert!(matches!(error, BWErr::VariableNotDefined(name) if name == "missing_left"));
+    assert!(matches!(error, BWErr::VariableNotDefined { name, .. } if name == "missing_left"));
     assert_eq!(
         context.expression_visits.borrow().len(),
         2,
@@ -1289,7 +1293,7 @@ fn keyword_prefix_identifiers_preserve_their_complete_names() {
     assert!(matches!(values.get("trueValue"), Some(Literal::Int(8))));
     assert!(matches!(values.get("android"), Some(Literal::Int(9))));
     assert!(
-        matches!(evaluate("|answer| = |order.trueValue|", &mut Context::default()), Err(BWErr::VariableNotDefined(name)) if name == "order")
+        matches!(evaluate("|answer| = |order.trueValue|", &mut Context::default()), Err(BWErr::VariableNotDefined { name, .. }) if name == "order")
     );
 }
 
@@ -1654,11 +1658,11 @@ fn nested_unary_expressions_keep_type_errors_and_controlled_failures() {
     }
     assert!(
         matches!(evaluate("|answer| = |2 ^ -missing|", &mut Context::default()),
-        Err(BWErr::VariableNotDefined(name)) if name == "missing")
+        Err(BWErr::VariableNotDefined { name, .. }) if name == "missing")
     );
     assert!(
         matches!(evaluate("|answer| = |2 ^ m.a|", &mut Context::default()),
-        Err(BWErr::VariableNotDefined(name)) if name == "m")
+        Err(BWErr::VariableNotDefined { name, .. }) if name == "m")
     );
     for expression in ["2 ^ 2 ^ 5", "-2 ^ 31", "2 ^ (1 / 0)", "(2 ^ 31) ^ 0"] {
         assert!(
@@ -1679,7 +1683,7 @@ fn undefined_variables_and_statements_return_typed_errors() {
     let mut context = Context::default();
     assert!(matches!(
         evaluate("|x| = |missing|", &mut context),
-        Err(BWErr::VariableNotDefined(_))
+        Err(BWErr::VariableNotDefined { .. })
     ));
     assert!(matches!(
         evaluate("Unknown statement", &mut context),
@@ -1767,7 +1771,9 @@ fn a_failing_handler_propagates_its_error() {
         "Try { |x| = |body_missing| } Catch { |x| = |handler_missing| }",
         &mut context,
     );
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "handler_missing"));
+    assert!(
+        matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "handler_missing")
+    );
 }
 
 #[test]
@@ -1796,7 +1802,7 @@ fn custom_statement_names_ignore_case_and_spaces() {
     .unwrap();
     assert!(matches!(
         evaluate("CHECK   Value |41|", &mut context),
-        Err(BWErr::VariableNotDefined(_))
+        Err(BWErr::VariableNotDefined { .. })
     ));
 }
 
@@ -1889,7 +1895,7 @@ fn separate_contexts_do_not_share_variables() {
     evaluate("|x| = |1|", &mut first).unwrap();
     assert!(matches!(
         evaluate("|y| = |x|", &mut second),
-        Err(BWErr::VariableNotDefined(_))
+        Err(BWErr::VariableNotDefined { .. })
     ));
 }
 

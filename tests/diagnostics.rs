@@ -1,6 +1,6 @@
 use botwork::core::{
     ast::{Program, StatementKind},
-    diagnostic::Diagnostic,
+    diagnostic::{Diagnostic, DiagnosticLimits},
     eval::{
         botwork_detailed, evaluate_program, evaluate_program_detailed, execute_statement_detailed,
         Context,
@@ -41,7 +41,7 @@ fn runtime_errors_keep_the_most_specific_expression_and_original_error_kind() {
         assert_eq!(error.label, "expression");
         assert!(
             match category {
-                "variable" => matches!(*error.error, BWErr::VariableNotDefined(_)),
+                "variable" => matches!(*error.error, BWErr::VariableNotDefined { .. }),
                 "arithmetic" => matches!(*error.error, BWErr::ArithmeticError(_)),
                 "type" => matches!(*error.error, BWErr::OperationIncompatibleError(_)),
                 "number" => matches!(*error.error, BWErr::ParsingIntegerError(_)),
@@ -110,7 +110,7 @@ fn validation_errors_retain_related_locations_and_prevent_all_state_changes() {
         *execute("|answer| = |early|", &mut context)
             .unwrap_err()
             .error,
-        BWErr::VariableNotDefined(_)
+        BWErr::VariableNotDefined { .. }
     ));
 }
 
@@ -224,7 +224,7 @@ fn recursive_errors_snapshot_every_entered_call_and_cleanup_all_frames() {
 fn failed_handlers_preserve_original_full_stacks_even_before_outer_calls_unwind() {
     let error = execute("Fail { Return |original| }\nHandler { Return |replacement| }\nOuter {\n Try { Fail } Catch { Handler }\n}\nOuter", &mut Context::default()).unwrap_err();
     assert!(
-        matches!(error.error.as_ref(), BWErr::VariableNotDefined(name) if name == "replacement")
+        matches!(error.error.as_ref(), BWErr::VariableNotDefined { name, .. } if name == "replacement")
     );
     assert_eq!(
         error
@@ -300,10 +300,126 @@ fn pair_compatibility_preserves_original_offsets_and_legacy_error_categories() {
     assert_eq!(error.span.unwrap().text(), "unsupported");
     let program = Program::parse("legacy.botwork", "|answer| = |missing|").unwrap();
     assert!(
-        matches!(evaluate_program(&program, &mut Context::default()), Err(BWErr::VariableNotDefined(name)) if name == "missing")
+        matches!(evaluate_program(&program, &mut Context::default()), Err(BWErr::VariableNotDefined { name, .. }) if name == "missing")
     );
     assert!(matches!(
         Program::parse("legacy.botwork", "Return"),
         Err(BWErr::ControlFlowError(_))
     ));
+}
+
+/// A context with the built-in statements.
+fn with_builtins() -> Context {
+    let mut context = Context::default();
+    context.init_statements();
+    context
+}
+
+fn suggestion(source: &str) -> (Option<String>, String) {
+    let error = execute(source, &mut with_builtins()).unwrap_err();
+    let BWErr::VariableNotDefined { suggestion, .. } = error.error.as_ref() else {
+        panic!("undefined variable: {error:?}")
+    };
+    (suggestion.clone(), error.help())
+}
+
+#[test]
+fn undefined_variables_suggest_a_visible_near_name() {
+    let (suggested, help) = suggestion("|discount| = |2|\n|total| = |10 - discont|");
+    assert_eq!(suggested.as_deref(), Some("discount"));
+    assert_eq!(
+        help,
+        "Did you mean `discount`? Otherwise define `discont` before reading it in this lexical scope."
+    );
+    // Parameters, case changes, and swapped letters are near names too.
+    let (suggested, _) =
+        suggestion("Line total of |quantity| at |price| {\n    Return |quantity * prcie|\n}\nLog |@{ Line total of |3| at |4| }|");
+    assert_eq!(suggested.as_deref(), Some("price"));
+    let (suggested, _) = suggestion("|Total| = |1|\nLog |total|");
+    assert_eq!(suggested.as_deref(), Some("Total"));
+    // Nothing near: the help is unchanged.
+    let (suggested, help) = suggestion("|discount| = |2|\nLog |weight|");
+    assert_eq!(suggested, None);
+    assert_eq!(
+        help,
+        "Define `weight` before reading it in this lexical scope; check spelling and case."
+    );
+}
+
+#[test]
+fn suggestions_come_only_from_names_the_read_could_reach() {
+    // `Inner` resolves through where it was defined, not through its caller,
+    // so the caller's `discount` parameter is never offered.
+    let calls = "Outer |discount| {\n    Return |@{ Inner |1| }|\n}\nInner |x| {\n    Return |x - discont|\n}\nLog |@{ Outer |2| }|";
+    assert_eq!(suggestion(calls).0, None);
+    let (suggested, _) = suggestion(&format!("|discount| = |5|\n{calls}"));
+    assert_eq!(suggested.as_deref(), Some("discount"));
+}
+
+#[test]
+fn catch_handlers_read_the_suggestion_from_the_details() {
+    let mut context = with_builtins();
+    execute(
+        r#"|discount| = |2|
+Try {
+    Log |discont|
+} Catch |error| {
+    Assert |@{ Map Keys |error.details| }| Equals |["name", "suggestion"]|
+    Assert |error.details.suggestion| Equals |"discount"|
+}
+Try {
+    Log |weight|
+} Catch |error| {
+    Assert |@{ Map Keys |error.details| }| Equals |["name"]|
+}"#,
+        &mut context,
+    )
+    .unwrap();
+}
+
+#[test]
+fn suggestions_count_toward_the_diagnostic_text_budget() {
+    let limits = DiagnosticLimits::default();
+    let plain = Diagnostic::new(BWErr::undefined_variable("discont".into()));
+    let suggested = Diagnostic::new(BWErr::VariableNotDefined {
+        name: "discont".into(),
+        suggestion: Some("discount".into()),
+    });
+    let plain_bytes = limits.check(&plain).unwrap().text_bytes;
+    assert_eq!(
+        limits.check(&suggested).unwrap().text_bytes,
+        plain_bytes + "discount".len()
+    );
+    let tight = DiagnosticLimits {
+        text_bytes: plain_bytes,
+        ..DiagnosticLimits::default()
+    };
+    assert!(tight.check(&plain).is_ok());
+    assert!(tight.check(&suggested).is_err());
+}
+
+#[test]
+fn emergency_summaries_keep_the_suggestion() {
+    // A text budget below the name and suggestion turns the error into a
+    // bounded summary whose cause keeps both.
+    let mut context = Context::with_limits(botwork::core::run::RunLimits {
+        diagnostics: DiagnosticLimits {
+            text_bytes: 10,
+            ..DiagnosticLimits::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    context.init_statements();
+    let error = execute("|discount| = |2|\nLog |discont|", &mut context).unwrap_err();
+    let cause = &error.causes[0];
+    assert!(cause.omissions.is_some(), "{error:?}");
+    assert!(
+        matches!(
+            cause.error.as_ref(),
+            BWErr::VariableNotDefined { name, suggestion: Some(suggestion) }
+                if name == "discont" && suggestion == "discount"
+        ),
+        "{error:?}"
+    );
 }

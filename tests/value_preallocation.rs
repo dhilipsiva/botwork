@@ -312,7 +312,7 @@ fn diagnostic_rendering_allocates_one_admitted_output_without_an_intermediate_he
         grammar::BWErr,
     };
     let name = "é".repeat(16 * 1024);
-    let error = Diagnostic::new(BWErr::VariableNotDefined(name.clone()));
+    let error = Diagnostic::new(BWErr::undefined_variable(name.clone()));
     let (rendered, copies) = observe(16 * 1024, || {
         error.render_with_limits(&DiagnosticRenderLimits {
             output_bytes: 128 * 1024,
@@ -341,7 +341,7 @@ fn rejected_diagnostic_rendering_never_copies_large_filename_detail_or_help_buff
         let error = Diagnostic::new(if filename {
             BWErr::NativeError("failed".into())
         } else {
-            BWErr::VariableNotDefined("🙂".repeat(100_000))
+            BWErr::undefined_variable("🙂".repeat(100_000))
         })
         .at(&program.statements[0].span);
         let (rendered, copies) = observe(64 * 1024, || error.to_string());
@@ -1655,7 +1655,7 @@ fn diagnostic_message_and_help_are_rejected_before_owned_string_formatting() {
     let length = 64 * 1024;
     for diagnostic in [
         Diagnostic::new(BWErr::NativeError("x".repeat(length))),
-        Diagnostic::new(BWErr::VariableNotDefined("x".repeat(length))),
+        Diagnostic::new(BWErr::undefined_variable("x".repeat(length))),
     ] {
         let limits = DiagnosticValueLimits {
             values: ValueLimits {

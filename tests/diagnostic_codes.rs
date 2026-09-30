@@ -41,7 +41,7 @@ fn every_existing_error_category_has_a_unique_pinned_code_and_repair_guidance() 
             "BW1003",
         ),
         (
-            BWErr::VariableNotDefined("x".into()),
+            BWErr::undefined_variable("x".into()),
             UndefinedVariable,
             "BW2001",
         ),

@@ -64,7 +64,7 @@ fn sample() -> Diagnostic {
     let program = Program::parse("தமிழ்-é", "# 🙂\r\n\t|x| = |1|").unwrap();
     let span = &program.statements[0].span;
     let mut error =
-        Diagnostic::new(BWErr::VariableNotDefined("cafe\u{301}".into())).at_expression(span);
+        Diagnostic::new(BWErr::undefined_variable("cafe\u{301}".into())).at_expression(span);
     error.call_stack.push(CallFrame {
         signature: "read".into(),
         call_site: span.clone(),
@@ -324,7 +324,7 @@ fn rendering_preserves_prior_filename_truncation_and_empty_or_whitespace_span_la
 
 #[test]
 fn repair_guidance_obeys_exact_zero_and_default_output_bounds_without_changing_category() {
-    let error = Diagnostic::new(BWErr::VariableNotDefined("café".into()));
+    let error = Diagnostic::new(BWErr::undefined_variable("café".into()));
     let expected = Help(&error.error).to_string();
     for output_bytes in [0, expected.len() - 1, expected.len()] {
         let rendered = error.help_with_limit(output_bytes);
@@ -339,7 +339,7 @@ fn repair_guidance_obeys_exact_zero_and_default_output_bounds_without_changing_c
             assert!(rendered.text.len() <= RENDER_SUMMARY_BYTES);
         }
     }
-    let error = BWErr::VariableNotDefined("🙂".repeat(100_000));
+    let error = BWErr::undefined_variable("🙂".repeat(100_000));
     assert!(error
         .help()
         .starts_with("[BW2001] repair guidance truncated:"));

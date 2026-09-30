@@ -119,8 +119,13 @@ lazy_static::lazy_static! {
 /// botwork Err
 #[derive(Error, Debug, Clone)]
 pub enum BWErr {
-    #[error("Variable not defined: {0}")]
-    VariableNotDefined(String),
+    #[error("Variable not defined: {name}")]
+    VariableNotDefined {
+        name: String,
+        /// A visible variable whose name is a likely misspelling of `name`,
+        /// offered in the help.
+        suggestion: Option<String>,
+    },
     #[error("Statement not defined: {0}")]
     StatementNotDefined(String),
     #[error("Duplicate statement `{signature}` at {duplicate}; first defined at {original}")]

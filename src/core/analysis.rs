@@ -551,6 +551,19 @@ impl<'a> Frame<'a> {
             .any(|frame| frame.variables.contains(variable) || frame.inputs.contains(variable))
     }
 
+    /// The visible variable whose name is nearest to `variable`, when one is a
+    /// likely misspelling of it.
+    fn nearest_variable(&self, variable: &str) -> Option<&str> {
+        let visible = self.chain().flat_map(|frame| {
+            frame
+                .variables
+                .iter()
+                .copied()
+                .chain(frame.inputs.iter().map(String::as_str))
+        });
+        crate::core::suggest::nearest(variable, visible)
+    }
+
     /// Imports register when they run: an earlier import in this frame, or any
     /// import in an enclosing one, serves the call.
     fn namespace(&self, namespace: &str, position: usize) -> Namespace<'_> {
@@ -956,11 +969,15 @@ impl Checker<'_, '_> {
                     self.report.inputs.insert(name.clone());
                 }
                 if !frame.binds(name) && self.reported.insert(name.clone()) {
+                    let help = match frame.nearest_variable(name) {
+                        Some(near) => format!("Did you mean `{near}`? Otherwise, assign it first, or supply it as an input variable with --var or --vars-file."),
+                        None => "Assign it first, or supply it as an input variable with --var or --vars-file.".into(),
+                    };
                     self.push(
                         Rule::UndefinedVariable,
                         &expression.span,
                         format!("`{name}` is never assigned in a scope that reaches this read"),
-                        "Assign it first, or supply it as an input variable with --var or --vars-file.",
+                        help,
                     );
                 }
             }

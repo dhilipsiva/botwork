@@ -148,7 +148,7 @@ impl BWErr {
             Self::ControlFlowError(_) => DiagnosticCode::InvalidControl,
             Self::DuplicateParameter { .. } => DiagnosticCode::DuplicateParameter,
             Self::SignatureError(_) => DiagnosticCode::Signature,
-            Self::VariableNotDefined(_) => DiagnosticCode::UndefinedVariable,
+            Self::VariableNotDefined { .. } => DiagnosticCode::UndefinedVariable,
             Self::StatementNotDefined(_) => DiagnosticCode::UndefinedStatement,
             Self::DuplicateStatement { .. } => DiagnosticCode::DuplicateStatement,
             Self::ParameterMissingError(_) => DiagnosticCode::ParameterCount,
@@ -176,6 +176,14 @@ impl BWErr {
         }
     }
 
+    /// An undefined-variable error without a suggestion.
+    pub fn undefined_variable(name: String) -> Self {
+        Self::VariableNotDefined {
+            name,
+            suggestion: None,
+        }
+    }
+
     pub fn help(&self) -> String {
         self.help_with_limit(DiagnosticRenderLimits::default().output_bytes)
             .text
@@ -191,7 +199,8 @@ struct Help<'a>(&'a BWErr);
 impl fmt::Display for Help<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let guidance = match self.0 {
-            BWErr::VariableNotDefined(name) => return write!(formatter, "Define `{name}` before reading it in this lexical scope; check spelling and case."),
+            BWErr::VariableNotDefined { name, suggestion: Some(suggestion) } => return write!(formatter, "Did you mean `{suggestion}`? Otherwise define `{name}` before reading it in this lexical scope."),
+            BWErr::VariableNotDefined { name, suggestion: None } => return write!(formatter, "Define `{name}` before reading it in this lexical scope; check spelling and case."),
             BWErr::ParsingError(_) => "Check the indicated token and close every pipe, bracket, brace, quote, and block comment.",
             BWErr::ControlFlowError(_) => "Return needs a custom body; Break/Continue need a loop and Rethrow needs a Catch in the same invocation.",
             BWErr::DuplicateParameter { .. } => "Give each parameter a distinct, case-sensitive name.",

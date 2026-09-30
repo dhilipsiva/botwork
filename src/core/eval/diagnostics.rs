@@ -5,6 +5,7 @@ mod tests;
 #[cfg(test)]
 use crate::core::diagnostic::DiagnosticCode;
 use crate::core::diagnostic::{DiagnosticConstruction, FormattedDetail, SourcePrefix};
+use std::borrow::Borrow;
 
 struct OriginalLocation<'a> {
     span: &'a Span,
@@ -336,6 +337,28 @@ impl Context {
             span.map(|span| (span, expression)),
             None,
         )
+    }
+
+    /// An undefined-variable error that suggests the visible variable whose
+    /// name is nearest, when one is a likely misspelling.
+    pub(super) fn undefined_variable(&self, name: &str, span: Option<&Span>) -> RuntimeDiagnostic {
+        let visible = std::iter::successors(Some(self.current), |&index| self.frames[index].parent)
+            .flat_map(|index| self.frames[index].variables.keys().map(|key| key.borrow()));
+        match crate::core::suggest::nearest(name, visible) {
+            Some(suggestion) => self.constructed_fields(
+                |[name, suggestion]| BWErr::VariableNotDefined {
+                    name,
+                    suggestion: Some(suggestion),
+                },
+                [
+                    FormattedDetail::exact(format_args!("{name}")),
+                    FormattedDetail::exact(format_args!("{suggestion}")),
+                ],
+                span.map(|span| (span, true)),
+                None,
+            ),
+            None => self.detail_error(BWErr::undefined_variable, name, span, true),
+        }
     }
 
     pub(super) fn detail_error(

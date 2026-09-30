@@ -49,7 +49,7 @@ fn collections_report_the_first_source_order_error() {
         assert!(
             matches!(
                 evaluate(&format!("|answer| = |{expression}|")),
-                Err(BWErr::VariableNotDefined(name)) if name == "missing_first"
+                Err(BWErr::VariableNotDefined { name, .. }) if name == "missing_first"
             ),
             "{expression}"
         );
@@ -131,7 +131,7 @@ fn a_helper_cannot_read_an_unrelated_callers_local() {
         "Read private {\n |copy| = |private|\n}\n\
          Caller {\n |private| = |7|\n Read private\n}\nCaller",
     );
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "private"));
+    assert!(matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "private"));
 }
 
 #[test]
@@ -306,7 +306,9 @@ fn failed_return_expression_is_catchable_before_a_return_outcome_exists() {
     let result = evaluate(
         "Get value {\n Try { Return |missing_body| } Catch { Return |missing_handler| }\n}\nGet value",
     );
-    assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_handler"));
+    assert!(
+        matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing_handler")
+    );
 }
 
 #[test]

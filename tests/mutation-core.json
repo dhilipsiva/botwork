@@ -1,5 +1,5 @@
 {
-  "version": 41,
+  "version": 42,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3388,6 +3388,139 @@
       "file": "src/main.rs",
       "before": "                            failures: args.failures.clone(),\n",
       "after": "                            failures: None,\n"
+    },
+    {
+      "id": "near-name-limit-half-length",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "    let limit = (target.len() / 3).max(1);\n",
+      "after": "    let limit = (target.len() / 2).max(1);\n"
+    },
+    {
+      "id": "near-name-short-names-need-exact",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "    let limit = (target.len() / 3).max(1);\n",
+      "after": "    let limit = target.len() / 3;\n"
+    },
+    {
+      "id": "near-name-exact-match-suggested",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "            *candidate != name\n",
+      "after": "            true\n"
+    },
+    {
+      "id": "near-name-cap-in-arrival-order",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "        close.select_nth_unstable(MAX_CANDIDATES);\n",
+      "after": ""
+    },
+    {
+      "id": "near-name-cap-removed",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "    if close.len() > MAX_CANDIDATES {\n",
+      "after": "    if false {\n"
+    },
+    {
+      "id": "near-name-farthest-chosen",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "        .min()\n        .map(|(_, candidate)| candidate)\n",
+      "after": "        .max()\n        .map(|(_, candidate)| candidate)\n"
+    },
+    {
+      "id": "near-name-long-names-compared",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "    if name.is_empty() || name.chars().nth(MAX_LENGTH).is_some() {\n",
+      "after": "    if name.is_empty() {\n"
+    },
+    {
+      "id": "near-name-swaps-cost-two",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "            if row > 1\n                && column > 1\n",
+      "after": "            if false\n                && column > 1\n"
+    },
+    {
+      "id": "near-name-substitutions-free",
+      "area": "near-names",
+      "file": "src/core/suggest.rs",
+      "before": "            let cost = usize::from(left[row - 1] != right[column - 1]);\n",
+      "after": "            let cost = 0;\n"
+    },
+    {
+      "id": "runtime-help-omits-suggestion",
+      "area": "near-names",
+      "file": "src/core/diagnostic.rs",
+      "before": "return write!(formatter, \"Did you mean `{suggestion}`? Otherwise define",
+      "after": "return write!(formatter, \"Otherwise define"
+    },
+    {
+      "id": "runtime-suggestion-never-computed",
+      "area": "near-names",
+      "file": "src/core/eval/diagnostics.rs",
+      "before": "        match crate::core::suggest::nearest(name, visible) {\n",
+      "after": "        match crate::core::suggest::nearest(name, visible).filter(|_| false) {\n"
+    },
+    {
+      "id": "runtime-suggestion-from-every-frame",
+      "area": "near-names",
+      "file": "src/core/eval/diagnostics.rs",
+      "before": "        let visible = std::iter::successors(Some(self.current), |&index| self.frames[index].parent)\n",
+      "after": "        let visible = (0..self.frames.len())\n"
+    },
+    {
+      "id": "runtime-suggestion-from-current-frame-only",
+      "area": "near-names",
+      "file": "src/core/eval/diagnostics.rs",
+      "before": "std::iter::successors(Some(self.current), |&index| self.frames[index].parent)",
+      "after": "std::iter::successors(Some(self.current), |_| None)"
+    },
+    {
+      "id": "check-suggestion-never-offered",
+      "area": "near-names",
+      "file": "src/core/analysis.rs",
+      "before": "                    let help = match frame.nearest_variable(name) {\n",
+      "after": "                    let help = match frame.nearest_variable(name).filter(|_| false) {\n"
+    },
+    {
+      "id": "check-suggestion-current-frame-only",
+      "area": "near-names",
+      "file": "src/core/analysis.rs",
+      "before": "        let visible = self.chain().flat_map(|frame| {\n",
+      "after": "        let visible = std::iter::once(self).flat_map(|frame| {\n"
+    },
+    {
+      "id": "check-suggestion-ignores-inputs",
+      "area": "near-names",
+      "file": "src/core/analysis.rs",
+      "before": "                .chain(frame.inputs.iter().map(String::as_str))\n",
+      "after": "                .chain(frame.inputs.iter().map(String::as_str).filter(|_| false))\n"
+    },
+    {
+      "id": "details-suggestion-dropped",
+      "area": "near-names",
+      "file": "src/core/diagnostic/value.rs",
+      "before": "                    if let Some(suggestion) = suggestion {\n",
+      "after": "                    if let Some(suggestion) = suggestion.as_ref().filter(|_| false) {\n"
+    },
+    {
+      "id": "summary-suggestion-dropped",
+      "area": "near-names",
+      "file": "src/core/diagnostic/rejection.rs",
+      "before": "            suggestion: suggestion.as_deref().map(&mut detail),\n",
+      "after": "            suggestion: suggestion.as_deref().map(&mut detail).filter(|_| false),\n"
+    },
+    {
+      "id": "ownership-suggestion-uncounted",
+      "area": "near-names",
+      "file": "src/core/diagnostic/ownership.rs",
+      "before": "            [name, suggestion.as_deref().unwrap_or_default(), \"\"]\n",
+      "after": "            [name, \"\", \"\"]\n"
     }
   ]
 }

@@ -233,6 +233,6 @@ fn variables_and_parameters_remain_case_sensitive_without_statement_name_normali
             "|value| = |1|\n|answer| = |VALUE|",
             &mut Context::default()
         ),
-        Err(BWErr::VariableNotDefined(_))
+        Err(BWErr::VariableNotDefined { .. })
     ));
 }

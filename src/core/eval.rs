@@ -611,7 +611,7 @@ impl Context {
         span: Option<&Span>,
     ) -> EvaluationResult<&Arc<StoredValue>> {
         self.find_variable_binding(name)
-            .ok_or_else(|| self.detail_error(BWErr::VariableNotDefined, name, span, true))
+            .ok_or_else(|| self.undefined_variable(name, span))
     }
 
     fn find_variable_binding(&self, name: &str) -> Option<&Arc<StoredValue>> {

@@ -258,7 +258,7 @@ fn none_bindings_and_entries_are_present_while_absent_names_are_errors() {
     }
     assert!(matches!(
         evaluate("|answer| = |absent|", &mut context),
-        Err(BWErr::VariableNotDefined(_))
+        Err(BWErr::VariableNotDefined { .. })
     ));
     assert!(matches!(
         evaluate("|answer| = |map.absent|", &mut context),
@@ -317,7 +317,9 @@ fn duplicate_map_keys_use_decoded_names_and_evaluate_all_values_in_source_order(
         let mut context = Context::default();
         evaluate("|answer| = |7|", &mut context).unwrap();
         let result = evaluate(&format!("|answer| = |{{{entries}}}|"), &mut context);
-        assert!(matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing_first"));
+        assert!(
+            matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing_first")
+        );
         assert!(matches!(
             evaluate("|preserved| = |answer|", &mut context),
             Ok(Literal::Int(7))

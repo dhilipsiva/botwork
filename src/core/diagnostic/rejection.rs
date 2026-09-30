@@ -80,7 +80,10 @@ fn error_summary(error: &BWErr, shortened: &mut usize) -> BWErr {
             attempts: detail(attempts),
             history: detail(history),
         },
-        BWErr::VariableNotDefined(value) => BWErr::VariableNotDefined(detail(value)),
+        BWErr::VariableNotDefined { name, suggestion } => BWErr::VariableNotDefined {
+            name: detail(name),
+            suggestion: suggestion.as_deref().map(&mut detail),
+        },
         BWErr::StatementNotDefined(value) => BWErr::StatementNotDefined(detail(value)),
         BWErr::DuplicateStatement {
             signature,

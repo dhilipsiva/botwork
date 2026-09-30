@@ -532,7 +532,7 @@ fn exact_borrowed_details_match_full_diagnostics_and_preserve_their_call_order()
         },
     ];
     for category in [
-        BWErr::VariableNotDefined,
+        BWErr::undefined_variable,
         BWErr::StatementNotDefined,
         BWErr::NativePanic,
     ] {
@@ -609,7 +609,7 @@ fn rejected_large_unicode_details_and_source_names_have_explicit_bounded_evidenc
         ..DiagnosticLimits::default()
     }
     .borrowed_detail(
-        BWErr::VariableNotDefined,
+        BWErr::undefined_variable,
         &"🦀".repeat(4096),
         Some(&program.statements[0].span),
         true,
@@ -618,7 +618,7 @@ fn rejected_large_unicode_details_and_source_names_have_explicit_bounded_evidenc
     drop(program);
     assert!(source.upgrade().is_none());
     let summary = &error.causes[0];
-    let BWErr::VariableNotDefined(detail) = summary.error.as_ref() else {
+    let BWErr::VariableNotDefined { name: detail, .. } = summary.error.as_ref() else {
         panic!("category")
     };
     assert!(detail.len() <= SUMMARY_DETAIL_BYTES && detail.ends_with("…[truncated]"));

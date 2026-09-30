@@ -210,7 +210,13 @@ impl<'a> Node<'a> {
                     ("attempts", text(attempts)),
                     ("history", text(history)),
                 ],
-                BWErr::VariableNotDefined(name) => vec![("name", text(name))],
+                BWErr::VariableNotDefined { name, suggestion } => {
+                    let mut fields = vec![("name", text(name))];
+                    if let Some(suggestion) = suggestion {
+                        fields.push(("suggestion", text(suggestion)));
+                    }
+                    fields
+                }
                 BWErr::StatementNotDefined(call) => vec![("call", text(call))],
                 BWErr::DuplicateStatement {
                     signature,

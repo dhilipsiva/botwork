@@ -77,7 +77,7 @@ fn every_argument_runs_once_in_caller_order_before_any_body_effect() {
         match failure {
             Some(index) => {
                 assert!(
-                    matches!(result, Err(BWErr::VariableNotDefined(name)) if name == "missing")
+                    matches!(result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing")
                 );
                 assert_eq!(visits(&context), arguments[..=index]);
                 assert!(events(&context).is_empty());
@@ -141,7 +141,9 @@ fn nested_collection_entries_keep_source_order_even_for_overwritten_keys() {
         });
         assert_eq!(observed, names[..expected_count]);
         if let Some(name) = failing {
-            assert!(matches!(result, Err(BWErr::VariableNotDefined(ref actual)) if actual == name));
+            assert!(
+                matches!(result, Err(BWErr::VariableNotDefined { name: ref actual, .. }) if actual == name)
+            );
             assert!(matches!(
                 context.get_variable("answer"),
                 Ok(Literal::Int(99))
@@ -257,7 +259,7 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                         "bare" =>
                             matches!(&result, Ok(Completion::Return(value)) if matches!(&**value, Literal::None)),
                         "error" =>
-                            matches!(&result, Err(BWErr::VariableNotDefined(name)) if name == "missing_handler"),
+                            matches!(&result, Err(BWErr::VariableNotDefined { name, .. }) if name == "missing_handler"),
                         _ =>
                             matches!(&result, Ok(Completion::Normal(value)) if matches!(&**value, Literal::None)),
                     },
@@ -290,7 +292,7 @@ fn nested_for_bindings_restore_before_handlers_and_on_every_completion_path() {
                 let restored = context.get_variable("item");
                 assert!(
                     match prior {
-                        "absent" => matches!(restored, Err(BWErr::VariableNotDefined(_))),
+                        "absent" => matches!(restored, Err(BWErr::VariableNotDefined { .. })),
                         "none" => matches!(restored, Ok(Literal::None)),
                         "local" => matches!(restored, Ok(Literal::Int(7))),
                         _ => matches!(restored, Ok(Literal::Int(99))),
@@ -484,14 +486,14 @@ fn catch_bindings_and_handler_state_restore_on_every_completion_before_frame_dis
                     _ => "missing_handler",
                 };
                 assert!(
-                    matches!(error.error.as_ref(), BWErr::VariableNotDefined(name) if name == expected)
+                    matches!(error.error.as_ref(), BWErr::VariableNotDefined { name, .. } if name == expected)
                 );
             }
             assert_eq!(events(&context), ["BW2001"]);
             let restored = context.get_variable("error");
             assert!(
                 match prior {
-                    "absent" => matches!(restored, Err(BWErr::VariableNotDefined(_))),
+                    "absent" => matches!(restored, Err(BWErr::VariableNotDefined { .. })),
                     "none" => matches!(restored, Ok(Literal::None)),
                     "local" => matches!(restored, Ok(Literal::Int(7))),
                     _ => matches!(restored, Ok(Literal::Int(99))),
@@ -516,7 +518,7 @@ fn defensive_rethrow_guard_does_not_consume_an_unrelated_callers_handler() {
     context.handlers.push(HandledError {
         invocation: 0,
         diagnostic: context
-            .retain_handler(Diagnostic::new(BWErr::VariableNotDefined(
+            .retain_handler(Diagnostic::new(BWErr::undefined_variable(
                 "original".into(),
             )))
             .unwrap(),
@@ -540,7 +542,9 @@ fn defensive_rethrow_guard_does_not_consume_an_unrelated_callers_handler() {
     assert_eq!(context.current, 0);
     assert_eq!(context.handlers.len(), 1);
     let error = evaluate_statement(statement, &mut context).unwrap_err();
-    assert!(matches!(error.error.as_ref(), BWErr::VariableNotDefined(name) if name == "original"));
+    assert!(
+        matches!(error.error.as_ref(), BWErr::VariableNotDefined { name, .. } if name == "original")
+    );
     assert!(error.causes.is_empty());
     assert_eq!(context.handlers.len(), 1);
 }

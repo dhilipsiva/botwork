@@ -59,7 +59,11 @@ impl<'a> WireError<'a> {
             1001 => BWErr::ParsingError(self.fields[0].into()),
             1002 => BWErr::ControlFlowError(self.fields[0].into()),
             1004 => BWErr::SignatureError(self.fields[0].into()),
-            2001 => BWErr::VariableNotDefined(self.fields[0].into()),
+            // Suggestions stay on the side that computed them.
+            2001 => BWErr::VariableNotDefined {
+                name: self.fields[0].into(),
+                suggestion: None,
+            },
             2002 => BWErr::StatementNotDefined(self.fields[0].into()),
             2004 => BWErr::ParameterMissingError(self.fields[0].into()),
             3001 => BWErr::ParsingIntegerError(self.fields[0].into()),
@@ -164,7 +168,7 @@ pub(super) fn encode(
         BWErr::ParsingError(text)
         | BWErr::ControlFlowError(text)
         | BWErr::SignatureError(text)
-        | BWErr::VariableNotDefined(text)
+        | BWErr::VariableNotDefined { name: text, .. }
         | BWErr::StatementNotDefined(text)
         | BWErr::ParameterMissingError(text)
         | BWErr::ParsingIntegerError(text)

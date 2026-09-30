@@ -54,7 +54,7 @@ fn default_display_bounds_large_details_help_filenames_and_repeated_call_locatio
         let program = Program::parse(&name, "|x| = |1|").unwrap();
         let span = &program.statements[0].span;
         let mut error = Diagnostic::new(if branch == 0 {
-            BWErr::VariableNotDefined("🙂".repeat(100_000))
+            BWErr::undefined_variable("🙂".repeat(100_000))
         } else {
             BWErr::NativeError("reason".into())
         })

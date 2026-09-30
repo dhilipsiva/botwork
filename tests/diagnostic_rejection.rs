@@ -28,7 +28,7 @@ fn rejection_preserves_original_category_and_exact_byte_coordinates_without_sour
     let owner = Arc::downgrade(&program.source);
     let span = &program.statements[0].span;
     let coordinates = (span.start().to_string(), span.end().to_string());
-    let error = Diagnostic::new(BWErr::VariableNotDefined("🙂".repeat(1024))).at(span);
+    let error = Diagnostic::new(BWErr::undefined_variable("🙂".repeat(1024))).at(span);
     drop(program);
     let error = zero().admit(error).unwrap_err();
     assert!(owner.upgrade().is_none());

@@ -455,6 +455,24 @@ cover:
 Its 484-entry catalogue adds 11 faults, with the `console_report` suite and the
 batch unit tests as oracles; see [rerun hint evidence](rerun-hint-evidence.json).
 
+Version 42 adds near-name suggestions for undefined variables. Its faults cover:
+
+- matching: a limit of half the length, no edit for short names, exact names
+  suggested, swaps counted twice, and substitutions counted as free;
+- choice: the farthest name chosen, and the candidate cap removed or applied
+  in arrival order;
+- bounds: long names compared rather than skipped;
+- runtime candidates: every frame, or only the current one, and no suggestion
+  computed at all;
+- `--check` candidates: the current frame only, suite inputs ignored, and no
+  suggestion offered;
+- the suggestion dropped from the help, the `Catch` details, and emergency
+  summaries, and left out of diagnostic text accounting.
+
+Its 503-entry catalogue adds 19 faults, with the library tests and the
+`diagnostics` and `value_preallocation` suites as oracles; see
+[near-name evidence](near-names-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

@@ -98,7 +98,7 @@ fn numeric_literals_and_operators_use_ascii_while_numeric_map_segments_keep_spel
             let program =
                 Program::parse("word.botwork", &format!("|answer| = |{expression}|")).unwrap();
             assert!(
-                matches!(evaluate_program(&program, &mut Context::default()), Err(BWErr::VariableNotDefined(name)) if name == "உண்மை")
+                matches!(evaluate_program(&program, &mut Context::default()), Err(BWErr::VariableNotDefined { name, .. }) if name == "உண்மை")
             );
         } else {
             assert!(
