@@ -27,7 +27,7 @@ such as `D4`.
 | D9 | Python is an optional feature that links the system libpython |
 | D10 | The package registry is deferred past 1.0 |
 | D11 | 1.0 integrates WebDriver, Playwright, and Appium |
-| D12 | Workers and processes have full parity on macOS and Windows |
+| D12 | Workers and processes have full parity on Windows; macOS lacks the tree and namespace modes (revised) |
 | D13 | The branch-coverage gate is dropped; the line-coverage gate stays |
 | D14 | Pre-release fuzzing is 1 CPU-hour per target |
 | D15 | The language, diagnostic codes, reports, CLI, and Rust API are stable at 1.0 |
@@ -272,6 +272,29 @@ process tracking on macOS.
 `with_pid_namespace`. If a guarantee proves unattainable there, the work stops
 and reports the gap for a new decision. It does not ship a weaker mode under
 the same name.
+
+#### macOS tree ownership
+
+*Decided by the owner on 2026-09-30, when the port met the gap the risk
+anticipated.*
+
+The process statements and the default worker pool promise process-group
+ownership: a process that deliberately leaves its group is outside the
+guarantee. macOS matches that with process groups. The process-tree guardian
+(`with_process_tree`) and PID-namespace workers promise more. They adopt
+descendants that double-fork out of the group, and they clean up after the
+host exits. macOS gives an unprivileged process no way to do that. It has no
+child subreaper and no PID namespaces, and kqueue's `NOTE_TRACK`, which
+followed a process across forks, has been unsupported since Mac OS X 10.5.
+Only the Endpoint Security framework, which needs an Apple entitlement and
+root, could observe every fork.
+
+So on macOS the process statements and the default worker pool have the same
+guarantees as on Linux, and the tree and namespace modes fail with a clear
+unsupported-platform error instead of running with a weaker guarantee. The gap
+is documented. Windows has full parity: Job Objects that kill on close and
+forbid breakaway contain every descendant, detached ones included, and close
+when the host exits.
 
 ## Release gates
 

@@ -40,8 +40,8 @@ no `rust-version`.
 | Platform | Status |
 | --- | --- |
 | Linux x86_64, GNU and static musl | Supported and tested: CI runs every test for both, in debug and release |
-| macOS arm64 | Planned for 1.0: needs ports of workers and process statements with the same ownership guarantees ([D12](decisions.md#d12-platform-parity)) |
-| Windows x86_64 | Planned for 1.0, with the same port |
+| macOS arm64 | Planned for 1.0: the process statements and the default worker pool with Linux's guarantees; the process-tree and PID-namespace worker modes are unavailable, since macOS cannot follow detached descendants ([D12](decisions.md#d12-platform-parity)) |
+| Windows x86_64 | Planned for 1.0 with full parity, process-tree ownership included, through Job Objects |
 
 Until those ports land, process statements and isolated workers are Linux-only;
 see [worker platforms](worker-platforms.md).
