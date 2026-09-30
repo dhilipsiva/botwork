@@ -1,0 +1,79 @@
+{
+  "name": "botwork",
+  "displayName": "Botwork",
+  "description": "Botwork scripts, suites, and datasets: highlighting, and diagnostics, completion, hover, navigation, rename, and signature help from the botwork language server.",
+  "version": "0.2.0",
+  "publisher": "botwork",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhilipsiva/botwork"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "botwork",
+        "aliases": [
+          "Botwork",
+          "botwork"
+        ],
+        "extensions": [
+          ".botwork"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "botwork-suite",
+        "aliases": [
+          "Botwork suite"
+        ],
+        "filenamePatterns": [
+          "*.suite.botwork",
+          "*.dataset.botwork"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "botwork",
+        "scopeName": "source.botwork",
+        "path": "./syntaxes/botwork.tmLanguage.json"
+      },
+      {
+        "language": "botwork-suite",
+        "scopeName": "source.botwork.suite",
+        "path": "./syntaxes/botwork-suite.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Botwork",
+      "properties": {
+        "botwork.server.path": {
+          "type": "string",
+          "default": "botwork",
+          "description": "The botwork executable. The extension runs `botwork --lsp` from the workspace folder."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/extension.test.js && node test/grammar.test.js",
+    "package": "vsce package --out botwork.vsix"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.2"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "4.0.0",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
+  }
+}

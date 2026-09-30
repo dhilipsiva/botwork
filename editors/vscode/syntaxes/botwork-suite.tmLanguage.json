@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Botwork suite",
+  "scopeName": "source.botwork.suite",
+  "patterns": [
+    {
+      "match": "(?i)^\\s*(suite|library|suitesetup|suiteteardown|casesetup|caseteardown|case|dataset|row)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.other.suite.botwork"
+        }
+      }
+    },
+    {
+      "match": "(?i)(?<=\\|)\\s*(named|tags|from|values|using|as)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.other.suite.botwork"
+        }
+      }
+    },
+    {
+      "include": "source.botwork"
+    }
+  ]
+}

@@ -105,6 +105,44 @@ jobs:
           BOTWORK_REQUIRE_TREE_SITTER: "1"
         run: cargo +stable test --locked --test tree_sitter
 
+  editors:
+    name: Editor packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The Helix configuration pins a grammar revision from the history.
+          fetch-depth: 0
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Install Vim
+        run: sudo apt-get update && sudo apt-get install --yes vim
+      - name: Install Helix 25.07.1
+        run: |
+          cd "$RUNNER_TEMP"
+          curl --silent --show-error --location --fail --output helix.tar.xz \
+            https://github.com/helix-editor/helix/releases/download/25.07.1/helix-25.07.1-x86_64-linux.tar.xz
+          echo "3f08e63ecd388fff657ad39722f88bb03dcf326f1f2da2700d99e1dc40ab2e8b  helix.tar.xz" | sha256sum --check
+          tar --extract --xz --file helix.tar.xz
+          echo "$RUNNER_TEMP/helix-25.07.1-x86_64-linux" >> "$GITHUB_PATH"
+      - name: Install the VS Code extension's locked dependencies
+        working-directory: editors/vscode
+        run: npm ci --no-audit --no-fund
+      - name: Package the VS Code extension
+        working-directory: editors/vscode
+        run: npm run package
+      - name: Check the editor packages
+        env:
+          BOTWORK_REQUIRE_EDITORS: all
+        run: cargo +stable test --locked --test editors
+
   fuzz:
     name: Seeded fuzz smoke (AddressSanitizer)
     runs-on: ubuntu-latest

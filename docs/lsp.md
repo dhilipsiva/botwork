@@ -103,31 +103,9 @@ reach it, skipping hidden directories, `target`, and `node_modules`.
 
 ## Editor configuration
 
-Any editor with a generic language-client setting can use the server. For
-example, in Helix (`languages.toml`):
-
-```toml
-[language-server.botwork]
-command = "botwork"
-args = ["--lsp"]
-
-[[language]]
-name = "botwork"
-scope = "source.botwork"
-file-types = ["botwork"]
-comment-token = "#"
-language-servers = ["botwork"]
-```
-
-In Neovim 0.11 or later:
-
-```lua
-vim.filetype.add({ extension = { botwork = "botwork" } })
-vim.lsp.config("botwork", { cmd = { "botwork", "--lsp" }, filetypes = { "botwork" } })
-vim.lsp.enable("botwork")
-```
-
-Syntax highlighting comes from the [Tree-sitter grammars](tree-sitter.md).
+[Editor support](editors.md) packages the server with highlighting for Helix,
+Vim, Neovim, and VS Code. Any other editor with a generic language-client
+setting can run `botwork --lsp` for `.botwork` files.
 
 ## Verification
 

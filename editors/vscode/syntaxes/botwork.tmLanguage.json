@@ -1,0 +1,361 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Botwork",
+  "scopeName": "source.botwork",
+  "patterns": [
+    {
+      "include": "#statement"
+    }
+  ],
+  "repository": {
+    "statement": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#for"
+        },
+        {
+          "include": "#import"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#parameter"
+        },
+        {
+          "include": "#continuation"
+        },
+        {
+          "include": "#block"
+        },
+        {
+          "include": "#words"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.botwork",
+          "begin": "###",
+          "end": "###",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.begin.botwork"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.end.botwork"
+            }
+          }
+        },
+        {
+          "name": "comment.line.number-sign.botwork",
+          "match": "(#).*$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.botwork"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "(?i)^\\s*(if|while|try|return|break|continue|rethrow|eventually|retry|else|catch|finally)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.botwork"
+            }
+          }
+        },
+        {
+          "match": "(?i)(?<=\\})\\s*(else|catch|finally)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.botwork"
+            }
+          }
+        },
+        {
+          "match": "(?i)(?<=\\{)\\s*(if|while|try|return|break|continue|rethrow|eventually|retry)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.botwork"
+            }
+          }
+        }
+      ]
+    },
+    "for": {
+      "begin": "(?i)(?:^|(?<=\\{))\\s*(for)\\b",
+      "end": "(?=\\{)|$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#parameter"
+        },
+        {
+          "include": "#continuation"
+        },
+        {
+          "match": "(?i)\\b(in)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.botwork"
+            }
+          }
+        }
+      ]
+    },
+    "import": {
+      "begin": "(?i)^\\s*(import)\\b",
+      "end": "$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.import.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#parameter"
+        },
+        {
+          "match": "(?i)\\b(as)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.import.botwork"
+            }
+          }
+        }
+      ]
+    },
+    "parameter": {
+      "name": "meta.parameter.botwork",
+      "begin": "\\|",
+      "end": "\\|",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.separator.parameter.botwork"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.separator.parameter.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#expression"
+        }
+      ]
+    },
+    "expression": {
+      "patterns": [
+        {
+          "include": "#string"
+        },
+        {
+          "include": "#call"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#constant"
+        },
+        {
+          "include": "#word-operator"
+        },
+        {
+          "include": "#operator"
+        },
+        {
+          "include": "#list"
+        },
+        {
+          "include": "#map"
+        },
+        {
+          "include": "#access"
+        },
+        {
+          "include": "#variable"
+        },
+        {
+          "include": "#punctuation"
+        }
+      ]
+    },
+    "string": {
+      "name": "string.quoted.double.botwork",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.botwork"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.botwork",
+          "match": "\\\\[\"\\\\n]"
+        }
+      ]
+    },
+    "call": {
+      "name": "meta.call.botwork",
+      "begin": "@\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.call.begin.botwork"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.call.end.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#parameter"
+        },
+        {
+          "include": "#continuation"
+        },
+        {
+          "include": "#words"
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.botwork",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    "constant": {
+      "name": "constant.language.boolean.botwork",
+      "match": "\\b(true|false)\\b"
+    },
+    "word-operator": {
+      "name": "keyword.operator.logical.botwork",
+      "match": "\\b(and|or)\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.botwork",
+      "match": "==|!=|<=|>=|[<>+\\-*/%^!]"
+    },
+    "list": {
+      "begin": "\\[",
+      "end": "\\]",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.brackets.begin.botwork"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.brackets.end.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#expression"
+        }
+      ]
+    },
+    "map": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.begin.botwork"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=:)",
+          "captures": {
+            "1": {
+              "name": "variable.other.property.botwork"
+            }
+          }
+        },
+        {
+          "include": "#expression"
+        }
+      ]
+    },
+    "access": {
+      "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.botwork"
+        },
+        "2": {
+          "name": "variable.other.property.botwork"
+        }
+      }
+    },
+    "variable": {
+      "name": "variable.other.botwork",
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
+    },
+    "punctuation": {
+      "name": "punctuation.separator.botwork",
+      "match": "[,:()]"
+    },
+    "continuation": {
+      "name": "punctuation.separator.continuation.botwork",
+      "match": "\\\\\\s*$"
+    },
+    "block": {
+      "name": "punctuation.section.block.botwork",
+      "match": "[{}]"
+    },
+    "words": {
+      "patterns": [
+        {
+          "match": "([^\\s|#{}\\\\\"=@:][^\\s|#{}\\\\\":]*)(::)",
+          "captures": {
+            "1": {
+              "name": "entity.name.namespace.botwork"
+            },
+            "2": {
+              "name": "punctuation.accessor.botwork"
+            }
+          }
+        },
+        {
+          "name": "entity.name.function.botwork",
+          "match": "[^\\s|#{}\\\\\"=@][^|#{}\\\\\"]*?(?=\\s*(\\||\\{|\\}|#|\\\\|$))"
+        }
+      ]
+    }
+  }
+}

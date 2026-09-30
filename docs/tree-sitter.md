@@ -30,6 +30,8 @@ names inside scripts.
   `queries/suite-highlights.scm` adds suite and dataset keywords.
 - `*/test/corpus/` holds Tree-sitter's own tests of the syntax trees.
 
+[Editor support](editors.md) packages the grammars and queries for Helix.
+
 ## How the grammars follow the interpreter
 
 - **Control keywords.** A control keyword is recognized only as a whole word,

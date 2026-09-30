@@ -1,0 +1,19 @@
+# A comment with |pipes| and "quotes"
+Double |x| {
+    Return |x * 2|
+}
+|total| = Double |@{ Length Of |[1, "a|b # c", {"k": true}]| }|
+If |total >= 2 and not_a_keyword| {
+    Log |"total: \"ok\" \n"|
+} Else {
+    Log In |total|
+}
+For |item| In |[1, 2.5]| { Log |item| }
+Import |"lib/m.botwork"| As |m|
+Log |@{ m::Double |2| }|
+###
+block |comment| "not a string"
+###
+Pair |1| \
+  |2|
+Try { Fail |"x"| } Catch |error| { Log |error.code| } Finally { No Operation }

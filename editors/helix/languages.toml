@@ -1,0 +1,35 @@
+# Botwork for Helix. Merge into ~/.config/helix/languages.toml, copy
+# editors/helix/queries into ~/.config/helix/runtime/queries, then run
+# `hx --grammar fetch && hx --grammar build`. See docs/editors.md.
+
+[[language]]
+name = "botwork"
+scope = "source.botwork"
+file-types = ["botwork"]
+comment-tokens = ["#"]
+block-comment-tokens = { start = "###", end = "###" }
+indent = { tab-width = 4, unit = "    " }
+language-servers = ["botwork"]
+grammar = "botwork"
+
+[[language]]
+name = "botwork-suite"
+scope = "source.botwork.suite"
+file-types = [{ glob = "*.suite.botwork" }, { glob = "*.dataset.botwork" }]
+comment-tokens = ["#"]
+block-comment-tokens = { start = "###", end = "###" }
+indent = { tab-width = 4, unit = "    " }
+language-servers = ["botwork"]
+grammar = "botwork_suite"
+
+[language-server.botwork]
+command = "botwork"
+args = ["--lsp"]
+
+[[grammar]]
+name = "botwork"
+source = { git = "https://github.com/dhilipsiva/botwork", rev = "919ceabdecccf7d22b7c6280d0a1ae206205d5eb", subpath = "editors/tree-sitter-botwork/botwork" }
+
+[[grammar]]
+name = "botwork_suite"
+source = { git = "https://github.com/dhilipsiva/botwork", rev = "919ceabdecccf7d22b7c6280d0a1ae206205d5eb", subpath = "editors/tree-sitter-botwork/suite" }

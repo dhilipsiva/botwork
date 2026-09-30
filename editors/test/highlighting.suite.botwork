@@ -1,0 +1,9 @@
+Suite |"checkout"| Named |"Checkout"| Tags |["smoke"]| {
+    Dataset |"rows"| {
+        Row |"a"| Values |1|
+    }
+    Library {
+        Get From |x| { Return |x| }
+    }
+    Case |"c"| Using |"rows"| As |n| { Log |@{ Get From |n| }| }
+}

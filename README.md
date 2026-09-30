@@ -28,7 +28,8 @@ The [syntax reference](docs/syntax.md) lists every form a script or suite can us
 and the [statement reference](docs/statements.md) lists every built-in statement.
 `--check` [finds mistakes without running](docs/check.md) a file or suite, and
 `--format` rewrites files in [canonical layout](docs/format.md), and `--lsp`
-runs a [language server](docs/lsp.md) for editors.
+runs a [language server](docs/lsp.md), packaged with highlighting for
+[Helix, Vim, and VS Code](docs/editors.md).
 To look around quickly:
 
 1. Clone the repo
@@ -203,7 +204,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Report listeners](docs/listeners.md)
 - [ ] Tooling
   - [x] [LSP support](docs/lsp.md)
-  - [ ] Editor support (Mainly Helix/Vim/VS Code)
+  - [x] [Editor support](docs/editors.md) (Helix, Vim, Neovim, VS Code)
   - [x] [TreeSitter grammar](docs/tree-sitter.md)
   - [x] [Linting](docs/check.md)
   - [ ] Trusted & Verified registry (for botwork packages)
