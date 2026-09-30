@@ -72,7 +72,8 @@ fn anchor(heading: &str) -> String {
         .collect()
 }
 
-/// Every function name in the Rust sources and tests.
+/// Every function name in the Rust sources and tests, and every Python test
+/// method in the helper tests.
 fn functions() -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut directories = vec![
@@ -85,10 +86,16 @@ fn functions() -> BTreeSet<String> {
             let path = entry.unwrap().path();
             if path.is_dir() {
                 directories.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
+            } else if let Some(keyword) =
+                match path.extension().and_then(|extension| extension.to_str()) {
+                    Some("rs") => Some("fn "),
+                    Some("py") => Some("def "),
+                    _ => None,
+                }
+            {
                 let text = fs::read_to_string(&path).unwrap();
-                for (at, _) in text.match_indices("fn ") {
-                    let name: String = text[at + 3..]
+                for (at, _) in text.match_indices(keyword) {
+                    let name: String = text[at + keyword.len()..]
                         .chars()
                         .take_while(|character| character.is_alphanumeric() || *character == '_')
                         .collect();

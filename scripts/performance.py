@@ -8,6 +8,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import subprocess
 import sys
@@ -18,6 +19,13 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = 1
 TARGETS = ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl")
+BASELINE = ROOT / "docs/performance-evidence.json"
+BUDGETS = ROOT / "benches/runtime/budgets.json"
+# Roadmap decision D4: budgets are the accepted baseline's p95 workload time and
+# maximum peak memory, each times 1.25; item 249 blocks unexplained regressions
+# of more than 10% against the baseline.
+BUDGET_FACTOR = 1.25
+REGRESSION_LIMIT = 0.10
 
 
 def workloads(smoke=False):
@@ -204,6 +212,64 @@ def aggregate(rows, definitions, samples, warmups):
     }
 
 
+def host(record):
+    """What makes two campaigns comparable: the CPU, visible CPUs, target, and profile."""
+    model = re.search(r"^model name\s*:\s*(.+)$", record["machine"]["cpuinfo"], re.M)
+    return {"cpu": model.group(1).strip() if model else "unknown",
+            "cpus": len(record["machine"]["cpu_affinity"]),
+            "target": record["target"], "profile": record["profile"]}
+
+
+def budgets_from(baseline):
+    """The budgets roadmap decision D4 registers from an accepted baseline campaign."""
+    if baseline.get("kind") != "measurement" or not baseline.get("complete"):
+        raise ValueError("budgets need a complete measurement campaign")
+    return {
+        "schema": 1, "decision": "D4",
+        "baseline": {"record": str(BASELINE.relative_to(ROOT)),
+                     "base_revision": baseline["base_revision"],
+                     "captured_at": baseline["captured_at"]},
+        "host": host(baseline), "budget_factor": BUDGET_FACTOR,
+        "regression_limit": REGRESSION_LIMIT,
+        "workloads": {
+            name: {"baseline_p95_ns": stats["workload_elapsed_ns"]["p95"],
+                   "p95_budget_ns": round(stats["workload_elapsed_ns"]["p95"] * BUDGET_FACTOR),
+                   "baseline_peak_rss_kib": stats["peak_rss_kib"]["max"],
+                   "peak_rss_budget_kib": math.ceil(stats["peak_rss_kib"]["max"] * BUDGET_FACTOR)}
+            for name, stats in baseline["statistics"].items()},
+    }
+
+
+def check(campaign, budgets, explained=()):
+    """Why a campaign fails the registered budgets, or an empty list.
+
+    A campaign counts only when it is a complete measurement on the budgets'
+    host, target, and profile. Each workload's p95 time and peak memory must be
+    within budget, and neither may regress more than the limit against the
+    baseline unless the workload's regression is explained."""
+    if campaign.get("kind") != "measurement" or not campaign.get("complete"):
+        return ["not a complete measurement campaign"]
+    if host(campaign) != budgets["host"]:
+        return [f"not comparable: measured on {host(campaign)}, budgets are for {budgets['host']}"]
+    problems = []
+    limit = budgets["regression_limit"]
+    for name, budget in budgets["workloads"].items():
+        stats = campaign["statistics"].get(name)
+        if stats is None:
+            problems.append(f"{name}: not measured")
+            continue
+        p95, peak = stats["workload_elapsed_ns"]["p95"], stats["peak_rss_kib"]["max"]
+        if p95 > budget["p95_budget_ns"]:
+            problems.append(f"{name}: p95 {p95} ns exceeds its budget of {budget['p95_budget_ns']} ns")
+        if peak > budget["peak_rss_budget_kib"]:
+            problems.append(f"{name}: peak memory {peak} KiB exceeds its budget of {budget['peak_rss_budget_kib']} KiB")
+        for metric, value, base in [("p95", p95, budget["baseline_p95_ns"]),
+                                    ("peak memory", peak, budget["baseline_peak_rss_kib"])]:
+            if value > base * (1 + limit) and name not in explained:
+                problems.append(f"{name}: {metric} regressed {100 * (value / base - 1):.1f}% against the baseline, more than {100 * limit:.0f}%, without an explanation")
+    return problems
+
+
 def fingerprints():
     paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "scripts/performance.py")]
     paths.extend(path for path in (ROOT / "benches").rglob("*.rs"))
@@ -216,7 +282,34 @@ def main():
     parser.add_argument("--smoke", action="store_true", help="small correctness check; never a performance baseline")
     parser.add_argument("--target", choices=TARGETS, default=TARGETS[0])
     parser.add_argument("--profile", choices=("debug", "release"), default="release")
+    parser.add_argument("--check", metavar="SUMMARY", type=Path,
+                        help="check a completed campaign's summary.json against the registered budgets")
+    parser.add_argument("--explain", metavar="WORKLOAD=REASON", action="append", default=[],
+                        help="accept a workload's regression beyond the limit, with the reason (repeatable)")
+    parser.add_argument("--write-budgets", action="store_true",
+                        help="register budgets from the accepted baseline in docs/performance-evidence.json")
     args = parser.parse_args()
+    if args.write_budgets:
+        BUDGETS.write_text(json.dumps(budgets_from(json.loads(BASELINE.read_text())), indent=2) + "\n")
+        print(f"wrote {BUDGETS.relative_to(ROOT)}")
+        return
+    if args.check:
+        explained = {}
+        for item in args.explain:
+            name, _, reason = item.partition("=")
+            if not reason.strip():
+                parser.error(f"--explain {item!r} needs WORKLOAD=REASON")
+            explained[name] = reason.strip()
+        campaign = json.loads(args.check.read_text())
+        problems = check(campaign, json.loads(BUDGETS.read_text()), explained)
+        for name, reason in explained.items():
+            print(f"explained regression: {name}: {reason}")
+        for problem in problems:
+            print(f"budget check failed: {problem}")
+        if problems:
+            sys.exit(1)
+        print("budget check passed")
+        return
     if sys.platform != "linux" or not hasattr(signal, "pidfd_send_signal"):
         parser.error("measurements require Linux wait4/pidfd support and Python 3.9+")
     if not args.smoke and args.profile != "release":
@@ -258,7 +351,7 @@ def main():
                      "peak_memory": "Native parent wait4 ru_maxrss in KiB, whole workload child lifetime including setup and cleanup; excludes Python's inherited high-water mark",
                      "cache": "warm filesystem caches; inputs created before samples and pre-read by driver; no cache eviction",
                      "order": "one child at a time; fixed workload order within each round; all warmup rounds precede measured rounds",
-                     "acceptance_budgets": None, "seed": None, "external_adapters": None},
+                     "acceptance_budgets": str(BUDGETS.relative_to(ROOT)), "seed": None, "external_adapters": None},
         "workloads": [{k: v for k, v in case.items() if k != "source"} for case in definitions],
         "observations": [],
     }

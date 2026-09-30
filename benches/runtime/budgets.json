@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "decision": "D4",
+  "baseline": {
+    "record": "docs/performance-evidence.json",
+    "base_revision": "2aed64d521e4f7d62bdb5ddf1e314ab275f5b210",
+    "captured_at": "2026-09-28T09:20:14.796382+00:00"
+  },
+  "host": {
+    "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",
+    "cpus": 8,
+    "target": "x86_64-unknown-linux-gnu",
+    "profile": "release"
+  },
+  "budget_factor": 1.25,
+  "regression_limit": 0.1,
+  "workloads": {
+    "cli-startup": {
+      "baseline_p95_ns": 1620260,
+      "p95_budget_ns": 2025325,
+      "baseline_peak_rss_kib": 4880,
+      "peak_rss_budget_kib": 6100
+    },
+    "parse": {
+      "baseline_p95_ns": 30831827,
+      "p95_budget_ns": 38539784,
+      "baseline_peak_rss_kib": 12944,
+      "peak_rss_budget_kib": 16180
+    },
+    "calls": {
+      "baseline_p95_ns": 305379281,
+      "p95_budget_ns": 381724101,
+      "baseline_peak_rss_kib": 5136,
+      "peak_rss_budget_kib": 6420
+    },
+    "loop": {
+      "baseline_p95_ns": 1905920196,
+      "p95_budget_ns": 2382400245,
+      "baseline_peak_rss_kib": 5132,
+      "peak_rss_budget_kib": 6415
+    },
+    "source-io": {
+      "baseline_p95_ns": 7373899,
+      "p95_budget_ns": 9217374,
+      "baseline_peak_rss_kib": 6048,
+      "peak_rss_budget_kib": 7560
+    },
+    "waiting": {
+      "baseline_p95_ns": 18703458,
+      "p95_budget_ns": 23379322,
+      "baseline_peak_rss_kib": 7892,
+      "peak_rss_budget_kib": 9865
+    }
+  }
+}

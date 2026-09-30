@@ -98,5 +98,94 @@ class PerformanceEvidence(unittest.TestCase):
                 time.sleep(0.01)
 
 
+
+class RegisteredBudgets(unittest.TestCase):
+    """Roadmap decision D4's budgets and the 10% regression gate of item 249."""
+
+    def setUp(self):
+        self.baseline = json.loads((ROOT / "docs/performance-evidence.json").read_text())
+        self.budgets = json.loads((ROOT / "benches/runtime/budgets.json").read_text())
+
+    def changed(self, workload, metric, factor):
+        campaign = copy.deepcopy(self.baseline)
+        statistics = campaign["statistics"][workload]
+        if metric == "p95":
+            statistics["workload_elapsed_ns"]["p95"] = round(statistics["workload_elapsed_ns"]["p95"] * factor)
+        else:
+            statistics["peak_rss_kib"]["max"] = round(statistics["peak_rss_kib"]["max"] * factor)
+        return campaign
+
+    def test_budgets_are_the_accepted_baseline_times_a_quarter(self):
+        self.assertEqual(self.budgets, RUNNER["budgets_from"](self.baseline))
+        self.assertEqual(self.budgets["workloads"]["cli-startup"]["p95_budget_ns"], 2_025_325)
+        self.assertEqual(self.budgets["workloads"]["parse"]["peak_rss_budget_kib"], 16_180)
+        self.assertEqual(set(self.budgets["workloads"]), {case["id"] for case in RUNNER["workloads"]()})
+        self.assertEqual(self.budgets["host"]["cpus"], 8)
+
+    def test_the_baseline_passes_its_own_budgets(self):
+        self.assertEqual(RUNNER["check"](self.baseline, self.budgets), [])
+
+    def test_exceeding_a_budget_fails_even_when_explained(self):
+        problems = RUNNER["check"](self.changed("loop", "p95", 1.3), self.budgets, {"loop": "slower"})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("loop: p95", problems[0])
+        self.assertIn("exceeds its budget", problems[0])
+        problems = RUNNER["check"](self.changed("parse", "memory", 1.3), self.budgets)
+        self.assertTrue(any("parse: peak memory" in problem and "exceeds" in problem for problem in problems))
+
+    def test_regressions_beyond_ten_percent_need_an_explanation(self):
+        within = self.changed("calls", "p95", 1.09)
+        self.assertEqual(RUNNER["check"](within, self.budgets), [])
+        regressed = self.changed("calls", "p95", 1.15)
+        problems = RUNNER["check"](regressed, self.budgets)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("calls: p95 regressed 15.0%", problems[0])
+        self.assertEqual(RUNNER["check"](regressed, self.budgets, {"calls": "reason"}), [])
+        memory = RUNNER["check"](self.changed("waiting", "memory", 1.12), self.budgets)
+        self.assertTrue(any("waiting: peak memory regressed" in problem for problem in memory))
+
+    def test_other_hosts_and_unfinished_campaigns_are_not_compared(self):
+        for change in [
+            lambda record: record["machine"].update(cpuinfo=record["machine"]["cpuinfo"].replace("9950X3D", "7950X")),
+            lambda record: record["machine"].update(cpu_affinity=[0, 1]),
+            lambda record: record.update(target="x86_64-unknown-linux-musl"),
+            lambda record: record.update(profile="debug"),
+        ]:
+            campaign = copy.deepcopy(self.baseline)
+            change(campaign)
+            with self.subTest(host=RUNNER["host"](campaign)):
+                problems = RUNNER["check"](campaign, self.budgets)
+                self.assertEqual(len(problems), 1)
+                self.assertIn("not comparable", problems[0])
+        for change in [{"kind": "smoke"}, {"complete": False}]:
+            with self.subTest(change=change):
+                self.assertEqual(RUNNER["check"](dict(self.baseline, **change), self.budgets),
+                                 ["not a complete measurement campaign"])
+        missing = copy.deepcopy(self.baseline)
+        del missing["statistics"]["waiting"]
+        self.assertEqual(RUNNER["check"](missing, self.budgets), ["waiting: not measured"])
+
+    def test_the_command_line_checks_a_summary_and_records_explanations(self):
+        import subprocess
+        script = str(ROOT / "scripts/performance.py")
+        passed = subprocess.run([sys.executable, script, "--check", str(ROOT / "docs/performance-evidence.json")],
+                                capture_output=True, text=True)
+        self.assertEqual((passed.returncode, passed.stdout.strip()), (0, "budget check passed"))
+        with tempfile.TemporaryDirectory() as directory:
+            summary = Path(directory) / "summary.json"
+            summary.write_text(json.dumps(self.changed("calls", "p95", 1.15)))
+            failed = subprocess.run([sys.executable, script, "--check", str(summary)], capture_output=True, text=True)
+            self.assertEqual(failed.returncode, 1)
+            self.assertIn("budget check failed: calls: p95 regressed", failed.stdout)
+            explained = subprocess.run([sys.executable, script, "--check", str(summary),
+                                        "--explain", "calls=profiled: new cancellation checkpoint"],
+                                       capture_output=True, text=True)
+            self.assertEqual(explained.returncode, 0, explained.stdout)
+            self.assertIn("explained regression: calls: profiled: new cancellation checkpoint", explained.stdout)
+            bare = subprocess.run([sys.executable, script, "--check", str(summary), "--explain", "calls"],
+                                  capture_output=True, text=True)
+            self.assertEqual(bare.returncode, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

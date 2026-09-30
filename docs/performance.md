@@ -8,10 +8,10 @@ Each round executes every workload below, in table order, one process at a time.
 
 This is measurement protocol version 1. The workload sizes, sample counts,
 statistics, correctness checks, and timing boundaries below are fixed before
-the full campaign. No runtime optimization or acceptance budget is part of this
-change. The recorded campaign below is now the accepted baseline for the
-[registered budgets](#registered-budgets); the scaling gates and release
-performance acceptance remain open.
+the full campaign. The recorded campaign below is the accepted baseline for the
+[registered budgets](#registered-budgets), which every later campaign on the
+reference host is checked against. The scaling gates and release performance
+acceptance remain open.
 
 ## Workloads and timing boundaries
 
@@ -151,10 +151,35 @@ budget is its p95 workload time × 1.25 and its maximum peak RSS × 1.25:
 | Sixteen 256 KiB source loads | 9.22 ms | 7,560 KiB |
 | 100 waiting runs | 23.38 ms | 9,865 KiB |
 
-Times are rounded to 0.01 ms, and memory is rounded up to whole KiB. A campaign
-counts against the budgets only on the reference host, with this protocol. It
-fails when a workload's p95 time or peak memory exceeds its budget, or regresses
-more than 10% against the baseline without an explanation.
+Times are rounded to 0.01 ms, and memory is rounded up to whole KiB.
+`benches/runtime/budgets.json` records the exact values in nanoseconds and KiB,
+with the baseline and the reference host. `python3 scripts/performance.py
+--write-budgets` derives it from the baseline record, and
+`tests/performance_tools.py` requires the two to match.
+
+### Checking a campaign
+
+Run a campaign, then check its record:
+
+```sh
+python3 scripts/performance.py
+python3 scripts/performance.py --check target/performance/campaign-XXXXXXXX/summary.json
+```
+
+The check prints `budget check passed` and exits 0, or prints each problem and
+exits 1:
+
+- **Not comparable.** A campaign counts only when it is a complete measurement
+  on the reference host. That means the same CPU model and number of visible
+  CPUs, the GNU target, and the release profile. Any other campaign is reported
+  as not comparable.
+- **Over budget.** A workload's p95 time or peak memory exceeds its budget.
+  Explaining the change does not excuse it.
+- **Unexplained regression.** A workload's p95 time or peak memory is more than
+  10% above the baseline. To accept such a regression, name the workload and
+  its cause, for example
+  `--explain calls="profiled: a new cancellation checkpoint"`. The check prints
+  each explanation so that it can be kept with the campaign.
 
 Use the same protocol and environment for changes, then perform the roadmap's
 doubling/scaling and regression checks. These samples do not prove
