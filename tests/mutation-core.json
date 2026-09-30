@@ -1,5 +1,5 @@
 {
-  "version": 40,
+  "version": 41,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3311,6 +3311,83 @@
       "file": "src/lsp.rs",
       "before": "                if !document.analysis.parsed {\n",
       "after": "                if !document.analysis.parsed && false {\n"
+    },
+    {
+      "id": "rerun-hint-not-printed",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "                if let Some(hint) = &rerun {\n",
+      "after": "                if let Some(hint) = &rerun.clone().filter(|_| false) {\n"
+    },
+    {
+      "id": "rerun-hint-ignores-failure-record",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "    Some(match (failed, failures) {\n",
+      "after": "    Some(match (failed, failures.filter(|_| false)) {\n"
+    },
+    {
+      "id": "rerun-hint-without-failures",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "        ([], _) => return None,\n",
+      "after": "        ([], _) => return Some(String::new()),\n"
+    },
+    {
+      "id": "rerun-hint-one-recorded-case-called-them",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "        ([_], Some(path)) => format!(\"rerun it with",
+      "after": "        ([_], Some(path)) => format!(\"rerun them with"
+    },
+    {
+      "id": "rerun-hint-names-first-of-several-cases",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "        ([id], None) =>",
+      "after": "        ([id, ..], None) =>"
+    },
+    {
+      "id": "rerun-hint-words-never-quoted",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "    if plain {\n",
+      "after": "    if plain || true {\n"
+    },
+    {
+      "id": "rerun-hint-quotes-slashes",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "\"_-./:=@%+,\".contains(character)",
+      "after": "\"_-.:=@%+,\".contains(character)"
+    },
+    {
+      "id": "rerun-hint-quote-escape-dropped",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": "text.replace('\\'', \"'\\\\''\")",
+      "after": "text.replace('\\'', \"'\")"
+    },
+    {
+      "id": "rerun-hint-lost-with-fixtures",
+      "area": "console-rerun",
+      "file": "src/suites/execution.rs",
+      "before": "batch::rerun_hint(&outcome.failed_cases,",
+      "after": "batch::rerun_hint(&[],"
+    },
+    {
+      "id": "rerun-hint-lost-without-fixtures",
+      "area": "console-rerun",
+      "file": "src/batch.rs",
+      "before": ".then(|| rerun_hint(&outcome.failed_cases,",
+      "after": ".then(|| rerun_hint(&[],"
+    },
+    {
+      "id": "rerun-hint-record-not-passed",
+      "area": "console-rerun",
+      "file": "src/main.rs",
+      "before": "                            failures: args.failures.clone(),\n",
+      "after": "                            failures: None,\n"
     }
   ]
 }

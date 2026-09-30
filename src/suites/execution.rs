@@ -379,7 +379,8 @@ pub(super) async fn run(
         outcome.stop = Some(Stop::Delivery(error));
         return Ok(outcome);
     }
-    batch::report(tally.summary(true)).await?;
+    let rerun = batch::rerun_hint(&outcome.failed_cases, configuration.failures.as_deref());
+    batch::report(tally.summary(true, rerun)).await?;
     if crate::interrupt::interrupted() {
         outcome.stop = Some(Stop::Interrupted);
     } else {

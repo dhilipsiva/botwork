@@ -143,7 +143,7 @@ fn failure_recap_names_each_unsuccessful_run_and_bounds_its_length() {
         recap,
         omitted,
         ..
-    } = tally.summary(true)
+    } = tally.summary(true, None)
     else {
         panic!("summary")
     };
@@ -161,7 +161,7 @@ fn failure_recap_names_each_unsuccessful_run_and_bounds_its_length() {
         many.finished(&identity(number, None), &Err(task_failure()))
             .unwrap();
     }
-    let Message::Summary { recap, omitted, .. } = many.summary(false) else {
+    let Message::Summary { recap, omitted, .. } = many.summary(false, None) else {
         panic!("summary")
     };
     assert_eq!((recap.len(), omitted), (RECAP_LINES, 3));
@@ -219,6 +219,7 @@ async fn invalid_admission_limits_fail_before_preparing_inputs_or_paths() {
                 limits: RunLimits::default(),
                 timeout_ms: None,
                 suite_timeout_ms: None,
+                failures: None,
             },
         )
         .await
@@ -229,4 +230,45 @@ async fn invalid_admission_limits_fail_before_preparing_inputs_or_paths() {
         assert_eq!(error.code(), DiagnosticCode::RunConfiguration);
         assert!(error.to_string().contains("Parallel jobs"));
     }
+}
+
+#[test]
+fn rerun_hints_name_the_failed_case_record_or_the_case() {
+    let one = ["checkout/total/pair".to_owned()];
+    let two = [
+        "checkout/total/pair".to_owned(),
+        "checkout/empty".to_owned(),
+    ];
+    let record = Path::new("failed.json");
+    assert_eq!(rerun_hint(&[], Some(record)), None);
+    assert_eq!(rerun_hint(&[], None), None);
+    assert_eq!(
+        rerun_hint(&one, Some(record)).unwrap(),
+        "rerun it with --rerun-failed failed.json"
+    );
+    assert_eq!(
+        rerun_hint(&two, Some(record)).unwrap(),
+        "rerun them with --rerun-failed failed.json"
+    );
+    assert_eq!(
+        rerun_hint(&one, None).unwrap(),
+        "rerun it with --case checkout/total/pair"
+    );
+    assert_eq!(
+        rerun_hint(&two, None).unwrap(),
+        "rerun one with --case ID, or record them with --failures PATH and rerun them with --rerun-failed PATH"
+    );
+}
+
+#[test]
+fn rerun_hints_quote_words_the_shell_would_split() {
+    assert_eq!(word("reports/failed-1.json"), "reports/failed-1.json");
+    assert_eq!(word("my failures.json"), "'my failures.json'");
+    assert_eq!(word("it's"), "'it'\\''s'");
+    assert_eq!(word("$HOME"), "'$HOME'");
+    assert_eq!(word(""), "''");
+    assert_eq!(
+        rerun_hint(&["a suite/case".into()], None).unwrap(),
+        "rerun it with --case 'a suite/case'"
+    );
 }

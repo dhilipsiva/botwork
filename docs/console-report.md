@@ -47,6 +47,28 @@ last lines of stderr always explain the exit status:
 - The recap keeps 50 entries and then reports `…and N more`. The count in the
   header covers every unsuccessful entry.
 
+A suite run ends its recap with how to run the unsuccessful cases again:
+
+```text
+[failures] 2:
+  [case checkout/total/two] failed (BW9001 at checkout.suite.botwork:8:9)
+  [case checkout/total/three] failed (BW9001 at checkout.suite.botwork:8:9)
+  rerun them with --rerun-failed failed.json
+[cases] 4 selected: 2 succeeded, 2 failed
+```
+
+- When `--failures PATH` records the failed cases, the hint is
+  `rerun them with --rerun-failed PATH`, or `rerun it` for one case.
+- Without a record, one failed case gets `rerun it with --case ID`. Several get
+  `rerun one with --case ID, or record them with --failures PATH and rerun them
+  with --rerun-failed PATH`.
+- Cases skipped because a shared fixture failed count as failed, as in the
+  record.
+- A path or ID that the shell would split is single-quoted.
+- The hint is printed before the record is written. If writing the record
+  fails, the command reports that failure too.
+- Runs of files, which have no case IDs, get no hint.
+
 ## Summary and exit status
 
 The final line summarizes every terminal status:

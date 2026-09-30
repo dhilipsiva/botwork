@@ -562,6 +562,7 @@ fn main() -> ExitCode {
                             limits,
                             timeout_ms: args.timeout_ms,
                             suite_timeout_ms: args.suite_timeout_ms,
+                            failures: args.failures.clone(),
                         },
                     ))
                 } else if args.file.len() == 1 {
@@ -626,6 +627,7 @@ fn main() -> ExitCode {
                             limits,
                             timeout_ms: args.timeout_ms,
                             suite_timeout_ms: args.suite_timeout_ms,
+                            failures: None,
                         },
                     ))
                 };

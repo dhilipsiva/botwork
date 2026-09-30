@@ -442,6 +442,19 @@ Its 473-entry catalogue adds 23 faults, with the `lsp`, `rename`, and
 code moved into the shared re-export resolver, was updated in place and re-run
 against the full oracle set.
 
+Version 41 adds the rerun hint that ends a suite's failure recap. Its faults
+cover:
+
+- the hint not printed, or printed for a run with no failed cases;
+- the failed-case record ignored, or not passed to the suite runner;
+- one recorded case called "them";
+- the first of several failed cases offered as the one to rerun;
+- words never quoted, slashes quoted, and quotes left unescaped;
+- the hint dropped by suites with and without shared fixtures.
+
+Its 484-entry catalogue adds 11 faults, with the `console_report` suite and the
+batch unit tests as oracles; see [rerun hint evidence](rerun-hint-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

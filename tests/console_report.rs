@@ -156,11 +156,130 @@ fn suite_recaps_name_cases_and_fixtures_and_count_skips() {
             .contains(&"  [suite broken] fixture failed (BW2001 at broken.suite.botwork:2:25)"),
         "{stderr}"
     );
+    // The failed fixture's skipped case is in the failed-case record too.
     assert_eq!(
         lines[3],
+        "  rerun one with --case ID, or record them with --failures PATH and rerun them with --rerun-failed PATH"
+    );
+    assert_eq!(
+        lines[4],
         "[cases] 3 selected: 1 succeeded, 1 failed, 1 skipped; 1 suite fixtures failed"
     );
-    assert_eq!(lines.len(), 4);
+    assert_eq!(lines.len(), 5);
+}
+
+/// The IDs of the cases a suite run selected, from its JSON report.
+fn selected(harness: &Harness, args: &[&str]) -> (Option<i32>, Vec<String>, String) {
+    let report = harness.workspace.join("selected.json");
+    let _ = fs::remove_file(&report);
+    let mut args = args.to_vec();
+    args.extend(["--report-json", "selected.json", "--jobs", "1"]);
+    let output = harness
+        .command("suites", &args, Duration::from_secs(60))
+        .unwrap();
+    let json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(report).unwrap()).unwrap();
+    let ids = json["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|run| run["identity"]["id"].as_str().unwrap().to_owned())
+        .collect();
+    (
+        output.status.code(),
+        ids,
+        String::from_utf8(output.stderr).unwrap(),
+    )
+}
+
+#[test]
+fn suite_recaps_end_with_a_rerun_command_that_selects_the_failed_cases() {
+    let harness = Harness::new();
+    fs::write(
+        harness.workspace.join("checkout.suite.botwork"),
+        r#"Suite |"checkout"| {
+    Dataset |"orders"| {
+        Row |"one"| Values |{expected: 1}|
+        Row |"two"| Values |{expected: 3}|
+        Row |"three"| Values |{expected: 3}|
+    }
+    Case |"empty"| { Assert |0| Equals |0| }
+    Case |"total"| Using |"orders"| As |order| {
+        Assert |order.expected| Equals |1|
+    }
+}"#,
+    )
+    .unwrap();
+    // Without a record, one failure is rerun by its ID.
+    fs::write(
+        harness.workspace.join("single.suite.botwork"),
+        r#"Suite |"single"| {
+    Case |"good"| { No Operation }
+    Case |"bad"| { Fail |"no"| }
+}"#,
+    )
+    .unwrap();
+    let (status, ids, stderr) = selected(&harness, &["--suite", "single.suite.botwork"]);
+    assert_eq!((status, ids.len()), (Some(1), 2), "{stderr}");
+    let lines = tail(&stderr);
+    assert_eq!(
+        lines[lines.len() - 2],
+        "  rerun it with --case single/bad",
+        "{stderr}"
+    );
+    let (status, ids, stderr) = selected(
+        &harness,
+        &["--suite", "single.suite.botwork", "--case", "single/bad"],
+    );
+    assert_eq!(
+        (status, ids),
+        (Some(1), vec!["single/bad".to_owned()]),
+        "{stderr}"
+    );
+
+    // With a record, the hint names it, quoted for the shell, and rerunning it
+    // selects exactly the failed rows.
+    let (status, ids, stderr) = selected(
+        &harness,
+        &[
+            "--suite",
+            "checkout.suite.botwork",
+            "--failures",
+            "my failures.json",
+        ],
+    );
+    assert_eq!((status, ids.len()), (Some(1), 4), "{stderr}");
+    let lines = tail(&stderr);
+    assert_eq!(lines[0], "[failures] 2:", "{stderr}");
+    assert_eq!(
+        lines[3], "  rerun them with --rerun-failed 'my failures.json'",
+        "{stderr}"
+    );
+    assert_eq!(
+        lines[4], "[cases] 4 selected: 2 succeeded, 2 failed",
+        "{stderr}"
+    );
+    let (status, mut ids, stderr) = selected(
+        &harness,
+        &[
+            "--suite",
+            "checkout.suite.botwork",
+            "--rerun-failed",
+            "my failures.json",
+        ],
+    );
+    ids.sort();
+    assert_eq!(
+        (status, ids),
+        (
+            Some(1),
+            vec![
+                "checkout/total/three".to_owned(),
+                "checkout/total/two".to_owned()
+            ]
+        ),
+        "{stderr}"
+    );
 }
 
 #[test]

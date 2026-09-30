@@ -3,7 +3,12 @@ use super::{BWErr, CliError, Context, Diagnostic, RunLimits};
 use botwork::core::acceptance::{CaseStatus, CaseTotals, Delivery, SkipReason};
 use botwork::core::report::{ErrorRecord, Recording, RunIdentity};
 use botwork::core::suite::SelectedCase;
-use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::task::JoinSet;
 
 #[cfg(test)]
@@ -19,6 +24,8 @@ pub(super) struct Configuration {
     pub(super) limits: RunLimits,
     pub(super) timeout_ms: Option<u64>,
     pub(super) suite_timeout_ms: Option<u64>,
+    /// The suite run's failed-case record (`--failures`), named in the rerun hint.
+    pub(super) failures: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -360,14 +367,40 @@ impl Tally {
         }
     }
 
-    pub(super) fn summary(&mut self, cases: bool) -> Message {
+    pub(super) fn summary(&mut self, cases: bool, rerun: Option<String>) -> Message {
         Message::Summary {
             cases,
             totals: self.totals,
             fixtures_failed: self.fixtures_failed,
             recap: std::mem::take(&mut self.recap),
             omitted: self.omitted,
+            rerun,
         }
+    }
+}
+
+/// How to run a suite's unsuccessful cases again, for the end of the recap:
+/// with the failed-case record when the run wrote one, otherwise by ID.
+pub(super) fn rerun_hint(failed: &[String], failures: Option<&Path>) -> Option<String> {
+    Some(match (failed, failures) {
+        ([], _) => return None,
+        ([_], Some(path)) => format!("rerun it with --rerun-failed {}", word(&path.display().to_string())),
+        (_, Some(path)) => format!("rerun them with --rerun-failed {}", word(&path.display().to_string())),
+        ([id], None) => format!("rerun it with --case {}", word(id)),
+        (_, None) => "rerun one with --case ID, or record them with --failures PATH and rerun them with --rerun-failed PATH".into(),
+    })
+}
+
+/// `text` as one shell word: unchanged when plain, otherwise single-quoted.
+fn word(text: &str) -> String {
+    let plain = !text.is_empty()
+        && text
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "_-./:=@%+,".contains(character));
+    if plain {
+        text.into()
+    } else {
+        format!("'{}'", text.replace('\'', "'\\''"))
     }
 }
 
@@ -426,6 +459,7 @@ pub(super) enum Message {
         fixtures_failed: usize,
         recap: Vec<String>,
         omitted: usize,
+        rerun: Option<String>,
     },
 }
 
@@ -564,6 +598,7 @@ fn write_report(message: Message) -> Result<Vec<PathBuf>, CliError> {
             fixtures_failed,
             recap,
             omitted,
+            rerun,
         } => {
             // Failures scroll past with their full diagnostics; recap them before
             // the summary so the final lines explain the exit status.
@@ -577,6 +612,9 @@ fn write_report(message: Message) -> Result<Vec<PathBuf>, CliError> {
                 }
                 if omitted != 0 {
                     context.write_output(&mut stderr, format_args!("  …and {omitted} more\n"))?;
+                }
+                if let Some(hint) = &rerun {
+                    context.write_output(&mut stderr, format_args!("  {hint}\n"))?;
                 }
             }
             context.write_output(
@@ -776,7 +814,10 @@ async fn run_inputs(
         outcome.stop = Some(Stop::Delivery(error));
         return Ok(outcome);
     }
-    report(tally.summary(cases)).await?;
+    let rerun = cases
+        .then(|| rerun_hint(&outcome.failed_cases, configuration.failures.as_deref()))
+        .flatten();
+    report(tally.summary(cases, rerun)).await?;
     if super::interrupt::interrupted() {
         outcome.stop = Some(Stop::Interrupted);
     } else {

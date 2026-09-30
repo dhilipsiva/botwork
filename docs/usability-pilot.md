@@ -60,12 +60,12 @@ weak evidence that there were none.
 | How pipes pair up inside `@{ ... }`, and that the left side of an assignment takes pipes too | Docs | Added to getting started |
 | No example of a module-qualified call inside `@{ ... }` | Docs | Getting started now shows `@{ pricing::Total of \|3\| at \|4\| }` |
 | `--failures` leaves a `failed.json.lock` that getting started does not mention | Docs | Getting started now explains it |
-| Rerunning failures needs `--failures` on the first run, and the failure summary does not say how to rerun | Product | Open: a rerun hint in the summary |
+| Rerunning failures needs `--failures` on the first run, and the failure summary does not say how to rerun | Product | Done: a suite's [failure recap](console-report.md#failure-recap) ends with the rerun command |
 | BW2001's help begins "Define `discont`…", which points toward adding a variable rather than fixing a misspelling, and there is no "did you mean `discount`" | Product | Open: suggest near names |
 | Call frames show a statement's normalized name, `pricing::linetotalof\|param\|at\|param\|less\|param\|`, rather than the name as written | Product | Open: show the written name |
 | An imported file's path is shown in full, the entry script's relative | Product | Open: consistent paths |
 
-The product findings are open items under the usability sessions in
+The product findings are items under the usability sessions in
 [TODO.md](../TODO.md).
 
 ## Limitations
