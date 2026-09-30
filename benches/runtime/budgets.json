@@ -1,55 +1,60 @@
 {
-  "schema": 1,
+  "schema": 2,
+  "protocol": 2,
   "decision": "D4",
   "baseline": {
-    "record": "docs/performance-evidence.json",
-    "base_revision": "2aed64d521e4f7d62bdb5ddf1e314ab275f5b210",
-    "captured_at": "2026-09-28T09:20:14.796382+00:00"
+    "record": "docs/performance-baseline-evidence.json",
+    "base_revision": "628b7825c3cf436160339a071b7720b986670168",
+    "captured_at": "2026-09-30T11:19:31.986875+00:00"
   },
   "host": {
     "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",
     "cpus": 8,
     "target": "x86_64-unknown-linux-gnu",
-    "profile": "release"
+    "profile": "dist"
   },
   "budget_factor": 1.25,
   "regression_limit": 0.1,
+  "binary": {
+    "baseline_bytes": 10525736,
+    "budget_bytes": 13157170
+  },
   "workloads": {
     "cli-startup": {
-      "baseline_p95_ns": 1620260,
-      "p95_budget_ns": 2025325,
-      "baseline_peak_rss_kib": 4880,
-      "peak_rss_budget_kib": 6100
+      "baseline_p95_ns": 3163795,
+      "p95_budget_ns": 3954744,
+      "baseline_heap_kib": 158,
+      "heap_budget_kib": 198
     },
     "parse": {
-      "baseline_p95_ns": 30831827,
-      "p95_budget_ns": 38539784,
-      "baseline_peak_rss_kib": 12944,
-      "peak_rss_budget_kib": 16180
+      "baseline_p95_ns": 32060373,
+      "p95_budget_ns": 40075466,
+      "baseline_heap_kib": 14508,
+      "heap_budget_kib": 18135
     },
     "calls": {
-      "baseline_p95_ns": 305379281,
-      "p95_budget_ns": 381724101,
-      "baseline_peak_rss_kib": 5136,
-      "peak_rss_budget_kib": 6420
+      "baseline_p95_ns": 344909476,
+      "p95_budget_ns": 431136845,
+      "baseline_heap_kib": 162,
+      "heap_budget_kib": 203
     },
     "loop": {
-      "baseline_p95_ns": 1905920196,
-      "p95_budget_ns": 2382400245,
-      "baseline_peak_rss_kib": 5132,
-      "peak_rss_budget_kib": 6415
+      "baseline_p95_ns": 2133860103,
+      "p95_budget_ns": 2667325129,
+      "baseline_heap_kib": 156,
+      "heap_budget_kib": 195
     },
     "source-io": {
-      "baseline_p95_ns": 7373899,
-      "p95_budget_ns": 9217374,
-      "baseline_peak_rss_kib": 6048,
-      "peak_rss_budget_kib": 7560
+      "baseline_p95_ns": 8475747,
+      "p95_budget_ns": 10594684,
+      "baseline_heap_kib": 933,
+      "heap_budget_kib": 1167
     },
     "waiting": {
-      "baseline_p95_ns": 18703458,
-      "p95_budget_ns": 23379322,
-      "baseline_peak_rss_kib": 7892,
-      "peak_rss_budget_kib": 9865
+      "baseline_p95_ns": 21103488,
+      "p95_budget_ns": 26379360,
+      "baseline_heap_kib": 4274,
+      "heap_budget_kib": 5343
     }
   }
 }

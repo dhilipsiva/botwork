@@ -1,0 +1,4 @@
+# Packed relative relocations (decision D19) shrink the relocation table and
+# startup work on GNU Linux, whose linker and C library support them.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,-z,pack-relative-relocs"]

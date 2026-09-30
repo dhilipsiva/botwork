@@ -49,7 +49,7 @@ fn decisions() -> Vec<String> {
 #[test]
 fn every_decision_has_a_section_and_is_cited_by_the_roadmap() {
     let numbers = decisions();
-    let expected: Vec<String> = (1..=18).map(|number| format!("D{number}")).collect();
+    let expected: Vec<String> = (1..=19).map(|number| format!("D{number}")).collect();
     assert_eq!(numbers, expected);
     let anchors = anchors();
     let todo = read("TODO.md");
@@ -122,11 +122,27 @@ fn grouped(n: u64) -> String {
 
 #[test]
 fn registered_budgets_follow_the_accepted_baseline() {
-    let evidence: Value = serde_json::from_str(&read("docs/performance-evidence.json")).unwrap();
+    let evidence: Value =
+        serde_json::from_str(&read("docs/performance-baseline-evidence.json")).unwrap();
+    assert_eq!(evidence["schema"], 2);
     let revision = evidence["base_revision"].as_str().unwrap();
     let decisions = read("docs/decisions.md");
     assert!(decisions.contains(&format!("revision `{}`", &revision[..7])));
     let performance = read("docs/performance.md");
+    // The binary's budget: its size in bytes × 1.25, rounded up.
+    let binary = evidence["binaries"]["botwork"]["bytes"].as_u64().unwrap();
+    let size = format!("{} bytes", grouped((binary * 5).div_ceil(4)));
+    for (file, text, heading) in [
+        ("decisions", &decisions, "### D4: Budgets and baseline"),
+        ("performance", &performance, "## Registered budgets"),
+    ] {
+        let (_, section) = text.split_once(heading).unwrap();
+        let (section, _) = section.split_once("\n## ").unwrap_or((section, ""));
+        assert!(
+            section.contains(&size),
+            "{file}: the binary should budget {size}"
+        );
+    }
     for (workload, label) in [
         ("cli-startup", "CLI startup"),
         ("parse", "Parse 10,000 statements"),
@@ -137,11 +153,11 @@ fn registered_budgets_follow_the_accepted_baseline() {
     ] {
         let statistics = &evidence["statistics"][workload];
         let p95 = statistics["workload_elapsed_ns"]["p95"].as_u64().unwrap();
-        let peak = statistics["peak_rss_kib"]["max"].as_u64().unwrap();
+        let heap = statistics["heap_kib"]["max"].as_u64().unwrap();
         // Hundredths of a millisecond, rounded; whole KiB, rounded up.
         let hundredths = (p95 as f64 * 1.25 / 10_000.0).round() as u64;
         let time = format!("{}.{:02} ms", grouped(hundredths / 100), hundredths % 100);
-        let memory = format!("{} KiB", grouped((peak * 5).div_ceil(4)));
+        let memory = format!("{} KiB", grouped((heap * 5).div_ceil(4)));
         // Each file's budget table, after its budget heading.
         for (file, text, heading) in [
             ("decisions", &decisions, "### D4: Budgets and baseline"),

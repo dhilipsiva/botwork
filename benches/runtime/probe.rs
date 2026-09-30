@@ -8,11 +8,21 @@ pub(super) fn main() -> i32 {
         time::Instant,
     };
 
+    // `--probe REPORT [--preload LIBRARY] COMMAND...`: the library is preloaded
+    // into the measured command only, never into this supervisor.
     let mut args = std::env::args_os().skip(2);
     let report = args.next().expect("probe report path");
-    let executable = args.next().expect("probe executable");
+    let mut executable = args.next().expect("probe executable");
+    let mut preload = None;
+    if executable == "--preload" {
+        preload = Some(args.next().expect("preloaded library"));
+        executable = args.next().expect("probe executable");
+    }
     let mut command = Command::new(executable);
     command.args(args);
+    if let Some(library) = preload {
+        command.env("LD_PRELOAD", library);
+    }
     let parent = std::process::id() as libc::pid_t;
     // Only async-signal-safe syscalls in the post-fork callback. All measured
     // commands are ordinary non-setuid programs and do not launch subprocesses.

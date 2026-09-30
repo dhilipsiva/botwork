@@ -12,11 +12,19 @@ install it from [rustup.rs](https://rustup.rs).
 ```sh
 git clone https://github.com/dhilipsiva/botwork.git
 cd botwork
-cargo install --path . --locked
+cargo install --path . --locked --profile dist
 ```
 
 `--locked` builds with the dependency versions in `Cargo.lock`, the ones the
-tests ran with. [Getting started](getting-started.md) continues from here.
+tests ran with. `--profile dist` builds the optimized binary that releases ship
+([D19](decisions.md#d19-distribution-build)): fat link-time optimization and one
+codegen unit make it smaller and faster to start, and the build takes a few
+minutes longer. Leave it out for a quicker `release` build.
+[Getting started](getting-started.md) continues from here.
+
+Builds and installs from the checkout read its `.cargo/config.toml`, which
+packs relative relocations in GNU Linux builds. Those binaries need glibc 2.36
+or later; on an older system, build the static binary below.
 
 ### A static Linux binary
 
@@ -27,10 +35,10 @@ copied to any x86_64 Linux machine:
 sudo apt-get install musl-tools
 rustup target add x86_64-unknown-linux-musl
 CC_x86_64_unknown_linux_musl=musl-gcc \
-  cargo build --release --locked --target x86_64-unknown-linux-musl
+  cargo build --profile dist --locked --target x86_64-unknown-linux-musl
 ```
 
-The binary is `target/x86_64-unknown-linux-musl/release/botwork`. CI tests the
+The binary is `target/x86_64-unknown-linux-musl/dist/botwork`. CI tests the
 GNU and musl builds, each in debug and release.
 
 ## Published versions

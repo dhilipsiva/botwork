@@ -17,15 +17,24 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION = 1
+# Protocol 2 builds the distributed `dist` profile and measures private memory,
+# as peak heap, apart from the binary's size (roadmap decisions D4 and D19).
+VERSION = 2
+PROBE_SCHEMA = 1
+DRIVER_SCHEMA = 1
 TARGETS = ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl")
-BASELINE = ROOT / "docs/performance-evidence.json"
+PROFILES = ("debug", "release", "dist")
+BASELINE = ROOT / "docs/performance-baseline-evidence.json"
 BUDGETS = ROOT / "benches/runtime/budgets.json"
-# Roadmap decision D4: budgets are the accepted baseline's p95 workload time and
-# maximum peak memory, each times 1.25; item 249 blocks unexplained regressions
-# of more than 10% against the baseline.
+# Roadmap decision D4: budgets are the accepted baseline's p95 workload time,
+# maximum peak heap, and CLI binary size, each times 1.25; item 249 blocks
+# unexplained regressions of more than 10% against the baseline.
 BUDGET_FACTOR = 1.25
 REGRESSION_LIMIT = 0.10
+# Peak heap comes from a second, counted run of each observation's command with
+# benches/runtime/heap.c preloaded, so the counter never touches the timed run.
+# GNU builds only: static binaries cannot preload.
+HEAP_COUNTER = ROOT / "benches/runtime/heap.c"
 
 
 def workloads(smoke=False):
@@ -53,13 +62,13 @@ def capture(*args):
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
 
-def execute(command, directory, prefix, timeout):
+def execute(command, directory, prefix, timeout, env=None):
     """Retain the leader's PID through watchdog cleanup, then reap with wait4."""
     stdout, stderr = prefix.with_suffix(".stdout"), prefix.with_suffix(".stderr")
     timed_out = threading.Event()
     with stdout.open("w") as output, stderr.open("w") as errors:
         start = time.perf_counter_ns()
-        child = subprocess.Popen(command, cwd=directory, stdin=subprocess.DEVNULL,
+        child = subprocess.Popen(command, cwd=directory, stdin=subprocess.DEVNULL, env=env,
                                  stdout=output, stderr=errors, start_new_session=True)
         try:
             pidfd = os.pidfd_open(child.pid)
@@ -133,7 +142,7 @@ def verify(sample, workload, stdout, stderr):
             raise ValueError("CLI did not produce the expected result")
         return sample["process_elapsed_ns"]
     result = json.loads(stdout)
-    expected = {"schema": VERSION, "workload": workload["id"],
+    expected = {"schema": DRIVER_SCHEMA, "workload": workload["id"],
                 "units": workload["units"], "checksum": workload["checksum"]}
     if (not isinstance(result, dict) or set(result) != {*expected, "elapsed_ns"}
             or any(type(result[k]) is not type(v) or result[k] != v for k, v in expected.items())):
@@ -142,6 +151,13 @@ def verify(sample, workload, stdout, stderr):
     if type(elapsed) is not int or not 0 < elapsed <= sample["process_elapsed_ns"]:
         raise ValueError("invalid workload duration")
     return elapsed
+
+
+def heap_kib(report):
+    """The heap counter's report, the peak in bytes, as whole KiB rounded up."""
+    if report is None or not re.fullmatch(r"[0-9]+\n", report) or int(report) <= 0:
+        raise ValueError("the heap counter did not report a peak")
+    return -(-int(report) // 1024)
 
 
 def statistics(values):
@@ -153,13 +169,18 @@ def statistics(values):
             "p95": ordered[math.ceil(0.95 * len(ordered)) - 1], "max": ordered[-1]}
 
 
-def measured(command, directory, prefix, supervisor):
+def measured(command, directory, prefix, supervisor, counter=None):
+    """Measure through the native supervisor, optionally with the heap counter."""
     report = prefix.with_suffix(".probe.json")
-    sample = execute([supervisor, "--probe", str(report), *command], directory, prefix, 120)
+    env = None
+    if counter:
+        command = ["--preload", str(counter), *command]
+        env = dict(os.environ, BOTWORK_HEAP_REPORT=str(prefix.with_suffix(".heap")))
+    sample = execute([supervisor, "--probe", str(report), *command], directory, prefix, 120, env)
     if sample["timeout"] or sample["returncode"]:
         return sample
     probe = json.loads(report.read_text())
-    if probe.get("schema") != VERSION or probe.get("returncode") != 0:
+    if probe.get("schema") != PROBE_SCHEMA or probe.get("returncode") != 0:
         raise ValueError("native measurement probe failed")
     # Keep the Python-observed lifetime separately; its RSS includes Python's
     # inherited high-water mark and must not enter workload memory statistics.
@@ -172,27 +193,39 @@ def measured(command, directory, prefix, supervisor):
     return sample
 
 
-def calibrate(directory, supervisor):
+def calibrate(directory, supervisor, counter=None):
     # Touch every 4 KiB so the Python parent actually owns 64 MiB of resident
     # pages. A fork/exec measurement taken by Python alone inherits that floor.
     padding = bytearray(64 * 1024 * 1024)
     padding[::4096] = b"x" * (len(padding) // 4096)
-    small = measured([sys.executable, "-I", "-S", "-c", "print(42)"], directory,
-                     directory / "calibration-small", supervisor)
     source = "data = bytearray(32 * 1024 * 1024); data[::4096] = b'x' * 8192; print(sum(data))"
-    large = measured([sys.executable, "-I", "-S", "-c", source], directory,
-                     directory / "calibration-large", supervisor)
-    for row, expected in [(small, "42\n"), (large, "983040\n")]:
-        if (row["timeout"] or row["returncode"] or Path(row["stdout"]).read_text() != expected
-                or Path(row["stderr"]).read_text()):
-            raise ValueError("memory calibration child failed")
+    rows = {}
+    for name, code, expected in [("small", "print(42)", "42\n"), ("large", source, "983040\n")]:
+        for counted in ([False, True] if counter else [False]):
+            label = name + ("-heap" if counted else "")
+            row = measured([sys.executable, "-I", "-S", "-c", code], directory,
+                           directory / f"calibration-{label}", supervisor, counter if counted else None)
+            if (row["timeout"] or row["returncode"] or Path(row["stdout"]).read_text() != expected
+                    or Path(row["stderr"]).read_text()):
+                raise ValueError("memory calibration child failed")
+            if counted:
+                row["heap_bytes"] = int(directory.joinpath(f"calibration-{label}.heap").read_text())
+            rows[label] = row
+    small, large = rows["small"], rows["large"]
     if not 0 < small["peak_rss_kib"] < 64 * 1024:
         raise ValueError("small child inherited the Python parent's memory high-water mark")
     if large["peak_rss_kib"] < max(32 * 1024, small["peak_rss_kib"] + 16 * 1024):
         raise ValueError("memory probe did not observe the child's 32 MiB allocation")
+    if counter:
+        small_heap, large_heap = rows["small-heap"]["heap_bytes"], rows["large-heap"]["heap_bytes"]
+        # The allocation alone makes a 32 MiB peak; startup's transient
+        # allocations need not be live alongside it.
+        if (not 0 < small_heap < 32 * 1024 * 1024 or large_heap < 32 * 1024 * 1024
+                or large_heap < small_heap + 31 * 1024 * 1024):
+            raise ValueError("heap counter did not observe exactly the child's own 32 MiB allocation")
     del padding
     return {"parent_padding_bytes": 64 * 1024 * 1024, "large_child_padding_bytes": 32 * 1024 * 1024,
-            "small": small, "large": large, "verified": True}
+            **rows, "verified": True}
 
 
 def aggregate(rows, definitions, samples, warmups):
@@ -204,12 +237,18 @@ def aggregate(rows, definitions, samples, warmups):
         raise ValueError("incomplete or duplicate sample inventory")
     if any(not row.get("verified") or row["timeout"] or row["returncode"] for row in rows):
         raise ValueError("failed observations cannot be excluded from a campaign")
-    return {
-        case["id"]: {metric: statistics([row[metric] for row in rows
-                                        if row["phase"] == "measured" and row["workload"] == case["id"]])
-                     for metric in ("workload_elapsed_ns", "process_elapsed_ns", "peak_rss_kib")}
-        for case in definitions
-    }
+    result = {}
+    for case in definitions:
+        measured = [row for row in rows if row["phase"] == "measured" and row["workload"] == case["id"]]
+        metrics = ["workload_elapsed_ns", "process_elapsed_ns", "peak_rss_kib"]
+        # Static builds have no counted runs, so no peak heap at all.
+        counted = {"heap_kib" in row for row in measured}
+        if counted == {True}:
+            metrics.append("heap_kib")
+        elif counted != {False}:
+            raise ValueError(f"{case['id']}: peak heap missing from some observations")
+        result[case["id"]] = {metric: statistics([row[metric] for row in measured]) for metric in metrics}
+    return result
 
 
 def host(record):
@@ -224,18 +263,22 @@ def budgets_from(baseline):
     """The budgets roadmap decision D4 registers from an accepted baseline campaign."""
     if baseline.get("kind") != "measurement" or not baseline.get("complete"):
         raise ValueError("budgets need a complete measurement campaign")
+    if baseline.get("schema") != VERSION:
+        raise ValueError(f"budgets need a protocol {VERSION} campaign")
+    binary = baseline["binaries"]["botwork"]["bytes"]
     return {
-        "schema": 1, "decision": "D4",
+        "schema": 2, "protocol": VERSION, "decision": "D4",
         "baseline": {"record": str(BASELINE.relative_to(ROOT)),
                      "base_revision": baseline["base_revision"],
                      "captured_at": baseline["captured_at"]},
         "host": host(baseline), "budget_factor": BUDGET_FACTOR,
         "regression_limit": REGRESSION_LIMIT,
+        "binary": {"baseline_bytes": binary, "budget_bytes": math.ceil(binary * BUDGET_FACTOR)},
         "workloads": {
             name: {"baseline_p95_ns": stats["workload_elapsed_ns"]["p95"],
                    "p95_budget_ns": round(stats["workload_elapsed_ns"]["p95"] * BUDGET_FACTOR),
-                   "baseline_peak_rss_kib": stats["peak_rss_kib"]["max"],
-                   "peak_rss_budget_kib": math.ceil(stats["peak_rss_kib"]["max"] * BUDGET_FACTOR)}
+                   "baseline_heap_kib": stats["heap_kib"]["max"],
+                   "heap_budget_kib": math.ceil(stats["heap_kib"]["max"] * BUDGET_FACTOR)}
             for name, stats in baseline["statistics"].items()},
     }
 
@@ -243,36 +286,48 @@ def budgets_from(baseline):
 def check(campaign, budgets, explained=()):
     """Why a campaign fails the registered budgets, or an empty list.
 
-    A campaign counts only when it is a complete measurement on the budgets'
-    host, target, and profile. Each workload's p95 time and peak memory must be
-    within budget, and neither may regress more than the limit against the
-    baseline unless the workload's regression is explained."""
+    A campaign counts only when it is a complete measurement with the budgets'
+    protocol on their host, target, and profile. Each workload's p95 time and
+    peak heap, and the CLI binary's size, must be within budget, and none
+    may regress more than the limit against the baseline unless the regression
+    is explained (by workload name, or `binary` for the binary's size). Peak
+    RSS is recorded, not budgeted: it is mostly the binary's own pages."""
     if campaign.get("kind") != "measurement" or not campaign.get("complete"):
         return ["not a complete measurement campaign"]
+    if campaign.get("schema") != budgets["protocol"]:
+        return [f"not comparable: protocol {campaign.get('schema')}, budgets use protocol {budgets['protocol']}"]
     if host(campaign) != budgets["host"]:
         return [f"not comparable: measured on {host(campaign)}, budgets are for {budgets['host']}"]
     problems = []
     limit = budgets["regression_limit"]
+
+    def compare(name, metric, value, unit, budget, base):
+        if value > budget:
+            problems.append(f"{name}: {metric} {value} {unit} exceeds its budget of {budget} {unit}")
+        if value > base * (1 + limit) and name not in explained:
+            problems.append(f"{name}: {metric} regressed {100 * (value / base - 1):.1f}% against the baseline, more than {100 * limit:.0f}%, without an explanation")
+
     for name, budget in budgets["workloads"].items():
         stats = campaign["statistics"].get(name)
         if stats is None:
             problems.append(f"{name}: not measured")
             continue
-        p95, peak = stats["workload_elapsed_ns"]["p95"], stats["peak_rss_kib"]["max"]
-        if p95 > budget["p95_budget_ns"]:
-            problems.append(f"{name}: p95 {p95} ns exceeds its budget of {budget['p95_budget_ns']} ns")
-        if peak > budget["peak_rss_budget_kib"]:
-            problems.append(f"{name}: peak memory {peak} KiB exceeds its budget of {budget['peak_rss_budget_kib']} KiB")
-        for metric, value, base in [("p95", p95, budget["baseline_p95_ns"]),
-                                    ("peak memory", peak, budget["baseline_peak_rss_kib"])]:
-            if value > base * (1 + limit) and name not in explained:
-                problems.append(f"{name}: {metric} regressed {100 * (value / base - 1):.1f}% against the baseline, more than {100 * limit:.0f}%, without an explanation")
+        compare(name, "p95", stats["workload_elapsed_ns"]["p95"], "ns",
+                budget["p95_budget_ns"], budget["baseline_p95_ns"])
+        if "heap_kib" not in stats:
+            problems.append(f"{name}: peak heap not measured")
+            continue
+        compare(name, "peak heap", stats["heap_kib"]["max"], "KiB",
+                budget["heap_budget_kib"], budget["baseline_heap_kib"])
+    compare("binary", "size", campaign["binaries"]["botwork"]["bytes"], "bytes",
+            budgets["binary"]["budget_bytes"], budgets["binary"]["baseline_bytes"])
     return problems
 
 
 def fingerprints():
-    paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "scripts/performance.py")]
-    paths.extend(path for path in (ROOT / "benches").rglob("*.rs"))
+    paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", ".cargo/config.toml",
+                                      "scripts/performance.py")]
+    paths.extend(path for path in (ROOT / "benches").rglob("*") if path.suffix in (".rs", ".c"))
     paths.extend(path for path in (ROOT / "src").rglob("*") if path.is_file())
     return {str(path.relative_to(ROOT)): digest(path) for path in sorted(paths)}
 
@@ -281,13 +336,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--smoke", action="store_true", help="small correctness check; never a performance baseline")
     parser.add_argument("--target", choices=TARGETS, default=TARGETS[0])
-    parser.add_argument("--profile", choices=("debug", "release"), default="release")
+    parser.add_argument("--profile", choices=PROFILES, default="dist")
     parser.add_argument("--check", metavar="SUMMARY", type=Path,
                         help="check a completed campaign's summary.json against the registered budgets")
     parser.add_argument("--explain", metavar="WORKLOAD=REASON", action="append", default=[],
-                        help="accept a workload's regression beyond the limit, with the reason (repeatable)")
+                        help="accept a workload's regression beyond the limit, with the reason; "
+                             "`binary` names the CLI binary's size (repeatable)")
     parser.add_argument("--write-budgets", action="store_true",
-                        help="register budgets from the accepted baseline in docs/performance-evidence.json")
+                        help=f"register budgets from the accepted baseline in {BASELINE.relative_to(ROOT)}")
     args = parser.parse_args()
     if args.write_budgets:
         BUDGETS.write_text(json.dumps(budgets_from(json.loads(BASELINE.read_text())), indent=2) + "\n")
@@ -312,8 +368,8 @@ def main():
         return
     if sys.platform != "linux" or not hasattr(signal, "pidfd_send_signal"):
         parser.error("measurements require Linux wait4/pidfd support and Python 3.9+")
-    if not args.smoke and args.profile != "release":
-        parser.error("full performance campaigns require the release profile")
+    if not args.smoke and args.profile != "dist":
+        parser.error("full performance campaigns require the dist profile")
     definitions = workloads(args.smoke)
     samples, warmups, wait_ms = (1, 0, 1) if args.smoke else (30, 3, 10)
     output_root = ROOT / "target/performance"
@@ -339,16 +395,18 @@ def main():
                     "load_average_before": os.getloadavg(),
                     "libc": platform.libc_ver(),
                     "filesystem": capture("stat", "-f", "-c", "%T", str(output))},
-        "build_environment": {key: os.environ[key] for key in
-                              ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS",
-                               "CARGO_INCREMENTAL", "CARGO_PROFILE_RELEASE_OPT_LEVEL",
-                               "CARGO_PROFILE_RELEASE_LTO", "CARGO_PROFILE_RELEASE_CODEGEN_UNITS")
-                              if key in os.environ},
+        "build_environment": {key: value for key, value in os.environ.items()
+                              if key in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_INCREMENTAL")
+                              or key.startswith(("CARGO_BUILD_", "CARGO_PROFILE_", "CARGO_TARGET_"))},
+        "cargo_config": (ROOT / ".cargo/config.toml").read_text(),
         "protocol": {"samples": samples, "warmups": warmups, "wait_ms": wait_ms,
                      "process_watchdog_seconds": 120, "steps_per_run": 64_000_000,
                      "other_run_limits": "RunLimits::default() at the recorded revision",
                      "percentiles": "nearest rank: sorted[ceil(p * n) - 1]",
-                     "peak_memory": "Native parent wait4 ru_maxrss in KiB, whole workload child lifetime including setup and cleanup; excludes Python's inherited high-water mark",
+                     "build": f"cargo build --locked --profile {args.profile}; dist is fat LTO with one codegen unit, and .cargo/config.toml packs relative relocations on GNU Linux",
+                     "peak_memory": "Native parent wait4 ru_maxrss in KiB, whole workload child lifetime including setup and cleanup; excludes Python's inherited high-water mark; recorded, not budgeted",
+                     "private_memory": "peak heap in KiB, rounded up: the most memory a run's allocations hold at once, apart from the binary's pages. Each observation's command runs a second time with benches/runtime/heap.c preloaded, which counts malloc usable sizes; the timed run is never counted. GNU builds only",
+                     "binary_size": "bytes of the botwork executable",
                      "cache": "warm filesystem caches; inputs created before samples and pre-read by driver; no cache eviction",
                      "order": "one child at a time; fixed workload order within each round; all warmup rounds precede measured rounds",
                      "acceptance_budgets": str(BUDGETS.relative_to(ROOT)), "seed": None, "external_adapters": None},
@@ -360,10 +418,9 @@ def main():
     print(f"campaign record: {summary}", flush=True)
     try:
         command = ["cargo", "build", "--locked", "--bin", "botwork", "--bench", "runtime",
-                   "--target", args.target, "--message-format=json-render-diagnostics"]
-        if args.profile == "release":
-            command.append("--release")
-        build = execute(command, ROOT, output / "build", 600)
+                   "--target", args.target, "--profile", "dev" if args.profile == "debug" else args.profile,
+                   "--message-format=json-render-diagnostics"]
+        build = execute(command, ROOT, output / "build", 900)
         record["build"] = build
         if build["returncode"] or build["timeout"]:
             raise ValueError("benchmark build failed; see build.stderr")
@@ -372,9 +429,20 @@ def main():
                        if item.get("reason") == "compiler-artifact" and item.get("executable")}
         if set(executables) != {"botwork", "runtime"}:
             raise ValueError("build did not produce exactly the CLI and workload driver")
-        record["binaries"] = {name: {"path": path, "sha256": digest(Path(path))}
+        record["binaries"] = {name: {"path": path, "sha256": digest(Path(path)),
+                                     "bytes": Path(path).stat().st_size}
                               for name, path in executables.items()}
-        record["calibration"] = calibrate(output, executables["runtime"])
+        counter = None
+        if "gnu" in args.target:
+            counter = output / "heap.so"
+            command = ["cc", "-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror",
+                       "-o", str(counter), str(HEAP_COUNTER)]
+            compiled = execute(command, ROOT, output / "heap-build", 120)
+            if compiled["returncode"] or compiled["timeout"]:
+                raise ValueError("heap counter build failed; see heap-build.stderr")
+            record["heap_counter"] = {"build": compiled, "compiler": capture("cc", "--version").splitlines()[0],
+                                      "sha256": digest(counter)}
+        record["calibration"] = calibrate(output, executables["runtime"], counter)
         for phase, count in [("warmup", warmups), ("measured", samples)]:
             for index in range(count):
                 for case in definitions:
@@ -388,6 +456,15 @@ def main():
                     record["observations"].append(row)
                     row["workload_elapsed_ns"] = verify(row, case, Path(row["stdout"]).read_text(),
                                                         Path(row["stderr"]).read_text())
+                    if counter:
+                        # The same command again, counted, with the same checks.
+                        heap = prefix.with_name(prefix.name + "-heap")
+                        counted = measured(command, sources, heap, executables["runtime"], counter)
+                        row["heap_run"] = counted
+                        verify(counted, case, Path(counted["stdout"]).read_text(),
+                               Path(counted["stderr"]).read_text())
+                        report = heap.with_suffix(".heap")
+                        row["heap_kib"] = heap_kib(report.read_text() if report.exists() else None)
                     row["verified"] = True
                     summary.write_text(json.dumps(record, indent=2) + "\n")
                 print(f"{phase} round {index + 1}/{count} verified", flush=True)

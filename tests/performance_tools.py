@@ -2,7 +2,10 @@ import copy
 import json
 import os
 from pathlib import Path
+import platform
 import runpy
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -28,10 +31,12 @@ class PerformanceEvidence(unittest.TestCase):
 
     def test_success_requires_identity_size_and_correct_result(self):
         self.assertEqual(RUNNER["verify"](SAMPLE, CASE, json.dumps(RESULT), ""), 100)
-        for key, value in [("schema", True), ("workload", "loop"), ("units", 1), ("checksum", 1)]:
+        for key, value in [("schema", True), ("schema", 2), ("workload", "loop"), ("units", 1), ("checksum", 1)]:
             result = dict(RESULT, **{key: value})
-            with self.subTest(key=key), self.assertRaises(ValueError):
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 RUNNER["verify"](SAMPLE, CASE, json.dumps(result), "")
+        with self.assertRaises(ValueError):
+            RUNNER["verify"](SAMPLE, CASE, json.dumps(dict(RESULT, peak_heap_bytes=1)), "")
 
     def test_cli_output_and_process_failure_cannot_pass(self):
         cli = {"id": "cli-startup"}
@@ -42,6 +47,14 @@ class PerformanceEvidence(unittest.TestCase):
         for change in [{"returncode": 1}, {"timeout": True}, {"peak_rss_kib": 0}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 RUNNER["verify"](dict(SAMPLE, **change), CASE, json.dumps(RESULT), "")
+
+    def test_the_heap_counter_must_report_a_positive_peak(self):
+        # 161,256 bytes round up to 158 KiB.
+        self.assertEqual(RUNNER["heap_kib"]("161256\n"), 158)
+        self.assertEqual(RUNNER["heap_kib"]("1024\n"), 1)
+        for report in [None, "", "0\n", "-1\n", "1.5\n", "12", "12\n13\n", " 12\n"]:
+            with self.subTest(report=report), self.assertRaises(ValueError):
+                RUNNER["heap_kib"](report)
 
     def test_invalid_or_impossible_workload_durations_are_rejected(self):
         for elapsed in [0, -1, 201, True, 1.5, float("nan")]:
@@ -58,10 +71,20 @@ class PerformanceEvidence(unittest.TestCase):
 
     def test_aggregation_requires_all_verified_samples_and_keeps_warmups_separate(self):
         rows = [dict(SAMPLE, phase=phase, index=index, workload="parse", verified=True,
-                     workload_elapsed_ns=elapsed) for phase, index, elapsed in
+                     workload_elapsed_ns=elapsed, heap_kib=elapsed // 10) for phase, index, elapsed in
                 [("warmup", 0, 1000), ("measured", 0, 10), ("measured", 1, 20)]]
         aggregate = RUNNER["aggregate"]
         self.assertEqual(aggregate(rows, [CASE], 2, 1)["parse"]["workload_elapsed_ns"]["max"], 20)
+        self.assertEqual(aggregate(rows, [CASE], 2, 1)["parse"]["heap_kib"]["max"], 2)
+        # Static builds have no counted runs; a workload counts every observation or none.
+        uncounted = copy.deepcopy(rows)
+        for row in uncounted:
+            del row["heap_kib"]
+        self.assertNotIn("heap_kib", aggregate(uncounted, [CASE], 2, 1)["parse"])
+        partly = copy.deepcopy(rows)
+        del partly[1]["heap_kib"]
+        with self.assertRaises(ValueError):
+            aggregate(partly, [CASE], 2, 1)
         bad = copy.deepcopy(rows)
         bad[0]["verified"] = False
         for invalid in [rows[:-1], [*rows, rows[0]], bad]:
@@ -98,29 +121,69 @@ class PerformanceEvidence(unittest.TestCase):
                 time.sleep(0.01)
 
 
+    @unittest.skipUnless(sys.platform == "linux" and shutil.which("cc") and platform.libc_ver()[0] == "glibc",
+                         "the heap counter preloads into glibc processes")
+    def test_heap_counter_observes_the_childs_own_allocations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            counter, report = Path(directory) / "heap.so", Path(directory) / "heap"
+            subprocess.run(["cc", "-shared", "-fPIC", "-O2", "-Wall", "-Wextra", "-Werror", "-o", str(counter),
+                            str(ROOT / "benches/runtime/heap.c")], check=True)
+
+            def heap(code, **env):
+                report.unlink(missing_ok=True)
+                subprocess.run([sys.executable, "-I", "-S", "-c", code], check=True, stdout=subprocess.DEVNULL,
+                               env=dict(os.environ, LD_PRELOAD=str(counter), **env))
+                return int(report.read_text()) if report.exists() else None
+
+            small = heap("print(42)", BOTWORK_HEAP_REPORT=str(report))
+            large = heap("data = bytearray(32 * 1024 * 1024); data = None; print(42)", BOTWORK_HEAP_REPORT=str(report))
+            # The allocation alone makes a 32 MiB peak. Startup's transient
+            # allocations need not be live alongside it, so the difference
+            # from the small child can fall slightly short of 32 MiB.
+            self.assertLess(0, small)
+            self.assertLessEqual(32 * 1024 * 1024, large)
+            self.assertLess(small + 31 * 1024 * 1024, large)
+            # Freeing a block releases it: two 32 MiB blocks held one after
+            # the other peak at one block, not at the total allocated.
+            again = heap("data = bytearray(32 * 1024 * 1024); data = None; data = bytearray(32 * 1024 * 1024); print(42)",
+                         BOTWORK_HEAP_REPORT=str(report))
+            self.assertLess(abs(again - large), 64 * 1024)
+            # An in-place repeat grows one block with realloc, from 1 MiB to 33 MiB.
+            grown = heap("data = bytearray(1024 * 1024); data *= 33; print(42)", BOTWORK_HEAP_REPORT=str(report))
+            self.assertLessEqual(33 * 1024 * 1024, grown)
+            self.assertIsNone(heap("print(42)"))
+
 
 class RegisteredBudgets(unittest.TestCase):
     """Roadmap decision D4's budgets and the 10% regression gate of item 249."""
 
     def setUp(self):
-        self.baseline = json.loads((ROOT / "docs/performance-evidence.json").read_text())
+        self.baseline = json.loads((ROOT / "docs/performance-baseline-evidence.json").read_text())
         self.budgets = json.loads((ROOT / "benches/runtime/budgets.json").read_text())
 
     def changed(self, workload, metric, factor):
         campaign = copy.deepcopy(self.baseline)
+        if workload == "binary":
+            binary = campaign["binaries"]["botwork"]
+            binary["bytes"] = round(binary["bytes"] * factor)
+            return campaign
         statistics = campaign["statistics"][workload]
-        if metric == "p95":
-            statistics["workload_elapsed_ns"]["p95"] = round(statistics["workload_elapsed_ns"]["p95"] * factor)
-        else:
-            statistics["peak_rss_kib"]["max"] = round(statistics["peak_rss_kib"]["max"] * factor)
+        key, statistic = {"p95": ("workload_elapsed_ns", "p95"), "heap": ("heap_kib", "max"),
+                          "rss": ("peak_rss_kib", "max")}[metric]
+        statistics[key][statistic] = round(statistics[key][statistic] * factor)
         return campaign
 
     def test_budgets_are_the_accepted_baseline_times_a_quarter(self):
         self.assertEqual(self.budgets, RUNNER["budgets_from"](self.baseline))
-        self.assertEqual(self.budgets["workloads"]["cli-startup"]["p95_budget_ns"], 2_025_325)
-        self.assertEqual(self.budgets["workloads"]["parse"]["peak_rss_budget_kib"], 16_180)
+        self.assertEqual((self.budgets["schema"], self.budgets["protocol"]), (2, 2))
+        self.assertEqual(self.budgets["workloads"]["cli-startup"]["p95_budget_ns"], 3_954_744)
+        self.assertEqual(self.budgets["workloads"]["parse"]["heap_budget_kib"], 18_135)
+        self.assertEqual(self.budgets["binary"]["budget_bytes"], 13_157_170)
         self.assertEqual(set(self.budgets["workloads"]), {case["id"] for case in RUNNER["workloads"]()})
-        self.assertEqual(self.budgets["host"]["cpus"], 8)
+        self.assertEqual(self.budgets["host"], {"cpu": "AMD Ryzen 9 9950X3D 16-Core Processor", "cpus": 8,
+                                                "target": "x86_64-unknown-linux-gnu", "profile": "dist"})
+        with self.assertRaises(ValueError):
+            RUNNER["budgets_from"](dict(self.baseline, schema=1))
 
     def test_the_baseline_passes_its_own_budgets(self):
         self.assertEqual(RUNNER["check"](self.baseline, self.budgets), [])
@@ -130,8 +193,12 @@ class RegisteredBudgets(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("loop: p95", problems[0])
         self.assertIn("exceeds its budget", problems[0])
-        problems = RUNNER["check"](self.changed("parse", "memory", 1.3), self.budgets)
-        self.assertTrue(any("parse: peak memory" in problem and "exceeds" in problem for problem in problems))
+        problems = RUNNER["check"](self.changed("parse", "heap", 1.3), self.budgets)
+        self.assertTrue(any("parse: peak heap" in problem and "exceeds" in problem for problem in problems))
+        problems = RUNNER["check"](self.changed("binary", "size", 1.3), self.budgets, {"binary": "new adapter"})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("binary: size", problems[0])
+        self.assertIn("exceeds its budget", problems[0])
 
     def test_regressions_beyond_ten_percent_need_an_explanation(self):
         within = self.changed("calls", "p95", 1.09)
@@ -141,22 +208,35 @@ class RegisteredBudgets(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("calls: p95 regressed 15.0%", problems[0])
         self.assertEqual(RUNNER["check"](regressed, self.budgets, {"calls": "reason"}), [])
-        memory = RUNNER["check"](self.changed("waiting", "memory", 1.12), self.budgets)
-        self.assertTrue(any("waiting: peak memory regressed" in problem for problem in memory))
+        memory = RUNNER["check"](self.changed("waiting", "heap", 1.12), self.budgets)
+        self.assertTrue(any("waiting: peak heap regressed" in problem for problem in memory))
+        binary = RUNNER["check"](self.changed("binary", "size", 1.12), self.budgets)
+        self.assertEqual(len(binary), 1)
+        self.assertIn("binary: size regressed", binary[0])
+        self.assertEqual(RUNNER["check"](self.changed("binary", "size", 1.12), self.budgets, {"binary": "reason"}), [])
+
+    def test_peak_rss_is_recorded_but_not_budgeted(self):
+        # Resident memory mixes the binary's pages and the heap, which have their own budgets.
+        self.assertEqual(RUNNER["check"](self.changed("parse", "rss", 2), self.budgets), [])
 
     def test_other_hosts_and_unfinished_campaigns_are_not_compared(self):
         for change in [
             lambda record: record["machine"].update(cpuinfo=record["machine"]["cpuinfo"].replace("9950X3D", "7950X")),
             lambda record: record["machine"].update(cpu_affinity=[0, 1]),
             lambda record: record.update(target="x86_64-unknown-linux-musl"),
-            lambda record: record.update(profile="debug"),
+            lambda record: record.update(profile="release"),
+            lambda record: record.update(schema=1),
         ]:
             campaign = copy.deepcopy(self.baseline)
             change(campaign)
-            with self.subTest(host=RUNNER["host"](campaign)):
+            with self.subTest(host=RUNNER["host"](campaign), schema=campaign["schema"]):
                 problems = RUNNER["check"](campaign, self.budgets)
                 self.assertEqual(len(problems), 1)
                 self.assertIn("not comparable", problems[0])
+        # The protocol 1 baseline measured whole-process memory of a release build.
+        earlier = json.loads((ROOT / "docs/performance-evidence.json").read_text())
+        self.assertEqual(RUNNER["check"](earlier, self.budgets),
+                         ["not comparable: protocol 1, budgets use protocol 2"])
         for change in [{"kind": "smoke"}, {"complete": False}]:
             with self.subTest(change=change):
                 self.assertEqual(RUNNER["check"](dict(self.baseline, **change), self.budgets),
@@ -164,11 +244,13 @@ class RegisteredBudgets(unittest.TestCase):
         missing = copy.deepcopy(self.baseline)
         del missing["statistics"]["waiting"]
         self.assertEqual(RUNNER["check"](missing, self.budgets), ["waiting: not measured"])
+        uncounted = copy.deepcopy(self.baseline)
+        del uncounted["statistics"]["cli-startup"]["heap_kib"]
+        self.assertEqual(RUNNER["check"](uncounted, self.budgets), ["cli-startup: peak heap not measured"])
 
     def test_the_command_line_checks_a_summary_and_records_explanations(self):
-        import subprocess
         script = str(ROOT / "scripts/performance.py")
-        passed = subprocess.run([sys.executable, script, "--check", str(ROOT / "docs/performance-evidence.json")],
+        passed = subprocess.run([sys.executable, script, "--check", str(ROOT / "docs/performance-baseline-evidence.json")],
                                 capture_output=True, text=True)
         self.assertEqual((passed.returncode, passed.stdout.strip()), (0, "budget check passed"))
         with tempfile.TemporaryDirectory() as directory:

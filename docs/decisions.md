@@ -2,7 +2,9 @@
 
 These decisions were ratified by the project owner on 2026-09-30. They settle
 the questions that [TODO.md](../TODO.md) left to the owner, and they revise
-three preregistered gates. The roadmap requires a written rationale for any
+three preregistered gates. Later the same day, the owner revised D4 and added
+D19 after the first campaign checked against D4 failed; D4 keeps its original
+text as history. The roadmap requires a written rationale for any
 revision of a frozen task, budget, or score ("Freeze tasks, budgets, and
 scoring before measuring; any subsequent revision needs a written rationale
 and renewed assessment"). This page is that record.
@@ -17,7 +19,7 @@ such as `D4`.
 | D1 | Two independent AI review sessions are the two scored reviewers |
 | D2 | A study kit for the human usability sessions, plus an AI-simulated pilot that does not count |
 | D3 | The reference benchmark host is the development workstation |
-| D4 | Budgets are the accepted baseline's p95 time and peak memory plus 25% |
+| D4 | Budgets are the accepted baseline's p95 time, peak heap, and binary size plus 25% (revised) |
 | D5 | 1.0 supports Linux x86_64, macOS arm64, and Windows x86_64 |
 | D6 | 1.0 ships WASM, Python, and JavaScript adapters |
 | D7 | JavaScript runs in an out-of-process Node worker |
@@ -32,6 +34,7 @@ such as `D4`.
 | D16 | The minimum supported Rust version is the latest stable release |
 | D17 | Binaries ship through GitHub Releases, crates.io, Homebrew, winget, and Scoop |
 | D18 | The VS Code extension ships through the Marketplace and Open VSX |
+| D19 | Distributed binaries use fat LTO, one codegen unit, and packed relocations |
 
 ## Assessment
 
@@ -69,15 +72,67 @@ sessions, and it never counts toward the thresholds.
 ### D3: Reference host
 
 The reference benchmark environment is the development workstation that
-recorded the [baseline campaign](performance-evidence.json): WSL2 on an AMD
+recorded the [baseline campaign](performance-baseline-evidence.json): WSL2 on an AMD
 Ryzen 9 9950X3D, with eight visible CPUs. Budgets and regression comparisons
 apply only to campaigns on this host, using the same protocol.
 
 ### D4: Budgets and baseline
 
-The campaign in [performance evidence](performance-evidence.json), captured on
-2026-09-28 at revision `2aed64d`, is the accepted baseline. Each workload's budget is its p95 workload time × 1.25 and
-its maximum peak resident memory × 1.25:
+*Revised on 2026-09-30; the original decision follows as history.*
+
+The campaign in [baseline evidence](performance-baseline-evidence.json),
+captured on 2026-09-30 at revision `628b782` with measurement protocol 2 and
+the `dist` build (D19), is the accepted baseline. Each workload's budget is its
+p95 workload time × 1.25 and its maximum peak heap × 1.25:
+
+| Workload | Baseline p95 | Time budget | Baseline peak heap | Heap budget |
+| --- | ---: | ---: | ---: | ---: |
+| CLI startup | 3.164 ms | 3.95 ms | 158 KiB | 198 KiB |
+| Parse 10,000 statements | 32.060 ms | 40.08 ms | 14,508 KiB | 18,135 KiB |
+| 100,000 custom calls | 344.909 ms | 431.14 ms | 162 KiB | 203 KiB |
+| 1,000,000 loop iterations | 2,133.860 ms | 2,667.33 ms | 156 KiB | 195 KiB |
+| Sixteen 256 KiB source loads | 8.476 ms | 10.59 ms | 933 KiB | 1,167 KiB |
+| 100 waiting runs | 21.103 ms | 26.38 ms | 4,274 KiB | 5,343 KiB |
+
+The CLI binary's budget is its 10,525,736-byte size × 1.25: 13,157,170 bytes.
+
+Times are rounded to 0.01 ms, and memory and size are rounded up. The budget
+check computes the same values from the recorded campaign. A later campaign on
+the reference host fails the gate when any workload's p95 time or peak heap,
+or the binary's size, exceeds its budget. It also fails when any of them
+regresses more than 10% against the accepted baseline without an explanation
+(milestone 6). Peak RSS is recorded but not budgeted.
+
+Peak heap is the most memory a run's allocations hold at once. Unlike peak
+RSS, it leaves out the binary's pages, so budgeting it separately from the
+binary's size tracks growth in each on its own.
+
+**Rationale.** The budgets guard against regressions without making release
+depend on optimization work.
+
+**Why D4 was revised.** The first campaign checked against the original
+budgets, at revision `628b782`, failed every workload. Peak RSS was over budget
+for all six, 27.4% to 104.1% above the first baseline. CLI startup's p95 time
+was over budget too, 115.8% above the baseline, and four other workloads' p95
+times regressed 13.8% to 22.2%. The 51 commits since the
+first baseline added HTTP, process, operating-system, and data statements,
+reports, checking, formatting, and the language server. They grew the
+`release` binary from 4,134,064 to 14,645,512 bytes. Every process pays for the
+binary's code and relocated data, so peak RSS rose by 3.5 to 5.8 MiB even for
+the loop, whose live data did not change. A budget on peak RSS was a budget on
+binary size, and the original budgets could not be met without removing
+features. The owner chose to:
+
+- re-baseline at the current revision with the optimized build (D19), with
+  budgets at 1.25 times the new baseline;
+- budget peak heap and binary size in place of peak RSS.
+
+[Measurement protocol 2](performance.md) implements both.
+
+**Original decision.** The campaign in [performance evidence](performance-evidence.json),
+captured on 2026-09-28 at revision `2aed64d` with protocol 1 and the `release`
+build, was the accepted baseline. Each workload's budget was its p95 workload
+time × 1.25 and its maximum peak resident memory × 1.25:
 
 | Workload | Baseline p95 | Time budget | Baseline peak RSS | Memory budget |
 | --- | ---: | ---: | ---: | ---: |
@@ -88,14 +143,30 @@ its maximum peak resident memory × 1.25:
 | Sixteen 256 KiB source loads | 7.374 ms | 9.22 ms | 6,048 KiB | 7,560 KiB |
 | 100 waiting runs | 18.703 ms | 23.38 ms | 7,892 KiB | 9,865 KiB |
 
-Times are rounded to 0.01 ms, and memory is rounded up to whole KiB. The
-budget check computes the same values from the recorded campaign. A later campaign on the reference
-host fails the gate when any workload's p95 time or peak memory exceeds its
-budget. It also fails when either value regresses more than 10% against the
-accepted baseline without an explanation (milestone 6).
+### D19: Distribution build
 
-**Rationale.** The budgets guard against regressions without making release
-depend on optimization work.
+*Added on 2026-09-30, with the revision of D4.*
+
+Distributed binaries and benchmark campaigns use the `dist` Cargo profile: the
+`release` profile with fat link-time optimization and one codegen unit. On GNU
+Linux x86_64, `.cargo/config.toml` also links with packed relative relocations
+(`-z pack-relative-relocs`). `release` stays the quick default, so
+`cargo test --release` does not link every test binary with LTO.
+
+**Rationale.** At revision `628b782` the `release` CLI was 14,645,512 bytes,
+with 48,483 relocations (1,163,592 bytes) that the loader applies at every
+start. Most of its growth since the first baseline was code and relocated data
+that every process loads, whatever it runs. The `dist` build of the same source
+is 10,525,736 bytes, 28% smaller, and its relocation tables take 22,752 bytes.
+In campaigns with the same workloads and timing boundaries, the `dist` one at a
+higher load, it cut median CLI startup from 3.102 to 2.749 ms and median parse
+time from 31.473 to 26.823 ms, and every other workload's median also fell, by
+2% to 7%.
+
+Packed relocations need GNU ld 2.38 or later (or lld 15), and GNU ld adds a
+dependency on glibc 2.36's `GLIBC_ABI_DT_RELR` symbol version. The release
+workflow ships static musl binaries for Linux (D17), which the setting does not
+affect, so only GNU builds made from a checkout need that glibc.
 
 ## Platforms and extensions
 
