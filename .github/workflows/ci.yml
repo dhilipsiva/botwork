@@ -20,8 +20,8 @@ env:
 jobs:
   rust:
     name: Rust (${{ matrix.profile }}, ${{ matrix.target }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
@@ -29,15 +29,36 @@ jobs:
           - profile: debug
             flags: ""
             target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            timeout: 15
           - profile: release
             flags: --release
             target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            timeout: 15
           - profile: debug
             flags: ""
             target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            timeout: 15
           - profile: release
             flags: --release
             target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            timeout: 15
+          # Process statements, workers, and cooperative interruption are
+          # Linux-only until their ports land; tests/platform_gaps.rs checks
+          # that they fail clearly here (decision D12).
+          - profile: debug
+            flags: ""
+            target: aarch64-apple-darwin
+            os: macos-latest
+            timeout: 30
+          - profile: release
+            flags: --release
+            target: aarch64-apple-darwin
+            os: macos-latest
+            timeout: 30
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,10 +93,13 @@ jobs:
         if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: python3 tests/performance_tools.py
       - name: Check benchmark workload correctness (no performance threshold)
+        # The measurement harness is Linux-only, like the reference host (D3).
+        if: runner.os == 'Linux'
         run: python3 scripts/performance.py --smoke --profile ${{ matrix.profile }} --target ${{ matrix.target }}
       - name: Allow unprivileged user namespaces for isolated workers
         # Ubuntu runners restrict them through AppArmor; PID-namespace worker tests
         # need them, as docs/isolated-workers.md requires of deployments.
+        if: runner.os == 'Linux'
         run: |
           if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

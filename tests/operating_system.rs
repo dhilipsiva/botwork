@@ -534,20 +534,24 @@ Remove File |"dangling"|
     #[test]
     fn native_non_utf8_values_fail_without_lossy_names_and_temporary_directories_are_private() {
         let directory = tempfile::tempdir().unwrap();
-        fs::write(
-            directory
-                .path()
-                .join(std::ffi::OsString::from_vec(vec![255])),
-            b"data",
-        )
-        .unwrap();
-        assert_eq!(
-            run(directory.path(), "List Directory |\".\"|")
-                .result
-                .unwrap_err()
-                .code(),
-            Code::IncompatibleType
-        );
+        // macOS file systems store names as UTF-8 and refuse other bytes.
+        #[cfg(not(target_os = "macos"))]
+        {
+            fs::write(
+                directory
+                    .path()
+                    .join(std::ffi::OsString::from_vec(vec![255])),
+                b"data",
+            )
+            .unwrap();
+            assert_eq!(
+                run(directory.path(), "List Directory |\".\"|")
+                    .result
+                    .unwrap_err()
+                    .code(),
+                Code::IncompatibleType
+            );
+        }
         for source in [
             "Get Environment Variable |\"bad\"|",
             "Environment Variables",

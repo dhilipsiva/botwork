@@ -451,8 +451,10 @@ fn reexport_dispatch_counts_depth_even_before_a_custom_body_is_entered() {
 #[test]
 fn cli_default_loop_budget_and_explicit_call_budget_fail_without_panicking() {
     let harness = Harness::new();
+    // A million unoptimized steps can take seconds on a loaded runner; the
+    // timeout only guards against a hang.
     let looped = harness
-        .run("loop-budget", "While |true| {}", Duration::from_secs(5))
+        .run("loop-budget", "While |true| {}", Duration::from_secs(30))
         .unwrap();
     assert_eq!(looped.status.code(), Some(1));
     assert!(String::from_utf8(looped.stderr)

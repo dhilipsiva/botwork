@@ -287,6 +287,22 @@ fn compatibility_versions_match_their_sources() {
         compatibility.contains(&format!("| VS Code | {vscode} or later |")),
         "{vscode}"
     );
+    // A platform is marked tested exactly when CI builds and tests its target.
+    for (target, row) in [
+        ("x86_64-unknown-linux-gnu", "| Linux x86_64"),
+        ("aarch64-apple-darwin", "| macOS arm64"),
+        ("x86_64-pc-windows-msvc", "| Windows x86_64"),
+    ] {
+        let line = compatibility
+            .lines()
+            .find(|line| line.starts_with(row))
+            .unwrap_or_else(|| panic!("{row}"));
+        assert_eq!(
+            ci.contains(&format!("target: {target}\n")),
+            line.contains("tested in CI"),
+            "{line}"
+        );
+    }
     // Latest stable only: CI installs stable, and Cargo.toml pins no older one.
     assert!(ci.contains("rustup toolchain install stable"));
     assert!(!read("Cargo.toml").contains("rust-version"));

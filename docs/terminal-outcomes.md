@@ -47,6 +47,11 @@ The first SIGINT (Ctrl-C) or SIGTERM stops the invocation cooperatively:
 A second signal exits at once with status 130 and leaves the reports as
 incomplete markers with their journal for reconciliation.
 
+Cooperative interruption is Linux-only until the macOS and Windows ports land
+([D12](decisions.md#d12-platform-parity)). On those platforms the first
+interrupt already ends the process at once, as a second signal does on Linux,
+with the operating system's exit status.
+
 ## Reporter failures
 
 When the console report cannot be written, admission stops and started runs

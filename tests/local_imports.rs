@@ -553,7 +553,8 @@ fn imported_parse_execution_and_budget_failures_receive_the_import_site_once() {
     }
 }
 
-#[cfg(unix)]
+// macOS file systems store names as UTF-8 and refuse other bytes.
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn non_utf8_canonical_import_paths_preserve_bounded_read_evidence_and_do_not_publish() {
     use botwork::core::{diagnostic::DiagnosticLimits, grammar::BWErr, run::RunLimits};

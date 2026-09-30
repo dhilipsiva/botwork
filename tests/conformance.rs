@@ -431,6 +431,12 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
     inventory(&cases, SPECIFICATION).unwrap();
     let harness = Harness::new();
     for case in cases {
+        // Process statements (B6) are Linux-only until their ports land
+        // (decision D12); tests/platform_gaps.rs checks their refusal elsewhere.
+        let rules = [case.positive, case.invalid, case.boundary].concat();
+        if !cfg!(target_os = "linux") && rules.contains(&"B6") {
+            continue;
+        }
         let mut arguments = vec![];
         let source = match case.input {
             Input::Script(source) => source,

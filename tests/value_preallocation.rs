@@ -933,7 +933,8 @@ fn import_messages_reserve_originating_site_before_copying_a_large_invalid_path(
     }
 }
 
-#[cfg(unix)]
+// macOS limits a path to 1,024 bytes, too few for this chain.
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn import_cycle_rejection_formats_no_large_joined_path_chain() {
     use botwork::core::diagnostic::{DiagnosticCode, DiagnosticLimits};

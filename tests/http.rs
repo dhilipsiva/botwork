@@ -411,10 +411,15 @@ async fn partial_bodies_malformed_protocol_and_transport_errors_are_failures_wit
         assert_eq!(server.requests.lock().unwrap().len(), 1);
     }
     // Keep the refused port owned: releasing an ephemeral listener lets another
-    // concurrently running fixture claim it and receive this request.
+    // concurrently running fixture claim it and receive this request. macOS
+    // drops connections to a bound socket that is not listening instead of
+    // refusing them, so there the port is released; it assigns ephemeral
+    // ports at random, which makes another fixture claiming it unlikely.
     let reserved = tokio::net::TcpSocket::new_v4().unwrap();
     reserved.bind("127.0.0.1:0".parse().unwrap()).unwrap();
     let url = format!("http://{}", reserved.local_addr().unwrap());
+    #[cfg(target_os = "macos")]
+    drop(reserved);
     assert_eq!(
         run(&url, r#"HTTP Request |"GET"| To |url|"#)
             .await

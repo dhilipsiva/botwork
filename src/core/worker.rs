@@ -137,6 +137,8 @@ pub struct WorkerSnapshot {
 struct Request {
     control: OperationControl,
     abandoned: AtomicBool,
+    // Read by the Linux supervisor; other platforms refuse entry before it.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     journal: Option<Arc<journal::Ticket>>,
@@ -520,6 +522,7 @@ impl std::ops::Deref for RetainedInput {
         &self.bytes
     }
 }
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 struct WorkerDelivery {
     send: Option<oneshot::Sender<RetainedReport>>,
     retention: Option<Arc<dyn Send + Sync>>,

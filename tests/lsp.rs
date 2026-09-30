@@ -166,13 +166,16 @@ fn definitions_reach_imported_module_files() {
     let uri = file_uri(&directory.path().join("main.botwork"));
     let text = "Import |\"lib/math.botwork\"| As |m|\nLog |@{ m::Double |2| }|\n";
     assert_eq!(client.open(&uri, text), Vec::<Value>::new());
+    // Modules are named by their canonical path, which differs where the
+    // temporary directory is reached through a link, as on macOS.
+    let module = file_uri(&module.canonicalize().unwrap());
     let definition = client.at("textDocument/definition", &uri, 1, 9, json!({}));
     assert_eq!(
         definition,
-        json!([{"uri": file_uri(&module), "range": range((1, 0), (1, 10))}])
+        json!([{"uri": module, "range": range((1, 0), (1, 10))}])
     );
     let import = client.at("textDocument/definition", &uri, 0, 10, json!({}));
-    assert_eq!(import[0]["uri"], file_uri(&module));
+    assert_eq!(import[0]["uri"], module);
     // A missing module is a diagnostic at its path.
     let diagnostics = client.change(&uri, 2, "Import |\"lib/none.botwork\"| As |m|\n");
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");

@@ -1,7 +1,8 @@
 //! SIGINT and SIGTERM. The first signal cancels every run and fixture through the
 //! invocation's root control and stops admission, so started runs still end with
 //! one terminal outcome; a second signal exits at once, leaving any report journal
-//! for `--reconcile-report`.
+//! for `--reconcile-report`. Linux only for now: elsewhere an interrupt keeps the
+//! operating system's default and ends the process at once.
 use botwork::core::operation::OperationControl;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -25,6 +26,7 @@ pub(super) fn interrupted() -> bool {
     INTERRUPTED.load(Ordering::SeqCst)
 }
 
+#[cfg(target_os = "linux")]
 fn stop() {
     INTERRUPTED.store(true, Ordering::SeqCst);
     root().cancel();
