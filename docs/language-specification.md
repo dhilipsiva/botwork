@@ -212,6 +212,9 @@ The library's program evaluator returns the final top-level statement's normal r
 
 ## Evidence and Implementation Gaps
 
+The [traceability index](traceability.md) maps every rule to its conformance
+cases, test files, tests, and review status.
+
 B5 evidence includes filesystem/path/environment integration checks, streaming and worker-admission unit tests, allocator observations, symlink-suffix regression tests, a real FIFO scheduling check, four conformance cases, an executed reference block, and example 32.
 
 B4 evidence includes synchronous/asynchronous date/time and arithmetic boundary tests, allocator observations, four conformance cases, an executed reference block, and example 31.

@@ -118,6 +118,8 @@ index.
 ## Quality and project records
 
 - [Testing Botwork](testing.md)
+- [Traceability](traceability.md): every rule, statement, and guarantee, with
+  its specification, examples, tests, and review status.
 - [Core conformance corpus](conformance-corpus.md)
 - [Execution order and cleanup evidence](execution-conformance.md)
 - [Generated core validation](generated-validation.md)
