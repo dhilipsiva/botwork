@@ -265,7 +265,7 @@ fn a_second_interrupt_exits_at_once_and_reconciliation_marks_runs_interrupted() 
     write(
         &harness,
         "stubborn.botwork",
-        "Try { Sleep |30000| } Finally { Sleep |30000| }",
+        "Try {\n    Log |\"inside\"|\n    Sleep |30000|\n} Finally { Sleep |30000| }",
     );
     let mut running = spawn(
         &harness,
@@ -286,6 +286,14 @@ fn a_second_interrupt_exits_at_once_and_reconciliation_marks_runs_interrupted() 
         ],
     );
     running.wait_for(&["[run 1] succeeded:", "[run 2] started:"]);
+    // `started` is printed before the script runs. Interrupt only inside the
+    // Try, so that its Finally keeps the run going until the second interrupt;
+    // an earlier interrupt skips the Finally and lets the batch finish.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !running.stdout().contains("inside") {
+        assert!(Instant::now() < deadline, "{}", running.stderr());
+        std::thread::sleep(Duration::from_millis(10));
+    }
     running.signal(libc::SIGINT);
     running.wait_for(&["[interrupted] stopping runs"]);
     running.signal(libc::SIGINT);
