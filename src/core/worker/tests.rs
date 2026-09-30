@@ -57,6 +57,7 @@ fn unverified_cleanup_stays_visible_and_keeps_capacity_even_without_history() {
     })
     .unwrap();
     let request = Arc::new(Request {
+        #[cfg(target_os = "linux")]
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),

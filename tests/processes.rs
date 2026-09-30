@@ -1,4 +1,4 @@
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 
 use botwork::core::{
     diagnostic::DiagnosticCode as Code,
@@ -24,7 +24,7 @@ fn ok(directory: &Path, source: &str) {
 }
 
 const BASIC: &str = r#"
-|p| = Run Process |"/bin/printf"| With Arguments |["<%s>", "hello world", "", "*.txt", "$(touch injected)", "; touch injected", "é"]|
+|p| = Run Process |"/usr/bin/printf"| With Arguments |["<%s>", "hello world", "", "*.txt", "$(touch injected)", "; touch injected", "é"]|
 Assert |p.stdout| Equals |"<hello world><><*.txt><$(touch injected)><; touch injected><é>"|
 Assert |p.stderr| Equals |""|
 Assert |p.exit_code| Equals |0|
@@ -127,7 +127,7 @@ fn metadata_is_typed_idempotent_and_preserves_host_overrides() {
     let error = evaluate_program_detailed(
         &Program::parse(
             "environment",
-            "Run Binary Process |\"/bin/true\"| With Arguments |[]|",
+            "Run Binary Process |\"/usr/bin/true\"| With Arguments |[]|",
         )
         .unwrap(),
         &mut context,
@@ -142,7 +142,7 @@ fn command_entries_and_stdin_have_independent_prelaunch_limits() {
     for count in [16_383, 16_384] {
         let result = Engine::default().run_source(
             "entries",
-            "Run Process |\"/bin/true\"| With Arguments |args|",
+            "Run Process |\"/usr/bin/true\"| With Arguments |args|",
             RunOptions {
                 variables: BTreeMap::from([(
                     "args".into(),
@@ -170,7 +170,7 @@ fn command_entries_and_stdin_have_independent_prelaunch_limits() {
     limits.values.string_bytes += 1;
     let result = Engine::default().run_source(
         "input-cap",
-        r#"Run Process |"/bin/touch"| With Arguments |["marker"]| Options |{"stdin": input}|"#,
+        r#"Run Process |"/usr/bin/touch"| With Arguments |["marker"]| Options |{"stdin": input}|"#,
         RunOptions {
             variables: BTreeMap::from([(
                 "input".into(),
@@ -191,14 +191,17 @@ fn command_entries_and_stdin_have_independent_prelaunch_limits() {
 #[test]
 fn command_workspace_and_result_overlap_are_admitted_at_the_exact_boundary() {
     let dir = tempfile::tempdir().unwrap();
-    let command = dir.path().as_os_str().len() + 1 + "/bin/touch".len() + 1 + "marker".len() + 1;
+    // The run directory is canonical, and the temporary directory may be
+    // reached through a link, as on macOS.
+    let root = botwork::core::paths::canonicalize(dir.path()).unwrap();
+    let command = root.as_os_str().len() + 1 + "/usr/bin/touch".len() + 1 + "marker".len() + 1;
     let arguments =
-        "/bin/touch".len() + "marker".len() + "stdout_limit".len() + "stderr_limit".len() + 8;
+        "/usr/bin/touch".len() + "marker".len() + "stdout_limit".len() + "stderr_limit".len() + 8;
     let maximum = 3 * command + arguments + 43;
     for below in [true, false] {
         let mut limits = RunLimits::default();
         limits.temporaries.payload_bytes = maximum - usize::from(below);
-        let result = Engine::default().run_source("overlap", r#"Run Process |"/bin/touch"| With Arguments |["marker"]| Options |{"stdout_limit": 0, "stderr_limit": 0}|"#, RunOptions { limits, ..options(dir.path()) });
+        let result = Engine::default().run_source("overlap", r#"Run Process |"/usr/bin/touch"| With Arguments |["marker"]| Options |{"stdout_limit": 0, "stderr_limit": 0}|"#, RunOptions { limits, ..options(dir.path()) });
         assert_eq!(
             result.result.is_ok(),
             !below,
@@ -235,7 +238,13 @@ Assert |p.stdout| Equals |expected|
         RunOptions {
             variables: BTreeMap::from([(
                 "expected".into(),
-                Literal::String(format!("{}\n", dir.path().display())),
+                // The child starts in the canonical run directory.
+                Literal::String(format!(
+                    "{}\n",
+                    botwork::core::paths::canonicalize(dir.path())
+                        .unwrap()
+                        .display()
+                )),
             )]),
             ..options(dir.path())
         },
@@ -248,13 +257,13 @@ async fn synchronous_call_inside_a_runtime_and_async_local_timeout_are_supported
     let dir = tempfile::tempdir().unwrap();
     ok(
         dir.path(),
-        "Run Process |\"/bin/true\"| With Arguments |[]|",
+        "Run Process |\"/usr/bin/true\"| With Arguments |[]|",
     );
     let result = Engine::default()
         .run_source_async(
             "deadline",
             r#"
-Try { Run Process |"/bin/touch"| With Arguments |["marker"]| Options |{"timeout_ms": 0}| }
+Try { Run Process |"/usr/bin/touch"| With Arguments |["marker"]| Options |{"timeout_ms": 0}| }
 Catch |error| { Write File |"caught"| Text |"bad"| }
 Finally { Write File |"finally"| Text |"yes"| }
 "#,
@@ -320,7 +329,7 @@ Assert |p.stdout| Equals |input|
 |p| = Run Binary Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": [0, 255, 128, 10, 13]}|
 Assert |p.stdout| Equals |[0, 255, 128, 10, 13]|
 Assert |p.stderr| Equals |[]|
-|p| = Run Binary Process |"/bin/true"| With Arguments |[]|
+|p| = Run Binary Process |"/usr/bin/true"| With Arguments |[]|
 Assert |p.stdout| Equals |[]|
 Assert |p.exit_code| Equals |0|
 |p| = Run Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": @{ No Operation }, "stdout_limit": 0, "stderr_limit": 0}|
@@ -374,7 +383,7 @@ fn option_and_argument_validation_precedes_process_creation() {
         r#"{"stderr_limit": false}"#,
     ] {
         let source = format!(
-            r#"Run Process |"/bin/touch"| With Arguments |["marker"]| Options |{invalid}|"#
+            r#"Run Process |"/usr/bin/touch"| With Arguments |["marker"]| Options |{invalid}|"#
         );
         let error = run(dir.path(), &source).result.unwrap_err();
         assert_eq!(error.code(), Code::IncompatibleType, "{source}: {error}");
@@ -382,7 +391,7 @@ fn option_and_argument_validation_precedes_process_creation() {
     }
     for input in [r#""text""#, "[256]", "[-1]", "[1.0]", "[true]"] {
         let source = format!(
-            r#"Run Binary Process |"/bin/touch"| With Arguments |["marker"]| Options |{{"stdin": {input}}}|"#
+            r#"Run Binary Process |"/usr/bin/touch"| With Arguments |["marker"]| Options |{{"stdin": {input}}}|"#
         );
         assert_eq!(
             run(dir.path(), &source).result.unwrap_err().code(),
@@ -391,11 +400,11 @@ fn option_and_argument_validation_precedes_process_creation() {
         assert!(!dir.path().join("marker").exists());
     }
     for source in [
-        r#"Run Process |"/bin/touch"| With Arguments |["marker", 1]|"#,
+        r#"Run Process |"/usr/bin/touch"| With Arguments |["marker", 1]|"#,
         r#"Run Process |""| With Arguments |[]|"#,
         r#"Run Process |1| With Arguments |[]|"#,
-        r#"Run Process |"/bin/true"| With Arguments |{}|"#,
-        r#"Run Process |"/bin/true"| With Arguments |[]| Options |[]|"#,
+        r#"Run Process |"/usr/bin/true"| With Arguments |{}|"#,
+        r#"Run Process |"/usr/bin/true"| With Arguments |[]| Options |[]|"#,
     ] {
         assert_eq!(
             run(dir.path(), source).result.unwrap_err().code(),
@@ -410,9 +419,9 @@ fn nul_in_native_command_fields_is_rejected_before_launch() {
     let dir = tempfile::tempdir().unwrap();
     for source in [
         "Run Process |bad| With Arguments |[]|",
-        "Run Process |\"/bin/touch\"| With Arguments |[\"marker\", bad]|",
-        "Run Process |\"/bin/touch\"| With Arguments |[\"marker\"]| Options |{\"directory\": bad}|",
-        "Run Process |\"/bin/touch\"| With Arguments |[\"marker\"]| Options |{\"environment\": {\"A\": bad}}|",
+        "Run Process |\"/usr/bin/touch\"| With Arguments |[\"marker\", bad]|",
+        "Run Process |\"/usr/bin/touch\"| With Arguments |[\"marker\"]| Options |{\"directory\": bad}|",
+        "Run Process |\"/usr/bin/touch\"| With Arguments |[\"marker\"]| Options |{\"environment\": {\"A\": bad}}|",
     ] {
         let result = Engine::default().run_source("nul", source, RunOptions {
             variables: BTreeMap::from([("bad".into(), Literal::String("x\0y".into()))]), ..options(dir.path())
@@ -426,6 +435,8 @@ fn nul_in_native_command_fields_is_rejected_before_launch() {
 fn directories_and_environment_are_per_call_with_explicit_path_search() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
+    // The run directory is canonical; see above.
+    let root = botwork::core::paths::canonicalize(dir.path()).unwrap();
     let global = std::env::current_dir().unwrap();
     fs::create_dir(dir.path().join("child")).unwrap();
     fs::write(
@@ -451,7 +462,7 @@ Assert |@{ Get Environment Variable |"A"| }| Equals |"old"|
 Assert |@{ Get Environment Variable |"B"| }| Equals |"kept"|
 Assert |@{ Working Directory }| Equals |root|
 "#, RunOptions {
-        variables: BTreeMap::from([("root".into(), Literal::String(dir.path().to_str().unwrap().into())), ("child".into(), Literal::String(dir.path().join("child").to_str().unwrap().into()))]),
+        variables: BTreeMap::from([("root".into(), Literal::String(root.to_str().unwrap().into())), ("child".into(), Literal::String(root.join("child").to_str().unwrap().into()))]),
         environment: BTreeMap::from([("A".into(), Some("old".into())), ("B".into(), Some("kept".into()))]),
         ..options(dir.path())
     });
@@ -524,7 +535,7 @@ fn output_admission_precedes_launch_even_if_program_would_print_nothing() {
                 limits.values.string_bytes = 100 - usize::from(too_small);
             }
             let source = format!(
-                r#"Run {}Process |"/bin/touch"| With Arguments |["marker"]| Options |{{"stdout_limit": 100, "stderr_limit": 0}}|"#,
+                r#"Run {}Process |"/usr/bin/touch"| With Arguments |["marker"]| Options |{{"stdout_limit": 100, "stderr_limit": 0}}|"#,
                 if binary { "Binary " } else { "" }
             );
             let result = Engine::default().run_source(
@@ -581,7 +592,7 @@ fn closed_stdin_is_an_error_even_when_child_exits_successfully() {
     let dir = tempfile::tempdir().unwrap();
     let result = Engine::default().run_source(
         "incomplete",
-        r#"Run Process |"/bin/true"| With Arguments |[]| Options |{"stdin": input}|"#,
+        r#"Run Process |"/usr/bin/true"| With Arguments |[]| Options |{"stdin": input}|"#,
         RunOptions {
             variables: BTreeMap::from([("input".into(), Literal::String("x".repeat(1024 * 1024)))]),
             ..options(dir.path())

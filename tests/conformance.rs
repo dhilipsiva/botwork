@@ -431,10 +431,10 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
     inventory(&cases, SPECIFICATION).unwrap();
     let harness = Harness::new();
     for case in cases {
-        // Process statements (B6) are Linux-only until their ports land
-        // (decision D12); tests/platform_gaps.rs checks their refusal elsewhere.
+        // Process statements (B6) run on Linux and macOS until their Windows
+        // port lands (decision D12); tests/platform_gaps.rs checks their refusal there.
         let rules = [case.positive, case.invalid, case.boundary].concat();
-        if !cfg!(target_os = "linux") && rules.contains(&"B6") {
+        if !cfg!(unix) && rules.contains(&"B6") {
             continue;
         }
         let mut arguments = vec![];
@@ -2308,7 +2308,7 @@ fn check_worker_case(case: &Case) {
         "é".as_bytes().to_vec(),
         OperationControl::default(),
     );
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         use botwork::core::worker::{WorkerCleanup, WorkerOutcome};
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -2333,7 +2333,7 @@ fn check_worker_case(case: &Case) {
             assert!(report.io_complete);
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     {
         let error = start
             .err()
@@ -2384,7 +2384,7 @@ fn check_shutdown_case(case: &Case) {
         assert!(!pool.snapshot().closed);
         return;
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     let handle = {
         use botwork::core::{operation::OperationControl, worker::WorkerCommand};
         pool.start(
@@ -2402,7 +2402,7 @@ fn check_shutdown_case(case: &Case) {
     let snapshot = pool.shutdown_wait(Duration::from_secs(2)).unwrap();
     assert!(snapshot.closed);
     assert!(snapshot.active.is_empty());
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
@@ -2447,7 +2447,7 @@ fn check_progress_case(case: &Case) {
         },
         OperationControl::default(),
     );
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         use botwork::core::worker::{WorkerCleanup, WorkerOutcome};
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -2474,7 +2474,7 @@ fn check_progress_case(case: &Case) {
             assert_eq!(report.stdin_written, 0);
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(unix))]
     assert!(start.is_err());
 }
 

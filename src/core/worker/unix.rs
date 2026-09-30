@@ -5,8 +5,11 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+// Process-tree guardians and PID namespaces need Linux (decision D12).
+#[cfg(target_os = "linux")]
 pub(super) mod guardian;
 mod launch;
+#[cfg(target_os = "linux")]
 mod namespace;
 mod observation;
 mod owner;
@@ -94,10 +97,10 @@ impl ChildOwner {
         let result = unsafe { libc::kill(-(self.child.id() as libc::pid_t), libc::SIGKILL) };
         let group_error = (result == -1)
             .then(io::Error::last_os_error)
-            .filter(|error| error.raw_os_error() != Some(libc::ESRCH));
+            .filter(|error| !self.nothing_left(error));
         // Also stop the direct child if it moved itself out of the initial group.
         let direct = self.child.kill().or_else(|error| {
-            if error.raw_os_error() == Some(libc::ESRCH) {
+            if self.nothing_left(&error) {
                 Ok(())
             } else {
                 Err(error)
@@ -109,13 +112,25 @@ impl ChildOwner {
         }
     }
 
+    /// Whether a failed signal found nothing left to stop: no such process, or
+    /// on macOS, which refuses to signal zombies, only the exited child that
+    /// [`Self::exited`] holds for reaping.
+    fn nothing_left(&self, error: &io::Error) -> bool {
+        match error.raw_os_error() {
+            Some(libc::ESRCH) => true,
+            Some(libc::EPERM) if cfg!(target_os = "macos") => self.exited().unwrap_or(false),
+            _ => false,
+        }
+    }
+
     fn reap(&mut self) -> io::Result<Option<Completion>> {
         let Some(status) = self.child.try_wait()? else {
             return Ok(None);
         };
         self.owned = false;
-        match self.guardian.as_mut() {
-            Some(control) => match guardian::completion(control, status) {
+        #[cfg(target_os = "linux")]
+        if let Some(control) = self.guardian.as_mut() {
+            return match guardian::completion(control, status) {
                 Ok(completion) => Ok(Some(completion)),
                 Err(error) if self.child.namespaced() => Ok(Some(Completion {
                     status: None,
@@ -125,13 +140,13 @@ impl ChildOwner {
                     ))),
                 })),
                 Err(error) => Err(error),
-            },
-            None => Ok(Some(Completion {
-                status: Some(status),
-                cleanup: WorkerCleanup::Reaped,
-                error: None,
-            })),
+            };
         }
+        Ok(Some(Completion {
+            status: Some(status),
+            cleanup: WorkerCleanup::Reaped,
+            error: None,
+        }))
     }
 }
 

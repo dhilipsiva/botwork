@@ -257,9 +257,9 @@ fn every_documented_botwork_example_matches_its_cli_output() {
         ("first-failure", (1, "[BW9001] Assertion failed")),
         ("check-example", (1, "[BW2002] Statement not defined")),
     ]);
-    // Process statements are Linux-only until their ports land (decision D12);
-    // elsewhere their examples stop at the first one, printing nothing.
-    let unported = |document: &str| !cfg!(target_os = "linux") && document == "docs/processes.md";
+    // Process statements run on Linux and macOS until their Windows port lands
+    // (decision D12); there their examples stop at the first one, printing nothing.
+    let unported = |document: &str| !cfg!(unix) && document == "docs/processes.md";
     let mut seen = BTreeSet::new();
     let harness = Harness::new();
     for (document, blocks) in documents() {
@@ -287,7 +287,7 @@ fn every_documented_botwork_example_matches_its_cli_output() {
             let (status, evidence) = if unported(&document) {
                 (
                     1,
-                    "[BW7002] Invalid run configuration: Process statements currently require Linux",
+                    "[BW7002] Invalid run configuration: Process statements currently require Linux or macOS",
                 )
             } else {
                 failing.get(id).copied().unwrap_or((0, ""))

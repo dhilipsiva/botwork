@@ -54,6 +54,7 @@ pub(super) fn run(
     input: RetainedInput,
     observation: &Arc<Observation>,
 ) {
+    #[cfg(target_os = "linux")]
     if let Some(ticket) = &observation.request.journal {
         if let Err(error) = ticket.file() {
             observation.error(runtime(format_args!(
@@ -263,21 +264,22 @@ fn launch_worker(
     specification: WorkerCommand,
     observation: &Observation,
 ) -> io::Result<ChildOwner> {
-    match &observation.shared.guardian {
-        Some(executable) => {
-            let record = observation
-                .request
-                .journal
-                .as_ref()
-                .map(|ticket| ticket.file())
-                .transpose()?;
-            guardian::spawn(
-                executable,
-                specification,
-                record.as_deref(),
-                observation.shared.namespaced,
-            )
-        }
-        None => launch::spawn(specification),
+    #[cfg(target_os = "linux")]
+    if let Some(executable) = &observation.shared.guardian {
+        let record = observation
+            .request
+            .journal
+            .as_ref()
+            .map(|ticket| ticket.file())
+            .transpose()?;
+        return guardian::spawn(
+            executable,
+            specification,
+            record.as_deref(),
+            observation.shared.namespaced,
+        );
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = observation;
+    launch::spawn(specification)
 }

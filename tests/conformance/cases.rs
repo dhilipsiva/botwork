@@ -209,7 +209,7 @@ Log |error.details.expected|
         success("process-empty", r#"|p| = Run Binary Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": [], "stdout_limit": 0, "stderr_limit": 0}|
 Assert |p.stdout| Equals |[]|
 Assert |p.exit_code| Equals |0|"#, "", &["B6"], &["B6"]),
-        failure("process-invalid-argument", r#"Run Process |"/bin/true"| With Arguments |[1]|"#, "", "BW3003", "Process arguments must be Strings", &["B6"]),
+        failure("process-invalid-argument", r#"Run Process |"/usr/bin/true"| With Arguments |[1]|"#, "", "BW3003", "Process arguments must be Strings", &["B6"]),
         success("os-statements", include_str!("../../examples/32-operating-system.botwork"), "hello world\n11\n[\"copy.txt\", \"message.txt\"]\ntxt\n", &["B5"], &[]),
         success("os-boundaries", r#"Assert |@{ Join Path |[]| }| Equals |""|
 Assert |@{ Parent Path |"name"| }| Equals |""|

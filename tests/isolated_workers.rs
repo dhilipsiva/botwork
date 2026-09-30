@@ -1,4 +1,4 @@
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 
 use botwork::core::{
     diagnostic::DiagnosticCode,
@@ -12,6 +12,13 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+
+/// Whether no process has this ID: signal 0 reaches even a zombie.
+fn gone(pid: u32) -> bool {
+    // SAFETY: signal 0 only checks that the process exists.
+    let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+}
 
 fn limits() -> WorkerLimits {
     WorkerLimits {
@@ -153,10 +160,7 @@ fn deadline_kills_cpu_bound_work_that_ignores_cooperative_signals() {
     assert_eq!(report.stdout, b"begun");
     assert_eq!(report.diagnostic.unwrap().code(), DiagnosticCode::Timeout);
     assert!(start.elapsed() < Duration::from_secs(2));
-    assert!(
-        !PathBuf::from(format!("/proc/{pid}")).exists(),
-        "direct child must be reaped"
-    );
+    assert!(gone(pid), "direct child must be reaped");
 }
 
 #[test]
@@ -407,7 +411,7 @@ fn command_arguments_are_not_shell_expanded_and_working_directory_is_local() {
     let report = wait(
         pool.start(
             WorkerCommand {
-                executable: PathBuf::from("/bin/printf"),
+                executable: PathBuf::from("/usr/bin/printf"),
                 arguments: vec!["%s".into(), argument.clone()],
                 directory: PathBuf::from("/"),
                 environment: BTreeMap::new(),
@@ -584,7 +588,7 @@ fn bounded_shutdown_wait_reaps_workers_without_consuming_their_reports() {
         assert_eq!(report.cleanup, WorkerCleanup::Reaped);
     }
     for pid in pids {
-        assert!(!PathBuf::from(format!("/proc/{pid}")).exists());
+        assert!(gone(pid));
     }
     assert!(pool.start(command(":"), vec![], parent).is_err());
 }

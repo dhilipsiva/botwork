@@ -1,4 +1,4 @@
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 use botwork::core::{
     ast::Program,
     diagnostic::{CallFrame, Diagnostic, DiagnosticCode, DiagnosticLimits, RelatedLocation},

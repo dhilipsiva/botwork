@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn dropping_a_handle_during_stop_observation_preserves_interruption() {
     let request = Arc::new(Request {
+        #[cfg(target_os = "linux")]
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
@@ -24,6 +25,7 @@ fn dropping_a_handle_during_stop_observation_preserves_interruption() {
     assert!(error.error.to_string().contains("abandoned"));
 
     let request = Request {
+        #[cfg(target_os = "linux")]
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
@@ -62,4 +64,11 @@ fn cleanup_errors_after_pending_handoff_preserve_the_published_terminal_outcome(
             "Async runtime failure: original"
         );
     }
+}
+
+/// Whether no process has this ID: signal 0 reaches even a zombie.
+pub(super) fn gone(pid: u32) -> bool {
+    // SAFETY: signal 0 only checks that the process exists.
+    let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
 }

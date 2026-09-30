@@ -1,8 +1,9 @@
 # Process statements
 
 The default Engine and CLI provide four process signatures within the 100-statement
-fixed catalogue. They execute on Linux, both synchronously and asynchronously.
-Other platforms return BW7002 before starting a process. A standalone Context
+fixed catalogue. They execute on Linux and macOS, both synchronously and
+asynchronously. Windows returns BW7002 before starting a process until its port
+lands. A standalone Context
 without a run environment also returns BW7002. CLI preparation captures the host
 environment and directory using `Context::with_host_environment`; low-level hosts
 can use the same constructor before initializing statements.
@@ -34,7 +35,7 @@ The result always has five keys:
 | `stdout` | strict UTF-8 String, or Array of Int bytes for binary calls |
 | `stderr` | same representation as stdout |
 | `exit_code` | Int exit code, or None when terminated by a signal |
-| `signal` | Linux signal number, or None for ordinary exit |
+| `signal` | The platform's signal number, or None for ordinary exit |
 | `success` | true exactly when the process exited with code zero |
 
 Nonzero exit and signal termination return results when all I/O and direct-child
@@ -111,7 +112,7 @@ shadow them. CLI listing/help uses the same typed metadata.
 
 <!-- botwork-test: process-statements -->
 ```botwork
-|result| = Run Process |"/bin/printf"| With Arguments |["Hello, %s!", "world"]|
+|result| = Run Process |"/usr/bin/printf"| With Arguments |["Hello, %s!", "world"]|
 Assert |result.success|
 Log |result.stdout|
 
@@ -130,7 +131,7 @@ The other two forms, with their output in comments:
 ```botwork
 |result| = Run Process |"/bin/sh"| With Arguments |["-c", "printf '%s' \"$GREETING\""]| Options |{"environment": {"GREETING": "hi"}}|
 Log |result.stdout|                                     # hi
-|result| = Run Binary Process |"/bin/printf"| With Arguments |["AB"]|
+|result| = Run Binary Process |"/usr/bin/printf"| With Arguments |["AB"]|
 Log |result.stdout|                                     # [65, 66]
 ```
 

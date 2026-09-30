@@ -192,7 +192,7 @@ fn stalled_child_transfer_returns_pending_and_reaps_late_child_without_changing_
     let record = &pool.snapshot().completed[0];
     assert_eq!(record.outcome, WorkerOutcome::TimedOut);
     assert_eq!(record.cleanup, WorkerCleanup::Reaped);
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn pool_drop_retains_launch_ownership_until_late_child_is_reaped() {
     assert!(weak.upgrade().is_some());
     held.release();
     until(|| weak.upgrade().is_none());
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
 #[test]
@@ -322,7 +322,7 @@ fn abandoning_child_ownership_runs_the_guard_before_the_thread_can_finish() {
     let child = spawn(command()).unwrap();
     let pid = child.child.id();
     std::thread::spawn(move || drop(child)).join().unwrap();
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn typed_invocation_keeps_argument_and_wire_charges_after_startup_timeout() {
         operation.ownership_budget().usage(),
         OperationUsage::default()
     );
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
 #[test]

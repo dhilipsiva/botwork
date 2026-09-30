@@ -40,13 +40,14 @@ no `rust-version`.
 | Platform | Status |
 | --- | --- |
 | Linux x86_64, GNU and static musl | Supported and tested in CI: every test for both, in debug and release |
-| macOS arm64 | Built and tested in CI, in debug and release. Planned for 1.0: the process statements and the default worker pool with Linux's guarantees; the process-tree and PID-namespace worker modes are unavailable, since macOS cannot follow detached descendants ([D12](decisions.md#d12-platform-parity)) |
+| macOS arm64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run with Linux's process-group guarantees; the process-tree and PID-namespace worker modes are unavailable, since macOS cannot follow detached descendants ([D12](decisions.md#d12-platform-parity)) |
 | Windows x86_64 | Built and tested in CI, in debug and release. Planned for 1.0 with full parity, process-tree ownership included, through Job Objects |
 
-Until those ports land, process statements, isolated workers, and cooperative
-interruption are Linux-only. Elsewhere a process statement fails with BW7002
-before starting anything, a worker pool refuses entry, and an interrupt ends the
-process at once; see [worker platforms](worker-platforms.md) and
+Until the Windows ports land, process statements and isolated workers run on
+Linux and macOS, and cooperative interruption on Linux only. On Windows a process
+statement fails with BW7002 before starting anything and a worker pool refuses
+entry; elsewhere than Linux an interrupt ends the process at once. See
+[worker platforms](worker-platforms.md) and
 [terminal outcomes](terminal-outcomes.md#interruption).
 
 ## Tools and editors

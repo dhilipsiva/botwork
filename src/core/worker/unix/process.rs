@@ -35,6 +35,7 @@ impl From<Child> for Process {
     }
 }
 impl Process {
+    #[cfg(target_os = "linux")]
     pub fn namespace(id: u32, stdin: File, stdout: File, stderr: File) -> Self {
         Self {
             id,

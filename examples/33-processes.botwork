@@ -1,4 +1,4 @@
-|result| = Run Process |"/bin/printf"| With Arguments |["Hello, %s!", "world"]|
+|result| = Run Process |"/usr/bin/printf"| With Arguments |["Hello, %s!", "world"]|
 Assert |result.success|
 Log |result.stdout|
 

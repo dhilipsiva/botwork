@@ -23,9 +23,9 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
     );
 }
 
-// Process statements are Linux-only until their ports land (decision D12);
-// tests/platform_gaps.rs checks their refusal elsewhere.
-#[cfg(target_os = "linux")]
+// Process statements run on Linux and macOS until their Windows port lands
+// (decision D12); tests/platform_gaps.rs checks their refusal there.
+#[cfg(unix)]
 #[test]
 fn process_example_captures_text_binary_and_nonzero_exit() {
     assert_example(

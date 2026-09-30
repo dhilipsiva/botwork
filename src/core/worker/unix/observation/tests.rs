@@ -151,10 +151,11 @@ fn every_post_launch_os_boundary_can_be_stalled_without_blocking_cancellation() 
             WorkerOutcome::Cancelled
         );
         assert_eq!(pool.snapshot().completed[0].cleanup, WorkerCleanup::Reaped);
-        assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+        assert!(super::super::tests::gone(pid));
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn namespace_reap_stall_keeps_pending_ownership_until_kernel_wait_completes() {
     let pool = WorkerPool::with_pid_namespace(
@@ -164,7 +165,7 @@ fn namespace_reap_stall_keeps_pending_ownership_until_kernel_wait_completes() {
             cleanup_timeout: Duration::from_millis(20),
             ..Default::default()
         },
-        "/bin/true".into(),
+        "/usr/bin/true".into(),
         None,
     )
     .unwrap();
@@ -194,13 +195,15 @@ fn namespace_reap_stall_keeps_pending_ownership_until_kernel_wait_completes() {
     let record = &pool.snapshot().completed[0];
     assert_eq!(record.outcome, WorkerOutcome::Failed);
     assert_eq!(record.cleanup, WorkerCleanup::NamespaceReaped);
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn namespace_wait_ownership_loss_still_quarantines_instead_of_claiming_kernel_reap() {
     let pool =
-        WorkerPool::with_pid_namespace(WorkerLimits::default(), "/bin/true".into(), None).unwrap();
+        WorkerPool::with_pid_namespace(WorkerLimits::default(), "/usr/bin/true".into(), None)
+            .unwrap();
     let mut gate = Gate::new(&pool, Point::Observe, false);
     let handle = pool
         .start(command(None), vec![], OperationControl::default())
@@ -279,7 +282,7 @@ fn stalled_panic_guard_retains_ownership_and_quarantines_late_completion() {
         pool.snapshot().completed[0].outcome,
         WorkerOutcome::Cancelled
     );
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
     assert!(weak.upgrade().is_some());
     drop(pool);
     until(|| weak.upgrade().is_none());
@@ -308,7 +311,7 @@ fn dropping_pool_and_runtime_during_blocked_io_keeps_child_and_reservation_owned
     assert!(weak.upgrade().is_some());
     gate.release();
     until(|| weak.upgrade().is_none());
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
 use crate::core::{
@@ -374,7 +377,7 @@ fn typed_value_read_in_flight_cannot_escape_timeout_or_release_charges() {
         pool.snapshot().completed[0].outcome,
         WorkerOutcome::TimedOut
     );
-    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    assert!(super::super::tests::gone(pid));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 # Isolated Worker Supervision
 
-`core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux. The default pool supervises the direct child and its inherited process group; `with_process_tree` adds a dedicated Linux guardian for detached descendants and host death; `with_pid_namespace` adds kernel containment when that guardian fails. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
+`core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux and macOS. The default pool supervises the direct child and its inherited process group; `with_process_tree` adds a dedicated Linux guardian for detached descendants and host death; `with_pid_namespace` adds kernel containment when that guardian fails. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
 
 This is the byte-oriented execution boundary beneath the [typed worker protocol](worker-protocol.md). `NativeOperation::isolated` supplies bounded typed arguments, results, diagnostics, signatures, and shared ownership across this boundary. Async DSL dispatch, persistent run/report recovery after a host crash, and the complete milestone 6 shutdown coordinator remain separate TODO items. This implementation does not claim those integrations are complete.
 
@@ -13,7 +13,7 @@ Create a pool with `WorkerLimits`, then call `start(command, input, control)`. A
 The child has piped stdin/stdout/stderr and a new process group. One owned OS thread performs process creation, pipe I/O, termination, reaping, and handle closure. A separate observer publishes results and retains reconciliation state. All parent pipe descriptors are nonblocking. Each supervision turn performs at most one 4 KiB input write and one bounded read of each output stream, then checks process state. The observer checks stops every 5 ms under ordinary host scheduling; it never performs worker OS calls or holds its state lock across them. Worker progress and deadlines do not require polling an async task or keeping a Tokio runtime alive.
 
 ```rust
-# #[cfg(target_os = "linux")]
+# #[cfg(unix)]
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 use botwork::core::{
     operation::OperationControl,
@@ -37,7 +37,7 @@ assert_eq!(report.stdout, "hello é".as_bytes());
 assert!(pool.shutdown().active.is_empty());
 # Ok(())
 # }
-# #[cfg(not(target_os = "linux"))]
+# #[cfg(not(unix))]
 # fn main() {}
 ```
 
@@ -104,7 +104,7 @@ Cleanup status is explicit:
 
 This is not a security sandbox or an absolute real-time kernel guarantee. A worker can consume child memory or create descendants outside its initial process group. For the default pool, deliberately detached descendants, host crashes, suspended hosts, uninterruptible kernel operations, and blocked OS process creation/signalling remain outside the termination guarantee. Stalled process creation and post-launch OS calls have independently observable pending results, but that result does not assert termination. The supervisor reaps only its direct child; orphaned descendants are reaped by their eventual parent. Use the guardian mode below for trusted detached descendants and cleanup after host death. The optional journal below provides worker recovery records; kernel containment when the guardian itself fails requires the opt-in namespace mode below. Never install a competing child reaper or ignore SIGCHLD while this pool owns children.
 
-Other platforms reject worker entry before effects. Only Linux is currently advertised for this boundary; the language's existing synchronous/async host APIs retain their prior platform scope.
+The default pool runs on Linux and macOS with the same process-group supervision; the process-tree and PID-namespace modes need Linux ([D12](decisions.md#d12-platform-parity)). Windows rejects worker entry before effects until its port lands. The language's existing synchronous/async host APIs retain their prior platform scope.
 
 The [platform and facility matrix](worker-platforms.md) lists each mode's prerequisites and executable refusal checks. Unavailable baseline facilities fail validation rather than silently skipping worker tests.
 

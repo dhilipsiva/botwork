@@ -24,11 +24,11 @@ use super::{
 
 #[cfg(target_os = "linux")]
 pub mod journal;
-#[cfg(target_os = "linux")]
-mod linux;
 pub mod protocol;
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, unix))]
 mod tests;
+#[cfg(unix)]
+mod unix;
 mod waiting;
 
 /// Trusted host configuration; the supervisor never constructs a shell command.
@@ -138,7 +138,7 @@ struct Request {
     control: OperationControl,
     abandoned: AtomicBool,
     // Read by the Linux supervisor; other platforms refuse entry before it.
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    #[cfg_attr(not(unix), allow(dead_code))]
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     journal: Option<Arc<journal::Ticket>>,
@@ -162,10 +162,10 @@ struct State {
 
 struct Shared {
     changed: Condvar,
-    #[cfg(all(test, target_os = "linux"))]
-    launcher: Mutex<Option<linux::LaunchHook>>,
-    #[cfg(all(test, target_os = "linux"))]
-    io_hooks: Mutex<VecDeque<linux::IoHook>>,
+    #[cfg(all(test, unix))]
+    launcher: Mutex<Option<unix::LaunchHook>>,
+    #[cfg(all(test, unix))]
+    io_hooks: Mutex<VecDeque<unix::IoHook>>,
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     guardian: Option<PathBuf>,
@@ -250,9 +250,9 @@ impl WorkerPool {
         }
         Ok(Self(Arc::new(Owner(Arc::new(Shared {
             changed: Condvar::new(),
-            #[cfg(all(test, target_os = "linux"))]
+            #[cfg(all(test, unix))]
             launcher: Mutex::new(None),
-            #[cfg(all(test, target_os = "linux"))]
+            #[cfg(all(test, unix))]
             io_hooks: Mutex::new(VecDeque::new()),
             limits,
             #[cfg(target_os = "linux")]
@@ -319,8 +319,10 @@ impl WorkerPool {
             _retention: retention.clone(),
         };
         control.checkpoint()?;
-        if !cfg!(target_os = "linux") {
-            return Err(configuration("Isolated workers currently require Linux"));
+        if !cfg!(unix) {
+            return Err(configuration(
+                "Isolated workers currently require Linux or macOS",
+            ));
         }
         let bare_name = command.executable.components().count() == 1
             && matches!(
@@ -391,8 +393,8 @@ impl WorkerPool {
         let spawn = std::thread::Builder::new()
             .name(format!("botwork-worker-{id}"))
             .spawn(move || {
-                #[cfg(target_os = "linux")]
-                linux::supervise(
+                #[cfg(unix)]
+                unix::supervise(
                     id,
                     command,
                     input,
@@ -401,7 +403,7 @@ impl WorkerPool {
                     thread_shared,
                     send,
                 );
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(unix))]
                 let _ = (
                     id,
                     command,
@@ -522,7 +524,7 @@ impl std::ops::Deref for RetainedInput {
         &self.bytes
     }
 }
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg_attr(not(unix), allow(dead_code))]
 struct WorkerDelivery {
     send: Option<oneshot::Sender<RetainedReport>>,
     retention: Option<Arc<dyn Send + Sync>>,
@@ -587,7 +589,7 @@ impl Shared {
         }
         self.changed.notify_all();
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn update(&self, id: u64, pid: Option<u32>, stopping: bool, cleanup: Option<WorkerCleanup>) {
         if let Some(active) = self
             .state
@@ -601,7 +603,7 @@ impl Shared {
             active.cleanup = cleanup;
         }
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn finish(&self, report: &WorkerReport) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if report.cleanup != WorkerCleanup::Unverified {
@@ -668,7 +670,7 @@ fn limit(resource: &'static str, limit: usize) -> Diagnostic {
 pub fn guardian_main() -> Option<u8> {
     #[cfg(target_os = "linux")]
     {
-        linux::guardian::entry()
+        unix::guardian::entry()
     }
     #[cfg(not(target_os = "linux"))]
     {

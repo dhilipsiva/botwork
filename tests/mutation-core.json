@@ -1005,35 +1005,35 @@
     {
       "id": "guardian-eof-not-published",
       "area": "guardian-completion",
-      "file": "src/core/worker/linux/guardian.rs",
+      "file": "src/core/worker/unix/guardian.rs",
       "before": "\n        .and_then(|()| control.shutdown(std::net::Shutdown::Write))",
       "after": ""
     },
     {
       "id": "guardian-completion-allows-open-peer",
       "area": "guardian-completion",
-      "file": "src/core/worker/linux/guardian.rs",
+      "file": "src/core/worker/unix/guardian.rs",
       "before": "if control.read(&mut trailing)? != 0 || &frame[..4] != MAGIC {",
       "after": "if control.read(&mut trailing).unwrap_or(0) != 0 || &frame[..4] != MAGIC {"
     },
     {
       "id": "guardian-completion-ignores-exit-status",
       "area": "guardian-completion",
-      "file": "src/core/worker/linux/guardian.rs",
+      "file": "src/core/worker/unix/guardian.rs",
       "before": "if !status.success() {",
       "after": "if false && !status.success() {"
     },
     {
       "id": "guardian-entry-omits-acknowledgment",
       "area": "guardian-completion",
-      "file": "src/core/worker/linux/guardian.rs",
+      "file": "src/core/worker/unix/guardian.rs",
       "before": "let _ = acknowledge(&mut control, &frame);",
       "after": "let _ = &frame;"
     },
     {
       "id": "worker-abandonment-read-before-cancellation",
       "area": "guardian-completion",
-      "file": "src/core/worker/linux.rs",
+      "file": "src/core/worker/unix.rs",
       "before": "    let stopped = checkpoint();\n    if request.abandoned.load(Ordering::Acquire) {\n        return Some((\n            WorkerOutcome::Interrupted,\n            Diagnostic::formatted(\n                BWErr::Cancelled,\n                format_args!(\"Worker invocation abandoned; completed effects are not rolled back\"),\n            ),\n        ));\n    }\n",
       "after": "    if request.abandoned.load(Ordering::Acquire) {\n        return Some((\n            WorkerOutcome::Interrupted,\n            Diagnostic::formatted(\n                BWErr::Cancelled,\n                format_args!(\"Worker invocation abandoned; completed effects are not rolled back\"),\n            ),\n        ));\n    }\n    let stopped = checkpoint();\n"
     },
@@ -1187,7 +1187,7 @@
     {
       "id": "process-cleanup-uses-pool-deadline",
       "area": "processes",
-      "file": "src/core/worker/linux/observation.rs",
+      "file": "src/core/worker/unix/observation.rs",
       "before": "start.elapsed() >= self.request.limits.cleanup_timeout)\n                {",
       "after": "start.elapsed() >= self.shared.limits.cleanup_timeout)\n                {"
     },

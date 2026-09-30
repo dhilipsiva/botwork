@@ -1,6 +1,6 @@
 # Worker Platform and Facility Evidence
 
-The worker API currently advertises Linux with the facilities required by the selected mode. A Linux version number alone does not establish support: kernel configuration, namespace limits, proc mounts, seccomp, and host policy also govern entry. Constructors validate configuration; the owned launch thread checks actual facilities for each invocation. Required facilities are never replaced with weaker worker ownership automatically.
+The worker API advertises Linux with the facilities required by the selected mode, and macOS for the default pool, which needs only process groups, pipes, signals, and `waitid`; the process-tree and namespace modes need Linux. A Linux version number alone does not establish support: kernel configuration, namespace limits, proc mounts, seccomp, and host policy also govern entry. Constructors validate configuration; the owned launch thread checks actual facilities for each invocation. Required facilities are never replaced with weaker worker ownership automatically.
 
 ## Mode Requirements
 
