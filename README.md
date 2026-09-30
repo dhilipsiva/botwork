@@ -14,7 +14,7 @@ I wanted:
 
 1. An efficient, fast, single-binary tool.
 1. An even more simpler syntax than RobotFramework.
-1. Extendible with Rust, Python (via PyO3), JavaScript (via neon), etc
+1. Extendible with Rust, Python (via PyO3), JavaScript (via a Node worker), and WASM (via WASI)
 1. Proper language defnition with PEG parser.
 1. LSP & TreeSitter Support. 
 1. Most of all, to have fun building something that I can introduce to my kids.
@@ -165,7 +165,7 @@ Log |answer|
 
 botwork is just taking its baby steps. There are so many things that are still missing and it goes without saying the the syntax & apis will change any time. Not to mention the hacy code that I managed to get working over the weekend. The Idea is to let it out in the wild and see if people are interested in a tool like this. 
 
-If there is interest out there for a tool like botwork, I plan to dedicate more time to make v1.0 happen. So here is a bunch of things that needs to be done before botwork can be tagged v1.0:
+If there is interest out there for a tool like botwork, I plan to dedicate more time to make v1.0 happen. So here is a bunch of things that needs to be done before botwork can be tagged v1.0. [TODO.md](TODO.md) has the detailed plan, and [roadmap decisions](docs/decisions.md) records the choices that shape it:
 
 - [ ] Basic syntax
   - [x] Statements
@@ -207,10 +207,10 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Editor support](docs/editors.md) (Helix, Vim, Neovim, VS Code)
   - [x] [TreeSitter grammar](docs/tree-sitter.md)
   - [x] [Linting](docs/check.md)
-  - [ ] Trusted & Verified registry (for botwork packages)
-  - [ ] Python extention support (via pyo3)
-  - [ ] Javascript extention support (via neon)
-  - [ ] WASM extention support (via WASI)
+  - [ ] Trusted & Verified registry (for botwork packages), after 1.0 ([D10](docs/decisions.md#d10-packages-and-registry))
+  - [ ] Python extension support (via PyO3, [D9](docs/decisions.md#d9-python-packaging))
+  - [ ] JavaScript extension support (via an out-of-process Node worker, [D7](docs/decisions.md#d7-javascript-hosting))
+  - [ ] WASM extension support (via Wasmtime and WASI, [D8](docs/decisions.md#d8-wasm-runtime))
 - [x] CLI
   - [x] Ability to pass variables from CLI / Files
   - [x] [Run in parallel](docs/parallel-cli.md)

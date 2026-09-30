@@ -1,6 +1,6 @@
 # DSL Quality Assessment Protocol
 
-Protocol version: 1. This is a preregistered assessment plan, not an assessment result. No participant sessions, independent scores, or release measurements have been collected yet.
+Protocol version: 2, amended on 2026-09-30 by [roadmap decisions](decisions.md) D1 and D2; see [version 2 amendments](#version-2-amendments). Version 1's text is kept below, and the amendments take precedence where they differ. This is a preregistered assessment plan, not an assessment result. No participant sessions, independent scores, or release measurements have been collected yet.
 
 ## Scope and Scoring
 
@@ -62,3 +62,26 @@ Identify the source commit, executable build, toolchain, OS, dependency versions
 For each reviewer, record all six dimension scores, their weighted total, evidence links, blockers, minor limitations, and remediation requests. Do not average away a failing reviewer or category. Resolve material gaps and reassess the affected areas against the same criteria, retaining earlier assessments.
 
 Protocol changes require a version increment, a reason, and an explanation of which comparisons need repeating. Freeze benchmark budgets and platform matrices before collecting performance evidence in the separate milestone-1 task; this document does not claim those measurements exist.
+
+## Version 2 amendments
+
+These amendments record the owner's decisions of 2026-09-30. See
+[D1](decisions.md#d1-reviewers) and [D2](decisions.md#d2-usability-sessions)
+for the rationale.
+
+- **Reviewers.** The two independent scored reviews are AI review sessions.
+  - Each starts fresh, with no access to authoring transcripts or earlier
+    reviews.
+  - Each scores the identified release from its evidence bundle alone and
+    submits its scores before any comparison.
+  - Each records its model and version.
+  - The release evidence report states, beside the scores, that reviewers from
+    one model family can share blind spots.
+- **Usability sessions.** The human sessions and their thresholds are
+  unchanged. The owner recruits the participants and runs the sessions from a
+  prepared study kit: starter files, prompts, automated success checks, a
+  timing and scoring sheet, a consent note, and a results template.
+- **Pilot.** Before the sessions, an AI-simulated pilot attempts U1–U6 from the
+  published documentation only. It finds confusing documentation and syntax.
+  Its results are reported separately and never count toward the thresholds.
+

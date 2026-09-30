@@ -9,8 +9,9 @@ Each round executes every workload below, in table order, one process at a time.
 This is measurement protocol version 1. The workload sizes, sample counts,
 statistics, correctness checks, and timing boundaries below are fixed before
 the full campaign. No runtime optimization or acceptance budget is part of this
-change. The roadmap's agreed absolute budgets, scaling gates, and release
-performance acceptance remain open; these observations inform that work.
+change. The recorded campaign below is now the accepted baseline for the
+[registered budgets](#registered-budgets); the scaling gates and release
+performance acceptance remain open.
 
 ## Workloads and timing boundaries
 
@@ -135,8 +136,27 @@ These are next profiling steps, not measured explanations of the costs:
    reads include parsing and fresh run setup; use controlled cold/cache and
    concurrent I/O experiments if those become representative requirements.
 
-Register and agree absolute latency/memory budgets on designated hardware before
-optimization. Use the same protocol and environment for changes, then perform
-the roadmap's doubling/scaling and regression checks. These samples do not prove
+## Registered budgets
+
+[Roadmap decisions](decisions.md) D3 and D4 register this workstation as the
+reference host and the campaign above as the accepted baseline. Each workload's
+budget is its p95 workload time × 1.25 and its maximum peak RSS × 1.25:
+
+| Workload | Time budget | Memory budget |
+| --- | ---: | ---: |
+| CLI startup | 2.03 ms | 6,100 KiB |
+| Parse 10,000 statements | 38.54 ms | 16,180 KiB |
+| 100,000 custom calls | 381.72 ms | 6,420 KiB |
+| 1,000,000 loop iterations | 2,382.40 ms | 6,415 KiB |
+| Sixteen 256 KiB source loads | 9.22 ms | 7,560 KiB |
+| 100 waiting runs | 23.38 ms | 9,865 KiB |
+
+Times are rounded to 0.01 ms, and memory is rounded up to whole KiB. A campaign
+counts against the budgets only on the reference host, with this protocol. It
+fails when a workload's p95 time or peak memory exceeds its budget, or regresses
+more than 10% against the baseline without an explanation.
+
+Use the same protocol and environment for changes, then perform the roadmap's
+doubling/scaling and regression checks. These samples do not prove
 bounded long-run memory, cross-platform parity, production tail latency, or the
 separate performance acceptance gates.
