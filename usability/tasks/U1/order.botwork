@@ -1,0 +1,16 @@
+# Prices three order lines and reports each one.
+Line price of |quantity| at |price| {
+    Return |quantity * price|
+}
+
+|quantity| = |99|
+For |line| In |[[3, 4], [2, 7], [0, 7]]| {
+    |amount| = |@{ Line price of |line[0]| at |line[1]| }|
+    Log |amount|
+    If |amount >= 13| {
+        Log |"high"|
+    } Else {
+        Log |"low"|
+    }
+}
+Log |quantity|

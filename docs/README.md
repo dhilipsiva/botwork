@@ -126,5 +126,7 @@ index.
 - [Core mutation testing](mutation-testing.md)
 - [Reproducing regressions](regression-reproduction.md)
 - [DSL quality assessment protocol](quality-assessment.md)
+- [Running the usability study](usability-study.md)
+- [Usability pilot](usability-pilot.md)
 - [Roadmap decisions](decisions.md)
 - [Development log](development-log.md)

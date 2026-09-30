@@ -90,11 +90,22 @@ Large order
 
 A few things to notice:
 
-- `|name| = |"Ada"|` assigns a variable. Variable names are case-sensitive.
-- `@{ ... }` calls a statement inside an expression and uses its result.
+- `|name| = |"Ada"|` assigns a variable. Both sides take pipes. Variable names
+  are case-sensitive.
+- `@{ ... }` calls a statement inside an expression and uses its result. The
+  call inside keeps its own pipes, so in `|@{ greet |name| WITH |"Hi"| }|` the
+  outer pipes hold the whole `@{ ... }`, and each inner pair holds one argument.
 - `Greet |person| with |greeting|` defines a statement. Statement names are
   matched without regard to case or spacing, so `greet |name|  WITH |...|`
   calls it.
+- A definition takes effect when its line runs, so define a statement above
+  the first line that calls it.
+- A statement's parameters and the variables it assigns are its own. Calling
+  `Greet` never changes the caller's variables, even ones with the same names;
+  see [variables and scope](language.md#variables-and-invocation-scope).
+- To use statements from another file, `Import |"pricing.botwork"| As |pricing|`
+  runs that file, and its statements are then called with the prefix, as in
+  `@{ pricing::Total of |3| at |4| }`; see [local modules](language.md#local-modules).
 
 Input variables are JSON values supplied on the command line or in files. Run
 the same script for someone else:
@@ -243,7 +254,9 @@ This command:
 - runs up to two cases at a time;
 - writes a [JSON report](json-report.md) for tools and a self-contained
   [HTML report](html-report.md) for people;
-- writes the IDs of failed cases to `failed.json`.
+- writes the IDs of failed cases to `failed.json`. Botwork also keeps a
+  `failed.json.lock` beside it, so that two runs never write the record at
+  once; see [rerun failed cases](suites.md#rerun-failed-cases).
 
 After fixing the failures, rerun only the cases that failed:
 

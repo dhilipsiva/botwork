@@ -1,0 +1,4 @@
+|quantity| = |3|
+|price| = |4|
+|product| = |quantity * price|
+Log |product|

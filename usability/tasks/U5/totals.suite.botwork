@@ -1,0 +1,10 @@
+Suite |"pricing"| Named |"Pricing totals"| {
+    Library {
+        Total of |quantity| at |price| {
+            Return |quantity * price|
+        }
+    }
+    Case |"total"| Named |"Line total"| {
+        Assert |@{ Total of |3| at |4| }| Equals |12|
+    }
+}

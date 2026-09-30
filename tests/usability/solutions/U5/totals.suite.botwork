@@ -1,0 +1,15 @@
+Suite |"pricing"| Named |"Pricing totals"| {
+    Dataset |"lines"| {
+        Row |"first"| Values |{quantity: 3, price: 4, expected: 12}|
+        Row |"second"| Values |{quantity: 2, price: 7, expected: 99}|
+        Row |"third"| Values |{quantity: 0, price: 7, expected: 0}|
+    }
+    Library {
+        Total of |quantity| at |price| {
+            Return |quantity * price|
+        }
+    }
+    Case |"total"| Named |"Line total"| Using |"lines"| As |line| {
+        Assert |@{ Total of |line.quantity| at |line.price| }| Equals |line.expected|
+    }
+}

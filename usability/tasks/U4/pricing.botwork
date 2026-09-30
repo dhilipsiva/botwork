@@ -1,0 +1,4 @@
+# The total for a quantity at a unit price.
+Total of |quantity| at |price| {
+    Return |quantity * price|
+}

@@ -1,0 +1,10 @@
+# This caller already tracks its own quantity.
+|quantity| = |99|
+
+Line total of |quantity| at |price| {
+    Return |quantity * price|
+}
+
+Log |@{ Line total of |3| at |4| }|
+Log |@{ Line total of |2| at |7| }|
+Log |quantity|

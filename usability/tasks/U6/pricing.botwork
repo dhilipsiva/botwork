@@ -1,0 +1,5 @@
+# The total for an order line, less a discount.
+Line total of |quantity| at |unit_price| less |discount| {
+    |gross| = |quantity * unit_price|
+    Return |gross - discont|
+}

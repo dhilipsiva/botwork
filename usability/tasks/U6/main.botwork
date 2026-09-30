@@ -1,0 +1,5 @@
+Import |"pricing.botwork"| As |pricing|
+
+|subtotal| = |@{ pricing::Line total of |3| at |4| less |2| }|
+Assert |subtotal| Equals |10|
+Log |subtotal|

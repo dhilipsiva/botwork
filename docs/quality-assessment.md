@@ -80,8 +80,11 @@ for the rationale.
 - **Usability sessions.** The human sessions and their thresholds are
   unchanged. The owner recruits the participants and runs the sessions from a
   prepared study kit: starter files, prompts, automated success checks, a
-  timing and scoring sheet, a consent note, and a results template.
+  timing and scoring sheet, a consent note, and a results template. The kit is
+  in `usability/`, and [running the usability study](usability-study.md) is
+  the facilitator's guide.
 - **Pilot.** Before the sessions, an AI-simulated pilot attempts U1–U6 from the
   published documentation only. It finds confusing documentation and syntax.
-  Its results are reported separately and never count toward the thresholds.
+  Its results are [reported separately](usability-pilot.md) and never count
+  toward the thresholds.
 

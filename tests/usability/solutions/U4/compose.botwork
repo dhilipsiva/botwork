@@ -1,0 +1,5 @@
+Import |"pricing.botwork"| As |pricing|
+
+|first| = |@{ pricing::Total of |3| at |4| }|
+|second| = |@{ pricing::Total of |2| at |7| }|
+Log |first + second == 26|
