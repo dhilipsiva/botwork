@@ -1,6 +1,11 @@
 //! Structured source diagnostics. Compatibility APIs can recover the original BWErr.
 
-use std::{error::Error, fmt, sync::Arc};
+use std::{
+    error::Error,
+    fmt,
+    path::{Path, PathBuf},
+    sync::{Arc, OnceLock},
+};
 
 use super::{
     ast::Span,
@@ -232,6 +237,46 @@ impl fmt::Display for Help<'_> {
         };
         formatter.write_str(guidance)
     }
+}
+
+/// Directories that text output shows source files relative to; see
+/// [`show_paths_relative_to`].
+static SHOWN_RELATIVE_TO: OnceLock<Vec<PathBuf>> = OnceLock::new();
+
+/// Show source files under `directory` relative to it in text output, as a
+/// command line shows the files it was given. Module sources are named by
+/// their full canonical path, so without this an imported file appears in full
+/// beside a relative entry script. Reports, metadata, and every other
+/// machine-readable name keep the full name. The first call in a process
+/// takes effect; later calls are ignored.
+pub fn show_paths_relative_to(directory: &Path) {
+    let mut bases = vec![directory.to_path_buf()];
+    // Module paths are canonical, and the directory may reach them through a link.
+    if let Ok(canonical) = directory.canonicalize() {
+        if canonical != directory {
+            bases.push(canonical);
+        }
+    }
+    let _ = SHOWN_RELATIVE_TO.set(bases);
+}
+
+/// A source name as text output shows it: relative to the directory given to
+/// [`show_paths_relative_to`] when the file is inside it, and unchanged
+/// otherwise. It borrows from the name.
+pub fn shown_path(name: &str) -> &str {
+    let Some(bases) = SHOWN_RELATIVE_TO.get() else {
+        return name;
+    };
+    let path = Path::new(name);
+    if !path.is_absolute() {
+        return name;
+    }
+    bases
+        .iter()
+        .find_map(|base| path.strip_prefix(base).ok())
+        .and_then(Path::to_str)
+        .filter(|relative| !relative.is_empty())
+        .unwrap_or(name)
 }
 
 #[derive(Clone, Debug)]

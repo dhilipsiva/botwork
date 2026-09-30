@@ -490,6 +490,14 @@ Its 517-entry catalogue adds 14 faults, with the library tests and the
 and `diagnostics` suites as oracles; see
 [written frames evidence](written-frames-evidence.json).
 
+Version 44 shows files relative to the CLI's working directory in text output.
+Its faults cover the CLI not registering its directory, shortening disabled,
+files outside the directory shortened, and full names kept in error headers,
+message locations, rendered call frames and sites, and `--check` findings.
+
+Its 524-entry catalogue adds 7 faults, with the `check` suite and the library
+tests as oracles; see [shown paths evidence](shown-paths-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

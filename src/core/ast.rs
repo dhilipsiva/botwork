@@ -48,7 +48,7 @@ pub(crate) struct LocationDisplay<'a>(&'a Span);
 
 impl std::fmt::Display for LocationDisplay<'_> {
     fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        output.write_str(self.0.source.name())?;
+        output.write_str(super::diagnostic::shown_path(self.0.source.name()))?;
         if output.alternate() {
             // Emergency evidence must never scan source text for coordinates.
             write!(output, ":[byte {}; coordinates omitted]", self.0.start)
@@ -135,7 +135,10 @@ impl Span {
 
     pub fn location(&self) -> String {
         let (line, column) = self.line_column();
-        format!("{}:{line}:{column}", self.source.name())
+        format!(
+            "{}:{line}:{column}",
+            super::diagnostic::shown_path(self.source.name())
+        )
     }
 
     pub(crate) fn location_display(&self) -> LocationDisplay<'_> {

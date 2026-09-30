@@ -145,7 +145,11 @@ impl Work {
 
 fn location(output: &mut impl Write, span: &Span) -> fmt::Result {
     let (line, column) = span.line_column();
-    write!(output, "{}:{line}:{column}", span.source().name())
+    write!(
+        output,
+        "{}:{line}:{column}",
+        super::shown_path(span.source().name())
+    )
 }
 
 fn full(
@@ -292,7 +296,14 @@ fn summary(
         let source = diagnostic
             .span
             .as_ref()
-            .map(|span| (span.source().name(), span.start(), span.end(), false))
+            .map(|span| {
+                (
+                    super::shown_path(span.source().name()),
+                    span.start(),
+                    span.end(),
+                    false,
+                )
+            })
             .or_else(|| {
                 diagnostic
                     .omissions

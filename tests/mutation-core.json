@@ -1,5 +1,5 @@
 {
-  "version": 43,
+  "version": 44,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3619,6 +3619,55 @@
       "file": "src/core/worker/protocol/diagnostics.rs",
       "before": "    sources.retain(|source| used.contains(&Arc::as_ptr(source)));\n",
       "after": ""
+    },
+    {
+      "id": "cli-paths-not-shortened",
+      "area": "shown-paths",
+      "file": "src/main.rs",
+      "before": "        botwork::core::diagnostic::show_paths_relative_to(&directory);\n",
+      "after": "        let _ = &directory;\n"
+    },
+    {
+      "id": "shown-path-disabled",
+      "area": "shown-paths",
+      "file": "src/core/diagnostic.rs",
+      "before": "    let Some(bases) = SHOWN_RELATIVE_TO.get() else {\n",
+      "after": "    let Some(bases) = SHOWN_RELATIVE_TO.get().filter(|_| false) else {\n"
+    },
+    {
+      "id": "shown-path-shortens-outside",
+      "area": "shown-paths",
+      "file": "src/core/diagnostic.rs",
+      "before": "        .find_map(|base| path.strip_prefix(base).ok())\n",
+      "after": "        .find_map(|base| path.strip_prefix(base.parent().unwrap_or(base)).ok())\n"
+    },
+    {
+      "id": "location-display-full",
+      "area": "shown-paths",
+      "file": "src/core/ast.rs",
+      "before": "        output.write_str(super::diagnostic::shown_path(self.0.source.name()))?;\n",
+      "after": "        output.write_str(self.0.source.name())?;\n"
+    },
+    {
+      "id": "location-string-full",
+      "area": "shown-paths",
+      "file": "src/core/ast.rs",
+      "before": "            super::diagnostic::shown_path(self.source.name())\n",
+      "after": "            self.source.name()\n"
+    },
+    {
+      "id": "render-location-full",
+      "area": "shown-paths",
+      "file": "src/core/diagnostic/render.rs",
+      "before": "        super::shown_path(span.source().name())\n",
+      "after": "        span.source().name()\n"
+    },
+    {
+      "id": "check-finding-full",
+      "area": "shown-paths",
+      "file": "src/core/analysis.rs",
+      "before": "            crate::core::diagnostic::shown_path(self.span.source().name()),\n",
+      "after": "            self.span.source().name(),\n"
     }
   ]
 }

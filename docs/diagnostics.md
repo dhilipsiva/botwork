@@ -1,6 +1,6 @@
 # Structured Diagnostics
 
-The CLI reports the failing source file, range, stable code, error, relevant source text, and repair guidance. A header such as `file.botwork:2:14-2:19: [BW2001]` uses one-based scalar positions with an exclusive end; an empty EOF range shows only its start. Runtime errors identify the innermost failing expression or access segment. Invalid conditions point to the condition, not the entire body. Entered calls appear innermost first, with call and definition locations. Each shows its statement [as written](#statements-as-written). Native calls have no DSL definition.
+The CLI reports the failing source file, range, stable code, error, relevant source text, and repair guidance. A header such as `file.botwork:2:14-2:19: [BW2001]` uses one-based scalar positions with an exclusive end; an empty EOF range shows only its start. Runtime errors identify the innermost failing expression or access segment. Invalid conditions point to the condition, not the entire body. Entered calls appear innermost first, with call and definition locations. Each shows its statement [as written](#statements-as-written). Native calls have no DSL definition. Files appear [relative to the working directory](#file-names) when they are inside it.
 
 [Bounded rendering](diagnostic-rendering.md) preserves this layout for admitted output. Oversized output or source-position work produces an explicit summary with original codes, leading cause evidence, bounded filenames, and byte offsets. Hosts can inspect truncation and choose local limits through `render_with_limits`; Display and CLI diagnostics use the defaults. Standalone repair-guidance helpers also bound their returned strings.
 
@@ -90,6 +90,19 @@ Each handled cause retains its own code and guidance; a handler's undefined-vari
 A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `line`, `column`, `end_line`, and `end_column`. Coordinates are decimal strings, not i32 values, so metadata never truncates a source offset. Byte and end-position semantics match `Span`. Missing source/definition sites are present with None values; they are not absent keys.
 
 `details` contains `name` for BW2001, and `suggestion` when a variable the read can reach has a [near name](#near-name-suggestions); `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. A file cannot catch its own pre-execution syntax/validation failure. An importer can inspect such a failure during runtime loading, retaining its original code.
+
+### File names
+
+The CLI shows every file in its text output as it shows the files it was
+given: relative to its working directory when the file is inside it, and in
+full otherwise. An imported module, which Botwork names by its canonical path,
+therefore appears as `lib/pricing.botwork` beside `main.botwork`, in error
+headers, `imported here` sites, call frames, the failure recap, and `--check`
+findings, including locations written into an error's message, such as a
+duplicate parameter's. The location fields of reports, run records, and `Catch`
+metadata, and the language server, keep full names. A host embedding Botwork can opt in with
+`botwork::core::diagnostic::show_paths_relative_to`, which takes effect once
+per process.
 
 ### Statements as written
 

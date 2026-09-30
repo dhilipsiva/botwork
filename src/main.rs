@@ -424,6 +424,10 @@ fn main() -> ExitCode {
         return ExitCode::from(status);
     }
     let args = Args::parse();
+    // Show imported modules, named by their full path, like the files given here.
+    if let Ok(directory) = std::env::current_dir() {
+        botwork::core::diagnostic::show_paths_relative_to(&directory);
+    }
     if args.lsp {
         return ExitCode::from(lsp::run() as u8);
     }

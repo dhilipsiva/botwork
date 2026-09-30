@@ -154,7 +154,7 @@ impl fmt::Display for Finding {
         write!(
             output,
             "{}:{line}:{column}-{end_line}:{end_column}: {}[{}]: ",
-            self.span.source().name(),
+            crate::core::diagnostic::shown_path(self.span.source().name()),
             self.severity().as_str(),
             self.rule.as_str()
         )?;

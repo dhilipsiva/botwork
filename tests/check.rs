@@ -152,27 +152,21 @@ fn imported_modules_are_checked_and_reported_with_their_own_paths() {
     .unwrap();
     let (status, stdout, stderr) = check(directory.path(), &["--file", "main.botwork"]);
     assert_eq!((status, stdout.as_str()), (Some(1), ""));
-    let canonical = fs::canonicalize(directory.path()).unwrap();
+    // Modules inside the working directory are shown relative to it.
     let lines: Vec<_> = stderr
         .lines()
         .filter(|line| !line.starts_with(' '))
         .collect();
     assert_eq!(
         lines[0],
-        format!(
-            "{}/lib/broken.botwork:2:1: [BW1001] Parsing error:  --> 2:1",
-            canonical.display()
-        )
+        "lib/broken.botwork:2:1: [BW1001] Parsing error:  --> 2:1"
     );
     assert!(
         lines.contains(&"main.botwork:3:9-3:26: error[undefined-statement]: [BW2002] Statement not defined: math::Doubled |2|"),
         "{stderr}"
     );
-    let module = format!(
-        "{}/lib/math.botwork:2:18-2:25: warning[undefined-variable]: [BW2001] `missing` is never assigned in a scope that reaches this read",
-        canonical.display()
-    );
-    assert!(lines.contains(&module.as_str()), "{stderr}");
+    let module = "lib/math.botwork:2:18-2:25: warning[undefined-variable]: [BW2001] `missing` is never assigned in a scope that reaches this read";
+    assert!(lines.contains(&module), "{stderr}");
     assert!(
         stderr.ends_with("[check] 1 file, 1 module: 2 errors, 1 warning\n"),
         "{stderr}"
@@ -306,4 +300,119 @@ fn the_documented_unchecked_summary_matches_a_real_check() {
     let (status, _, stderr) = check(directory.path(), &["--file", "remote.botwork"]);
     assert_eq!(status, Some(0));
     assert!(stderr.ends_with(shown), "{stderr}");
+}
+
+#[test]
+fn modules_outside_the_working_directory_keep_their_full_path() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir_all(directory.path().join("work")).unwrap();
+    fs::create_dir_all(directory.path().join("shared")).unwrap();
+    fs::write(
+        directory.path().join("shared/lib.botwork"),
+        "Reader { Return |missing| }\n",
+    )
+    .unwrap();
+    let work = directory.path().join("work");
+    fs::write(
+        work.join("main.botwork"),
+        "Import |\"../shared/lib.botwork\"| As |lib|\nLog |@{ lib::Reader }|\n",
+    )
+    .unwrap();
+    let full = fs::canonicalize(directory.path().join("shared/lib.botwork")).unwrap();
+    let (_, _, stderr) = check(&work, &["--file", "main.botwork"]);
+    assert!(
+        stderr.starts_with(&format!(
+            "{}:1:18-1:25: warning[undefined-variable]",
+            full.display()
+        )),
+        "{stderr}"
+    );
+    let run = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .args(["--file", "main.botwork"])
+        .current_dir(&work)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(run.stderr).unwrap();
+    assert!(
+        stderr.starts_with(&format!("{}:1:18-1:25: [BW2001]", full.display())),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("imported here: main.botwork:1:1"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn run_output_shows_modules_inside_the_working_directory_like_the_files_given() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir(directory.path().join("lib")).unwrap();
+    fs::write(
+        directory.path().join("lib/pricing.botwork"),
+        "Total |x| {\n    Return |x - discont|\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.path().join("main.botwork"),
+        "Import |\"lib/pricing.botwork\"| As |pricing|\nLog |@{ pricing::Total |3| }|\n",
+    )
+    .unwrap();
+    fs::write(directory.path().join("ok.botwork"), "Log |1|\n").unwrap();
+    let run = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .args([
+            "--file",
+            "main.botwork",
+            "--file",
+            "ok.botwork",
+            "--jobs",
+            "1",
+        ])
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(run.stderr).unwrap();
+    for expected in [
+        "\nlib/pricing.botwork:2:17-2:24: [BW2001] Variable not defined: discont",
+        "  imported here: main.botwork:1:1",
+        "  in `pricing::Total |x|` called at main.botwork:2:9 (defined at lib/pricing.botwork:1:1)",
+        "failed \"main.botwork\" (BW2001 at lib/pricing.botwork:2:17)",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected:?}: {stderr}");
+    }
+    assert!(
+        !stderr.contains(&*directory.path().to_string_lossy()),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn locations_inside_error_messages_follow_the_text_output() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir(directory.path().join("lib")).unwrap();
+    fs::write(
+        directory.path().join("lib/pair.botwork"),
+        "Pair |x| and |x| { Return |x| }\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.path().join("main.botwork"),
+        "Import |\"lib/pair.botwork\"| As |pair|\n",
+    )
+    .unwrap();
+    let run = Command::new(env!("CARGO_BIN_EXE_botwork"))
+        .args(["--file", "main.botwork"])
+        .current_dir(directory.path())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(run.stderr).unwrap();
+    // The duplicate parameter's message names both of its locations.
+    assert!(stderr.contains("[BW1003]"), "{stderr}");
+    assert!(
+        stderr.matches("lib/pair.botwork:1:").count() >= 3,
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains(&*directory.path().to_string_lossy()),
+        "{stderr}"
+    );
 }
