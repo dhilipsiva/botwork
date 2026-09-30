@@ -67,6 +67,7 @@ fn sample() -> Diagnostic {
         Diagnostic::new(BWErr::undefined_variable("cafe\u{301}".into())).at_expression(span);
     error.call_stack.push(CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });

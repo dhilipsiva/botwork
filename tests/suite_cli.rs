@@ -417,7 +417,7 @@ fn case_errors_keep_original_suite_coordinates_and_custom_call_frames() {
     for expected in [
         "[case s/broken] failed:",
         "suite.botwork:4:",
-        "explode",
+        "in `Explode` called at suite.botwork:7:",
         "BW2001",
     ] {
         assert!(stderr.contains(expected), "missing {expected}: {stderr}");

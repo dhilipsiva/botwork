@@ -661,6 +661,7 @@ impl RunBudget {
     pub(crate) fn reserve_call_frame(
         &self,
         signature: &str,
+        statement: Option<&Span>,
         call_site: &Span,
         definition_site: Option<&Span>,
     ) -> DiagnosticResult<DiagnosticReservation> {
@@ -670,9 +671,12 @@ impl RunBudget {
             .check_record()
             .map_err(|error| self.stop(error))?;
         let mut sources = vec![Arc::clone(call_site.source())];
-        if let Some(definition) = definition_site {
-            if !Arc::ptr_eq(call_site.source(), definition.source()) {
-                sources.push(Arc::clone(definition.source()));
+        for span in definition_site.into_iter().chain(statement) {
+            if !sources
+                .iter()
+                .any(|source| Arc::ptr_eq(source, span.source()))
+            {
+                sources.push(Arc::clone(span.source()));
             }
         }
         self.0

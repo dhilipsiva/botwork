@@ -223,6 +223,9 @@ impl Measurement<'_> {
         }
         for frame in &diagnostic.call_stack {
             self.text(&frame.signature)?;
+            if let Some(span) = &frame.statement {
+                self.source(span)?;
+            }
             self.source(&frame.call_site)?;
             if let Some(span) = &frame.definition_site {
                 self.source(span)?;
@@ -411,6 +414,9 @@ impl DiagnosticLimits {
             )?;
             for frame in frames {
                 measurement.text(&frame.signature)?;
+                if let Some(span) = &frame.statement {
+                    measurement.source(span)?;
+                }
                 measurement.source(&frame.call_site)?;
                 if let Some(span) = &frame.definition_site {
                     measurement.source(span)?;

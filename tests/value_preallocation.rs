@@ -1624,6 +1624,7 @@ fn checked_diagnostic_clone_rejects_large_context_and_width_before_copying() {
     let mut diagnostic = Diagnostic::new(BWErr::NativeError("".into()));
     diagnostic.call_stack.push(CallFrame {
         signature: "x".repeat(length),
+        statement: None,
         call_site: program.statements[0].span.clone(),
         definition_site: None,
     });

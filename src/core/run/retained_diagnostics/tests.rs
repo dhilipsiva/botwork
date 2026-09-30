@@ -508,6 +508,7 @@ fn copied_handler_admission_counts_every_dimension_and_the_prospective_related_s
             let mut error = Diagnostic::new(BWErr::NativeError("failed".into())).at(span);
             error.call_stack.push(crate::core::diagnostic::CallFrame {
                 signature: "read".into(),
+                statement: None,
                 call_site: span.clone(),
                 definition_site: None,
             });
@@ -704,6 +705,7 @@ fn outgoing_mutations_admit_every_aggregate_dimension_and_release_on_rejection_o
             let mut primary = Diagnostic::new(BWErr::NativeError("primary".into())).at(span);
             primary.call_stack.push(CallFrame {
                 signature: "frame".into(),
+                statement: None,
                 call_site: span.clone(),
                 definition_site: Some(site.clone()),
             });
@@ -957,6 +959,7 @@ fn runtime_context_admits_every_dimension_before_metadata_and_preserves_borrowed
         let call_source = Program::parse("caller", "Call").unwrap();
         let frame = CallFrame {
             signature: "call".into(),
+            statement: None,
             call_site: call_source.statements[0].span.clone(),
             definition_site: Some(site.clone()),
         };
@@ -1069,6 +1072,7 @@ fn context_readmission_credits_existing_reservations_and_keeps_innermost_metadat
     let program = Program::parse("first", "Missing").unwrap();
     let frame = CallFrame {
         signature: "inner".into(),
+        statement: None,
         call_site: program.statements[0].span.clone(),
         definition_site: None,
     };
@@ -1084,6 +1088,7 @@ fn context_readmission_credits_existing_reservations_and_keeps_innermost_metadat
     let frames: Vec<_> = (0..3)
         .map(|_| CallFrame {
             signature: "outer".into(),
+            statement: None,
             call_site: outer.statements[0].span.clone(),
             definition_site: None,
         })

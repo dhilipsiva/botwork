@@ -255,7 +255,7 @@ fn snapshots_share_call_and_handler_records_and_charge_their_copied_handles() {
     .unwrap();
     context
         .calls
-        .push(context.retain_call("read", span, None).unwrap());
+        .push(context.retain_call("read", None, span, None).unwrap());
     context.handlers.push(HandledError {
         invocation: 0,
         diagnostic: context
@@ -296,7 +296,7 @@ fn stopped_calls_release_their_record_and_cancelled_handler_admission_keeps_evid
     let control = OperationControl::default();
     let mut context = Context::with_control(RunLimits::default(), control.clone()).unwrap();
     let mut weak = std::sync::Weak::new();
-    let result = context.with_call("stop", &program.statements[0].span, None, |context| {
+    let result = context.with_call("stop", None, &program.statements[0].span, None, |context| {
         weak = Arc::downgrade(context.calls.last().unwrap());
         control.cancel();
         context.temporary(Literal::None)
@@ -327,6 +327,7 @@ fn initial_constructor_reserves_every_dimension_with_active_call_and_distinct_re
             .with_related("imported here", site);
         expected.call_stack.push(CallFrame {
             signature: "call".into(),
+            statement: None,
             call_site: call.clone(),
             definition_site: None,
         });
@@ -355,7 +356,7 @@ fn initial_constructor_reserves_every_dimension_with_active_call_and_distinct_re
         .unwrap();
         context
             .calls
-            .push(context.retain_call("call", call, None).unwrap());
+            .push(context.retain_call("call", None, call, None).unwrap());
         let sibling = context.clone();
         let error = context.import_error(BWErr::ImportRead, format_args!("detail-é"), span, site);
         if deficit == 0 {
@@ -410,7 +411,7 @@ fn cancellation_during_message_formatting_keeps_prospective_primary_context_on_r
     let span = &program.statements[0].span;
     context
         .calls
-        .push(context.retain_call("read", span, None).unwrap());
+        .push(context.retain_call("read", None, span, None).unwrap());
     let error = context.formatted_error(
         BWErr::NativeError,
         format_args!("{}", CancelWhileFormatting(control)),
@@ -437,6 +438,7 @@ fn source_guard_construction_reserves_distinct_prefix_and_live_calls_before_copy
     };
     let frame = CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: None,
     };
@@ -472,7 +474,7 @@ fn source_guard_construction_reserves_distinct_prefix_and_live_calls_before_copy
         .unwrap();
         context
             .calls
-            .push(context.retain_call("read", span, None).unwrap());
+            .push(context.retain_call("read", None, span, None).unwrap());
         let sibling = context.clone();
         let error = context.ast_error(ast::AstFailure::SourceGuard {
             error: &original,
@@ -560,7 +562,7 @@ fn stopped_source_construction_admits_both_snapshots_and_preserves_control_on_re
         let caller = Program::parse("caller", "Read").unwrap();
         context.calls.push(
             context
-                .retain_call("read", &caller.statements[0].span, None)
+                .retain_call("read", None, &caller.statements[0].span, None)
                 .unwrap(),
         );
         control.cancel();
@@ -613,6 +615,7 @@ fn raw_ast_limit_and_lowering_reporters_keep_all_context_reserved_through_transf
         };
         let frame = CallFrame {
             signature: "read".into(),
+            statement: None,
             call_site: caller.statements[0].span.clone(),
             definition_site: None,
         };
@@ -640,9 +643,11 @@ fn raw_ast_limit_and_lowering_reporters_keep_all_context_reserved_through_transf
                 ..Default::default()
             })
             .unwrap();
-            context
-                .calls
-                .push(context.retain_call("read", &frame.call_site, None).unwrap());
+            context.calls.push(
+                context
+                    .retain_call("read", None, &frame.call_site, None)
+                    .unwrap(),
+            );
             let sibling = context.clone();
             let error = context.ast_error(failure());
             if deficit == 0 {

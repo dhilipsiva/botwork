@@ -187,6 +187,7 @@ fn detailed() -> Diagnostic {
     });
     error.call_stack.push(CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });

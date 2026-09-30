@@ -92,6 +92,7 @@ fn fixture_error() -> Diagnostic {
         .push(Diagnostic::new(BWErr::OutputError("partial".into())).at(span));
     error.call_stack.push(CallFrame {
         signature: "inner".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });

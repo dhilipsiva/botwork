@@ -1,6 +1,6 @@
 # Structured Diagnostics
 
-The CLI reports the failing source file, range, stable code, error, relevant source text, and repair guidance. A header such as `file.botwork:2:14-2:19: [BW2001]` uses one-based scalar positions with an exclusive end; an empty EOF range shows only its start. Runtime errors identify the innermost failing expression or access segment. Invalid conditions point to the condition, not the entire body. Entered calls appear innermost first, with call and definition locations. Native calls have no DSL definition.
+The CLI reports the failing source file, range, stable code, error, relevant source text, and repair guidance. A header such as `file.botwork:2:14-2:19: [BW2001]` uses one-based scalar positions with an exclusive end; an empty EOF range shows only its start. Runtime errors identify the innermost failing expression or access segment. Invalid conditions point to the condition, not the entire body. Entered calls appear innermost first, with call and definition locations. Each shows its statement [as written](#statements-as-written). Native calls have no DSL definition.
 
 [Bounded rendering](diagnostic-rendering.md) preserves this layout for admitted output. Oversized output or source-position work produces an explicit summary with original codes, leading cause evidence, bounded filenames, and byte offsets. Hosts can inspect truncation and choose local limits through `render_with_limits`; Display and CLI diagnostics use the defaults. Standalone repair-guidance helpers also bound their returned strings.
 
@@ -83,13 +83,25 @@ Each handled cause retains its own code and guidance; a handler's undefined-vari
 | `code`, `message`, `help` | Strings describing this error |
 | `details` | Category-specific map described below |
 | `source` | Source map, or None if no source exists |
-| `call_stack` | Innermost-first array of `{signature, call_site, definition_site}`; sites are source maps and native definition sites are None |
+| `call_stack` | Innermost-first array of `{signature, call_site, definition_site}`; `signature` is the normalized form, sites are source maps, and native definition sites are None |
 | `related` | Array of `{message, source}` for declarations and rethrow sites |
 | `causes` | Array of diagnostic maps preserving handled errors |
 
 A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `line`, `column`, `end_line`, and `end_column`. Coordinates are decimal strings, not i32 values, so metadata never truncates a source offset. Byte and end-position semantics match `Span`. Missing source/definition sites are present with None values; they are not absent keys.
 
 `details` contains `name` for BW2001, and `suggestion` when a variable the read can reach has a [near name](#near-name-suggestions); `call` for BW2002; `name`, `original`, and `duplicate` for BW1003; `signature`, `original`, and `duplicate` for BW2003; `path`, `segment`, and `reason` for BW3004; and `reason` for all other current codes. These values are strings. Check the code before reading category-specific keys. A file cannot catch its own pre-execution syntax/validation failure. An importer can inspect such a failure during runtime loading, retaining its original code.
+
+### Statements as written
+
+Each entered call in the text output shows its statement as written, such as
+``in `pricing::Line total of |quantity| at |unit_price| less |discount|` called at
+main.botwork:3:18``. That is a definition's header, or a built-in or native
+statement's registered signature, on one line, prefixed with the namespaces the
+call used to reach it. Frames keep the header's source span, never a copy.
+When the header is unknown, as for frames received through the
+[worker protocol](worker-protocol.md), the frame shows the normalized
+signature instead, such as `assert|param|equals|param|`. The `call_stack`
+metadata keeps the normalized `signature`.
 
 ### Near-name suggestions
 

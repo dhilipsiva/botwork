@@ -1,5 +1,5 @@
 {
-  "version": 42,
+  "version": 43,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3521,6 +3521,104 @@
       "file": "src/core/diagnostic/ownership.rs",
       "before": "            [name, suggestion.as_deref().unwrap_or_default(), \"\"]\n",
       "after": "            [name, \"\", \"\"]\n"
+    },
+    {
+      "id": "frame-shows-signature",
+      "area": "written-frames",
+      "file": "src/core/diagnostic.rs",
+      "before": "        let Some(header) = &self.0.statement else {\n",
+      "after": "        let Some(header) = self.0.statement.as_ref().filter(|_| false) else {\n"
+    },
+    {
+      "id": "frame-namespaces-dropped",
+      "area": "written-frames",
+      "file": "src/core/diagnostic.rs",
+      "before": "        if let Some((namespaces, _)) = self.0.signature.rsplit_once(\"::\") {\n",
+      "after": "        if let Some((namespaces, _)) = self.0.signature.rsplit_once(\"::\").filter(|_| false) {\n"
+    },
+    {
+      "id": "frame-first-namespace-only",
+      "area": "written-frames",
+      "file": "src/core/diagnostic.rs",
+      "before": "        if let Some((namespaces, _)) = self.0.signature.rsplit_once(\"::\") {\n",
+      "after": "        if let Some((namespaces, _)) = self.0.signature.split_once(\"::\") {\n"
+    },
+    {
+      "id": "frame-continuation-kept",
+      "area": "written-frames",
+      "file": "src/core/diagnostic.rs",
+      "before": "            .filter(|word| *word != \"\\\\\");\n",
+      "after": "            .filter(|word| !word.is_empty());\n"
+    },
+    {
+      "id": "frame-words-unspaced",
+      "area": "written-frames",
+      "file": "src/core/diagnostic.rs",
+      "before": "            write!(output, \" {word}\")?;\n",
+      "after": "            write!(output, \"{word}\")?;\n"
+    },
+    {
+      "id": "operation-frame-statement-dropped",
+      "area": "written-frames",
+      "file": "src/core/eval/execution.rs",
+      "before": "                let statement = Some(operation.signature().header());\n",
+      "after": "                let statement = None;\n"
+    },
+    {
+      "id": "http-frame-statement-dropped",
+      "area": "written-frames",
+      "file": "src/core/eval/execution.rs",
+      "before": "Http(kind)) = body {\n                    context.check_call_depth()?;\n                    let statement = Some(metadata.header());\n",
+      "after": "Http(kind)) = body {\n                    context.check_call_depth()?;\n                    let statement = None;\n"
+    },
+    {
+      "id": "worker-native-frame-statement-dropped",
+      "area": "written-frames",
+      "file": "src/core/eval/execution.rs",
+      "before": "if context.asynchronous && !inline {\n                    context.check_call_depth()?;\n                    let statement = Some(metadata.header());\n",
+      "after": "if context.asynchronous && !inline {\n                    context.check_call_depth()?;\n                    let statement = None;\n"
+    },
+    {
+      "id": "inline-native-frame-statement-dropped",
+      "area": "written-frames",
+      "file": "src/core/eval/execution.rs",
+      "before": "                    let statement = Some(metadata.header());\n                    context.with_call(",
+      "after": "                    let statement = None;\n                    context.with_call("
+    },
+    {
+      "id": "user-frame-statement-dropped",
+      "area": "written-frames",
+      "file": "src/core/eval/execution.rs",
+      "before": "                let statement = Some(metadata.header());\n                let call_frame = context.retain_call(",
+      "after": "                let statement = None;\n                let call_frame = context.retain_call("
+    },
+    {
+      "id": "frame-header-source-unmeasured",
+      "area": "written-frames",
+      "file": "src/core/diagnostic/ownership.rs",
+      "before": "            self.text(&frame.signature)?;\n            if let Some(span) = &frame.statement {\n",
+      "after": "            self.text(&frame.signature)?;\n            if let Some(span) = frame.statement.as_ref().filter(|_| false) {\n"
+    },
+    {
+      "id": "frame-header-source-unreserved",
+      "area": "written-frames",
+      "file": "src/core/run/retained_diagnostics.rs",
+      "before": "        for span in definition_site.into_iter().chain(statement) {\n",
+      "after": "        for span in definition_site.into_iter() {\n"
+    },
+    {
+      "id": "render-header-scan-uncharged",
+      "area": "written-frames",
+      "file": "src/core/diagnostic/render.rs",
+      "before": "                    header.end() - header.start(),\n",
+      "after": "                    0,\n"
+    },
+    {
+      "id": "wire-header-sources-sent",
+      "area": "written-frames",
+      "file": "src/core/worker/protocol/diagnostics.rs",
+      "before": "    sources.retain(|source| used.contains(&Arc::as_ptr(source)));\n",
+      "after": ""
     }
   ]
 }

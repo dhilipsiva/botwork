@@ -90,7 +90,7 @@ fn missing_imported_exports_admit_name_and_complete_known_context() {
             .at(&call.span)
             .with_related("imported here", site);
         let outer = Context::default()
-            .retain_call("outer", &call.span, None)
+            .retain_call("outer", None, &call.span, None)
             .unwrap();
         expected.call_stack.push(outer.frame.clone());
         let size = DiagnosticLimits::default().check(&expected).unwrap();

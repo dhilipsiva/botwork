@@ -57,6 +57,7 @@ fn sample_error() -> Diagnostic {
         .push(Diagnostic::new(BWErr::OutputError("partial output".into())).at(span));
     error.call_stack.push(CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });

@@ -8,11 +8,13 @@ fn diagnostic() -> Diagnostic {
     let mut value = Diagnostic::new(BWErr::undefined_variable("café".into())).at(&span);
     value.call_stack.push(CallFrame {
         signature: "read ||".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });
     value.call_stack.push(CallFrame {
         signature: "native".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: None,
     });

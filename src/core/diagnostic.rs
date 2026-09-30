@@ -238,9 +238,47 @@ impl fmt::Display for Help<'_> {
 pub struct CallFrame {
     /// Normalized statement signature, independent of parameter values.
     pub signature: String,
+    /// The header of the statement as written: a definition's header or a
+    /// native statement's registered signature. None when unknown, as for
+    /// frames decoded from a worker; see [`CallFrame::shown`].
+    pub statement: Option<Span>,
     pub call_site: Span,
     /// None for native statements.
     pub definition_site: Option<Span>,
+}
+
+impl CallFrame {
+    /// The statement as written, on one line and under the namespaces the call
+    /// used, or the normalized signature when the header is unknown. It is
+    /// formatted without copying the header.
+    pub fn shown(&self) -> impl fmt::Display + '_ {
+        Shown(self)
+    }
+}
+
+struct Shown<'a>(&'a CallFrame);
+
+impl fmt::Display for Shown<'_> {
+    fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Some(header) = &self.0.statement else {
+            return output.write_str(&self.0.signature);
+        };
+        // A header never names a namespace; the call's signature does.
+        if let Some((namespaces, _)) = self.0.signature.rsplit_once("::") {
+            write!(output, "{namespaces}::")?;
+        }
+        let mut words = header
+            .text()
+            .split_whitespace()
+            .filter(|word| *word != "\\");
+        if let Some(first) = words.next() {
+            output.write_str(first)?;
+        }
+        for word in words {
+            write!(output, " {word}")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -439,17 +439,21 @@ impl Context {
     pub(super) fn retain_call(
         &self,
         signature: &str,
+        statement: Option<&Span>,
         call_site: &Span,
         definition_site: Option<&Span>,
     ) -> DiagnosticResult<Arc<StoredCallFrame>> {
         let reservation = self
             .budget
             .as_ref()
-            .map(|budget| budget.reserve_call_frame(signature, call_site, definition_site))
+            .map(|budget| {
+                budget.reserve_call_frame(signature, statement, call_site, definition_site)
+            })
             .transpose()?;
         Ok(Arc::new(StoredCallFrame {
             frame: CallFrame {
                 signature: signature.into(),
+                statement: statement.cloned(),
                 call_site: call_site.clone(),
                 definition_site: definition_site.cloned(),
             },

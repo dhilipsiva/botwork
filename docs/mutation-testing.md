@@ -473,6 +473,23 @@ Its 503-entry catalogue adds 19 faults, with the library tests and the
 `diagnostics` and `value_preallocation` suites as oracles; see
 [near-name evidence](near-names-evidence.json).
 
+Version 43 shows each call frame's statement as written. Its faults cover:
+
+- the frame shown as its normalized signature, its namespaces dropped or cut
+  to the first, a continuation backslash kept, and words run together;
+- the header left out of the frames of registered operations, HTTP
+  built-ins, native callbacks on blocking workers, inline built-ins, and
+  definitions;
+- the header's source left out of diagnostic measurement and call-frame
+  reservations, its render scan left uncharged, and its source sent to
+  workers.
+
+Its 517-entry catalogue adds 14 faults, with the library tests and the
+`local_imports`, `getting_started`, `processes`, `suite_cli`,
+`retained_diagnostics`, `assertion_diagnostics`, `diagnostic_rendering`, `http`,
+and `diagnostics` suites as oracles; see
+[written frames evidence](written-frames-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

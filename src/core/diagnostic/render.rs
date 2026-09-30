@@ -207,7 +207,16 @@ fn full(
                 "diagnostic render call frames",
             )?;
             work.source(&frame.call_site, false, limits)?;
-            write!(output, "\n  in `{}` called at ", frame.signature)?;
+            if let Some(header) = &frame.statement {
+                // Showing the header as written scans it once.
+                charge(
+                    &mut work.source,
+                    header.end() - header.start(),
+                    limits.source_scan_bytes,
+                    "diagnostic render source scan bytes",
+                )?;
+            }
+            write!(output, "\n  in `{}` called at ", frame.shown())?;
             location(output, &frame.call_site)?;
             if let Some(definition) = &frame.definition_site {
                 work.source(definition, false, limits)?;

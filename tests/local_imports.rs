@@ -1167,3 +1167,34 @@ fn cli_imports_initialize_once_and_use_source_paths_outside_the_process_director
     );
     assert_eq!(output.stdout, b"initialize\n14\n");
 }
+
+#[test]
+fn call_frames_show_statements_as_written_under_the_namespaces_used() {
+    let project = Project::new();
+    project.write(
+        "nested/pricing.botwork",
+        "Line total of |quantity| \\\n    at |price| {\n    Return |quantity * missing|\n}",
+    );
+    project.write(
+        "shop.botwork",
+        "Import |\"nested/pricing.botwork\"| As |pricing|",
+    );
+    let mut context = Context::default();
+    context.init_statements();
+    let error = project
+        .run(
+            "Import |\"shop.botwork\"| As |shop|\n|total| = |@{ shop::pricing::Line total of |3| at |4| }|",
+            &mut context,
+        )
+        .unwrap_err();
+    // One line, as written, under both namespaces; the signature is unchanged.
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("in `shop::pricing::Line total of |quantity| at |price|` called at"),
+        "{rendered}"
+    );
+    assert_eq!(
+        error.call_stack[0].signature,
+        "shop::pricing::linetotalof|param|at|param|"
+    );
+}

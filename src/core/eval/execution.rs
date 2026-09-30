@@ -117,7 +117,8 @@ pub(super) fn invoke_resolved<'a>(
                     })
                     .unwrap_or_default();
                 context.check_call_depth()?;
-                let frame = context.retain_call(&call.signature, &call.span, None)?;
+                let statement = Some(operation.signature().header());
+                let frame = context.retain_call(&call.signature, statement, &call.span, None)?;
                 context.calls.push(frame);
                 let (values, reservations): (Vec<_>, Vec<_>) = arguments
                     .into_iter()
@@ -154,7 +155,9 @@ pub(super) fn invoke_resolved<'a>(
             } => {
                 if let NativeBody::Builtin(builtins::Builtin::Http(kind)) = body {
                     context.check_call_depth()?;
-                    let frame = context.retain_call(&call.signature, &call.span, None)?;
+                    let statement = Some(metadata.header());
+                    let frame =
+                        context.retain_call(&call.signature, statement, &call.span, None)?;
                     context.calls.push(frame);
                     let result = kind.invoke(&arguments, context).await;
                     let result = context
@@ -176,7 +179,9 @@ pub(super) fn invoke_resolved<'a>(
                     matches!(&body, NativeBody::Builtin(kind) if kind.needs_directory());
                 if context.asynchronous && !inline {
                     context.check_call_depth()?;
-                    let frame = context.retain_call(&call.signature, &call.span, None)?;
+                    let statement = Some(metadata.header());
+                    let frame =
+                        context.retain_call(&call.signature, statement, &call.span, None)?;
                     context.calls.push(frame);
                     let span = call.span.clone();
                     let result = context
@@ -191,7 +196,8 @@ pub(super) fn invoke_resolved<'a>(
                     context.calls.pop();
                     result
                 } else {
-                    context.with_call(&call.signature, &call.span, None, |context| {
+                    let statement = Some(metadata.header());
+                    context.with_call(&call.signature, statement, &call.span, None, |context| {
                         blocking::native_body(context, body, &metadata, arguments, &call.span)
                     })
                 }
@@ -220,8 +226,13 @@ pub(super) fn invoke_resolved<'a>(
                 context.check_call_depth().map_err(|error| {
                     context.runtime_diagnostic(error.into(), Some(&call.span), false)
                 })?;
-                let call_frame =
-                    context.retain_call(&call.signature, &call.span, Some(&definition.span))?;
+                let statement = Some(metadata.header());
+                let call_frame = context.retain_call(
+                    &call.signature,
+                    statement,
+                    &call.span,
+                    Some(&definition.span),
+                )?;
                 context.calls.push(call_frame);
                 let caller = context.current;
                 context.current = context.frames.len();

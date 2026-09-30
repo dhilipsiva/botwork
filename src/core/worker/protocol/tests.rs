@@ -18,6 +18,7 @@ fn error() -> Diagnostic {
     let mut error = Diagnostic::new(BWErr::NativeError("failed é".into())).at(span);
     error.call_stack.push(CallFrame {
         signature: "native".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });
@@ -301,6 +302,21 @@ fn suggestions_stay_on_the_side_that_computed_them() {
     // The wire format is unchanged: the frame is the one without a suggestion.
     let plain = Diagnostic::new(BWErr::undefined_variable("discont".into()));
     assert_eq!(protocol.encode_response(Err(&plain)).unwrap(), frame);
+}
+
+#[test]
+fn statement_headers_stay_behind_and_decoded_frames_show_the_signature() {
+    let protocol = WorkerProtocol::default();
+    let header = StatementSignature::native_at("<header>", "Go |x|").unwrap();
+    let mut with_header = error();
+    with_header.call_stack[0].statement = Some(header.header().clone());
+    let frame = protocol.encode_response(Err(&with_header)).unwrap();
+    // The header's source is neither in the table nor on the wire.
+    assert_eq!(frame, protocol.encode_response(Err(&error())).unwrap());
+    let decoded = protocol.decode_response(&frame).unwrap().unwrap_err();
+    assert!(decoded.call_stack[0].statement.is_none());
+    assert_eq!(decoded.call_stack[0].shown().to_string(), "native");
+    assert_eq!(with_header.call_stack[0].shown().to_string(), "Go |x|");
 }
 
 #[test]

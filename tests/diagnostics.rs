@@ -423,3 +423,42 @@ fn emergency_summaries_keep_the_suggestion() {
         "{error:?}"
     );
 }
+
+#[tokio::test]
+async fn every_call_path_shows_its_statement_as_written() {
+    use botwork::core::{
+        operation::NativeOperation,
+        run::{Engine, RunOptions},
+        signature::StatementSignature,
+    };
+    let mut engine = Engine::default();
+    engine
+        .register_native("Explode |reason|", |_, _| {
+            Err(BWErr::NativeError("boom".into()))
+        })
+        .unwrap();
+    engine
+        .register_operation(
+            NativeOperation::asynchronous(
+                StatementSignature::native("Wait For |value|").unwrap(),
+                |_, _| async { Err(Diagnostic::new(BWErr::NativeError("late".into()))) },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    for (source, shown) in [
+        // A callback on a blocking worker, an operation, and an HTTP built-in.
+        ("Explode |\"x\"|", "Explode |reason|"),
+        ("Wait For |1|", "Wait For |value|"),
+        (
+            "HTTP Request |\"GET\"| To |\"not a url\"|",
+            "HTTP Request |method| To |url|",
+        ),
+    ] {
+        let run = engine
+            .run_source_async("paths", source, RunOptions::default())
+            .await;
+        let error = run.result.unwrap_err();
+        assert_eq!(error.call_stack[0].shown().to_string(), shown, "{error}");
+    }
+}

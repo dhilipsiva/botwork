@@ -879,13 +879,14 @@ impl Context {
     fn with_call(
         &mut self,
         signature: &str,
+        statement: Option<&Span>,
         call_site: &Span,
         definition_site: Option<&Span>,
         body: impl FnOnce(&mut Self) -> TemporaryResult,
     ) -> TemporaryResult {
         self.check_call_depth()
             .map_err(|error| self.runtime_diagnostic(error.into(), Some(call_site), false))?;
-        let frame = self.retain_call(signature, call_site, definition_site)?;
+        let frame = self.retain_call(signature, statement, call_site, definition_site)?;
         self.calls.push(frame);
         let result = body(self).map_err(|error| self.runtime_diagnostic(error, None, false));
         self.calls.pop();

@@ -142,6 +142,7 @@ fn syntax_construction_admits_exact_message_source_and_prospective_calls_as_one_
     let caller = Program::parse("caller", "Read {}").unwrap();
     let frame = CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: caller.statements[0].span.clone(),
         definition_site: None,
     };

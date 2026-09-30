@@ -563,8 +563,17 @@ Assert |kept| Equals |42|
     );
     let error = result.result.unwrap_err();
     assert_eq!(error.code(), Code::AsyncRuntime);
-    assert!(error.to_string().contains("wrapper"), "{error}");
-    assert!(error.to_string().contains("Run Process"), "{error}");
+    // Frames show each statement as written.
+    assert!(
+        error.to_string().contains("in `Wrapper` called at"),
+        "{error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("in `Run Process |executable| With Arguments |arguments|` called at"),
+        "{error}"
+    );
 }
 
 #[test]

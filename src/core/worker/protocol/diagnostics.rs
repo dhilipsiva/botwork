@@ -3,7 +3,10 @@ use crate::core::{
     ast::{SourceFile, Span},
     diagnostic::{CallFrame, DiagnosticOmissions, OmittedSource, RelatedLocation},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 mod errors;
 use errors::WireError;
@@ -104,18 +107,38 @@ impl<'a> Tables<'a> {
     }
 }
 
+/// The sources of the spans the wire carries, as `Tables::node` writes them.
+/// Call-frame headers stay behind, so sources only they use are not sent.
+fn wire_sources(diagnostic: &Diagnostic, used: &mut HashSet<*const SourceFile>) {
+    let spans =
+        diagnostic
+            .span
+            .iter()
+            .chain(diagnostic.call_stack.iter().flat_map(|call| {
+                std::iter::once(&call.call_site).chain(call.definition_site.as_ref())
+            }))
+            .chain(diagnostic.related.iter().map(|related| &related.span));
+    used.extend(spans.map(|span| Arc::as_ptr(span.source())));
+    for cause in &diagnostic.causes {
+        wire_sources(cause, used);
+    }
+}
+
 pub(super) fn encode(
     protocol: &WorkerProtocol,
     diagnostic: &Diagnostic,
     control: &OperationControl,
 ) -> DiagnosticResult<Vec<u8>> {
-    let (_, sources) = protocol.limits.diagnostics.retained_runtime_size(
+    let (_, mut sources) = protocol.limits.diagnostics.retained_runtime_size(
         diagnostic,
         std::iter::empty(),
         None,
         None,
         None,
     )?;
+    let mut used = HashSet::new();
+    wire_sources(diagnostic, &mut used);
+    sources.retain(|source| used.contains(&Arc::as_ptr(source)));
     if sources.len() > protocol.limits.sources {
         return Err(limit("worker protocol sources", protocol.limits.sources));
     }
@@ -538,6 +561,8 @@ fn build_node(
     let call_stack = (0..count)
         .map(|_| CallFrame {
             signature: input.string().unwrap().into(),
+            // The wire carries the signature alone; `shown` falls back to it.
+            statement: None,
             call_site: build_span(input, sources),
             definition_site: build_optional_span(input, sources),
         })

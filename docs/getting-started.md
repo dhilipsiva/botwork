@@ -145,7 +145,7 @@ first-failure.botwork:9:1-9:43: [BW9001] Assertion failed: Expected 6 (Int), got
   difference at $: expected 6 (Int), got 5 (Int)
   full operands: details.expected / details.actual (typed JSON)
   source: Assert |@{ Total of |[2, 3]| }| Equals |6|
-  in `assert|param|equals|param|` called at first-failure.botwork:9:1
+  in `Assert |actual| Equals |expected|` called at first-failure.botwork:9:1
   help: Inspect the condition or compared values; fix the behavior or update the expectation deliberately.
 ```
 

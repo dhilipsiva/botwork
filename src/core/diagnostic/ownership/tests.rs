@@ -10,6 +10,7 @@ fn tree() -> Diagnostic {
     let mut root = Diagnostic::new(BWErr::NativeError("é".into())).at(span);
     root.call_stack.push(CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });

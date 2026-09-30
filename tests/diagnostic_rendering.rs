@@ -6,6 +6,7 @@ use botwork::core::{
     },
     eval::{evaluate_program_detailed, Context},
     grammar::BWErr,
+    signature::StatementSignature,
 };
 use std::sync::Arc;
 
@@ -63,6 +64,7 @@ fn default_display_bounds_large_details_help_filenames_and_repeated_call_locatio
             for _ in 0..1000 {
                 error.call_stack.push(CallFrame {
                     signature: "read".into(),
+                    statement: None,
                     call_site: span.clone(),
                     definition_site: Some(span.clone()),
                 });
@@ -105,6 +107,36 @@ fn every_utf8_output_boundary_is_exact_or_explicitly_summarized() {
 }
 
 #[test]
+fn showing_a_statement_as_written_counts_one_scan_of_its_header() {
+    let program = Program::parse("call", "|x| = |1|").unwrap();
+    let span = &program.statements[0].span;
+    let header = StatementSignature::native(&format!("Go {}", "x".repeat(1000))).unwrap();
+    let mut error = Diagnostic::new(BWErr::NativeError("failed".into()));
+    error.call_stack.push(CallFrame {
+        signature: "go".into(),
+        statement: Some(header.header().clone()),
+        call_site: span.clone(),
+        definition_site: None,
+    });
+    // The call site is at offset 0, so the header scan is all the work.
+    let needed = header.header().end() - header.header().start();
+    let exact = error.render_with_limits(&DiagnosticRenderLimits {
+        source_scan_bytes: needed,
+        ..Default::default()
+    });
+    assert!(exact.truncation.is_none(), "{}", exact.text);
+    assert!(exact.text.contains("in `Go xxx"), "{}", exact.text);
+    let rejected = error.render_with_limits(&DiagnosticRenderLimits {
+        source_scan_bytes: needed - 1,
+        ..Default::default()
+    });
+    assert_eq!(
+        rejected.truncation.unwrap().resource,
+        "diagnostic render source scan bytes"
+    );
+}
+
+#[test]
 fn source_work_is_counted_per_occurrence_before_coordinate_and_excerpt_scans() {
     let program = Program::parse(
         "large-offset",
@@ -116,6 +148,7 @@ fn source_work_is_counted_per_occurrence_before_coordinate_and_excerpt_scans() {
     let mut error = Diagnostic::new(BWErr::NativeError("failed".into())).at(span);
     error.call_stack.push(CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });

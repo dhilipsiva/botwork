@@ -36,6 +36,7 @@ fn rejected_source_and_context_are_released_and_root_byte_evidence_is_explicit()
     original.label = "host label";
     original.call_stack.push(CallFrame {
         signature: "call".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     });
@@ -204,6 +205,7 @@ fn emergency_evidence_stays_bounded_when_unwinding_adds_context_and_causes() {
     let span = &program.statements[0].span;
     let frame = CallFrame {
         signature: "x".repeat(4096),
+        statement: None,
         call_site: span.clone(),
         definition_site: Some(span.clone()),
     };

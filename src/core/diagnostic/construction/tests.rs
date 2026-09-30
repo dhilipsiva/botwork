@@ -57,6 +57,7 @@ fn source_prefix_admits_complete_call_context_and_distinct_equal_source_owners_b
     let caller = Program::parse("file", "Read {}").unwrap();
     let frame = CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: caller.statements[0].span.clone(),
         definition_site: None,
     };
@@ -259,6 +260,7 @@ fn formatted_related_details_admit_complete_site_and_call_metrics_before_message
     let site = &related.statements[0].span;
     let frames = [CallFrame {
         signature: "outer".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: None,
     }];
@@ -522,11 +524,13 @@ fn exact_borrowed_details_match_full_diagnostics_and_preserve_their_call_order()
     let frames = [
         CallFrame {
             signature: "outer".into(),
+            statement: None,
             call_site: span.clone(),
             definition_site: None,
         },
         CallFrame {
             signature: "inner".into(),
+            statement: None,
             call_site: span.clone(),
             definition_site: Some(span.clone()),
         },
@@ -569,6 +573,7 @@ fn every_prospective_quota_rejects_before_context_capture_with_exact_omission_co
     let span = &program.statements[0].span;
     let frames = [CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: None,
     }];
@@ -663,6 +668,7 @@ fn formatted_details_match_exact_raw_byte_counts_and_preserve_context() {
     let span = &program.statements[0].span;
     let frames = [CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: span.clone(),
         definition_site: None,
     }];
@@ -928,6 +934,7 @@ fn construction_admission_measures_full_stop_context_and_reserves_before_formatt
     let site = &program.statements[0].span;
     let frame = CallFrame {
         signature: "read".into(),
+        statement: None,
         call_site: site.clone(),
         definition_site: None,
     };

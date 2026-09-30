@@ -156,13 +156,15 @@ fn calls_reserve_exact_metadata_before_callback_entry_and_release_between_calls(
             Ok(Literal::None)
         })
         .unwrap();
+    // The frame retains the call's source, `call` with `Go`, and the native's
+    // registered header, `<native>` with `Go`, which shows the statement.
     let exact = RetainedDiagnosticLimits {
         records: 1,
         diagnostics: 0,
         call_frames: 1,
         related_locations: 0,
         text_bytes: 2,
-        source_bytes: 6,
+        source_bytes: 16,
     };
     assert_eq!(
         engine
@@ -176,7 +178,7 @@ fn calls_reserve_exact_metadata_before_callback_entry_and_release_between_calls(
             0 => limits.records = 0,
             1 => limits.call_frames = 0,
             2 => limits.text_bytes = 1,
-            _ => limits.source_bytes = 5,
+            _ => limits.source_bytes = exact.source_bytes - 1,
         }
         assert_eq!(
             engine.run_source("call", "Go", options(limits)).outcome(),
@@ -188,7 +190,8 @@ fn calls_reserve_exact_metadata_before_callback_entry_and_release_between_calls(
         "call",
         "Go\nGo\nGo",
         options(RetainedDiagnosticLimits {
-            source_bytes: 12,
+            // `call` with "Go\nGo\nGo", and `<native>` with `Go`.
+            source_bytes: 12 + 10,
             ..exact
         }),
     );
@@ -542,7 +545,8 @@ fn native_error_context_requires_exact_overlap_with_the_active_call() {
             call_frames: 2,
             related_locations: 0,
             text_bytes: 20, // Active "fail" plus error label, reason, and copied "fail".
-            source_bytes: "peakFail".len(),
+            // The call's source and the native's registered header.
+            source_bytes: "peakFail".len() + "<native>Fail".len(),
         };
         match deficit {
             1 => limits.records -= 1,
