@@ -66,6 +66,8 @@ index.
 - [Language server](lsp.md)
 - [Editor support](editors.md)
 - [Tree-sitter grammars](tree-sitter.md)
+- [Keeping the tools aligned](alignment.md): one corpus for parsing,
+  formatting, analysis, and highlighting, and how error recovery differs.
 
 ## Extending and embedding
 

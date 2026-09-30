@@ -275,6 +275,18 @@
    "",
    "No Operation",
    "function"
+  ],
+  [
+   20,
+   "",
+   "Break!",
+   "function"
+  ],
+  [
+   20,
+   "{ ",
+   "Return",
+   "keyword"
   ]
  ],
  "highlighting.suite.botwork": [

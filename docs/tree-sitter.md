@@ -31,6 +31,8 @@ names inside scripts.
 - `*/test/corpus/` holds Tree-sitter's own tests of the syntax trees.
 
 [Editor support](editors.md) packages the grammars and queries for Helix.
+[Keeping the tools aligned](alignment.md) compares their highlighting with Vim's
+and VS Code's over the shared corpus.
 
 ## How the grammars follow the interpreter
 

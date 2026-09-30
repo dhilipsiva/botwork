@@ -4,15 +4,94 @@
   "scopeName": "source.botwork.suite",
   "patterns": [
     {
-      "match": "(?i)^\\s*(suite|library|suitesetup|suiteteardown|casesetup|caseteardown|case|dataset|row)\\b",
-      "captures": {
+      "comment": "A suite or case header runs from its keyword to its block and may continue across lines.",
+      "begin": "(?i)^\\s*(suite|case)(?=[ \\t|{}#\\\\]|$)",
+      "end": "(?=\\{)",
+      "beginCaptures": {
         "1": {
           "name": "keyword.other.suite.botwork"
         }
-      }
+      },
+      "patterns": [
+        {
+          "match": "(?i)\\b(named|tags|using|as|from|values)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.suite.botwork"
+            }
+          }
+        },
+        {
+          "include": "source.botwork#comments"
+        },
+        {
+          "include": "source.botwork#parameter"
+        },
+        {
+          "include": "source.botwork#continuation"
+        }
+      ]
     },
     {
-      "match": "(?i)(?<=\\|)\\s*(named|tags|from|values|using|as)\\b",
+      "comment": "A dataset header ends at its block, or at the end of the line when it names a file.",
+      "begin": "(?i)^\\s*(dataset)(?=[ \\t|{}#\\\\]|$)",
+      "end": "(?=\\{)|$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.suite.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "match": "(?i)\\b(named|tags|using|as|from)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.suite.botwork"
+            }
+          }
+        },
+        {
+          "include": "source.botwork#comments"
+        },
+        {
+          "include": "source.botwork#parameter"
+        },
+        {
+          "include": "source.botwork#continuation"
+        }
+      ]
+    },
+    {
+      "comment": "A dataset row is a header that ends with its line.",
+      "begin": "(?i)^\\s*(row)(?=[ \\t|{}#\\\\]|$)",
+      "end": "$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.suite.botwork"
+        }
+      },
+      "patterns": [
+        {
+          "match": "(?i)\\b(named|tags|using|as|from|values)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.suite.botwork"
+            }
+          }
+        },
+        {
+          "include": "source.botwork#comments"
+        },
+        {
+          "include": "source.botwork#parameter"
+        },
+        {
+          "include": "source.botwork#continuation"
+        }
+      ]
+    },
+    {
+      "match": "(?i)^\\s*(library|suitesetup|suiteteardown|casesetup|caseteardown)\\b",
       "captures": {
         "1": {
           "name": "keyword.other.suite.botwork"

@@ -17,3 +17,4 @@ block |comment| "not a string"
 Pair |1| \
   |2|
 Try { Fail |"x"| } Catch |error| { Log |error.code| } Finally { No Operation }
+Break! { Return |1| }

@@ -132,16 +132,18 @@ jobs:
           echo "3f08e63ecd388fff657ad39722f88bb03dcf326f1f2da2700d99e1dc40ab2e8b  helix.tar.xz" | sha256sum --check
           tar --extract --xz --file helix.tar.xz
           echo "$RUNNER_TEMP/helix-25.07.1-x86_64-linux" >> "$GITHUB_PATH"
+      - name: Install the Tree-sitter CLI
+        run: npm install --global tree-sitter-cli@0.25.9
       - name: Install the VS Code extension's locked dependencies
         working-directory: editors/vscode
         run: npm ci --no-audit --no-fund
       - name: Package the VS Code extension
         working-directory: editors/vscode
         run: npm run package
-      - name: Check the editor packages
+      - name: Check the editor packages and their alignment
         env:
           BOTWORK_REQUIRE_EDITORS: all
-        run: cargo +stable test --locked --test editors
+        run: cargo +stable test --locked --test editors --test alignment
 
   fuzz:
     name: Seeded fuzz smoke (AddressSanitizer)

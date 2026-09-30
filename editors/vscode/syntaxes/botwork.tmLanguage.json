@@ -67,7 +67,19 @@
     "keywords": {
       "patterns": [
         {
-          "match": "(?i)^\\s*(if|while|try|return|break|continue|rethrow|eventually|retry|else|catch|finally)\\b",
+          "comment": "`Else If` continues an `If`.",
+          "match": "(?i)(?:^|(?<=\\}))\\s*(else)\\s+(if)(?=[ \\t|{}#\\\\]|$)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.botwork"
+            },
+            "2": {
+              "name": "keyword.control.botwork"
+            }
+          }
+        },
+        {
+          "match": "(?i)^\\s*(if|while|try|return|break|continue|rethrow|eventually|retry|else|catch|finally)(?=[ \\t|{}#\\\\]|$)",
           "captures": {
             "1": {
               "name": "keyword.control.botwork"
@@ -75,7 +87,7 @@
           }
         },
         {
-          "match": "(?i)(?<=\\})\\s*(else|catch|finally)\\b",
+          "match": "(?i)(?<=\\})\\s*(else|catch|finally)(?=[ \\t|{}#\\\\]|$)",
           "captures": {
             "1": {
               "name": "keyword.control.botwork"
@@ -83,7 +95,7 @@
           }
         },
         {
-          "match": "(?i)(?<=\\{)\\s*(if|while|try|return|break|continue|rethrow|eventually|retry)\\b",
+          "match": "(?i)(?<=\\{)\\s*(if|while|try|return|break|continue|rethrow|eventually|retry)(?=[ \\t|{}#\\\\]|$)",
           "captures": {
             "1": {
               "name": "keyword.control.botwork"
@@ -93,7 +105,7 @@
       ]
     },
     "for": {
-      "begin": "(?i)(?:^|(?<=\\{))\\s*(for)\\b",
+      "begin": "(?i)(?:^|(?<=\\{))\\s*(for)(?=[ \\t|{}#\\\\]|$)",
       "end": "(?=\\{)|$",
       "beginCaptures": {
         "1": {
@@ -111,7 +123,7 @@
           "include": "#continuation"
         },
         {
-          "match": "(?i)\\b(in)\\b",
+          "match": "(?i)\\b(in)(?=[ \\t|{}#\\\\]|$)",
           "captures": {
             "1": {
               "name": "keyword.control.botwork"
@@ -121,7 +133,7 @@
       ]
     },
     "import": {
-      "begin": "(?i)^\\s*(import)\\b",
+      "begin": "(?i)^\\s*(import)(?=[ \\t|{}#\\\\]|$)",
       "end": "$",
       "beginCaptures": {
         "1": {
@@ -136,7 +148,7 @@
           "include": "#parameter"
         },
         {
-          "match": "(?i)\\b(as)\\b",
+          "match": "(?i)\\b(as)(?=[ \\t|{}#\\\\]|$)",
           "captures": {
             "1": {
               "name": "keyword.control.import.botwork"

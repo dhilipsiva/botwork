@@ -116,7 +116,11 @@ fn vim_category(category: &str) -> &'static [&'static str] {
         "comment" => &["botworkComment", "botworkBlockComment"],
         "string" => &["botworkString"],
         "escape" => &["botworkEscape"],
-        "keyword" => &["botworkKeyword", "botworkSuiteKeyword"],
+        "keyword" => &[
+            "botworkKeyword",
+            "botworkSuiteKeyword",
+            "botworkHeaderKeyword",
+        ],
         "number" => &["botworkNumber"],
         "boolean" => &["botworkBoolean"],
         "function" => &["botworkWords"],

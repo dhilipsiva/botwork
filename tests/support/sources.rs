@@ -29,6 +29,7 @@ pub fn sources() -> Vec<(String, String, SourceKind)> {
         "examples/datasets",
         "tests/conformance",
         "tests/fixtures",
+        "editors/test",
     ] {
         let mut paths: Vec<_> = fs::read_dir(root.join(directory))
             .unwrap()

@@ -115,8 +115,8 @@ when it is not on `PATH`.
 `tests/editors.rs` checks each package:
 
 - **Highlighting.** Vim and VS Code highlight the shared fixtures in
-  `editors/test` as `editors/test/highlighting.json` expects: 60 tokens across a
-  script and a suite. Vim is probed headless for the syntax group at every
+  `editors/test` as `editors/test/highlighting.json` expects, token by token,
+  in a script and a suite. Vim is probed headless for the syntax group at every
   character. VS Code's own TextMate engine, `vscode-textmate` with Oniguruma,
   tokenizes the fixtures.
 - **VS Code.** The manifest declares both languages, each grammar's scope, the
@@ -145,10 +145,10 @@ confirms the check that reports it.
 ## Limits
 
 - **Regular-expression highlighting.** Vim and VS Code highlight with regular
-  expressions, not the grammar. Keywords are recognized by position: at the
-  start of a statement, after a brace, and, for `In` and `As`, in `For` and
-  `Import`. Unusual layouts can highlight differently from Helix, whose
-  Tree-sitter grammars follow the interpreter.
+  expressions, not the grammar, so they recognize keywords by position. Over
+  the shared corpus they agree with the Tree-sitter queries on every
+  character. [Keeping the tools aligned](alignment.md) gives the rules they
+  follow and the cases where they still differ.
 - **Neovim** configuration follows its documented API but is not exercised by
   the tests.
 - **The VS Code extension** is not published to the Marketplace. Install it
