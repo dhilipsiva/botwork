@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::run::blocking_io;
-use std::{fs, path::Path};
+use std::path::Path;
 
 impl Context {
     fn filesystem_control(&self) -> OperationControl {
@@ -48,11 +48,11 @@ impl Context {
         let canonical = if self.asynchronous {
             let path = path.to_owned();
             blocking_io::run(self.filesystem_control(), move |_| {
-                fs::canonicalize(path).map_err(SourceFailure::Io)
+                crate::core::paths::canonicalize(path).map_err(SourceFailure::Io)
             })
             .await?
         } else {
-            fs::canonicalize(path).map_err(SourceFailure::Io)?
+            crate::core::paths::canonicalize(path).map_err(SourceFailure::Io)?
         };
         self.checkpoint().map_err(SourceFailure::Diagnostic)?;
         Ok(canonical)

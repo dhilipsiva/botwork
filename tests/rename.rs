@@ -218,7 +218,7 @@ fn renames_in_the_conformance_corpus_keep_resolution_and_behavior() {
 fn renames_in_the_examples_keep_resolution_and_behavior() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
     let workspace = tempfile::tempdir().unwrap();
-    let root = fs::canonicalize(workspace.path()).unwrap();
+    let root = botwork::core::paths::canonicalize(workspace.path()).unwrap();
     copy(&examples, &root);
     let language = Language::new(&root);
     let mut scripts: Vec<_> = fs::read_dir(&root)
@@ -345,7 +345,7 @@ fn renaming_module_definitions_updates_importers_and_keeps_their_behavior() {
             .collect();
         for offset in headers {
             let workspace = tempfile::tempdir().unwrap();
-            let root = fs::canonicalize(workspace.path()).unwrap();
+            let root = botwork::core::paths::canonicalize(workspace.path()).unwrap();
             copy(&examples, &root);
             let mut documents = BTreeMap::new();
             for directory in [root.clone(), root.join("modules")] {

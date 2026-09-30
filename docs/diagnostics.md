@@ -104,6 +104,13 @@ metadata, and the language server, keep full names. A host embedding Botwork can
 `botwork::core::diagnostic::show_paths_relative_to`, which takes effect once
 per process.
 
+On Windows, text output uses the platform's separator, as in
+`lib\pricing.botwork`. A canonical name there drops the `\\?\` verbatim prefix
+Windows adds whenever the path means the same without it: a drive or UNC path
+under 260 characters whose names are all ordinary. A host comparing its own
+paths with module names can canonicalize them the same way with
+`botwork::core::paths::canonicalize`.
+
 ### Statements as written
 
 Each entered call in the text output shows its statement as written, such as

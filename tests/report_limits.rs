@@ -88,6 +88,9 @@ fn a_long_logging_loop_keeps_bounded_reports_and_a_complete_stream() {
     assert_eq!((logs, with_text), (ITERATIONS, 64));
 }
 
+// A Windows command line holds 32,767 characters, fewer than the 4,097 file
+// arguments this needs.
+#[cfg(not(windows))]
 #[test]
 fn batch_selections_are_bounded_before_any_output() {
     let harness = Harness::new();

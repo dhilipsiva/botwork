@@ -49,7 +49,9 @@ fn assert_failure(output: &Output, code: &str, source: &str) {
     assert!(output.stdout.is_empty(), "no success report after failure");
     let diagnostic = String::from_utf8_lossy(&output.stderr);
     assert!(diagnostic.contains(code), "{diagnostic}");
-    assert!(diagnostic.contains(source), "{diagnostic}");
+    // Sources are shown with the platform's separators.
+    let source = source.replace('/', std::path::MAIN_SEPARATOR_STR);
+    assert!(diagnostic.contains(&source), "{diagnostic}");
 }
 
 #[cfg(target_os = "linux")]

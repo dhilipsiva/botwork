@@ -125,3 +125,43 @@ fn setup_diagnostics_use_defaults_before_local_run_quotas_are_installed() {
     );
     assert!(error.omissions.is_none());
 }
+
+#[test]
+fn environment_names_ignore_case_only_where_the_platform_does() {
+    let variables = BTreeMap::from([
+        (OsString::from("Path"), OsString::from("bin")),
+        (OsString::from("HOME"), OsString::from("home")),
+    ]);
+    let key = |name: &str, ignore_case| {
+        environment_key(&variables, OsStr::new(name), ignore_case).and_then(|key| key.to_str())
+    };
+    assert_eq!(key("Path", false), Some("Path"));
+    assert_eq!(key("PATH", false), None);
+    assert_eq!(key("PATH", true), Some("Path"));
+    assert_eq!(key("home", true), Some("HOME"));
+    assert_eq!(key("PATHS", true), None);
+    assert_eq!(NAMES_IGNORE_CASE, cfg!(windows));
+}
+
+#[test]
+fn environment_overlays_replace_the_variable_their_name_names() {
+    let host = BTreeMap::from([(OsString::from("Path"), OsString::from("bin"))]);
+    let value = OsString::from("tools");
+    // Where names ignore case, an overlay replaces the variable in its own spelling.
+    let mut variables = host.clone();
+    overlay(&mut variables, OsStr::new("PATH"), Some(&value), true);
+    assert_eq!(
+        variables,
+        BTreeMap::from([(OsString::from("PATH"), value.clone())])
+    );
+    overlay(&mut variables, OsStr::new("path"), None, true);
+    assert!(variables.is_empty());
+    // Elsewhere differently cased names are different variables.
+    let mut variables = host.clone();
+    overlay(&mut variables, OsStr::new("PATH"), Some(&value), false);
+    assert_eq!(variables.len(), 2);
+    overlay(&mut variables, OsStr::new("path"), None, false);
+    assert_eq!(variables.len(), 2);
+    overlay(&mut variables, OsStr::new("Path"), None, false);
+    assert_eq!(variables, BTreeMap::from([(OsString::from("PATH"), value)]));
+}

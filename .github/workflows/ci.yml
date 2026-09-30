@@ -59,6 +59,16 @@ jobs:
             target: aarch64-apple-darwin
             os: macos-latest
             timeout: 30
+          - profile: debug
+            flags: ""
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            timeout: 40
+          - profile: release
+            flags: --release
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            timeout: 40
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -168,7 +168,7 @@ fn definitions_reach_imported_module_files() {
     assert_eq!(client.open(&uri, text), Vec::<Value>::new());
     // Modules are named by their canonical path, which differs where the
     // temporary directory is reached through a link, as on macOS.
-    let module = file_uri(&module.canonicalize().unwrap());
+    let module = file_uri(&botwork::core::paths::canonicalize(&module).unwrap());
     let definition = client.at("textDocument/definition", &uri, 1, 9, json!({}));
     assert_eq!(
         definition,
@@ -248,7 +248,7 @@ fn publications(client: &mut Client, uri: &str) -> std::collections::BTreeMap<St
 #[test]
 fn module_problems_follow_their_importers_and_their_own_documents() {
     let directory = tempfile::tempdir().unwrap();
-    let directory = std::fs::canonicalize(directory.path()).unwrap();
+    let directory = botwork::core::paths::canonicalize(directory.path()).unwrap();
     std::fs::create_dir(directory.join("lib")).unwrap();
     let module = directory.join("lib/m.botwork");
     std::fs::write(&module, "Double |x| { Return |x * y| }\n").unwrap();
@@ -380,7 +380,7 @@ fn apply_edits(text: &str, edits: &Value) -> String {
 #[test]
 fn rename_edits_every_workspace_file_that_reaches_the_definition() {
     let directory = tempfile::tempdir().unwrap();
-    let directory = std::fs::canonicalize(directory.path()).unwrap();
+    let directory = botwork::core::paths::canonicalize(directory.path()).unwrap();
     std::fs::create_dir(directory.join("lib")).unwrap();
     let files = [
         ("lib/math.botwork", "# 😀\nDouble |x| { Return |x * 2| }\n"),

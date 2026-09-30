@@ -1,3 +1,6 @@
+# Check out text files with LF endings everywhere: tests compare output byte
+# for byte, and Windows Git would otherwise convert them to CRLF.
+* text=auto eol=lf
 # Preserve CRLF in the source-location diagnostic fixture.
 /tests/fixtures/invalid-control-unicode.botwork -text whitespace=cr-at-eol
 editors/tree-sitter-botwork/*/src/parser.c linguist-generated

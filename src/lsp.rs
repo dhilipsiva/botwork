@@ -111,8 +111,18 @@ fn name_of(uri: &str) -> String {
         .and_then(|url| url.to_file_path().ok())
         .map_or_else(
             || uri.to_owned(),
-            |path| path.to_string_lossy().into_owned(),
+            |path| upper_drive(path.to_string_lossy().into_owned(), cfg!(windows)),
         )
+}
+
+/// On Windows, a path with its drive letter in upper case, as canonical module
+/// paths spell it: editors such as VS Code send `file:///c%3A/...`, and module
+/// problems and renames match documents by name.
+fn upper_drive(mut name: String, windows: bool) -> String {
+    if windows && name.as_bytes().get(1) == Some(&b':') {
+        name[..1].make_ascii_uppercase();
+    }
+    name
 }
 
 fn uri_of(path: &str) -> String {
@@ -661,9 +671,22 @@ mod tests {
 
     #[test]
     fn file_uris_name_their_paths_and_other_uris_name_themselves() {
-        assert_eq!(name_of("file:///tmp/a%20b.botwork"), "/tmp/a b.botwork");
+        let (uri, path) = if cfg!(windows) {
+            ("file:///C:/work/a%20b.botwork", r"C:\work\a b.botwork")
+        } else {
+            ("file:///tmp/a%20b.botwork", "/tmp/a b.botwork")
+        };
+        assert_eq!(name_of(uri), path);
         assert_eq!(name_of("untitled:Untitled-1"), "untitled:Untitled-1");
-        assert_eq!(uri_of("/tmp/a b.botwork"), "file:///tmp/a%20b.botwork");
+        assert_eq!(
+            upper_drive(r"c:\work\a.botwork".into(), true),
+            r"C:\work\a.botwork"
+        );
+        assert_eq!(upper_drive(r"C:\work".into(), true), r"C:\work");
+        assert_eq!(upper_drive("c:".into(), false), "c:");
+        assert_eq!(upper_drive("/c:/x".into(), true), "/c:/x");
+        assert_eq!(upper_drive("é:".into(), true), "é:");
+        assert_eq!(uri_of(path), uri);
         assert_eq!(uri_of("relative.botwork"), "relative.botwork");
         assert!(matches!(
             kind_of("file:///x/a.suite.botwork"),

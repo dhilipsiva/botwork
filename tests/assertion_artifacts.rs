@@ -59,6 +59,7 @@ fn single_file_keeps_large_operands_in_private_artifacts_and_previews_in_stderr(
     let artifacts = records(&harness.workspace.join("artifacts"));
     assert_eq!(artifacts.len(), 1);
     let (path, record) = &artifacts[0];
+    assert!(path.is_file());
     assert_eq!(record["format"], "botwork-assertion");
     assert_eq!(record["version"], 1);
     assert_eq!(record["identity"]["run"], 1);

@@ -54,7 +54,7 @@ fn writer_admits_exact_id_capacity_and_rejections_preserve_the_previous_record()
 #[test]
 fn temporary_collisions_are_retried_without_overwrite_and_other_io_errors_keep_their_cause() {
     let _serial = SERIAL.lock().unwrap();
-    let mut directory = Directory::new();
+    let directory = Directory::new();
     let path = directory.0.join("failed.json");
     let history = History::begin(path.clone()).unwrap();
     let collision = directory.0.join(format!(
@@ -69,11 +69,14 @@ fn temporary_collisions_are_retried_without_overwrite_and_other_io_errors_keep_t
         fs::read_to_string(&collision).unwrap(),
         "unrelated temporary file"
     );
-    let moved = directory.0.with_extension("moved");
-    fs::rename(&directory.0, &moved).unwrap();
-    directory.0 = moved;
-    let error = history.finish(vec![]).unwrap_err().to_string();
-    assert!(error.contains("Failed-case record"), "{error}");
-    assert!(!error.contains("collisions exhausted"), "{error}");
-    assert_eq!(load(&directory.0.join("failed.json")).unwrap(), ["s/a"]);
+    // Windows cannot move a directory while the record's lock is open in it.
+    #[cfg(unix)]
+    {
+        let moved = Directory(directory.0.with_extension("moved"));
+        fs::rename(&directory.0, &moved.0).unwrap();
+        let error = history.finish(vec![]).unwrap_err().to_string();
+        assert!(error.contains("Failed-case record"), "{error}");
+        assert!(!error.contains("collisions exhausted"), "{error}");
+        assert_eq!(load(&moved.0.join("failed.json")).unwrap(), ["s/a"]);
+    }
 }

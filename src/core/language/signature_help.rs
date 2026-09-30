@@ -244,7 +244,7 @@ fn exports(module: &Path, alias: &str, depth: usize, found: &mut Vec<(String, St
                 path, namespace, ..
             } => {
                 if let Some(nested) = super::module_path(&name, Path::new("/"), path)
-                    .and_then(|requested| std::fs::canonicalize(requested).ok())
+                    .and_then(|requested| crate::core::paths::canonicalize(requested).ok())
                 {
                     exports(
                         &nested,

@@ -77,7 +77,7 @@ async fn filesystem_statements_have_same_async_effects_and_results() {
 fn paths_use_native_syntax_and_the_run_directory_without_global_changes() {
     let directory = tempfile::tempdir().unwrap();
     let global = std::env::current_dir().unwrap();
-    let expected = fs::canonicalize(directory.path()).unwrap();
+    let expected = botwork::core::paths::canonicalize(directory.path()).unwrap();
     fs::create_dir(directory.path().join("child")).unwrap();
     let result = Engine::default().run_source(
         "paths",
@@ -123,16 +123,19 @@ Assert |@{ Path Separator }| Equals |separator|
 #[test]
 fn environment_reads_use_exact_immutable_run_overlays_and_preserve_empty_values() {
     let directory = tempfile::tempdir().unwrap();
-    let result = Engine::default().run_source(
-        "environment",
-        r#"
+    // Windows names the same variable in any case, as the system does.
+    let source = r#"
 Assert |@{ Environment Variable Exists |"Name"| }| Equals |true|
-Assert |@{ Environment Variable Exists |"NAME"| }| Equals |false|
+Assert |@{ Environment Variable Exists |"NAME"| }| Equals |WINDOWS|
 Assert |@{ Get Environment Variable |"Name"| }| Equals |"é"|
 Assert |@{ Get Environment Variable |"empty"| }| Equals |""|
 Assert |@{ Get Environment Variable |"removed"| }| Equals |@{ No Operation }|
 Assert |@{ Environment Variables }| Equals |{"Name": "é", "empty": ""}|
-"#,
+"#
+    .replace("WINDOWS", &cfg!(windows).to_string());
+    let result = Engine::default().run_source(
+        "environment",
+        &source,
         RunOptions {
             environment: BTreeMap::from([
                 ("Name".into(), Some("é".into())),

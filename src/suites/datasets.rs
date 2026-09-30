@@ -6,7 +6,7 @@ use botwork::core::{
 };
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self, OpenOptions},
+    fs::OpenOptions,
     path::Path,
 };
 
@@ -99,7 +99,7 @@ impl Discovery {
         span: &Span,
         format: DatasetFormat,
     ) -> Result<Arc<Dataset>, Diagnostic> {
-        let canonical = fs::canonicalize(path).map_err(|error| {
+        let canonical = botwork::core::paths::canonicalize(path).map_err(|error| {
             Diagnostic::new(BWErr::ImportRead(format!(
                 "Dataset {}: {error}",
                 path.display()

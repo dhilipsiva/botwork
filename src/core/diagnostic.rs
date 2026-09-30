@@ -252,7 +252,7 @@ static SHOWN_RELATIVE_TO: OnceLock<Vec<PathBuf>> = OnceLock::new();
 pub fn show_paths_relative_to(directory: &Path) {
     let mut bases = vec![directory.to_path_buf()];
     // Module paths are canonical, and the directory may reach them through a link.
-    if let Ok(canonical) = directory.canonicalize() {
+    if let Ok(canonical) = super::paths::canonicalize(directory) {
         if canonical != directory {
             bases.push(canonical);
         }

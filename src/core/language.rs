@@ -413,7 +413,7 @@ impl IndexBuilder<'_> {
                 } => {
                     let module =
                         module_path(path_span.source().name(), &self.language.directory, path)
-                            .and_then(|requested| fs::canonicalize(requested).ok());
+                            .and_then(|requested| super::paths::canonicalize(requested).ok());
                     if self.seen.insert((path_span.start(), path_span.end(), 1)) {
                         self.index.imports.push(ImportSymbol {
                             path_span: (path_span.start(), path_span.end()),
@@ -667,7 +667,11 @@ fn reexported(module: &Path, exported: &str, depth: usize) -> Option<(PathBuf, S
             _ => None,
         })?;
     let requested = module_path(&name, Path::new("/"), &import)?;
-    reexported(&fs::canonicalize(requested).ok()?, rest, depth + 1)
+    reexported(
+        &super::paths::canonicalize(requested).ok()?,
+        rest,
+        depth + 1,
+    )
 }
 
 /// Where a module defines `signature` at its root, and the header.

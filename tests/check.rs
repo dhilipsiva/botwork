@@ -1,6 +1,11 @@
 //! `--check` parses, validates, and lints files and suites without running them.
 use std::{fs, path::Path, process::Command};
 
+/// Text naming files under `lib/` as the platform shows them.
+fn native(text: &str) -> String {
+    text.replace("lib/", &format!("lib{}", std::path::MAIN_SEPARATOR))
+}
+
 fn check(directory: &Path, arguments: &[&str]) -> (Option<i32>, String, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
         .arg("--check")
@@ -159,14 +164,14 @@ fn imported_modules_are_checked_and_reported_with_their_own_paths() {
         .collect();
     assert_eq!(
         lines[0],
-        "lib/broken.botwork:2:1: [BW1001] Parsing error:  --> 2:1"
+        native("lib/broken.botwork:2:1: [BW1001] Parsing error:  --> 2:1")
     );
     assert!(
         lines.contains(&"main.botwork:3:9-3:26: error[undefined-statement]: [BW2002] Statement not defined: math::Doubled |2|"),
         "{stderr}"
     );
-    let module = "lib/math.botwork:2:18-2:25: warning[undefined-variable]: [BW2001] `missing` is never assigned in a scope that reaches this read";
-    assert!(lines.contains(&module), "{stderr}");
+    let module = native("lib/math.botwork:2:18-2:25: warning[undefined-variable]: [BW2001] `missing` is never assigned in a scope that reaches this read");
+    assert!(lines.contains(&module.as_str()), "{stderr}");
     assert!(
         stderr.ends_with("[check] 1 file, 1 module: 2 errors, 1 warning\n"),
         "{stderr}"
@@ -318,7 +323,8 @@ fn modules_outside_the_working_directory_keep_their_full_path() {
         "Import |\"../shared/lib.botwork\"| As |lib|\nLog |@{ lib::Reader }|\n",
     )
     .unwrap();
-    let full = fs::canonicalize(directory.path().join("shared/lib.botwork")).unwrap();
+    let full =
+        botwork::core::paths::canonicalize(directory.path().join("shared/lib.botwork")).unwrap();
     let (_, _, stderr) = check(&work, &["--file", "main.botwork"]);
     assert!(
         stderr.starts_with(&format!(
@@ -377,7 +383,8 @@ fn run_output_shows_modules_inside_the_working_directory_like_the_files_given() 
         "  in `pricing::Total |x|` called at main.botwork:2:9 (defined at lib/pricing.botwork:1:1)",
         "failed \"main.botwork\" (BW2001 at lib/pricing.botwork:2:17)",
     ] {
-        assert!(stderr.contains(expected), "missing {expected:?}: {stderr}");
+        let expected = native(expected);
+        assert!(stderr.contains(&expected), "missing {expected:?}: {stderr}");
     }
     assert!(
         !stderr.contains(&*directory.path().to_string_lossy()),
@@ -408,7 +415,7 @@ fn locations_inside_error_messages_follow_the_text_output() {
     // The duplicate parameter's message names both of its locations.
     assert!(stderr.contains("[BW1003]"), "{stderr}");
     assert!(
-        stderr.matches("lib/pair.botwork:1:").count() >= 3,
+        stderr.matches(&native("lib/pair.botwork:1:")).count() >= 3,
         "{stderr}"
     );
     assert!(

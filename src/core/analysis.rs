@@ -658,7 +658,7 @@ impl Checker<'_, '_> {
             );
             return None;
         };
-        let canonical = match fs::canonicalize(&requested) {
+        let canonical = match super::paths::canonicalize(&requested) {
             Ok(canonical) => canonical,
             Err(error) => {
                 self.push(

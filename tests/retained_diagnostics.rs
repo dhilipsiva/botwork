@@ -327,7 +327,10 @@ fn imported_calls_share_inherited_records_and_deduplicate_source_owners() {
         "Import |\"module.botwork\"| As |lib|\nWrapper { Return |@{ lib::Value }| }\n|x| = Wrapper";
     let bytes = "entry".len()
         + source.len()
-        + path.canonicalize().unwrap().to_string_lossy().len()
+        + botwork::core::paths::canonicalize(&path)
+            .unwrap()
+            .to_string_lossy()
+            .len()
         + module.len();
     for fits in [false, true] {
         let mut configuration = options(RetainedDiagnosticLimits {
@@ -900,9 +903,13 @@ fn imported_parser_failures_include_live_caller_and_import_sites_in_shared_const
                 let omitted = error.causes[0].omissions.as_ref().unwrap();
                 assert_eq!(omitted.call_frames, 1);
                 assert!(omitted.related_locations >= 1);
+                // Modules are named by their canonical path.
                 assert_eq!(
                     omitted.source.as_ref().unwrap().file,
-                    path.to_str().unwrap()
+                    botwork::core::paths::canonicalize(&path)
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
                 );
             }
         }

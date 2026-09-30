@@ -10,7 +10,7 @@ use botwork::core::{
 use std::{
     collections::HashMap,
     fmt::{self, Write},
-    fs::{self, File},
+    fs::File,
     io::Read,
     path::{Component, Path, PathBuf},
 };
@@ -177,7 +177,8 @@ pub(super) fn href(path: &str, directory: &Path) -> String {
     let absolute = std::env::current_dir()
         .map(|current| current.join(path))
         .unwrap_or_else(|_| path.to_path_buf());
-    let absolute = fs::canonicalize(&absolute).unwrap_or_else(|_| lexical(&absolute));
+    let absolute =
+        botwork::core::paths::canonicalize(&absolute).unwrap_or_else(|_| lexical(&absolute));
     match absolute.strip_prefix(directory) {
         Ok(relative)
             if relative
@@ -186,8 +187,18 @@ pub(super) fn href(path: &str, directory: &Path) -> String {
         {
             encode(relative)
         }
-        _ => format!("file://{}", encode(&absolute)),
+        _ => file_url(&absolute),
     }
+}
+
+/// A `file:` URL for an absolute path.
+fn file_url(path: &Path) -> String {
+    // A Windows drive path needs its own slash before the drive letter.
+    #[cfg(windows)]
+    if let Ok(url) = url::Url::from_file_path(path) {
+        return url.to_string();
+    }
+    format!("file://{}", encode(path))
 }
 
 /// Source files read once, bounded, for statement and error excerpts.
@@ -708,6 +719,7 @@ pub(super) fn render(document: &Document<'_>, directory: &Path, budget: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn text_escapes_markup_quotes_and_nul() {
@@ -720,18 +732,30 @@ mod tests {
     #[test]
     fn links_are_relative_beneath_the_report_and_encoded() {
         let directory = tempfile::tempdir().unwrap();
-        let base = fs::canonicalize(directory.path()).unwrap();
-        let nested = base.join("evidence dir").join("a#1?.json");
+        let base = botwork::core::paths::canonicalize(directory.path()).unwrap();
+        // Windows file names cannot hold `?`.
+        let (name, encoded) = if cfg!(windows) {
+            ("a#1%.json", "a%231%25.json")
+        } else {
+            ("a#1?.json", "a%231%3F.json")
+        };
+        let nested = base.join("evidence dir").join(name);
         fs::create_dir_all(nested.parent().unwrap()).unwrap();
         fs::write(&nested, "{}").unwrap();
         assert_eq!(
             href(nested.to_str().unwrap(), &base),
-            "evidence%20dir/a%231%3F.json"
+            format!("evidence%20dir/{encoded}")
         );
         let outside = base.join("..").join("elsewhere.json");
         let link = href(outside.to_str().unwrap(), &base);
         assert!(
             link.starts_with("file:///") && !link.contains(".."),
+            "{link}"
+        );
+        #[cfg(windows)]
+        assert!(
+            link[8..].starts_with(|drive: char| drive.is_ascii_alphabetic())
+                && link[9..].starts_with(':'),
             "{link}"
         );
     }

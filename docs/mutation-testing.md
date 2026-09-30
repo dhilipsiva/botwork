@@ -508,6 +508,17 @@ Its 536-entry catalogue adds 12 faults, with the library tests and the
 `stack_headroom` suite as oracles; see
 [stack headroom evidence](stack-headroom-evidence.json).
 
+Version 46 runs every test on Windows. Its faults simplify verbatim paths at 260
+characters, with device names, trailing dots, or no drive letter, and drop a UNC
+path's server prefix; match environment names exactly on Windows or by case
+everywhere, or leave a differently cased variable behind an overlay; ignore a
+path beneath a regular file, look at its farthest ancestor, or classify it on
+every platform; and keep a document's lower-case drive letter. Two earlier
+faults were moved to the lines they target now.
+
+Its 548-entry catalogue adds 12 faults, with the library and binary tests as
+oracles; see [Windows CI evidence](windows-ci-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

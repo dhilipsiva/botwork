@@ -467,8 +467,8 @@ fn cycle_construction_preserves_chain_and_all_parent_sites_through_unwinding() {
     let BWErr::ImportCycle(chain) = baseline.error.as_ref() else {
         panic!("cycle")
     };
-    let a = fs::canonicalize(first).unwrap();
-    let b = fs::canonicalize(second).unwrap();
+    let a = botwork::core::paths::canonicalize(first).unwrap();
+    let b = botwork::core::paths::canonicalize(second).unwrap();
     assert_eq!(
         chain,
         &format!("{} -> {} -> {}", a.display(), b.display(), a.display())

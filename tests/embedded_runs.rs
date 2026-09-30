@@ -172,7 +172,10 @@ fn environment_overlay_is_per_run_and_never_changes_the_host() {
         .register_native("Environment", move |_, environment| {
             assert!(environment.get(&removed).is_none());
             assert_eq!(environment.get("BOTWORK_RUN_TEST").unwrap(), "local");
-            assert_eq!(environment.working_directory(), cwd.canonicalize().unwrap());
+            assert_eq!(
+                environment.working_directory(),
+                botwork::core::paths::canonicalize(&cwd).unwrap()
+            );
             Ok(Literal::Int(environment.variables().len() as i32))
         })
         .unwrap();

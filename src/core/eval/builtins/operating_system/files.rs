@@ -19,7 +19,7 @@ pub(super) fn invoke(op: OsOp, arguments: &[TemporaryValue], context: &Context) 
         OsOp::Canonical => {
             return paths::output(
                 context,
-                &fs::canonicalize(&path)
+                &crate::core::paths::canonicalize(&path)
                     .map_err(|error| io_error(context, "Canonicalize", &path, error))?,
             )
         }
@@ -180,7 +180,7 @@ fn inspect(context: &Context, op: OsOp, path: &Path) -> TemporaryResult {
     } else {
         fs::symlink_metadata(path)
     };
-    let metadata = match result {
+    let metadata = match result.map_err(|error| wrong_parent(path, error, PARENTS_LOOK_MISSING)) {
         Ok(metadata) => Some(metadata),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(io_error(context, "Inspect", path, error)),
@@ -269,10 +269,34 @@ fn ignore_missing(
     path: &Path,
     result: io::Result<()>,
 ) -> EvaluationResult<()> {
-    match result {
+    match result.map_err(|error| wrong_parent(path, error, PARENTS_LOOK_MISSING)) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(io_error(context, action, path, error)),
+    }
+}
+
+/// Whether the platform reports a path beneath a regular file as missing:
+/// Windows does, where Unix reports that the parent is not a directory.
+const PARENTS_LOOK_MISSING: bool = cfg!(windows);
+
+/// `error`, or when it reports `path` missing only because an existing
+/// ancestor is not a directory, that error instead, so a wrong parent type is
+/// never mistaken for a missing path.
+fn wrong_parent(path: &Path, error: io::Error, parents_look_missing: bool) -> io::Error {
+    if !parents_look_missing || error.kind() != io::ErrorKind::NotFound {
+        return error;
+    }
+    let under_a_file = path
+        .ancestors()
+        .skip(1)
+        .filter(|ancestor| !ancestor.as_os_str().is_empty())
+        .find_map(|ancestor| fs::metadata(ancestor).ok())
+        .is_some_and(|metadata| !metadata.is_dir());
+    if under_a_file {
+        io::Error::new(io::ErrorKind::NotADirectory, "a parent is not a directory")
+    } else {
+        error
     }
 }
 

@@ -31,7 +31,7 @@ fn read(path: &Path) -> Result<String, String> {
 /// Replace `path` with `text` by writing a sibling file and renaming it over the
 /// original, keeping the original's permissions. A failure leaves the original.
 fn replace(path: &Path, text: &str) -> io::Result<()> {
-    let target = fs::canonicalize(path)?;
+    let target = botwork::core::paths::canonicalize(path)?;
     let directory = target.parent().unwrap_or(Path::new("/"));
     let name = target.file_name().unwrap_or_default().to_string_lossy();
     let permissions = fs::metadata(&target)?.permissions();

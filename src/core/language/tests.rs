@@ -130,7 +130,7 @@ fn imports_resolve_to_module_files_and_their_definitions() {
     let analysis = language.analyze("main.botwork", text, SourceKind::Script);
     // The module's own warning about `y` belongs to the module's file.
     assert!(analysis.problems.is_empty(), "{:?}", analysis.problems);
-    let math = fs::canonicalize(directory.path().join("lib/math.botwork")).unwrap();
+    let math = crate::core::paths::canonicalize(directory.path().join("lib/math.botwork")).unwrap();
     let related = &analysis.related[math.to_str().unwrap()];
     assert_eq!(related.text, "Double |x| { Return |x * y| }\n");
     let codes: Vec<_> = related
@@ -141,9 +141,11 @@ fn imports_resolve_to_module_files_and_their_definitions() {
     assert_eq!(codes, [("BW2001", 25, 26)]);
     assert_eq!(analysis.related.len(), 1);
     let module = analysis.definition(offset(text, "lib/wrap"));
-    assert!(module[0].file.ends_with("lib/wrap.botwork"), "{module:?}");
+    // Compared by components, since Windows separates them with `\`.
+    let ends = |file: &str, tail: &str| std::path::Path::new(file).ends_with(tail);
+    assert!(ends(&module[0].file, "lib/wrap.botwork"), "{module:?}");
     let target = analysis.definition(offset(text, "w::m::Double"));
-    assert!(target[0].file.ends_with("lib/math.botwork"), "{target:?}");
+    assert!(ends(&target[0].file, "lib/math.botwork"), "{target:?}");
     assert_eq!(target[0].start, 0);
     let hover = analysis
         .hover(&language, offset(text, "w::m::Double"))

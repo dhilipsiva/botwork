@@ -141,7 +141,7 @@ fn variable_renames_that_could_change_resolution_are_refused() {
 #[test]
 fn module_definitions_are_renamed_across_their_importers() {
     let directory = tempfile::tempdir().unwrap();
-    let root = fs::canonicalize(directory.path()).unwrap();
+    let root = crate::core::paths::canonicalize(directory.path()).unwrap();
     fs::create_dir(root.join("lib")).unwrap();
     let files = [
         (
@@ -158,15 +158,19 @@ fn module_definitions_are_renamed_across_their_importers() {
             "Import |\"lib/wrap.botwork\"| As |w|\nLog |@{ w::m::double |3| }|\n",
         ),
     ];
+    // Files named as the language names modules: joined component by
+    // component, so Windows separates them with `\` throughout.
+    let name = |file: &str| {
+        file.split('/')
+            .fold(root.clone(), |path, part| path.join(part))
+            .to_string_lossy()
+            .into_owned()
+    };
     let mut documents = BTreeMap::new();
-    for (name, text) in files {
-        fs::write(root.join(name), text).unwrap();
-        documents.insert(
-            root.join(name).to_string_lossy().into_owned(),
-            text.to_owned(),
-        );
+    for (file, text) in files {
+        fs::write(root.join(file), text).unwrap();
+        documents.insert(name(file), text.to_owned());
     }
-    let name = |file: &str| root.join(file).to_string_lossy().into_owned();
     let language = Language::new(&root);
     let main = &documents[&name("main.botwork")];
     let edits = language

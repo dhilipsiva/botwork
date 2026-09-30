@@ -81,7 +81,7 @@ defines creation and permission handling.
 | `File Extension \|path\|` | Final extension without its dot; empty String for a trailing dot, None when absent |
 | `Path Is Absolute \|path\|` | Bool using native path syntax |
 | `Path Components \|path\|` | Array of lexical components, including native roots/prefixes and `..` |
-| `Environment Variable Exists \|name\|` | Exact-key existence in the run's immutable environment snapshot |
+| `Environment Variable Exists \|name\|` | Whether the run's immutable environment snapshot has the variable `name` names |
 | `Get Environment Variable \|name\|` | String, or None for a missing key; empty values remain empty Strings |
 | `Environment Variables` | Map of every snapshotted environment name and value |
 | `Operating System` | Rust target OS name, such as `linux`, `windows`, or `macos` |
@@ -102,7 +102,11 @@ spelling apart from its empty-input rule; it does not require existence. Only
 Canonical Path accesses the filesystem. See [Rust path semantics](https://doc.rust-lang.org/std/path/struct.Path.html).
 
 Environment access reads the snapshot configured by RunOptions inheritance and
-overlays, with exact keys and no added case folding. Missing differs from empty.
+overlays. Names match exactly, except on Windows, where they match without regard
+to ASCII case as the operating system matches them: `PATH` there names the
+variable Windows spells `Path`, and an overlay replaces it in the overlay's
+spelling. `Environment Variables` keeps each name as the snapshot spells it.
+Missing differs from empty.
 Names must be nonempty and contain neither `=` nor NUL. Existence testing does
 not decode the value; Get and Environment Variables reject non-UTF-8 data.
 Environment statements use an Engine run or the CLI's host snapshot. Low-level
@@ -113,6 +117,9 @@ without a configured environment reports BW7002. See [embedded run configuration
 
 BW3003 covers wrong kinds, invalid paths/prefixes/bytes, and non-UTF-8 values.
 BW4002 covers filesystem failures with the operation, path, and OS reason.
+A path beneath a regular file is such a failure on every platform, not a missing
+path: Windows reports it as missing, so there Botwork checks the nearest existing
+ancestor.
 BW8001 denotes resource exhaustion. Ordinary errors remain catchable; stops and
 resource failures follow the existing non-catchable stop policy.
 
@@ -212,7 +219,7 @@ Try {
 Log |@{ Collection Contains |["linux", "macos", "windows"]| Item |system| }|  # true
 Log |@{ Path Separator } == "/" or system == "windows"|         # true
 Log |@{ Environment Variable Exists |"PATH"| }|                 # true
-Log |@{ Collection Contains |@{ Environment Variables }| Item |"PATH"| }|    # true
+Log |@{ Length Of |@{ Environment Variables }| } > 0|             # true
 ```
 
 The same program is [example 32](../examples/32-operating-system.botwork).

@@ -282,6 +282,39 @@ impl Context {
     }
 }
 
+/// Whether environment names match without regard to ASCII case: on Windows,
+/// as the operating system matches them.
+const NAMES_IGNORE_CASE: bool = cfg!(windows);
+
+/// The stored name that `name` names among `variables`.
+fn environment_key<'a>(
+    variables: &'a BTreeMap<OsString, OsString>,
+    name: &OsStr,
+    ignore_case: bool,
+) -> Option<&'a OsString> {
+    if ignore_case {
+        variables.keys().find(|key| key.eq_ignore_ascii_case(name))
+    } else {
+        variables.get_key_value(name).map(|(key, _)| key)
+    }
+}
+
+/// Set or remove `name`, replacing the variable it names whatever that
+/// variable's case where names ignore case.
+fn overlay(
+    variables: &mut BTreeMap<OsString, OsString>,
+    name: &OsStr,
+    value: Option<&OsString>,
+    ignore_case: bool,
+) {
+    if let Some(key) = environment_key(variables, name, ignore_case).cloned() {
+        variables.remove(&key);
+    }
+    if let Some(value) = value {
+        variables.insert(name.to_owned(), value.clone());
+    }
+}
+
 impl RunEnvironment {
     pub(crate) fn with_control(&self, control: OperationControl) -> Self {
         Self {
@@ -299,8 +332,10 @@ impl RunEnvironment {
     pub fn variables(&self) -> &BTreeMap<OsString, OsString> {
         &self.variables
     }
+    /// The variable `name` names; on Windows its case does not matter.
     pub fn get(&self, name: impl AsRef<OsStr>) -> Option<&OsStr> {
-        self.variables.get(name.as_ref()).map(OsString::as_os_str)
+        environment_key(&self.variables, name.as_ref(), NAMES_IGNORE_CASE)
+            .map(|key| self.variables[key].as_os_str())
     }
     pub fn control(&self) -> &OperationControl {
         &self.control
@@ -345,7 +380,7 @@ impl RunEnvironment {
             .map(Ok)
             .unwrap_or_else(std::env::current_dir)
             .map_err(|error| failure(format_args!("{error}")))?;
-        let directory = fs::canonicalize(&directory)
+        let directory = super::paths::canonicalize(&directory)
             .map_err(|error| failure(format_args!("{}: {error}", directory.display())))?;
         control.checkpoint()?;
         if !directory.is_dir() {
@@ -376,14 +411,7 @@ impl RunEnvironment {
                     "Environment values must not contain NUL"
                 )));
             }
-            match value {
-                Some(value) => {
-                    variables.insert(name.clone(), value.clone());
-                }
-                None => {
-                    variables.remove(name);
-                }
-            }
+            overlay(&mut variables, name, value.as_ref(), NAMES_IGNORE_CASE);
         }
         control.checkpoint()?;
         Ok(Self {

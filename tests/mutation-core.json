@@ -1,5 +1,5 @@
 {
-  "version": 45,
+  "version": 46,
   "mutations": [
     {
       "id": "precedence-products",
@@ -68,8 +68,8 @@
       "id": "environment-removal-ignored",
       "area": "isolation",
       "file": "src/core/run.rs",
-      "before": "                None => {\n                    variables.remove(name);\n                }",
-      "after": "                None => {}"
+      "before": "        variables.remove(&key);\n",
+      "after": "        let _ = &key;\n"
     },
     {
       "id": "input-variables-discarded",
@@ -2973,8 +2973,8 @@
       "id": "lsp-reexports-not-followed",
       "area": "lsp",
       "file": "src/core/language.rs",
-      "before": "    reexported(&fs::canonicalize(requested).ok()?, rest, depth + 1)\n",
-      "after": "    fs::canonicalize(requested).ok().and(None)\n"
+      "before": "    reexported(\n        &super::paths::canonicalize(requested).ok()?,\n        rest,\n        depth + 1,\n    )\n",
+      "after": "    super::paths::canonicalize(requested).ok().and(None)\n"
     },
     {
       "id": "lsp-outermost-call-chosen",
@@ -3752,6 +3752,90 @@
       "file": "src/main.rs",
       "before": "        .stack_size(STACK_BYTES)\n",
       "after": "        .stack_size(2 * 1024 * 1024)\n"
+    },
+    {
+      "id": "verbatim-long-path-simplified",
+      "area": "windows-paths",
+      "file": "src/core/paths.rs",
+      "before": "    (ordinary && simple.len() < MAX_PATH).then_some(simple)\n",
+      "after": "    (ordinary && simple.len() <= MAX_PATH).then_some(simple)\n"
+    },
+    {
+      "id": "verbatim-device-names-simplified",
+      "area": "windows-paths",
+      "file": "src/core/paths.rs",
+      "before": "            .any(|device| stem.eq_ignore_ascii_case(device))\n",
+      "after": "            .any(|device| stem.is_empty() && device.is_empty())\n"
+    },
+    {
+      "id": "verbatim-trailing-dots-simplified",
+      "area": "windows-paths",
+      "file": "src/core/paths.rs",
+      "before": "        && !name.ends_with(['.', ' '])\n",
+      "after": "        && !name.ends_with(['\\0'])\n"
+    },
+    {
+      "id": "verbatim-unc-server-dropped",
+      "area": "windows-paths",
+      "file": "src/core/paths.rs",
+      "before": "        (r\"\\\\\", rest)\n",
+      "after": "        (\"\", rest)\n"
+    },
+    {
+      "id": "verbatim-drive-unchecked",
+      "area": "windows-paths",
+      "file": "src/core/paths.rs",
+      "before": "        if drive.len() < 3 || !drive[0].is_ascii_alphabetic() || &drive[1..3] != br\":\\\" {\n",
+      "after": "        if drive.len() < 3 {\n"
+    },
+    {
+      "id": "environment-case-always-exact",
+      "area": "windows-paths",
+      "file": "src/core/run.rs",
+      "before": "    if ignore_case {\n",
+      "after": "    if ignore_case && false {\n"
+    },
+    {
+      "id": "environment-case-folded-everywhere",
+      "area": "windows-paths",
+      "file": "src/core/run.rs",
+      "before": "const NAMES_IGNORE_CASE: bool = cfg!(windows);\n",
+      "after": "const NAMES_IGNORE_CASE: bool = true;\n"
+    },
+    {
+      "id": "environment-overlay-keeps-other-case",
+      "area": "windows-paths",
+      "file": "src/core/run.rs",
+      "before": "    if let Some(key) = environment_key(variables, name, ignore_case).cloned() {\n",
+      "after": "    if let Some(key) = environment_key(variables, name, false).cloned() {\n"
+    },
+    {
+      "id": "wrong-parent-ignored",
+      "area": "windows-paths",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "    if under_a_file {\n",
+      "after": "    if under_a_file && false {\n"
+    },
+    {
+      "id": "wrong-parent-farthest-ancestor",
+      "area": "windows-paths",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "        .find_map(|ancestor| fs::metadata(ancestor).ok())\n",
+      "after": "        .filter_map(|ancestor| fs::metadata(ancestor).ok())\n        .last()\n"
+    },
+    {
+      "id": "wrong-parent-everywhere",
+      "area": "windows-paths",
+      "file": "src/core/eval/builtins/operating_system/files.rs",
+      "before": "const PARENTS_LOOK_MISSING: bool = cfg!(windows);\n",
+      "after": "const PARENTS_LOOK_MISSING: bool = true;\n"
+    },
+    {
+      "id": "drive-letter-kept",
+      "area": "windows-paths",
+      "file": "src/lsp.rs",
+      "before": "    if windows && name.as_bytes().get(1) == Some(&b':') {\n",
+      "after": "    if windows && false {\n"
     }
   ]
 }

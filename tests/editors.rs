@@ -89,13 +89,18 @@ qall!
 "#,
     )
     .unwrap();
+    // Vim commands read a backslash as an escape; forward slashes work everywhere.
+    let vim_path = |path: &Path| path.to_string_lossy().replace('\\', "/");
     let status = Command::new("vim")
         .args(["-Nu", "NONE", "-i", "NONE", "-es", "--cmd"])
-        .arg(format!("set rtp^={}", root().join("editors/vim").display()))
+        .arg(format!(
+            "set rtp^={}",
+            vim_path(&root().join("editors/vim"))
+        ))
         .args(["-c", "filetype plugin on", "-c", "syntax on", "-c"])
-        .arg(format!("edit {}", file.display()))
+        .arg(format!("edit {}", vim_path(file)))
         .arg("-c")
-        .arg(format!("source {}", script.display()))
+        .arg(format!("source {}", vim_path(&script)))
         .env("PROBE_OUT", &output)
         .status()
         .unwrap();

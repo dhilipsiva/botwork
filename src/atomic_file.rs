@@ -39,7 +39,8 @@ impl AtomicFile {
             .parent()
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
-        let parent = fs::canonicalize(parent).map_err(|cause| error(&path, &cause))?;
+        let parent =
+            botwork::core::paths::canonicalize(parent).map_err(|cause| error(&path, &cause))?;
         let path = parent.join(filename);
         let mut lock_name = filename.to_os_string();
         lock_name.push(".lock");

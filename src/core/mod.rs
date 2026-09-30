@@ -13,6 +13,7 @@ pub mod language;
 pub mod listener;
 pub mod operation;
 mod parser;
+pub mod paths;
 pub mod report;
 pub mod run;
 pub mod secret;

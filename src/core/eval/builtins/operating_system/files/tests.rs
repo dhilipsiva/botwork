@@ -93,3 +93,38 @@ fn writes_observe_cancellation_between_partial_effects_and_reject_zero_progress(
         DiagnosticCode::Native
     );
 }
+
+#[test]
+fn paths_beneath_a_file_are_wrong_parents_where_the_platform_calls_them_missing() {
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("kept"), b"old").unwrap();
+    let missing = || io::Error::from(io::ErrorKind::NotFound);
+    let beneath = directory.path().join("kept").join("child");
+    // Where the platform says missing, the file among its ancestors decides.
+    assert_eq!(
+        wrong_parent(&beneath, missing(), true).kind(),
+        io::ErrorKind::NotADirectory
+    );
+    let nested = directory.path().join("kept").join("a").join("b");
+    assert_eq!(
+        wrong_parent(&nested, missing(), true).kind(),
+        io::ErrorKind::NotADirectory
+    );
+    // A path beneath missing directories is missing.
+    let absent = directory.path().join("absent").join("child");
+    assert_eq!(
+        wrong_parent(&absent, missing(), true).kind(),
+        io::ErrorKind::NotFound
+    );
+    // Other errors, and platforms that report the parent, are unchanged.
+    let denied = io::Error::from(io::ErrorKind::PermissionDenied);
+    assert_eq!(
+        wrong_parent(&beneath, denied, true).kind(),
+        io::ErrorKind::PermissionDenied
+    );
+    assert_eq!(
+        wrong_parent(&beneath, missing(), false).kind(),
+        io::ErrorKind::NotFound
+    );
+    assert_eq!(PARENTS_LOOK_MISSING, cfg!(windows));
+}

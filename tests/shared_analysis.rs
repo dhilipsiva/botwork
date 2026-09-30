@@ -92,7 +92,7 @@ fn check(
             );
             continue;
         };
-        let file = fs::canonicalize(directory.join(&headline["file"])).unwrap();
+        let file = botwork::core::paths::canonicalize(directory.join(&headline["file"])).unwrap();
         let text = text_of(&file, documents);
         let number = |name: &str| {
             headline
@@ -149,7 +149,7 @@ impl Published {
                 continue;
             }
             let path = url::Url::parse(uri).unwrap().to_file_path().unwrap();
-            let file = fs::canonicalize(&path).unwrap();
+            let file = botwork::core::paths::canonicalize(&path).unwrap();
             let text = text_of(&file, documents);
             for diagnostic in diagnostics {
                 let start = utf16_offset(&text, &diagnostic["range"]["start"]);
@@ -235,7 +235,7 @@ fn check_and_the_language_server_agree_across_the_corpus() {
             fs::write(&path, &text).unwrap();
             path
         };
-        let path = fs::canonicalize(path).unwrap();
+        let path = botwork::core::paths::canonicalize(path).unwrap();
         let expected = published.agree(&mut client, root, &path, &text, suite);
         compared += 1;
         with_problems += usize::from(!expected.is_empty());
@@ -252,7 +252,7 @@ fn check_and_the_language_server_agree_across_the_corpus() {
 #[test]
 fn every_incomplete_edit_reports_what_check_reports() {
     let directory = tempfile::tempdir().unwrap();
-    let directory = fs::canonicalize(directory.path()).unwrap();
+    let directory = botwork::core::paths::canonicalize(directory.path()).unwrap();
     fs::create_dir(directory.join("lib")).unwrap();
     // The module's warning sits after characters that take two UTF-16 units.
     fs::write(
@@ -308,7 +308,7 @@ fn every_incomplete_edit_reports_what_check_reports() {
 #[test]
 fn imported_modules_are_reported_alike() {
     let directory = tempfile::tempdir().unwrap();
-    let directory = fs::canonicalize(directory.path()).unwrap();
+    let directory = botwork::core::paths::canonicalize(directory.path()).unwrap();
     fs::create_dir(directory.join("lib")).unwrap();
     for (file, text) in [
         ("lib/bad.botwork", "# ü\nLog |1\n"),
@@ -368,7 +368,7 @@ fn imported_modules_are_reported_alike() {
 #[test]
 fn syntax_errors_are_placed_alike() {
     let directory = tempfile::tempdir().unwrap();
-    let directory = fs::canonicalize(directory.path()).unwrap();
+    let directory = botwork::core::paths::canonicalize(directory.path()).unwrap();
     let mut client = Client::start(&directory);
     let mut published = Published {
         latest: BTreeMap::new(),

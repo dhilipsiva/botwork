@@ -11,6 +11,10 @@ botwork --lsp
 The server works on scripts (`*.botwork`), suites (`*.suite.botwork`), and
 datasets (`*.dataset.botwork`). It chooses the kind from the file name.
 
+Documents are named by the paths their `file:` URIs give. On Windows the drive
+letter is upper-cased, as in canonical module paths, so a document an editor
+opens as `c:\work\main.botwork` is the module other files import.
+
 ## Features
 
 | Feature | What it gives |
