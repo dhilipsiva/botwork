@@ -648,6 +648,44 @@ impl Checker<'_, '_> {
         frame
     }
 
+    /// The project of package and URL imports, found from `base`, the
+    /// importing directory, at the first such import; and that directory, or
+    /// the project root for a module imported by URL.
+    fn project(
+        &mut self,
+        importer: &str,
+        directory: &Path,
+    ) -> Result<(Rc<crate::core::packages::Project>, PathBuf), String> {
+        let base = if crate::core::packages::is_url(importer) {
+            None
+        } else {
+            let base = import_base(importer, directory);
+            Some(
+                super::paths::canonicalize(&base)
+                    .map_err(|error| format!("{}: {error}", base.display()))?,
+            )
+        };
+        let project = self
+            .modules
+            .project
+            .get_or_insert_with(|| {
+                let base = base
+                    .as_ref()
+                    .ok_or("a module imported by URL needs the project that named it")?;
+                let root = crate::core::packages::Project::find(base).ok_or_else(|| {
+                    format!(
+                        "package and URL imports need a {} at or above {}",
+                        crate::core::packages::MANIFEST,
+                        base.display()
+                    )
+                })?;
+                crate::core::packages::Project::load(&root, None).map(Rc::new)
+            })
+            .clone()?;
+        let base = base.unwrap_or_else(|| project.root().to_owned());
+        Ok((project, base))
+    }
+
     /// The file an `@name/file` import names from `importer`, and its
     /// package's directory, through the project found at the first such import.
     fn package_module(
@@ -657,23 +695,7 @@ impl Checker<'_, '_> {
         directory: &Path,
     ) -> Result<(PathBuf, PathBuf), String> {
         let (name, file) = parsed?;
-        let base = import_base(importer, directory);
-        let base = super::paths::canonicalize(&base)
-            .map_err(|error| format!("{}: {error}", base.display()))?;
-        let project = self
-            .modules
-            .project
-            .get_or_insert_with(|| {
-                let root = crate::core::packages::Project::find(&base).ok_or_else(|| {
-                    format!(
-                        "`@` imports need a {} at or above {}",
-                        crate::core::packages::MANIFEST,
-                        base.display()
-                    )
-                })?;
-                crate::core::packages::Project::load(&root, None).map(Rc::new)
-            })
-            .clone()?;
+        let (project, base) = self.project(importer, directory)?;
         let requested = project.resolve(&base, name, &file)?;
         let package = project
             .directory(name)
@@ -700,13 +722,39 @@ impl Checker<'_, '_> {
         ) {
             return None;
         }
+        let importer = path_span.source().name();
+        if crate::core::packages::is_url(importer)
+            && !crate::core::packages::is_url(path)
+            && crate::core::packages::package_path(path).is_none()
+        {
+            self.push(
+                Rule::ImportFailure,
+                path_span,
+                format!(
+                    "Loading module failed: `{path}` is a relative path, but a module imported by URL imports only URLs and packages"
+                ),
+                "Import by URL or from a package.",
+            );
+            return None;
+        }
         let (requested, package) = match crate::core::packages::package_path(path) {
-            None => (
-                module_path(path_span.source().name(), directory, path),
-                None,
-            ),
-            Some(parsed) => match self.package_module(parsed, path_span.source().name(), directory)
+            None if crate::core::packages::is_url(path) => match self
+                .project(importer, directory)
+                .and_then(|(project, _)| project.url_file(path))
             {
+                Ok(file) => (Some(file), None),
+                Err(reason) => {
+                    self.push(
+                        Rule::ImportFailure,
+                        path_span,
+                        format!("Loading module failed: {reason}"),
+                        "Name the URL with its SHA-256 in botwork.toml's [files] and run `botwork --fetch`.",
+                    );
+                    return None;
+                }
+            },
+            None => (module_path(importer, directory, path), None),
+            Some(parsed) => match self.package_module(parsed, importer, directory) {
                 Ok((requested, package)) => (Some(requested), Some(package)),
                 Err(reason) => {
                     self.push(
@@ -804,7 +852,14 @@ impl Checker<'_, '_> {
                 return None;
             }
         };
-        let name = canonical.to_string_lossy().into_owned();
+        // A module imported by URL is named by its URL, as runs name it.
+        let name = self
+            .modules
+            .project
+            .as_ref()
+            .and_then(|project| project.as_ref().ok())
+            .and_then(|project| project.url_of(&canonical))
+            .map_or_else(|| canonical.to_string_lossy().into_owned(), str::to_owned);
         let program = match Program::parse_detailed(&name, &text) {
             Ok(program) => program,
             Err(diagnostic) => {

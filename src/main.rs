@@ -55,8 +55,9 @@ struct Args {
     /// Serve the Language Server Protocol on stdin and stdout
     #[arg(long, exclusive = true)]
     lsp: bool,
-    /// Resolve the packages that DIRECTORY's botwork.toml names (by default
-    /// the current directory's), fetch them into the cache, and write botwork.lock
+    /// Resolve the packages and URL files that DIRECTORY's botwork.toml names
+    /// (by default the current directory's), fetch them into the cache, and
+    /// write botwork.lock
     #[arg(long, value_name = "DIRECTORY", num_args = 0..=1, default_missing_value = ".", conflicts_with_all = ["file", "suite", "check", "format", "format_check", "list_cases", "list_statements", "statement_help", "reconcile_report"])]
     fetch: Option<PathBuf>,
     /// With --fetch: use only botwork.lock and the cache, and fetch nothing
@@ -482,6 +483,9 @@ fn fetch(directory: &Path, offline: bool, locked: bool) -> ExitCode {
                     "[fetch] {} {} from {}",
                     package.name, package.version, package.source
                 );
+            }
+            for file in &report.lock.files {
+                println!("[fetch] {} sha256 {}", file.url, file.sha256);
             }
             println!(
                 "[fetch] {} {}",

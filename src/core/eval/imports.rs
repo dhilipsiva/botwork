@@ -487,6 +487,61 @@ async fn read_module_source(path: &Path, context: &mut Context) -> Result<String
     })
 }
 
+/// The run's package project and the importing directory it sees: found from
+/// `base`, the importer's directory, at the first package or URL import; a
+/// module imported by URL imports as the project root does.
+async fn project(
+    base: Option<&Path>,
+    span: &Span,
+    import_site: &Span,
+    context: &mut Context,
+) -> EvaluationResult<(Arc<crate::core::packages::Project>, PathBuf)> {
+    let failure = |context: &Context, reason: std::fmt::Arguments<'_>| {
+        context.import_error(BWErr::ImportRead, reason, span, import_site)
+    };
+    let related = |context: &Context, error: Diagnostic| {
+        RuntimeDiagnostic::from(error).with_related_in(
+            "imported here",
+            import_site,
+            context.budget.as_ref(),
+            Some((span, false)),
+            context.calls.iter().map(|record| &record.frame),
+        )
+    };
+    let importer = match base {
+        Some(base) => Some(context.canonicalize_source(base).await.map_err(
+            |error| match error {
+                SourceFailure::Io(error) => {
+                    failure(context, format_args!("{}: {error}", base.display()))
+                }
+                SourceFailure::Diagnostic(error) => related(context, error),
+            },
+        )?),
+        None => None,
+    };
+    let project = match (context.modules.project.clone(), &importer) {
+        (Some(project), _) => project,
+        (None, Some(importer)) => {
+            let project = Arc::new(context.load_project(importer).await.map_err(
+                |error| match error {
+                    SourceFailure::Io(error) => failure(context, format_args!("{error}")),
+                    SourceFailure::Diagnostic(error) => related(context, error),
+                },
+            )?);
+            context.modules.project = Some(Arc::clone(&project));
+            project
+        }
+        (None, None) => {
+            return Err(failure(
+                context,
+                format_args!("a module imported by URL needs the project that named it"),
+            ))
+        }
+    };
+    let importer = importer.unwrap_or_else(|| project.root().to_owned());
+    Ok((project, importer))
+}
+
 /// The canonical path of the local file `path` names, relative to the source
 /// that imports it, recorded once per run so that a repeated import reads no
 /// metadata.
@@ -508,50 +563,48 @@ async fn resolve(
             context.calls.iter().map(|record| &record.frame),
         )
     };
-    let importer = Path::new(span.source().name());
-    let base = if importer.is_absolute() {
-        importer.parent().unwrap_or(Path::new("/")).to_owned()
+    let importer = span.source().name();
+    // A module imported by URL is named by its URL; it has no directory.
+    let from_url = crate::core::packages::is_url(importer);
+    let base = if from_url {
+        None
     } else {
-        context
-            .working_directory
-            .as_ref()
-            .map_err(|reason| failure(context, format_args!("{reason}")))?
-            .join(importer.parent().unwrap_or(Path::new("")))
+        let importer = Path::new(importer);
+        Some(if importer.is_absolute() {
+            importer.parent().unwrap_or(Path::new("/")).to_owned()
+        } else {
+            context
+                .working_directory
+                .as_ref()
+                .map_err(|reason| failure(context, format_args!("{reason}")))?
+                .join(importer.parent().unwrap_or(Path::new("")))
+        })
     };
-    // `@name/file` names a file in a package the project's lockfile resolved.
-    let (requested, package) = match crate::core::packages::package_path(path) {
-        None => (base.join(path), None),
-        Some(Err(reason)) => return Err(failure(context, format_args!("{reason}"))),
-        Some(Ok((name, file))) => {
-            let importer =
-                context
-                    .canonicalize_source(&base)
-                    .await
-                    .map_err(|error| match error {
-                        SourceFailure::Io(error) => {
-                            failure(context, format_args!("{}: {error}", base.display()))
-                        }
-                        SourceFailure::Diagnostic(error) => related(context, error),
-                    })?;
-            let project = match context.modules.project.clone() {
-                Some(project) => project,
-                None => {
-                    let project = Arc::new(context.load_project(&importer).await.map_err(
-                        |error| match error {
-                            SourceFailure::Io(error) => failure(context, format_args!("{error}")),
-                            SourceFailure::Diagnostic(error) => related(context, error),
-                        },
-                    )?);
-                    context.modules.project = Some(Arc::clone(&project));
-                    project
-                }
-            };
-            let requested = project
-                .resolve(&importer, name, &file)
-                .map_err(|reason| failure(context, format_args!("{reason}")))?;
-            let directory = project.directory(name).map(Path::to_owned);
-            (requested, directory)
-        }
+    let (requested, package) = if crate::core::packages::is_url(path) {
+        // A URL names a file the project's manifest pins, fetched into the cache.
+        let (project, _) = project(base.as_deref(), span, import_site, context).await?;
+        let file = project
+            .url_file(path)
+            .map_err(|reason| failure(context, format_args!("{reason}")))?;
+        (file, None)
+    } else if let Some(parsed) = crate::core::packages::package_path(path) {
+        // `@name/file` names a file in a package the project's lockfile resolved.
+        let (name, file) = parsed.map_err(|reason| failure(context, format_args!("{reason}")))?;
+        let (project, importer) = project(base.as_deref(), span, import_site, context).await?;
+        let requested = project
+            .resolve(&importer, name, &file)
+            .map_err(|reason| failure(context, format_args!("{reason}")))?;
+        let directory = project.directory(name).map(Path::to_owned);
+        (requested, directory)
+    } else if let Some(base) = base {
+        (base.join(path), None)
+    } else {
+        return Err(failure(
+            context,
+            format_args!(
+                "`{path}` is a relative path, but a module imported by URL imports only URLs and packages"
+            ),
+        ));
     };
     if let Some(canonical) = context.modules.resolved.get(&requested) {
         return Ok(canonical.clone());
@@ -620,9 +673,7 @@ async fn load_module(
     if let Some(Err(reason)) = crate::core::packages::package_path(path) {
         return Err(failure(context, format_args!("{reason}")));
     }
-    if path.contains("://")
-        || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
-    {
+    if Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork") {
         return Err(failure(
             context,
             format_args!("`{path}` must name a local .botwork file"),
@@ -660,9 +711,19 @@ async fn load_module(
             }
             SourceFailure::Diagnostic(error) => related(context, error),
         })?;
-    let source_name = canonical
-        .to_str()
-        .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
+    // A module imported by URL is named by its URL, not its place in the cache.
+    let url = context
+        .modules
+        .project
+        .as_ref()
+        .and_then(|project| project.url_of(&canonical))
+        .map(str::to_owned);
+    let source_name = match &url {
+        Some(url) => url.as_str(),
+        None => canonical
+            .to_str()
+            .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?,
+    };
     let program = context
         .parse_module(source_name, &source)
         .map_err(|error| {

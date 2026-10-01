@@ -144,6 +144,11 @@ pub fn fetch(root: &Path, options: &FetchOptions) -> Result<FetchReport, String>
             }
         };
         let package_manifest = Manifest::read(&directory.join(MANIFEST))?;
+        if !package_manifest.files.is_empty() {
+            return Err(format!(
+                "`{name}` names [files]; only a project's {MANIFEST} can"
+            ));
+        }
         let package = package_manifest
             .package
             .as_ref()
@@ -188,9 +193,33 @@ pub fn fetch(root: &Path, options: &FetchOptions) -> Result<FetchReport, String>
             },
         );
     }
+    let mut files = Vec::new();
+    for (url, sha256) in &manifest.files {
+        let name = manifest::file_name(url)?;
+        if !cache::file(&cache, sha256, &name).is_file() {
+            if options.offline {
+                return Err(format!(
+                    "{url} is not in the cache, and --offline forbids fetching it"
+                ));
+            }
+            let bytes = download::get(url)?;
+            let actual = tree::sha256(&bytes);
+            if actual != *sha256 {
+                return Err(format!(
+                    "integrity check failed: {url} has SHA-256 {actual}, but botwork.toml pins {sha256}"
+                ));
+            }
+            cache::store_file(&cache, &bytes, sha256, &name)?;
+        }
+        files.push(LockedFile {
+            url: url.clone(),
+            sha256: sha256.clone(),
+        });
+    }
     let lock = Lock {
         version: Lock::VERSION,
         packages,
+        files,
     };
     let text = lock.render();
     let unchanged = std::fs::read_to_string(&lock_path).is_ok_and(|old| old == text);

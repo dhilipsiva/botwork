@@ -13,6 +13,16 @@ pub struct Lock {
     pub version: u32,
     #[serde(default, rename = "package", skip_serializing_if = "Vec::is_empty")]
     pub packages: Vec<Locked>,
+    #[serde(default, rename = "file", skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<LockedFile>,
+}
+
+/// One file fetched by URL.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LockedFile {
+    pub url: String,
+    pub sha256: String,
 }
 
 /// One resolved package.
@@ -83,6 +93,7 @@ impl Lock {
         for package in &mut lock.packages {
             package.dependencies.sort();
         }
+        lock.files.sort_by(|left, right| left.url.cmp(&right.url));
         format!(
             "{HEADER}{}",
             toml::to_string(&lock).expect("a lock serializes")

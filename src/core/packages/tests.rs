@@ -118,13 +118,25 @@ fn lockfiles_render_the_same_bytes_for_the_same_resolution_and_read_back() {
         tree: Some(format!("sha256-{}", "a".repeat(64))),
         dependencies: dependencies.iter().map(|name| name.to_string()).collect(),
     };
+    let file = |url: &str| LockedFile {
+        url: url.into(),
+        sha256: "0".repeat(64),
+    };
     let one = Lock {
         version: 1,
         packages: vec![package("b", &["z", "a"]), package("a", &[])],
+        files: vec![
+            file("https://b.example/x.botwork"),
+            file("https://a.example/x.botwork"),
+        ],
     };
     let two = Lock {
         version: 1,
         packages: vec![package("a", &[]), package("b", &["a", "z"])],
+        files: vec![
+            file("https://a.example/x.botwork"),
+            file("https://b.example/x.botwork"),
+        ],
     };
     assert_eq!(one.render(), two.render());
     let read = Lock::parse(&one.render()).unwrap();
@@ -281,4 +293,59 @@ fn cached_files_must_hash_to_the_pinned_tree() {
         .unwrap()
         .join("botwork.toml")
         .is_file());
+}
+
+#[test]
+fn projects_pin_the_files_they_import_by_url() {
+    let digest = "a".repeat(64);
+    let manifest = Manifest::parse(&format!(
+        "[files]\n\"https://example.com/lib/math.botwork\" = \"{digest}\"\n\"http://localhost:8000/tools.wasm\" = \"{digest}\"\n"
+    ))
+    .unwrap();
+    assert_eq!(manifest.files.len(), 2);
+    assert_eq!(
+        manifest::file_name("https://example.com/lib/math.botwork").unwrap(),
+        "math.botwork"
+    );
+    for (entry, reason) in [
+        (
+            "\"https://example.com/lib/math.botwork\" = \"abc\"",
+            "is not a SHA-256",
+        ),
+        (
+            &format!("\"https://example.com/lib/\" = \"{digest}\""),
+            "names no file",
+        ),
+        (
+            &format!("\"https://example.com/notes.txt\" = \"{digest}\""),
+            "must name a .botwork",
+        ),
+        (
+            &format!("\"https://example.com/a%2Fb.botwork\" = \"{digest}\""),
+            "must name a .botwork",
+        ),
+        (
+            &format!("\"https://example.com/.hidden.botwork\" = \"{digest}\""),
+            "must name a .botwork",
+        ),
+        (
+            &format!("\"http://example.com/x.botwork\" = \"{digest}\""),
+            "`http` only on this machine",
+        ),
+        (
+            &format!("\"ftp://example.com/x.botwork\" = \"{digest}\""),
+            "uses `ftp`",
+        ),
+    ] {
+        let error = Manifest::parse(&format!("[files]\n{entry}\n")).unwrap_err();
+        assert!(error.contains(reason), "{entry}: {error}");
+    }
+    for (text, url) in [
+        ("https://example.com/x.botwork", true),
+        ("lib/x.botwork", false),
+        ("@kit/x.botwork", false),
+        ("c:\\x.botwork", false),
+    ] {
+        assert_eq!(is_url(text), url, "{text}");
+    }
 }

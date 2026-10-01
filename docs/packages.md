@@ -91,11 +91,37 @@ leaving the lockfile as it was:
 | `--offline` | Use only `botwork.lock` and the cache; fetch nothing. |
 | `--locked` | Fail rather than change `botwork.lock`, as CI should. |
 
+## Files by URL
+
+A project can also import single files by URL, each pinned by its SHA-256 in
+a `[files]` table of its `botwork.toml`:
+
+```toml
+[files]
+"https://example.com/lib/text.botwork" = "3f1d…"
+"https://example.com/tools/statements.wasm" = "8c0a…"
+```
+
+```
+Import |"https://example.com/lib/text.botwork"| As |text|
+```
+
+- `botwork --fetch` downloads each file the cache lacks, checks its SHA-256,
+  and lists it in `botwork.lock`; `--offline` uses only the cache.
+- A run never downloads: an import of a URL the manifest does not name, or
+  that is not fetched yet, is BW6001 saying so.
+- A file must end in `.botwork`, `.wasm`, `.py`, `.js`, `.mjs`, or `.cjs`,
+  with a plain name, and its URL must use `https` (or `http` on this machine).
+- A Botwork module imported by URL is named by its URL in diagnostics and
+  checks. It may import other URLs the project names, and packages, but not
+  relative paths: there is no directory beside it.
+- Only a project's manifest names files; a package's cannot.
+
 ## The lockfile
 
 `botwork.lock` lists every package the project resolved, by name, with its
 version, its source, the commit a git reference resolved to, and the SHA-256
-tree hash of its files. Commit it with the project: with the lockfile, every
+tree hash of its files, and every file it fetched by URL, with its SHA-256. Commit it with the project: with the lockfile, every
 machine runs the same files, and `botwork --fetch --locked` there fetches
 exactly them.
 
@@ -106,7 +132,8 @@ links and other entries are refused when fetched.
 
 ## The cache
 
-Fetched packages live in a directory named by their tree hash, under
+Fetched packages live in a directory named by their tree hash, and URL files
+in one named by their SHA-256, under
 `BOTWORK_CACHE_DIR` if set, else the platform's user cache directory:
 `$XDG_CACHE_HOME/botwork` (or `~/.cache/botwork`) on Linux,
 `~/Library/Caches/botwork` on macOS, and `%LOCALAPPDATA%\botwork` on Windows.
@@ -159,11 +186,12 @@ planned after 1.0.
 
 ## Tests
 
-`cargo test --locked --test packages` fetches path, git, and URL packages
-(local git repositories and a server on this machine), runs scripts that
-import them, and covers offline runs, integrity failures, conflicts, version
-incompatibilities, dependencies a package may not use, paths that leave a
-package, `--locked`, every kind of module, and the language server. Unit tests
+`cargo test --locked --test packages` fetches path, git, and URL packages and
+URL files (local git repositories and a server on this machine), runs scripts
+that import them, and covers offline runs, integrity failures, conflicts,
+version incompatibilities, dependencies a package may not use, paths that
+leave a package, `--locked`, every kind of module, modules named by their
+URL, and the language server. Unit tests
 in `src/core/packages/tests.rs` cover manifests, lockfiles, tree hashes, and
 archive extraction. The git tests are skipped without `git` unless
 `BOTWORK_REQUIRE_GIT` is set, as it is in CI.

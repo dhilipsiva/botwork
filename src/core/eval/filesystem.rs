@@ -69,7 +69,7 @@ impl Context {
         let load = |directory: &Path| {
             let root = crate::core::packages::Project::find(directory).ok_or_else(|| {
                 format!(
-                    "`@` imports need a {} at or above {}",
+                    "package and URL imports need a {} at or above {}",
                     crate::core::packages::MANIFEST,
                     directory.display()
                 )

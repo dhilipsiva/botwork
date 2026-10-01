@@ -98,12 +98,6 @@ async fn load(
             context.calls.iter().map(|record| &record.frame),
         )
     };
-    if path.contains("://") {
-        return Err(failure(
-            context,
-            format_args!("`{path}` must name a local JavaScript file"),
-        ));
-    }
     let canonical = resolve(path, span, import_site, context).await?;
     if let Some(module) = context.modules.javascript.get(&canonical) {
         return Ok(Arc::clone(module));

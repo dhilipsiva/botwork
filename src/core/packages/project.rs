@@ -12,6 +12,8 @@ pub struct Project {
     lock: Lock,
     /// Each locked package's directory, canonical, by name.
     directories: BTreeMap<String, PathBuf>,
+    /// Each URL file's place in the cache, canonical once fetched, by URL.
+    files: BTreeMap<String, PathBuf>,
 }
 
 /// The package a path names, if it names one: `@name/rest` gives the name
@@ -68,13 +70,25 @@ impl Project {
             Lock {
                 version: Lock::VERSION,
                 packages: Vec::new(),
+                files: Vec::new(),
             }
         };
         let cache = match cache {
             Some(cache) => cache.to_owned(),
-            None if lock.packages.iter().any(|package| package.tree.is_some()) => cache::root()?,
+            None if !manifest.files.is_empty()
+                || lock.packages.iter().any(|package| package.tree.is_some()) =>
+            {
+                cache::root()?
+            }
             None => PathBuf::new(),
         };
+        // The manifest's hash pins each file; the lockfile only records it.
+        let mut files = BTreeMap::new();
+        for (url, sha256) in &manifest.files {
+            let file = cache::file(&cache, sha256, &super::manifest::file_name(url)?);
+            let file = crate::core::paths::canonicalize(&file).unwrap_or(file);
+            files.insert(url.clone(), file);
+        }
         let mut directories = BTreeMap::new();
         for package in &lock.packages {
             let directory = match (&package.path, &package.tree) {
@@ -96,11 +110,37 @@ impl Project {
             manifest,
             lock,
             directories,
+            files,
         })
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The cached file a URL import names: the URL must be in the project's
+    /// `[files]`, and fetched.
+    pub fn url_file(&self, url: &str) -> Result<PathBuf, String> {
+        let file = self.files.get(url).ok_or_else(|| {
+            format!(
+                "`{url}` is not in the [files] of {}; name it there with its SHA-256 and run `botwork --fetch`",
+                self.root.join(MANIFEST).display()
+            )
+        })?;
+        if !file.is_file() {
+            return Err(format!(
+                "`{url}` is not in the cache; run `botwork --fetch`"
+            ));
+        }
+        Ok(file.clone())
+    }
+
+    /// The URL a cached file was imported by, to name its module.
+    pub fn url_of(&self, file: &Path) -> Option<&str> {
+        self.files
+            .iter()
+            .find(|(_, cached)| cached.as_path() == file)
+            .map(|(url, _)| url.as_str())
     }
 
     /// The file that the import `name`/`file` from `importer` names, checked
@@ -211,7 +251,7 @@ pub fn import_file(directory: &Path, path: &str) -> Option<Result<PathBuf, Strin
             None => {
                 let root = Project::find(&directory).ok_or_else(|| {
                     format!(
-                        "`@` imports need a {MANIFEST} at or above {}",
+                        "package and URL imports need a {MANIFEST} at or above {}",
                         directory.display()
                     )
                 })?;

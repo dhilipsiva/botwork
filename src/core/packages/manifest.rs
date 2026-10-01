@@ -11,6 +11,8 @@ struct Raw {
     package: Option<RawPackage>,
     #[serde(default)]
     dependencies: BTreeMap<String, RawDependency>,
+    #[serde(default)]
+    files: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,6 +92,44 @@ pub struct Manifest {
     /// None for a project that is not itself a package.
     pub package: Option<Package>,
     pub dependencies: BTreeMap<String, Dependency>,
+    /// Files that scripts import by URL, each with its SHA-256.
+    pub files: BTreeMap<String, String>,
+}
+
+/// The extensions of the files a project may import by URL: the module kinds.
+const FILE_EXTENSIONS: [&str; 6] = ["botwork", "wasm", "py", "js", "mjs", "cjs"];
+
+/// Whether `text` is a URL rather than a path: it has a scheme of letters
+/// before `://`.
+pub fn is_url(text: &str) -> bool {
+    text.split_once("://").is_some_and(|(scheme, _)| {
+        !scheme.is_empty()
+            && scheme
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"+-.".contains(&byte))
+    })
+}
+
+/// The name a URL file keeps in the cache: the last segment of its path,
+/// which must name one of the module kinds.
+pub(super) fn file_name(url: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(url).map_err(|error| format!("`{url}`: {error}"))?;
+    let name = parsed
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| format!("`{url}` names no file"))?;
+    let extension = Path::new(name).extension().and_then(|value| value.to_str());
+    // Plain names only: no escapes, separators, or hidden files.
+    if !extension.is_some_and(|extension| FILE_EXTENSIONS.contains(&extension))
+        || name.contains(['%', '\\', ':'])
+        || name.starts_with('.')
+    {
+        return Err(format!(
+            "`{url}` must name a .botwork, .wasm, .py, .js, .mjs, or .cjs file"
+        ));
+    }
+    Ok(name.to_owned())
 }
 
 /// Whether `name` is a valid package name: lowercase ASCII letters, digits,
@@ -162,9 +202,22 @@ impl Manifest {
                 dependency(raw).map_err(|error| format!("dependency `{name}`: {error}"))?;
             dependencies.insert(name, dependency);
         }
+        if raw.files.len() > MAX_DEPENDENCIES {
+            return Err(format!("more than {MAX_DEPENDENCIES} files"));
+        }
+        for (url, sha256) in &raw.files {
+            remote(url, &["https", "http"]).map_err(|error| format!("file {error}"))?;
+            file_name(url)?;
+            if !hex(sha256, 64) {
+                return Err(format!(
+                    "file `{url}`: `{sha256}` is not a SHA-256 in 64 lowercase hex digits"
+                ));
+            }
+        }
         Ok(Self {
             package,
             dependencies,
+            files: raw.files,
         })
     }
 }

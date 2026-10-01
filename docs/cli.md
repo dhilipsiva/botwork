@@ -39,7 +39,7 @@ One invocation does one of these things:
 | Option | Default | Effect | Details |
 | --- | --- | --- | --- |
 | `--lsp` | | Serve the Language Server Protocol on stdin and stdout. Takes no other option. | [Language server](lsp.md) |
-| `--fetch [<DIRECTORY>]` | | Resolve the packages named by the `botwork.toml` in DIRECTORY (by default the current directory), fetch them into the cache, and write `botwork.lock`. | [Packages](packages.md) |
+| `--fetch [<DIRECTORY>]` | | Resolve the packages and URL files named by the `botwork.toml` in DIRECTORY (by default the current directory), fetch them into the cache, and write `botwork.lock`. | [Packages](packages.md) |
 | `--offline` | | With `--fetch`: use only `botwork.lock` and the cache; fetch nothing. | [Packages](packages.md) |
 | `--locked` | | With `--fetch`: fail rather than change `botwork.lock`. | [Packages](packages.md) |
 | `--check` | | Check files or suites without running them: syntax, control placement, and lint rules. | [Checking scripts](check.md) |

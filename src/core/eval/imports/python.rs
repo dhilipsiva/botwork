@@ -126,12 +126,6 @@ async fn load(
             context.calls.iter().map(|record| &record.frame),
         )
     };
-    if path.contains("://") {
-        return Err(failure(
-            context,
-            format_args!("`{path}` must name a local .py file"),
-        ));
-    }
     let canonical = resolve(path, span, import_site, context).await?;
     if let Some(module) = context.modules.python.get(&canonical) {
         return Ok(Arc::clone(module));

@@ -65,3 +65,30 @@ pub fn store(root: &Path, files: &Path, expected: Option<&str>) -> Result<String
     }
     Ok(tree)
 }
+
+/// Where the file `name`, with SHA-256 `sha256`, lives in the cache under
+/// `root`.
+pub fn file(root: &Path, sha256: &str, name: &str) -> PathBuf {
+    root.join("files").join(sha256).join(name)
+}
+
+/// Store `bytes` as the file `name`, after checking that they hash to
+/// `sha256`, which names their directory. The file appears whole or not at all.
+pub fn store_file(root: &Path, bytes: &[u8], sha256: &str, name: &str) -> Result<PathBuf, String> {
+    let target = file(root, sha256, name);
+    if target.is_file() {
+        return Ok(target);
+    }
+    let directory = target.parent().expect("a file in a directory");
+    fs::create_dir_all(directory).map_err(|error| format!("{}: {error}", directory.display()))?;
+    let mut scratch = tempfile::Builder::new()
+        .prefix(".fetch-")
+        .tempfile_in(directory)
+        .map_err(|error| format!("{}: {error}", directory.display()))?;
+    std::io::Write::write_all(&mut scratch, bytes)
+        .map_err(|error| format!("{}: {error}", directory.display()))?;
+    scratch
+        .persist(&target)
+        .map_err(|error| format!("{}: {}", target.display(), error.error))?;
+    Ok(target)
+}

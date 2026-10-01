@@ -1,5 +1,5 @@
 {
-  "version": 57,
+  "version": 58,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4207,6 +4207,48 @@
       "file": "src/core/eval/imports.rs",
       "before": "        if !canonical.starts_with(&directory) {\n",
       "after": "        if false {\n"
+    },
+    {
+      "id": "url-file-hash-unchecked",
+      "area": "url-imports",
+      "file": "src/core/packages/resolve.rs",
+      "before": "            if actual != *sha256 {\n",
+      "after": "            if false {\n"
+    },
+    {
+      "id": "url-file-offline-downloads",
+      "area": "url-imports",
+      "file": "src/core/packages/resolve.rs",
+      "before": "            if options.offline {\n",
+      "after": "            if false {\n"
+    },
+    {
+      "id": "url-files-from-packages",
+      "area": "url-imports",
+      "file": "src/core/packages/resolve.rs",
+      "before": "        if !package_manifest.files.is_empty() {\n",
+      "after": "        if false {\n"
+    },
+    {
+      "id": "url-file-fetch-unchecked",
+      "area": "url-imports",
+      "file": "src/core/packages/project.rs",
+      "before": "        if !file.is_file() {\n",
+      "after": "        if false {\n"
+    },
+    {
+      "id": "url-module-relative-imports",
+      "area": "url-imports",
+      "file": "src/core/eval/imports.rs",
+      "before": "    let from_url = crate::core::packages::is_url(importer);\n",
+      "after": "    let from_url = false;\n"
+    },
+    {
+      "id": "url-module-named-by-cache",
+      "area": "url-imports",
+      "file": "src/core/eval/imports.rs",
+      "before": "        .and_then(|project| project.url_of(&canonical))\n",
+      "after": "        .and_then(|project| project.url_of(Path::new(\"\")))\n"
     }
   ]
 }

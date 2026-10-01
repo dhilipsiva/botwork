@@ -294,10 +294,7 @@ fn loading_failures_are_import_errors() {
         ("core.wasm", "not a WebAssembly component"),
         ("empty.wasm", "botwork:statements/statements"),
         ("missing.wasm", "missing.wasm"),
-        (
-            "https://example.com/tools.wasm",
-            "must name a local WebAssembly file",
-        ),
+        ("https://example.com/tools.wasm", "need a botwork.toml"),
     ] {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()

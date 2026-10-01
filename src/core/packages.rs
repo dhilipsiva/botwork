@@ -22,8 +22,8 @@ mod source;
 mod tests;
 mod tree;
 
-pub use lock::{Lock, Locked, LOCKFILE};
-pub use manifest::{valid_name, Dependency, GitRef, Manifest, Package, Source, MANIFEST};
+pub use lock::{Lock, Locked, LockedFile, LOCKFILE};
+pub use manifest::{is_url, valid_name, Dependency, GitRef, Manifest, Package, Source, MANIFEST};
 pub use project::{import_file, package_path, Project};
 pub use resolve::{fetch, FetchOptions, FetchReport};
 pub use tree::tree_hash;

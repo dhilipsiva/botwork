@@ -170,19 +170,30 @@ fn sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// An HTTP server on this machine that answers every request with `body`,
-/// and counts them.
+/// Request paths, or `*` for every path, and the bodies that answer them.
+type Routes = Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
+
+/// An HTTP server on this machine that answers each request with the body
+/// routed to its path, or `fallback` for any path, and counts them.
 struct Server {
     port: u16,
     requests: Arc<AtomicUsize>,
+    routes: Routes,
 }
 
 impl Server {
-    fn start(body: Vec<u8>) -> Self {
+    fn start(fallback: Vec<u8>) -> Self {
+        let server = Self::empty();
+        server.serve("*", fallback);
+        server
+    }
+
+    fn empty() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let requests = Arc::new(AtomicUsize::new(0));
-        let counted = Arc::clone(&requests);
+        let routes: Routes = Arc::default();
+        let (counted, served) = (Arc::clone(&requests), Arc::clone(&routes));
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { continue };
@@ -195,15 +206,38 @@ impl Server {
                     }
                 }
                 counted.fetch_add(1, Ordering::SeqCst);
-                let _ = write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                let _ = stream.write_all(&body);
+                let request = String::from_utf8_lossy(&request);
+                let path = request.split(' ').nth(1).unwrap_or("").to_owned();
+                let body = served
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .find(|(route, _)| *route == path || route == "*")
+                    .map(|(_, body)| body.clone());
+                let _ = match body {
+                    Some(body) => write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    )
+                    .and_then(|()| stream.write_all(&body)),
+                    None => write!(
+                        stream,
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    ),
+                };
             }
         });
-        Self { port, requests }
+        Self {
+            port,
+            requests,
+            routes,
+        }
+    }
+
+    /// Answer requests for `path` (or every path, for `*`) with `body`.
+    fn serve(&self, path: &str, body: Vec<u8>) {
+        self.routes.lock().unwrap().push((path.to_owned(), body));
     }
 
     fn url(&self, name: &str) -> String {
@@ -523,7 +557,7 @@ fn imports_say_what_to_fetch_and_stay_inside_their_package() {
     );
     failed_with(
         &world.run("loose", "main.botwork"),
-        "`@` imports need a botwork.toml",
+        "package and URL imports need a botwork.toml",
     );
     world.write(
         "project/botwork.toml",
@@ -688,4 +722,143 @@ fn the_language_server_follows_package_imports() {
     let definitions = analysis.definition(text.find("Double").unwrap());
     assert_eq!(definitions.len(), 1, "{definitions:?}");
     assert_eq!(Path::new(&definitions[0].file), module.join("math.botwork"));
+}
+
+#[test]
+fn files_imported_by_url_are_pinned_fetched_once_and_named_by_their_url() {
+    let world = World::new();
+    let server = Server::empty();
+    let helper_url = server.url("lib/helper.botwork");
+    let library_url = server.url("lib/library.botwork");
+    let relative_url = server.url("lib/relative.botwork");
+    let wasm_url = server.url("tools/statements.wasm");
+    let helper = "Shout |x| {\n    Return |x + \"!\"|\n}\n".to_owned();
+    let library = format!(
+        "Import |\"{helper_url}\"| As |helper|\nLoud |x| {{\n    Return |@{{ helper::Shout |x| }}|\n}}\nBroken {{\n    Fail |\"from the library\"|\n}}\n"
+    );
+    let relative = "Import |\"helper.botwork\"| As |helper|\n".to_owned();
+    let wasm =
+        fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/wasm/statements.wasm")).unwrap();
+    let files = [
+        (&helper_url, helper.into_bytes()),
+        (&library_url, library.into_bytes()),
+        (&relative_url, relative.into_bytes()),
+        (&wasm_url, wasm),
+    ];
+    let mut manifest = String::from("[files]\n");
+    for (url, body) in &files {
+        server.serve(
+            url.trim_start_matches(&format!("http://127.0.0.1:{}", server.port)),
+            body.clone(),
+        );
+        manifest.push_str(&format!("\"{url}\" = \"{}\"\n", sha256(body)));
+    }
+    world.write("project/botwork.toml", &manifest);
+    world.write(
+        "project/main.botwork",
+        &format!("Import |\"{library_url}\"| As |library|\nImport |\"{wasm_url}\"| As |wasm|\nLog |@{{ library::Loud |\"hi\"| }}|\nLog |@{{ wasm::Echo |[3]| }}|\n"),
+    );
+    // Nothing runs before a fetch.
+    failed_with(
+        &world.run("project", "main.botwork"),
+        "is not in the cache; run `botwork --fetch`",
+    );
+    succeeded(&world.fetch("project", &[]));
+    let lock = fs::read_to_string(world.path("project/botwork.lock")).unwrap();
+    assert_eq!(lock.matches("[[file]]").count(), 4, "{lock}");
+    let downloads = server.requests.load(Ordering::SeqCst);
+    assert_eq!(downloads, 4);
+    let run = world.run("project", "main.botwork");
+    succeeded(&run);
+    assert_eq!(stdout(&run), "hi!\n[3]\n");
+    // The cache serves later fetches and runs.
+    succeeded(&world.fetch("project", &["--offline", "--locked"]));
+    assert_eq!(server.requests.load(Ordering::SeqCst), downloads);
+    // Offline, an empty cache is an error, and nothing is downloaded.
+    fs::remove_dir_all(world.path("cache/files")).unwrap();
+    failed_with(
+        &world.fetch("project", &["--offline"]),
+        "is not in the cache, and --offline forbids fetching it",
+    );
+    assert_eq!(server.requests.load(Ordering::SeqCst), downloads);
+    succeeded(&world.fetch("project", &[]));
+    // A module imported by URL is named by its URL in diagnostics and checks.
+    world.write(
+        "project/broken.botwork",
+        &format!("Import |\"{library_url}\"| As |library|\nlibrary::Broken\n"),
+    );
+    let broken = world.run("project", "broken.botwork");
+    failed_with(&broken, "from the library");
+    assert!(
+        stderr(&broken).contains(&format!("{library_url}:6:5")),
+        "{}",
+        stderr(&broken)
+    );
+    let check = world.check("project", "main.botwork");
+    succeeded(&check);
+    assert!(
+        stderr(&check).contains("1 file, 2 modules: 0 errors"),
+        "{}",
+        stderr(&check)
+    );
+    // It may import only URLs and packages.
+    world.write(
+        "project/relative.botwork",
+        &format!("Import |\"{relative_url}\"| As |relative|\n"),
+    );
+    failed_with(
+        &world.run("project", "relative.botwork"),
+        "a module imported by URL imports only URLs and packages",
+    );
+    failed_with(
+        &world.check("project", "relative.botwork"),
+        "a module imported by URL imports only URLs and packages",
+    );
+    // Undeclared URLs are refused, by runs and checks alike.
+    let undeclared = server.url("lib/other.botwork");
+    world.write(
+        "project/other.botwork",
+        &format!("Import |\"{undeclared}\"| As |other|\n"),
+    );
+    failed_with(
+        &world.run("project", "other.botwork"),
+        "is not in the [files] of",
+    );
+    failed_with(
+        &world.check("project", "other.botwork"),
+        "is not in the [files] of",
+    );
+    // A file that is not the pinned one fails the fetch.
+    fs::remove_dir_all(world.path("cache/files")).unwrap();
+    world.write(
+        "project/botwork.toml",
+        &manifest.replace(&sha256(&files[0].1), &"0".repeat(64)),
+    );
+    failed_with(&world.fetch("project", &[]), "integrity check failed");
+    // Packages cannot name files.
+    world.package(
+        "kit",
+        &format!(
+            "[package]\nname = \"kit\"\nversion = \"1.0.0\"\n[files]\n\"{helper_url}\" = \"{}\"\n",
+            sha256(&files[0].1)
+        ),
+        &[],
+    );
+    world.write(
+        "project/botwork.toml",
+        "[dependencies]\nkit = { path = \"../kit\" }\n",
+    );
+    failed_with(
+        &world.fetch("project", &[]),
+        "only a project's botwork.toml can",
+    );
+    // Without a project, a URL import says what it needs.
+    world.write(
+        "loose/main.botwork",
+        &format!("Import |\"{library_url}\"| As |library|\n"),
+    );
+    failed_with(
+        &world.run("loose", "main.botwork"),
+        "package and URL imports need a botwork.toml",
+    );
 }
