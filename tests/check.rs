@@ -423,3 +423,23 @@ fn locations_inside_error_messages_follow_the_text_output() {
         "{stderr}"
     );
 }
+
+/// Python and JavaScript modules declare their statements only when they load,
+/// so calls into them are left unchecked rather than reported.
+#[test]
+fn calls_into_python_and_javascript_modules_are_left_unchecked() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::write(
+        directory.path().join("main.botwork"),
+        "Import |\"helpers.py\"| As |py|\nImport |\"helpers.mjs\"| As |js|\npy::Greet |\"Ada\"|\njs::Greet |\"Ada\"|\n",
+    )
+    .unwrap();
+    assert_eq!(
+        check(directory.path(), &["--file", "main.botwork"]),
+        (
+            Some(0),
+            String::new(),
+            "[check] not checked: 2 calls into Python or JavaScript modules, or modules that could not be read\n[check] 1 file: 0 errors, 0 warnings\n".into()
+        )
+    );
+}

@@ -39,7 +39,9 @@ impl Listener<u32> for Probe {
             let _ = gate.recv();
         }
         if self.panic_on == Some(*item) {
-            panic!("probe panic");
+            // Unwind without the panic hook: printing a backtrace can take
+            // over a minute in an unoptimized Windows build.
+            std::panic::resume_unwind(Box::new("probe panic"));
         }
         if self.fail_on == Some(*item) {
             return Err(format!("rejected {item}"));
@@ -146,8 +148,7 @@ fn a_rejected_item_detaches_the_listener_and_later_items_are_refused() {
 fn panics_and_finish_errors_are_failures() {
     let (mut probe, _, _) = Probe::new();
     probe.panic_on = Some(0);
-    // Printing the panic's backtrace can take seconds in an unoptimized
-    // Windows build; the close timeout only guards against a hang.
+    // The close timeout only guards against a hang.
     let dispatcher = Dispatcher::spawn(probe, options(16, 60_000)).unwrap();
     assert!(dispatcher.sender().send(0));
     assert_eq!(dispatcher.close().failure, Some(ListenerFailure::Panicked));

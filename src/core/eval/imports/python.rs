@@ -95,7 +95,17 @@ pub(super) async fn evaluate_import(
     context: &mut Context,
 ) -> EvaluationResult<Literal> {
     let module = load(path, span, import_site, context).await?;
-    publish(&module, namespace, normalized, import_site, context)
+    let statements = module.statements.iter().map(|(signature, function)| {
+        let function = Arc::clone(function);
+        (signature, move |qualified| {
+            NativeOperation::blocking(
+                qualified,
+                NonZeroUsize::new(CAPACITY).expect("nonzero capacity"),
+                move |arguments, control| call(&function, arguments, control),
+            )
+        })
+    });
+    publish_operations(statements, namespace, normalized, import_site, context)
 }
 
 async fn load(
@@ -285,87 +295,6 @@ fn accepts(py: Python<'_>, function: &Py<PyAny>, count: usize) -> bool {
             signature.call_method1("bind", PyTuple::new(py, (0..count).map(|_| py.None()))?)
         })
         .is_ok()
-}
-
-fn publish(
-    module: &Arc<Module>,
-    namespace: &Name,
-    normalized: &str,
-    import_site: &Span,
-    context: &mut Context,
-) -> EvaluationResult<Literal> {
-    if let Some(budget) = &context.budget {
-        let mut bytes = normalized.len();
-        for (signature, _) in &module.statements {
-            bytes = signature
-                .qualified_bytes(&namespace.text, normalized)
-                .and_then(|size| bytes.checked_add(size))
-                .ok_or_else(|| {
-                    context.runtime_diagnostic(
-                        budget.import_limit(ImportResource::MetadataBytes).into(),
-                        Some(import_site),
-                        false,
-                    )
-                })?;
-        }
-        budget
-            .charge_imports(&[
-                (ImportResource::Bindings, module.statements.len() + 1),
-                (ImportResource::MetadataBytes, bytes),
-            ])
-            .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
-    }
-    let namespace_registry = context
-        .reserve_registry(RegistryPlan::namespace(normalized, import_site))
-        .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
-    let namespace_key = namespace_registry.as_ref().map_or_else(
-        || Arc::from(normalized),
-        |reservation| Arc::clone(&reservation.key),
-    );
-    // Admit every statement before publishing any.
-    let mut operations = Vec::with_capacity(module.statements.len());
-    for (signature, function) in &module.statements {
-        let registry = context
-            .reserve_registry(RegistryPlan::qualified(
-                signature,
-                &namespace.text,
-                normalized,
-                import_site,
-            ))
-            .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
-        let qualified = signature.qualified(&namespace.text, normalized);
-        let key = registry.as_ref().map_or_else(
-            || Arc::from(qualified.normalized()),
-            |reservation| Arc::clone(&reservation.key),
-        );
-        let function = Arc::clone(function);
-        let operation = NativeOperation::blocking(
-            qualified,
-            NonZeroUsize::new(CAPACITY).expect("nonzero capacity"),
-            move |arguments, control| call(&function, arguments, control),
-        )
-        .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
-        operations.push((key, operation, registry));
-    }
-    let frame = &mut context.frames[context.current];
-    for (key, operation, registry) in operations {
-        frame.statements.insert(
-            key,
-            StmtType::Operation {
-                operation,
-                builtin: false,
-                _registry: registry,
-            },
-        );
-    }
-    frame.namespaces.insert(
-        namespace_key,
-        StoredNamespace {
-            span: import_site.clone(),
-            _registry: namespace_registry,
-        },
-    );
-    Ok(Literal::None)
 }
 
 /// Call a statement's function on this blocking worker thread.

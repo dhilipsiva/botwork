@@ -103,6 +103,9 @@ Before the summary, the check lists what only a run can tell:
 - **Unreadable modules.** Calls into a module that could not be read or parsed
   are counted, since their statements are unknown; the import itself is an
   error.
+- **Python and JavaScript modules.** Their statements are known only when they
+  load, so calls into [Python](python.md) and [JavaScript](javascript.md)
+  modules are counted too, and their imports are not errors.
 
 ## Limits
 

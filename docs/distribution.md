@@ -103,7 +103,7 @@ summary, and the others still publish.
 | Process statements and isolated workers | Linux, macOS, or Windows; see [worker platforms](worker-platforms.md) |
 | HTTP statements | Network access to the servers a script calls |
 | [Python statements](python.md) | A build with the `python` feature, and libpython 3.10 or later |
-| The planned JavaScript adapter | Node; see [extending Botwork](extending.md#language-adapters) |
+| [JavaScript statements](javascript.md) | Node.js on `PATH` |
 
 The [compatibility guide](compatibility.md) lists the supported platforms and
 tool versions.

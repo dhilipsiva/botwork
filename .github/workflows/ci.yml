@@ -26,6 +26,9 @@ jobs:
     name: Rust (${{ matrix.profile }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout }}
+    env:
+      # The JavaScript statement tests use the runners' Node rather than skip.
+      BOTWORK_REQUIRE_NODE: "1"
     strategy:
       fail-fast: false
       matrix:

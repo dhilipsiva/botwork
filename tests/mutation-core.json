@@ -1,5 +1,5 @@
 {
-  "version": 53,
+  "version": 54,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3941,6 +3941,55 @@
       "file": "src/core/eval/imports/python.rs",
       "before": "            let prepared = interruptible(control, |py| {\n",
       "after": "            let prepared = Python::attach(|py| {\n"
+    },
+    {
+      "id": "js-arity-unchecked",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript.rs",
+      "before": "        if declared > count {\n",
+      "after": "        if false && declared > count {\n"
+    },
+    {
+      "id": "js-environment-dropped",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript.rs",
+      "before": "        .map(|environment| environment.variables().clone())\n",
+      "after": "        .map(|_| BTreeMap::new())\n"
+    },
+    {
+      "id": "js-host-int-range-ignored",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "      if (Number.isInteger(value) && value >= -2147483648 && value <= 2147483647) {\n",
+      "after": "      if (Number.isInteger(value)) {\n"
+    },
+    {
+      "id": "js-host-map-keys-unsorted",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "          Buffer.compare(Buffer.from(left, \"utf8\"), Buffer.from(right, \"utf8\")),\n",
+      "after": "          0 * Buffer.compare(Buffer.from(left, \"utf8\"), Buffer.from(right, \"utf8\")),\n"
+    },
+    {
+      "id": "js-host-assertion-not-mapped",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "    response = error?.name === \"AssertionError\"\n",
+      "after": "    response = false\n"
+    },
+    {
+      "id": "js-host-any-object-is-a-map",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "      if (prototype === Object.prototype || prototype === null) {\n",
+      "after": "      if (prototype !== undefined) {\n"
+    },
+    {
+      "id": "check-flags-adapter-imports",
+      "area": "javascript",
+      "file": "src/core/analysis.rs",
+      "before": "            Some(\"py\" | \"js\" | \"mjs\" | \"cjs\")\n",
+      "after": "            Some(\"never\")\n"
     }
   ]
 }

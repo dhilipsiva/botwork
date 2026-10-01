@@ -25,6 +25,7 @@ impl std::fmt::Display for ImportChain<'_> {
     }
 }
 
+mod javascript;
 #[cfg(feature = "python")]
 mod python;
 
@@ -35,6 +36,9 @@ pub(super) struct ModuleCache {
     /// Python files this run has loaded, each in a module object of its own.
     #[cfg(feature = "python")]
     python: HashMap<PathBuf, Arc<python::Module>>,
+    /// JavaScript files this run has loaded, and the pool their calls run in.
+    javascript: HashMap<PathBuf, Arc<javascript::Module>>,
+    javascript_pool: Option<crate::core::worker::WorkerPool>,
 }
 
 impl Clone for ModuleCache {
@@ -56,6 +60,12 @@ impl Clone for ModuleCache {
                 .iter()
                 .map(|(key, value)| (key.clone(), Arc::clone(value)))
                 .collect(),
+            javascript: self
+                .javascript
+                .iter()
+                .map(|(key, value)| (key.clone(), Arc::clone(value)))
+                .collect(),
+            javascript_pool: self.javascript_pool.clone(),
         }
     }
 }
@@ -74,10 +84,22 @@ impl ModuleCache {
                 size.path(path);
             }
         }
+        size.entries(self.javascript.len());
+        for path in self.javascript.keys() {
+            size.path(path);
+        }
         for (requested, canonical) in &self.resolved {
             size.path(requested);
             size.path(canonical);
         }
+    }
+
+    /// The pool a run's JavaScript calls share, made at the first import.
+    fn javascript_pool(&mut self) -> DiagnosticResult<crate::core::worker::WorkerPool> {
+        if self.javascript_pool.is_none() {
+            self.javascript_pool = Some(javascript::pool()?);
+        }
+        Ok(self.javascript_pool.clone().expect("just made"))
     }
 }
 
@@ -137,6 +159,17 @@ pub(super) async fn evaluate_import(
             statement.metadata().header(),
             &namespace.span,
         ));
+    }
+    if javascript::handles(path) {
+        return javascript::evaluate_import(
+            path,
+            path_span,
+            namespace,
+            &normalized,
+            import_site,
+            context,
+        )
+        .await;
     }
     if Path::new(path).extension().and_then(|value| value.to_str()) == Some("py") {
         #[cfg(feature = "python")]
@@ -223,6 +256,89 @@ fn publish_namespace(
     frame.dependency_depth = frame
         .dependency_depth
         .max(module.frame.dependency_depth + 1);
+    frame.namespaces.insert(
+        namespace_key,
+        StoredNamespace {
+            span: import_site.clone(),
+            _registry: namespace_registry,
+        },
+    );
+    Ok(Literal::None)
+}
+
+/// Publish native operations as a namespace's statements, as the adapters for
+/// other languages do: each takes its unqualified signature and makes the
+/// operation for the qualified one. Every statement is admitted before any is
+/// published.
+fn publish_operations<'a, F>(
+    statements: impl ExactSizeIterator<Item = (&'a StatementSignature, F)>,
+    namespace: &Name,
+    normalized: &str,
+    import_site: &Span,
+    context: &mut Context,
+) -> EvaluationResult<Literal>
+where
+    F: FnOnce(StatementSignature) -> DiagnosticResult<NativeOperation>,
+{
+    let statements: Vec<_> = statements.collect();
+    if let Some(budget) = &context.budget {
+        let mut bytes = normalized.len();
+        for (signature, _) in &statements {
+            bytes = signature
+                .qualified_bytes(&namespace.text, normalized)
+                .and_then(|size| bytes.checked_add(size))
+                .ok_or_else(|| {
+                    context.runtime_diagnostic(
+                        budget.import_limit(ImportResource::MetadataBytes).into(),
+                        Some(import_site),
+                        false,
+                    )
+                })?;
+        }
+        budget
+            .charge_imports(&[
+                (ImportResource::Bindings, statements.len() + 1),
+                (ImportResource::MetadataBytes, bytes),
+            ])
+            .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
+    }
+    let namespace_registry = context
+        .reserve_registry(RegistryPlan::namespace(normalized, import_site))
+        .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
+    let namespace_key = namespace_registry.as_ref().map_or_else(
+        || Arc::from(normalized),
+        |reservation| Arc::clone(&reservation.key),
+    );
+    let mut operations = Vec::with_capacity(statements.len());
+    for (signature, make) in statements {
+        let registry = context
+            .reserve_registry(RegistryPlan::qualified(
+                signature,
+                &namespace.text,
+                normalized,
+                import_site,
+            ))
+            .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
+        let qualified = signature.qualified(&namespace.text, normalized);
+        let key = registry.as_ref().map_or_else(
+            || Arc::from(qualified.normalized()),
+            |reservation| Arc::clone(&reservation.key),
+        );
+        let operation = make(qualified)
+            .map_err(|error| context.runtime_diagnostic(error.into(), Some(import_site), false))?;
+        operations.push((key, operation, registry));
+    }
+    let frame = &mut context.frames[context.current];
+    for (key, operation, registry) in operations {
+        frame.statements.insert(
+            key,
+            StmtType::Operation {
+                operation,
+                builtin: false,
+                _registry: registry,
+            },
+        );
+    }
     frame.namespaces.insert(
         namespace_key,
         StoredNamespace {

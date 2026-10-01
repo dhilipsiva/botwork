@@ -77,6 +77,8 @@ index.
   language adapters.
 - [Python statements](python.md): statements written in Python, in builds with
   the `python` feature.
+- [JavaScript statements](javascript.md): statements written in JavaScript,
+  run with Node.js.
 - [Embedded Rust runs](embedded-runs.md)
 - [Interpreter architecture](interpreter-architecture.md)
 - [Asynchronous execution](async-execution.md)
