@@ -170,9 +170,16 @@ struct Args {
     stop_grace_ms: u64,
 }
 
-/// A runtime that shuts down without waiting for abandoned blocking jobs, which
-/// may never return; see [`OperationControl::stop_grace`].
+/// A runtime that waits at most [`EXIT_JOIN`] for its threads when dropped, not
+/// for abandoned blocking jobs, which may never return; see
+/// [`OperationControl::stop_grace`].
 struct Runtime(Option<tokio::runtime::Runtime>);
+
+/// How long a dropped runtime waits for its threads to end. Threads that end in
+/// time are joined, so none is still exiting when the process exits: a thread's
+/// library destructors can crash racing exit-time cleanup, as OpenSSL's did on
+/// macOS once Python's `asyncio` had loaded it into a blocking thread.
+const EXIT_JOIN: Duration = Duration::from_millis(250);
 
 impl std::ops::Deref for Runtime {
     type Target = tokio::runtime::Runtime;
@@ -185,7 +192,7 @@ impl std::ops::Deref for Runtime {
 impl Drop for Runtime {
     fn drop(&mut self) {
         if let Some(runtime) = self.0.take() {
-            runtime.shutdown_background();
+            runtime.shutdown_timeout(EXIT_JOIN);
         }
     }
 }
@@ -767,4 +774,39 @@ fn statement_help(header: Option<&str>, output: OutputLimits) -> Result<(), CliE
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn a_dropped_runtime_has_ended_its_threads() {
+        static ENDED: AtomicBool = AtomicBool::new(false);
+        /// Set once its thread's destructors have run, slowly, as a library's
+        /// may: a thread still running them would race the process's exit.
+        struct Ending;
+        impl Drop for Ending {
+            fn drop(&mut self) {
+                std::thread::sleep(Duration::from_millis(100));
+                ENDED.store(true, Ordering::SeqCst);
+            }
+        }
+        thread_local!(static ENDING: Ending = const { Ending });
+        let runtime = Runtime(Some(
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap(),
+        ));
+        runtime
+            .block_on(async { tokio::task::spawn_blocking(|| ENDING.with(|_| ())).await })
+            .unwrap();
+        drop(runtime);
+        assert!(
+            ENDED.load(Ordering::SeqCst),
+            "a runtime thread was still ending"
+        );
+    }
 }

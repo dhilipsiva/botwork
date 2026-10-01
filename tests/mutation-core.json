@@ -1,5 +1,5 @@
 {
-  "version": 60,
+  "version": 61,
   "mutations": [
     {
       "id": "precedence-products",
@@ -2588,8 +2588,15 @@
       "id": "shutdown-cli-runtime-joins-abandoned",
       "area": "shutdown",
       "file": "src/main.rs",
-      "before": "            runtime.shutdown_background();\n",
+      "before": "            runtime.shutdown_timeout(EXIT_JOIN);\n",
       "after": "            drop(runtime);\n"
+    },
+    {
+      "id": "shutdown-cli-runtime-threads-left-ending",
+      "area": "shutdown",
+      "file": "src/main.rs",
+      "before": "            runtime.shutdown_timeout(EXIT_JOIN);\n",
+      "after": "            runtime.shutdown_background();\n"
     },
     {
       "id": "shutdown-cli-grace-flag-ignored",

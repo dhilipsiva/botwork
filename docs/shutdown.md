@@ -78,15 +78,19 @@ assert_eq!(options.control.child(None).stop_grace(), Duration::from_millis(500))
 
 ## The CLI process
 
-- **Exit.** The CLI shuts its runtime down without waiting for abandoned jobs,
-  so they cannot hold the process after it finishes. The operating system
-  reclaims their threads at exit.
+- **Exit.** The CLI shuts its runtime down waiting at most 250 ms for its
+  threads, so abandoned jobs cannot hold the process after it finishes; the
+  operating system reclaims their threads at exit. Threads that end in time are
+  joined, so none is still ending as the process exits: a thread's library
+  destructors can crash racing the process's own exit-time cleanup, as
+  OpenSSL's did on macOS after Python's `asyncio` loaded it.
 - **Interrupts.** One interrupt stops every run within these bounds. A second
   interrupt exits at once; see [terminal outcomes](terminal-outcomes.md#interruption).
 - **Listeners.** A listener has its own close timeout; see [listeners](listeners.md).
 
 A stopped single-file CLI run therefore exits within its timeout or interrupt,
-the bound above, and the listener's close timeout when one is attached.
+the bound above, 250 ms for its runtime's threads, and the listener's close
+timeout when one is attached.
 
 ## Limits
 
