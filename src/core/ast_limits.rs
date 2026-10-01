@@ -4,9 +4,11 @@ use std::{collections::HashSet, sync::Arc};
 
 use super::{ast::*, diagnostic::DiagnosticResult};
 
+#[doc(hidden)]
 pub const DEFAULT_AST_NODES: usize = 65_536;
+#[doc(hidden)]
 pub const MAX_AST_DEPTH: usize = 128;
-pub const DEFAULT_AST_SOURCE_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const DEFAULT_AST_SOURCE_BYTES: usize = 8 * 1024 * 1024;
 
 #[cfg(test)]
 mod tests;

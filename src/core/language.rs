@@ -7,7 +7,6 @@
 use super::{
     analysis::{module_path, Analyzer, Severity},
     ast::{
-        suite::{Dataset, Suite},
         AccessSegment, AssignmentValue, Block, Call, ElseBranch, Expr, ExprKind, Name, Program,
         Span, Statement, StatementKind,
     },
@@ -16,6 +15,7 @@ use super::{
     format::SourceKind,
     run::RunLimits,
     signature::StatementSignature,
+    suite::{Dataset, Suite},
     syntax_limits::DEFAULT_SOURCE_BYTES,
 };
 use std::{

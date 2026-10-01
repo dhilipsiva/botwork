@@ -104,6 +104,9 @@ jobs:
       - name: Check release packaging helper
         if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: python3 tests/release_tools.py
+      - name: Check public API helper
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: python3 tests/api_tools.py
       - name: Build all targets
         run: cargo +stable build --locked --all-targets --target ${{ matrix.target }} ${{ matrix.flags }}
       - name: Check performance measurement helper
@@ -123,6 +126,28 @@ jobs:
           fi
       - name: Run tests and examples
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
+
+  public-api:
+    name: Public API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the recorded nightly toolchain
+        # Rustdoc's JSON output is unstable; this toolchain writes format 61.
+        run: rustup toolchain install nightly-2026-08-14 --profile minimal
+      - name: Describe the public API
+        run: cargo +nightly-2026-08-14 rustdoc --lib --locked -- -Z unstable-options --output-format json
+      - name: Check that no public signature names an internal item
+        run: python3 scripts/public_api.py --leaks target/doc/botwork.json
+      - name: Check that the API matches docs/public-api.txt
+        # A change to the API must update the listing; see docs/rust-api.md.
+        run: |
+          python3 scripts/public_api.py target/doc/botwork.json > "$RUNNER_TEMP/public-api.txt"
+          diff --unified docs/public-api.txt "$RUNNER_TEMP/public-api.txt"
 
   workflows:
     name: Workflows

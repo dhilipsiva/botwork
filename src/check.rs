@@ -2,9 +2,10 @@
 use super::{CliError, Context};
 use botwork::core::{
     analysis::{Analyzer, External, Severity},
-    ast::{suite::Suite, Program},
+    ast::Program,
     diagnostic::Diagnostic,
     grammar::BWErr,
+    suite::Suite,
     syntax_limits::DEFAULT_SOURCE_BYTES,
 };
 use std::{
@@ -75,9 +76,10 @@ pub(super) fn run(files: &[PathBuf], suites: &[PathBuf]) -> Result<(), CliError>
                     context.write_output(&mut stderr, format_args!("{diagnostic}\n"))?;
                 }
                 for finding in &report.findings {
-                    match finding.severity() {
-                        Severity::Error => errors += 1,
-                        Severity::Warning => warnings += 1,
+                    if finding.severity() == Severity::Error {
+                        errors += 1;
+                    } else {
+                        warnings += 1;
                     }
                     context.write_output(&mut stderr, format_args!("{finding}\n"))?;
                 }

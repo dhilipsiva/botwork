@@ -4,6 +4,7 @@ use botwork::core::{
     ast::Program,
     eval::{evaluate_program, Context},
     grammar::{BWErr, Literal, LiteralResult, Operate, Rule},
+    signature::ValueKind,
 };
 
 fn evaluate(source: &str, context: &mut Context) -> LiteralResult {
@@ -20,7 +21,15 @@ fn kind(value: &Literal) -> &str {
         Literal::String(_) => "string",
         Literal::Array(_) => "array",
         Literal::Map(_) => "map",
+        // Literal can gain kinds; representatives() must then list them.
+        _ => unreachable!("{value:?} is a kind this contract does not list"),
     }
+}
+
+#[test]
+fn the_representatives_cover_every_value_kind() {
+    let kinds: Vec<ValueKind> = representatives().iter().map(Literal::kind).collect();
+    assert_eq!(kinds, ValueKind::ALL);
 }
 
 fn representatives() -> Vec<Literal> {

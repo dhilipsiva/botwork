@@ -15,12 +15,14 @@ use super::{
 mod construction;
 pub(crate) use construction::{DiagnosticConstruction, FormattedDetail, SourcePrefix};
 mod rejection;
-pub use rejection::{
-    DiagnosticOmissions, OmittedSource, SUMMARY_DETAIL_BYTES, SUMMARY_SOURCE_NAME_BYTES,
-};
+pub use rejection::{DiagnosticOmissions, OmittedSource};
+#[doc(hidden)]
+pub use rejection::{SUMMARY_DETAIL_BYTES, SUMMARY_SOURCE_NAME_BYTES};
 mod ownership;
 pub(crate) use ownership::OwnedDiagnostic;
-pub use ownership::{DiagnosticLimits, DiagnosticSize, MAX_DIAGNOSTIC_DEPTH};
+#[doc(hidden)]
+pub use ownership::MAX_DIAGNOSTIC_DEPTH;
+pub use ownership::{DiagnosticLimits, DiagnosticSize};
 mod value;
 pub use value::DiagnosticValueLimits;
 mod render;
@@ -249,6 +251,7 @@ static SHOWN_RELATIVE_TO: OnceLock<Vec<PathBuf>> = OnceLock::new();
 /// beside a relative entry script. Reports, metadata, and every other
 /// machine-readable name keep the full name. The first call in a process
 /// takes effect; later calls are ignored.
+#[doc(hidden)]
 pub fn show_paths_relative_to(directory: &Path) {
     let mut bases = vec![directory.to_path_buf()];
     // Module paths are canonical, and the directory may reach them through a link.
@@ -263,7 +266,7 @@ pub fn show_paths_relative_to(directory: &Path) {
 /// A source name as text output shows it: relative to the directory given to
 /// [`show_paths_relative_to`] when the file is inside it, and unchanged
 /// otherwise. It borrows from the name.
-pub fn shown_path(name: &str) -> &str {
+pub(crate) fn shown_path(name: &str) -> &str {
     let Some(bases) = SHOWN_RELATIVE_TO.get() else {
         return name;
     };
@@ -333,6 +336,7 @@ pub struct RelatedLocation {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Diagnostic {
     /// Shared immutable identity lets rethrow retain the original error without self-causes.
     pub error: Arc<BWErr>,

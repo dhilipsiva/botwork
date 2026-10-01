@@ -409,6 +409,9 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
     );
     assert!(include_str!("../src/lib.rs")
         .contains("#![doc = include_str!(\"../docs/parameterized-cases.md\")]"));
+    assert!(
+        include_str!("../src/lib.rs").contains("#![doc = include_str!(\"../docs/rust-api.md\")]")
+    );
     let inclusion = "#![doc = include_str!(\"../docs/interpreter-architecture.md\")]";
     assert!(include_str!("../src/lib.rs").contains(inclusion));
     assert!(include_str!("../src/lib.rs")
@@ -452,7 +455,8 @@ fn every_rust_documentation_example_is_included_in_crate_doctests() {
             "docs/listeners.md".to_owned(),
             "docs/secrets.md".to_owned(),
             "docs/shutdown.md".to_owned(),
-            "docs/check.md".to_owned()
+            "docs/check.md".to_owned(),
+            "docs/rust-api.md".to_owned()
         ]),
         "include new Rust documentation examples in rustdoc before registering their files"
     );

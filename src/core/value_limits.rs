@@ -9,6 +9,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+#[doc(hidden)]
 pub const MAX_VALUE_DEPTH: usize = 64;
 
 #[cfg(test)]
@@ -38,6 +39,7 @@ impl Default for ValueLimits {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ValueSize {
     pub nodes: usize,
     pub depth: usize,

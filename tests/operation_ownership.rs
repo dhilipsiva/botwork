@@ -178,15 +178,7 @@ async fn host_emergency_shapes_cannot_skip_aggregate_diagnostic_admission() {
         limit: 0,
     });
     let mut cause = Diagnostic::new(BWErr::NativeError("original".into()));
-    cause.omissions = Some(Box::new(DiagnosticOmissions {
-        detail_fields: 0,
-        call_frames: 0,
-        related_locations: 0,
-        direct_causes: 0,
-        label: false,
-        prior_summary: false,
-        source: None,
-    }));
+    cause.omissions = Some(Box::new(DiagnosticOmissions::default()));
     error.causes.push(cause);
     let operation = failing_worker(&budget, error);
     let error = operation
@@ -437,16 +429,25 @@ async fn unpolled_arguments_share_atomic_limits_across_clones_and_distinct_opera
     };
     let first = operation.invoke(arguments(), OperationControl::default());
     let second = clone.invoke(arguments(), OperationControl::default());
+    let usage = budget.usage();
     assert_eq!(
-        budget.usage(),
-        OperationUsage {
-            invocations: 2,
-            values: 2,
-            nodes: 6,
-            payload_bytes: 12,
-            ..OperationUsage::default()
-        }
+        (
+            usage.invocations,
+            usage.values,
+            usage.nodes,
+            usage.payload_bytes
+        ),
+        (2, 2, 6, 12)
     );
+    // Nothing else is in use.
+    let mut rest = usage;
+    (
+        rest.invocations,
+        rest.values,
+        rest.nodes,
+        rest.payload_bytes,
+    ) = (0, 0, 0, 0);
+    assert_eq!(rest, OperationUsage::default());
     let before = budget.usage();
     let error = distinct
         .invoke(arguments(), OperationControl::default())

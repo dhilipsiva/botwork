@@ -9,12 +9,10 @@
 mod sources;
 
 use botwork::core::{
-    ast::{
-        suite::{Dataset, Suite},
-        Program,
-    },
+    ast::Program,
     diagnostic::{Diagnostic, DiagnosticCode},
     format::SourceKind,
+    suite::{Dataset, Suite},
 };
 use std::{
     collections::BTreeSet,

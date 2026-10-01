@@ -109,10 +109,7 @@ async fn report(message: Message, error: &mut Option<CliError>) -> Vec<PathBuf> 
 }
 
 fn skip_message(reason: SkipReason) -> &'static str {
-    match reason {
-        SkipReason::SuiteSetupFailed => "suite setup did not complete",
-        SkipReason::SuiteStopped => "suite control stopped",
-    }
+    reason.message()
 }
 
 async fn skip(

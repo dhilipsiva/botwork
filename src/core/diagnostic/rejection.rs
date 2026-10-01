@@ -12,6 +12,7 @@ pub const SUMMARY_SOURCE_NAME_BYTES: usize = 256;
 pub(super) const TRUNCATED: &str = "…[truncated]";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct OmittedSource {
     /// A bounded filename prefix; no SourceFile owner is retained.
     pub file: String,
@@ -20,7 +21,8 @@ pub struct OmittedSource {
     pub end_byte: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DiagnosticOmissions {
     pub detail_fields: usize,
     pub call_frames: usize,

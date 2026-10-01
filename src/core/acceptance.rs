@@ -14,11 +14,12 @@ pub use view::{HtmlStatus, StatusView};
 #[cfg(test)]
 mod tests;
 
-pub const MAX_EXPECTATION_REASON_BYTES: usize = 512;
+pub(crate) const MAX_EXPECTATION_REASON_BYTES: usize = 512;
 
 /// Assertions transfer control immediately; no implicit collection/continuation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AssertionMode {
     #[default]
     Immediate,
@@ -55,6 +56,7 @@ impl CaseExpectation {
 /// one assertion failure with no secondary failure or omitted evidence. Mixed
 /// errors, native errors/panics, and uncertain evidence use Other (or a stop).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FailureKind {
     Assertion,
     Other,
@@ -99,6 +101,7 @@ impl FailureKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PhaseOutcome {
     Succeeded,
     Failed(FailureKind),
@@ -107,6 +110,7 @@ pub enum PhaseOutcome {
 /// An owning run's stop observed after the phase results, including cleanup.
 /// Phase-local cleanup stops remain secondary to earlier setup/body failures.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParentStop {
     Cancelled,
     TimedOut,
@@ -125,9 +129,20 @@ impl ParentStop {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SkipReason {
     SuiteSetupFailed,
     SuiteStopped,
+}
+
+impl SkipReason {
+    /// Why the case did not run, as reports show it.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::SuiteSetupFailed => "suite setup did not complete",
+            Self::SuiteStopped => "suite control stopped",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -224,6 +239,7 @@ impl CaseCompletion {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum CaseStatus {
     Succeeded,
     ExpectedFailure,

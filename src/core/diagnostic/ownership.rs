@@ -37,6 +37,7 @@ impl Default for DiagnosticLimits {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DiagnosticSize {
     pub diagnostics: usize,
     pub depth: usize,

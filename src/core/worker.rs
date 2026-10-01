@@ -68,6 +68,7 @@ impl Default for WorkerLimits {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WorkerOutcome {
     Succeeded,
     Failed,
@@ -77,6 +78,7 @@ pub enum WorkerOutcome {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WorkerCleanup {
     NotStarted,
     /// The direct child was reaped. Inherited-group termination was attempted.
@@ -94,6 +96,7 @@ pub enum WorkerCleanup {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct WorkerReport {
     pub id: u64,
     pub outcome: WorkerOutcome,
@@ -110,6 +113,7 @@ pub struct WorkerReport {
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct WorkerRecord {
     pub id: u64,
     pub outcome: WorkerOutcome,
@@ -118,6 +122,7 @@ pub struct WorkerRecord {
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct ActiveWorker {
     pub id: u64,
     /// None until process creation returns; this does not prove that no process exists.
@@ -128,6 +133,7 @@ pub struct ActiveWorker {
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct WorkerSnapshot {
     pub closed: bool,
     pub active: Vec<ActiveWorker>,

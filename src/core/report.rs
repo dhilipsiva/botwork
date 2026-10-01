@@ -231,6 +231,7 @@ pub struct ArtifactRecord {
 /// One observation, in run order. Offsets are microseconds since `RunStarted`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Event {
     RunStarted {
         identity: RunIdentity,
@@ -390,6 +391,7 @@ impl<'de> Deserialize<'de> for RunRecord {
 
 /// An event that breaks run ordering; the record is left unchanged.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum RecordError {
     #[error("event {found} arrived where sequence {expected} was expected")]
     Sequence { expected: u64, found: u64 },

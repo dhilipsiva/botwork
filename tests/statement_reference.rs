@@ -8,12 +8,13 @@ mod markdown;
 
 use botwork::core::{
     ast::{
-        suite::Suite, AccessSegment, AssignmentValue, Block, Call, ElseBranch, Expr, ExprKind,
-        Program, Statement, StatementKind,
+        AccessSegment, AssignmentValue, Block, Call, ElseBranch, Expr, ExprKind, Program,
+        Statement, StatementKind,
     },
     eval::Context,
     run::RunLimits,
     signature::StatementSignature,
+    suite::Suite,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},

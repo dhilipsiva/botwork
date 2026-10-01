@@ -745,6 +745,8 @@ impl Context {
     }
 
     /// Metadata for hover at a parsed call in the current lexical environment.
+    /// It takes a syntax-tree node, which is not part of the embedding API.
+    #[doc(hidden)]
     pub fn signature_for_call(&self, call: &Call) -> Option<&StatementSignature> {
         self.get_statement_ref(&call.signature)
             .map(|(statement, _)| statement.metadata())
@@ -948,6 +950,7 @@ fn finish_script(completion: Completion, context: &Context, span: &Span) -> Temp
     Err(context.detail_error(BWErr::ControlFlowError, reason, Some(span), false))
 }
 
+#[doc(hidden)]
 /// Evaluate an already parsed, owned statement at script level in this context.
 ///
 /// Definitions retain their syntax tree and source spans after the program is dropped.
@@ -956,6 +959,7 @@ pub fn execute_statement(statement: &Statement, context: &mut Context) -> Litera
     execute_statement_detailed(statement, context).map_err(Diagnostic::into_error)
 }
 
+#[doc(hidden)]
 /// Execute one script-level statement with source locations and entered-call frames.
 pub fn execute_statement_detailed(statement: &Statement, context: &mut Context) -> RuntimeResult {
     execute_statement_runtime(statement, context).map_err(RuntimeDiagnostic::into_diagnostic)
@@ -1003,6 +1007,7 @@ pub(crate) fn evaluate_program_runtime(
     sync_result(execution::evaluate_program_runtime(program, context))
 }
 
+#[doc(hidden)]
 /// Compatibility entry point for callers that already hold a Pest pair.
 ///
 /// This lowers the pair once. Prefer `Program::parse` and `evaluate_program` to
@@ -1011,6 +1016,7 @@ pub fn botwork(pair: Pair<Rule>, context: &mut Context) -> LiteralResult {
     botwork_detailed(pair, context).map_err(Diagnostic::into_error)
 }
 
+#[doc(hidden)]
 /// Parser-pair compatibility with detailed execution errors.
 pub fn botwork_detailed(pair: Pair<Rule>, context: &mut Context) -> RuntimeResult {
     let result = (|| {

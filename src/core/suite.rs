@@ -1,26 +1,36 @@
 //! Explicit suite discovery, stable case identity, and immutable case programs.
-use super::*;
-use crate::core::{grammar::Literal, value_limits::ValueLimits};
-use std::collections::{BTreeSet, HashSet};
+use super::{
+    ast::*,
+    ast_limits,
+    diagnostic::{Diagnostic, DiagnosticResult},
+    grammar::{BWErr, BWParser, Literal, Rule},
+    syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES},
+    value_limits::ValueLimits,
+};
+use pest::{iterators::Pair, Parser};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
 
 mod dataset;
 mod fixtures;
-pub use dataset::{
-    Dataset, DatasetDefinition, DatasetFormat, Row, MAX_DATASETS, MAX_DATASET_PATH_BYTES,
-    MAX_DATASET_ROWS, MAX_DATA_NODES, MAX_DATA_ROWS,
-};
+pub use dataset::{Dataset, DatasetDefinition, DatasetFormat, Row};
+#[doc(hidden)]
+pub use dataset::{MAX_DATASETS, MAX_DATA_NODES, MAX_DATA_ROWS};
 pub use fixtures::FixturePrograms;
 
 #[cfg(test)]
 mod tests;
 
-pub const MAX_SUITE_CASES: usize = 1024;
+pub(crate) const MAX_SUITE_CASES: usize = 1024;
+#[doc(hidden)]
 pub const MAX_SUITES: usize = 64;
+#[doc(hidden)]
 pub const MAX_SELECTED_CASES: usize = 4096;
+#[doc(hidden)]
 pub const MAX_SUITE_SOURCE_BYTES: usize = 8 * 1024 * 1024;
-pub const MAX_ID_BYTES: usize = 128;
-pub const MAX_TAGS: usize = 32;
-pub const MAX_NAME_BYTES: usize = 512;
+pub(crate) const MAX_ID_BYTES: usize = 128;
+pub(crate) const MAX_TAGS: usize = 32;
+pub(crate) const MAX_NAME_BYTES: usize = 512;
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct Metadata {
@@ -79,10 +89,12 @@ pub struct Suite {
     fixtures: fixtures::Fixtures,
 }
 
+#[doc(hidden)]
 pub fn configuration(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(BWErr::RunConfiguration(message.into()))
 }
 
+#[doc(hidden)]
 pub fn resource(resource: &'static str, limit: usize) -> Diagnostic {
     Diagnostic::new(BWErr::ResourceLimit {
         resource,
@@ -90,7 +102,7 @@ pub fn resource(resource: &'static str, limit: usize) -> Diagnostic {
     })
 }
 
-pub fn valid_id(id: &str) -> bool {
+pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_ID_BYTES
         && id.as_bytes()[0].is_ascii_alphanumeric()
@@ -99,12 +111,14 @@ pub fn valid_id(id: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
 }
 
+#[doc(hidden)]
 pub fn valid_case_id(id: &str) -> bool {
     id.split_once('/')
         .is_some_and(|(suite, case)| valid_id(suite) && valid_id(case))
 }
 
 /// A runnable identity is a suite/case, optionally followed by a stable row ID.
+#[doc(hidden)]
 pub fn valid_run_id(id: &str) -> bool {
     let mut parts = id.split('/');
     matches!((parts.next(), parts.next(), parts.next(), parts.next()),
@@ -204,7 +218,7 @@ impl Suite {
     pub fn parse(name: &str, text: &str) -> DiagnosticResult<Self> {
         check_source(name, text, DEFAULT_SOURCE_BYTES, &SyntaxLimits::default())?;
         let source = Arc::new(SourceFile::from_owned_parts(name.into(), text.into()));
-        let pair = super::super::parser::BWParser::parse(Rule::test_suite, text)
+        let pair = super::parser::BWParser::parse(Rule::test_suite, text)
             .map_err(|error| parse_error(error, &source, |failure| failure.default_diagnostic()))?
             .next()
             .expect("suite root")

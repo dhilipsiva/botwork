@@ -15,6 +15,7 @@ pub const DEFAULT_COMPILED_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 
 /// Counts for one cache; hits and misses accumulate over its lifetime.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct CompiledStatistics {
     /// Distinct parses kept: one per path, text, and limit combination.
     pub modules: usize,

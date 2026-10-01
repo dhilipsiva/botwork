@@ -15,6 +15,8 @@ index.
   precedence.
 - [Compatibility](compatibility.md): stable contracts, platforms, and tool
   versions.
+- [The Rust API](rust-api.md): what the crate's stable API is, and how it can
+  change in a minor release.
 - [Complete automation examples](automation-examples.md)
 - [Running scripts in parallel](parallel-cli.md)
 - [Input variables](input-variables.md)

@@ -1,0 +1,1448 @@
+assoc_const botwork::core::analysis::Rule::ALL
+assoc_const botwork::core::diagnostic::DiagnosticCode::ALL
+assoc_const botwork::core::signature::ValueKind::ALL
+assoc_const botwork::core::signature::ValueKinds::ANY
+const botwork::core::analysis::EXTERNAL_STATEMENTS
+const botwork::core::diagnostic::RENDER_SUMMARY_BYTES
+const botwork::core::eval::DEFAULT_COMPILED_SOURCE_BYTES
+const botwork::core::operation::DEFAULT_STOP_GRACE
+const botwork::core::report::RECORD_FORMAT
+const botwork::core::report::RECORD_VERSION
+const botwork::core::run::MAX_EVALUATION_DEPTH
+const botwork::core::worker::protocol::VERSION
+enum botwork::core::acceptance::AssertionMode #[non_exhaustive]
+enum botwork::core::acceptance::CaseStatus #[non_exhaustive]
+enum botwork::core::acceptance::Delivery #[non_exhaustive]
+enum botwork::core::acceptance::FailureKind #[non_exhaustive]
+enum botwork::core::acceptance::ParentStop #[non_exhaustive]
+enum botwork::core::acceptance::PhaseOutcome #[non_exhaustive]
+enum botwork::core::acceptance::SkipReason #[non_exhaustive]
+enum botwork::core::analysis::External #[non_exhaustive]
+enum botwork::core::analysis::Rule #[non_exhaustive]
+enum botwork::core::analysis::Severity #[non_exhaustive]
+enum botwork::core::diagnostic::DiagnosticCode #[non_exhaustive]
+enum botwork::core::format::SourceKind
+enum botwork::core::grammar::BWErr #[non_exhaustive]
+enum botwork::core::grammar::Literal #[non_exhaustive]
+enum botwork::core::listener::ListenerFailure #[non_exhaustive]
+enum botwork::core::report::Event #[non_exhaustive]
+enum botwork::core::report::RecordError #[non_exhaustive]
+enum botwork::core::run::RunOutcome #[non_exhaustive]
+enum botwork::core::signature::StatementOrigin #[non_exhaustive]
+enum botwork::core::signature::ValueKind #[non_exhaustive]
+enum botwork::core::suite::DatasetFormat #[non_exhaustive]
+enum botwork::core::worker::WorkerCleanup #[non_exhaustive]
+enum botwork::core::worker::WorkerOutcome #[non_exhaustive]
+enum botwork::core::worker::journal::GuardianReceipt #[non_exhaustive]
+field botwork::core::analysis::Finding::help
+field botwork::core::analysis::Finding::message
+field botwork::core::analysis::Finding::rule
+field botwork::core::analysis::Finding::span
+field botwork::core::analysis::Report::diagnostics
+field botwork::core::analysis::Report::external
+field botwork::core::analysis::Report::findings
+field botwork::core::analysis::Report::inputs
+field botwork::core::analysis::Report::modules
+field botwork::core::analysis::Report::unchecked_imports
+field botwork::core::ast::Program::source
+field botwork::core::ast_limits::AstLimits::depth
+field botwork::core::ast_limits::AstLimits::nodes
+field botwork::core::ast_limits::AstLimits::source_bytes
+field botwork::core::diagnostic::CallFrame::call_site
+field botwork::core::diagnostic::CallFrame::definition_site
+field botwork::core::diagnostic::CallFrame::signature
+field botwork::core::diagnostic::CallFrame::statement
+field botwork::core::diagnostic::Diagnostic::call_stack
+field botwork::core::diagnostic::Diagnostic::causes
+field botwork::core::diagnostic::Diagnostic::error
+field botwork::core::diagnostic::Diagnostic::label
+field botwork::core::diagnostic::Diagnostic::omissions
+field botwork::core::diagnostic::Diagnostic::related
+field botwork::core::diagnostic::Diagnostic::span
+field botwork::core::diagnostic::DiagnosticLimits::call_frames
+field botwork::core::diagnostic::DiagnosticLimits::depth
+field botwork::core::diagnostic::DiagnosticLimits::diagnostics
+field botwork::core::diagnostic::DiagnosticLimits::related_locations
+field botwork::core::diagnostic::DiagnosticLimits::source_bytes
+field botwork::core::diagnostic::DiagnosticLimits::text_bytes
+field botwork::core::diagnostic::DiagnosticOmissions::call_frames
+field botwork::core::diagnostic::DiagnosticOmissions::detail_fields
+field botwork::core::diagnostic::DiagnosticOmissions::direct_causes
+field botwork::core::diagnostic::DiagnosticOmissions::label
+field botwork::core::diagnostic::DiagnosticOmissions::prior_summary
+field botwork::core::diagnostic::DiagnosticOmissions::related_locations
+field botwork::core::diagnostic::DiagnosticOmissions::source
+field botwork::core::diagnostic::DiagnosticRenderLimits::call_frames
+field botwork::core::diagnostic::DiagnosticRenderLimits::depth
+field botwork::core::diagnostic::DiagnosticRenderLimits::diagnostics
+field botwork::core::diagnostic::DiagnosticRenderLimits::output_bytes
+field botwork::core::diagnostic::DiagnosticRenderLimits::related_locations
+field botwork::core::diagnostic::DiagnosticRenderLimits::source_scan_bytes
+field botwork::core::diagnostic::DiagnosticRenderTruncation::limit
+field botwork::core::diagnostic::DiagnosticRenderTruncation::resource
+field botwork::core::diagnostic::DiagnosticSize::call_frames
+field botwork::core::diagnostic::DiagnosticSize::depth
+field botwork::core::diagnostic::DiagnosticSize::diagnostics
+field botwork::core::diagnostic::DiagnosticSize::related_locations
+field botwork::core::diagnostic::DiagnosticSize::source_bytes
+field botwork::core::diagnostic::DiagnosticSize::text_bytes
+field botwork::core::diagnostic::DiagnosticValueLimits::position_bytes
+field botwork::core::diagnostic::DiagnosticValueLimits::values
+field botwork::core::diagnostic::OmittedSource::end_byte
+field botwork::core::diagnostic::OmittedSource::file
+field botwork::core::diagnostic::OmittedSource::file_truncated
+field botwork::core::diagnostic::OmittedSource::start_byte
+field botwork::core::diagnostic::RelatedLocation::message
+field botwork::core::diagnostic::RelatedLocation::span
+field botwork::core::diagnostic::RenderedDiagnostic::text
+field botwork::core::diagnostic::RenderedDiagnostic::truncation
+field botwork::core::eval::CompiledStatistics::evictions
+field botwork::core::eval::CompiledStatistics::hits
+field botwork::core::eval::CompiledStatistics::misses
+field botwork::core::eval::CompiledStatistics::modules
+field botwork::core::eval::CompiledStatistics::source_bytes
+field botwork::core::eval::FixtureResult::body
+field botwork::core::eval::FixtureResult::result
+field botwork::core::input::InputLimits::raw_nodes
+field botwork::core::input::InputLimits::source_bytes
+field botwork::core::input::InputLimits::sources
+field botwork::core::input::InputLimits::total_bytes
+field botwork::core::input::InputLimits::values
+field botwork::core::input::InputLimits::variables
+field botwork::core::listener::ListenerOptions::capacity
+field botwork::core::listener::ListenerOptions::close_timeout
+field botwork::core::listener::ListenerOutcome::accepted
+field botwork::core::listener::ListenerOutcome::delivered
+field botwork::core::listener::ListenerOutcome::failure
+field botwork::core::listener::ListenerOutcome::finished
+field botwork::core::operation::OperationOwnershipLimits::call_frames
+field botwork::core::operation::OperationOwnershipLimits::diagnostics
+field botwork::core::operation::OperationOwnershipLimits::invocations
+field botwork::core::operation::OperationOwnershipLimits::nodes
+field botwork::core::operation::OperationOwnershipLimits::payload_bytes
+field botwork::core::operation::OperationOwnershipLimits::related_locations
+field botwork::core::operation::OperationOwnershipLimits::source_bytes
+field botwork::core::operation::OperationOwnershipLimits::text_bytes
+field botwork::core::operation::OperationOwnershipLimits::values
+field botwork::core::operation::OperationUsage::call_frames
+field botwork::core::operation::OperationUsage::diagnostics
+field botwork::core::operation::OperationUsage::invocations
+field botwork::core::operation::OperationUsage::nodes
+field botwork::core::operation::OperationUsage::payload_bytes
+field botwork::core::operation::OperationUsage::related_locations
+field botwork::core::operation::OperationUsage::source_bytes
+field botwork::core::operation::OperationUsage::text_bytes
+field botwork::core::operation::OperationUsage::values
+field botwork::core::report::ArtifactRecord::kind
+field botwork::core::report::ArtifactRecord::path
+field botwork::core::report::ErrorRecord::causes
+field botwork::core::report::ErrorRecord::code
+field botwork::core::report::ErrorRecord::location
+field botwork::core::report::ErrorRecord::message
+field botwork::core::report::ErrorRecord::omitted_causes
+field botwork::core::report::ErrorRecord::status
+field botwork::core::report::ErrorRecord::truncated
+field botwork::core::report::EventRecord::event
+field botwork::core::report::EventRecord::sequence
+field botwork::core::report::LogRecord::bytes
+field botwork::core::report::LogRecord::offset_us
+field botwork::core::report::LogRecord::statement
+field botwork::core::report::LogRecord::text
+field botwork::core::report::LogRecord::truncated
+field botwork::core::report::RecordLimits::artifacts
+field botwork::core::report::RecordLimits::causes
+field botwork::core::report::RecordLimits::log_bytes
+field botwork::core::report::RecordLimits::log_record_bytes
+field botwork::core::report::RecordLimits::logs
+field botwork::core::report::RecordLimits::message_bytes
+field botwork::core::report::RecordLimits::statements
+field botwork::core::report::RecordOptions::expectation
+field botwork::core::report::RecordOptions::identity
+field botwork::core::report::RecordOptions::limits
+field botwork::core::report::RecordOptions::observer
+field botwork::core::report::RecordOptions::secrets
+field botwork::core::report::RunIdentity::dataset
+field botwork::core::report::RunIdentity::id
+field botwork::core::report::RunIdentity::name
+field botwork::core::report::RunIdentity::row
+field botwork::core::report::RunRecord::artifacts
+field botwork::core::report::RunRecord::complete
+field botwork::core::report::RunRecord::duration_us
+field botwork::core::report::RunRecord::error
+field botwork::core::report::RunRecord::events
+field botwork::core::report::RunRecord::finished_at
+field botwork::core::report::RunRecord::format
+field botwork::core::report::RunRecord::identity
+field botwork::core::report::RunRecord::logged_bytes
+field botwork::core::report::RunRecord::logs
+field botwork::core::report::RunRecord::omitted_artifacts
+field botwork::core::report::RunRecord::omitted_logs
+field botwork::core::report::RunRecord::omitted_statements
+field botwork::core::report::RunRecord::skip_reason
+field botwork::core::report::RunRecord::started_at
+field botwork::core::report::RunRecord::statements
+field botwork::core::report::RunRecord::status
+field botwork::core::report::RunRecord::version
+field botwork::core::report::SourceLocation::column
+field botwork::core::report::SourceLocation::end_byte
+field botwork::core::report::SourceLocation::end_column
+field botwork::core::report::SourceLocation::end_line
+field botwork::core::report::SourceLocation::file
+field botwork::core::report::SourceLocation::line
+field botwork::core::report::SourceLocation::start_byte
+field botwork::core::report::StatementRecord::code
+field botwork::core::report::StatementRecord::duration_us
+field botwork::core::report::StatementRecord::index
+field botwork::core::report::StatementRecord::kind
+field botwork::core::report::StatementRecord::location
+field botwork::core::report::StatementRecord::offset_us
+field botwork::core::report::StatementRecord::status
+field botwork::core::run::CleanupLimits::steps
+field botwork::core::run::CleanupLimits::timeout
+field botwork::core::run::ImportLimits::bindings
+field botwork::core::run::ImportLimits::dependency_depth
+field botwork::core::run::ImportLimits::loads
+field botwork::core::run::ImportLimits::metadata_bytes
+field botwork::core::run::ImportLimits::paths
+field botwork::core::run::ImportLimits::source_bytes
+field botwork::core::run::OutputLimits::record_bytes
+field botwork::core::run::OutputLimits::total_bytes
+field botwork::core::run::ResultLimits::name_bytes
+field botwork::core::run::ResultLimits::nodes
+field botwork::core::run::ResultLimits::payload_bytes
+field botwork::core::run::ResultLimits::values
+field botwork::core::run::RetainedDefinitionLimits::definitions
+field botwork::core::run::RetainedDefinitionLimits::nodes
+field botwork::core::run::RetainedDefinitionLimits::source_bytes
+field botwork::core::run::RetainedDiagnosticLimits::call_frames
+field botwork::core::run::RetainedDiagnosticLimits::diagnostics
+field botwork::core::run::RetainedDiagnosticLimits::records
+field botwork::core::run::RetainedDiagnosticLimits::related_locations
+field botwork::core::run::RetainedDiagnosticLimits::source_bytes
+field botwork::core::run::RetainedDiagnosticLimits::text_bytes
+field botwork::core::run::RetainedNameLimits::name_bytes
+field botwork::core::run::RetainedNameLimits::names
+field botwork::core::run::RetainedNameLimits::total_bytes
+field botwork::core::run::RetainedRegistryLimits::entries
+field botwork::core::run::RetainedRegistryLimits::name_bytes
+field botwork::core::run::RetainedRegistryLimits::nodes
+field botwork::core::run::RetainedRegistryLimits::source_bytes
+field botwork::core::run::RetainedRegistryLimits::text_bytes
+field botwork::core::run::RetainedValueLimits::nodes
+field botwork::core::run::RetainedValueLimits::payload_bytes
+field botwork::core::run::RetainedValueLimits::values
+field botwork::core::run::RunLimits::ast
+field botwork::core::run::RunLimits::call_depth
+field botwork::core::run::RunLimits::cleanup
+field botwork::core::run::RunLimits::diagnostic_values
+field botwork::core::run::RunLimits::diagnostics
+field botwork::core::run::RunLimits::evaluation_depth
+field botwork::core::run::RunLimits::import_depth
+field botwork::core::run::RunLimits::imports
+field botwork::core::run::RunLimits::output
+field botwork::core::run::RunLimits::results
+field botwork::core::run::RunLimits::retained_definitions
+field botwork::core::run::RunLimits::retained_diagnostics
+field botwork::core::run::RunLimits::retained_names
+field botwork::core::run::RunLimits::retained_registry
+field botwork::core::run::RunLimits::retained_values
+field botwork::core::run::RunLimits::snapshots
+field botwork::core::run::RunLimits::source_bytes
+field botwork::core::run::RunLimits::steps
+field botwork::core::run::RunLimits::syntax
+field botwork::core::run::RunLimits::temporaries
+field botwork::core::run::RunLimits::values
+field botwork::core::run::RunOptions::control
+field botwork::core::run::RunOptions::environment
+field botwork::core::run::RunOptions::inherit_environment
+field botwork::core::run::RunOptions::limits
+field botwork::core::run::RunOptions::record
+field botwork::core::run::RunOptions::secrets
+field botwork::core::run::RunOptions::timeout
+field botwork::core::run::RunOptions::variables
+field botwork::core::run::RunOptions::working_directory
+field botwork::core::run::RunResult::elapsed
+field botwork::core::run::RunResult::record
+field botwork::core::run::RunResult::result
+field botwork::core::run::RunResult::snapshot_error
+field botwork::core::run::RunResult::steps
+field botwork::core::run::RunResult::variables
+field botwork::core::run::SnapshotLimits::entries
+field botwork::core::run::SnapshotLimits::path_bytes
+field botwork::core::run::TemporaryLimits::nodes
+field botwork::core::run::TemporaryLimits::payload_bytes
+field botwork::core::run::TemporaryLimits::values
+field botwork::core::signature::ParameterSignature::accepted
+field botwork::core::signature::ParameterSignature::name
+field botwork::core::signature::ParameterSignature::span
+field botwork::core::signature::StatementError::code
+field botwork::core::signature::StatementError::description
+field botwork::core::suite::FixturePrograms::setup
+field botwork::core::suite::FixturePrograms::teardown
+field botwork::core::suite::Selection::cases
+field botwork::core::suite::Selection::exclude_tags
+field botwork::core::suite::Selection::failed
+field botwork::core::suite::Selection::tags
+field botwork::core::syntax_limits::SyntaxLimits::nesting
+field botwork::core::syntax_limits::SyntaxLimits::operators
+field botwork::core::value_limits::ValueLimits::depth
+field botwork::core::value_limits::ValueLimits::entries
+field botwork::core::value_limits::ValueLimits::key_bytes
+field botwork::core::value_limits::ValueLimits::nodes
+field botwork::core::value_limits::ValueLimits::payload_bytes
+field botwork::core::value_limits::ValueLimits::string_bytes
+field botwork::core::value_limits::ValueSize::depth
+field botwork::core::value_limits::ValueSize::nodes
+field botwork::core::value_limits::ValueSize::payload_bytes
+field botwork::core::worker::ActiveWorker::cleanup
+field botwork::core::worker::ActiveWorker::id
+field botwork::core::worker::ActiveWorker::pid
+field botwork::core::worker::ActiveWorker::stopping
+field botwork::core::worker::WorkerCommand::arguments
+field botwork::core::worker::WorkerCommand::directory
+field botwork::core::worker::WorkerCommand::environment
+field botwork::core::worker::WorkerCommand::executable
+field botwork::core::worker::WorkerLimits::cleanup_timeout
+field botwork::core::worker::WorkerLimits::history_records
+field botwork::core::worker::WorkerLimits::max_in_flight
+field botwork::core::worker::WorkerLimits::request_bytes
+field botwork::core::worker::WorkerLimits::stderr_bytes
+field botwork::core::worker::WorkerLimits::stdout_bytes
+field botwork::core::worker::WorkerLimits::timeout
+field botwork::core::worker::WorkerRecord::cleanup
+field botwork::core::worker::WorkerRecord::exit_status
+field botwork::core::worker::WorkerRecord::id
+field botwork::core::worker::WorkerRecord::outcome
+field botwork::core::worker::WorkerReport::cleanup
+field botwork::core::worker::WorkerReport::diagnostic
+field botwork::core::worker::WorkerReport::exit_status
+field botwork::core::worker::WorkerReport::id
+field botwork::core::worker::WorkerReport::io_complete
+field botwork::core::worker::WorkerReport::outcome
+field botwork::core::worker::WorkerReport::progress_complete
+field botwork::core::worker::WorkerReport::stderr
+field botwork::core::worker::WorkerReport::stdin_written
+field botwork::core::worker::WorkerReport::stdout
+field botwork::core::worker::WorkerSnapshot::active
+field botwork::core::worker::WorkerSnapshot::closed
+field botwork::core::worker::WorkerSnapshot::completed
+field botwork::core::worker::WorkerSnapshot::omitted_records
+field botwork::core::worker::journal::JournalFlush::failed
+field botwork::core::worker::journal::JournalFlush::pending
+field botwork::core::worker::journal::JournalId::sequence
+field botwork::core::worker::journal::JournalId::session
+field botwork::core::worker::journal::JournalMetadata::cleanup
+field botwork::core::worker::journal::JournalMetadata::exit_status
+field botwork::core::worker::journal::JournalMetadata::io_complete
+field botwork::core::worker::journal::JournalMetadata::outcome
+field botwork::core::worker::journal::JournalMetadata::progress_complete
+field botwork::core::worker::journal::RecoveredWorker::damaged
+field botwork::core::worker::journal::RecoveredWorker::guardian
+field botwork::core::worker::journal::RecoveredWorker::id
+field botwork::core::worker::journal::RecoveredWorker::outcome
+field botwork::core::worker::journal::RecoveredWorker::published
+field botwork::core::worker::journal::RecoveredWorker::reconciled
+field botwork::core::worker::protocol::ProtocolLimits::argument_nodes
+field botwork::core::worker::protocol::ProtocolLimits::argument_payload_bytes
+field botwork::core::worker::protocol::ProtocolLimits::arguments
+field botwork::core::worker::protocol::ProtocolLimits::diagnostics
+field botwork::core::worker::protocol::ProtocolLimits::frame_bytes
+field botwork::core::worker::protocol::ProtocolLimits::in_flight_bytes
+field botwork::core::worker::protocol::ProtocolLimits::sources
+field botwork::core::worker::protocol::ProtocolLimits::values
+field botwork::core::worker::protocol::WorkerProtocol::labels
+field botwork::core::worker::protocol::WorkerProtocol::limits
+field botwork::core::worker::protocol::WorkerProtocol::resource_names
+fn botwork::core::acceptance::CaseCompletion::decide
+fn botwork::core::acceptance::CaseCompletion::executed
+fn botwork::core::acceptance::CaseCompletion::interrupted
+fn botwork::core::acceptance::CaseCompletion::skip_reason
+fn botwork::core::acceptance::CaseCompletion::skipped
+fn botwork::core::acceptance::CaseExpectation::failure
+fn botwork::core::acceptance::CaseExpectation::reason
+fn botwork::core::acceptance::CaseStatus::as_str
+fn botwork::core::acceptance::CaseStatus::complete
+fn botwork::core::acceptance::CaseStatus::exit_code
+fn botwork::core::acceptance::CaseStatus::failed
+fn botwork::core::acceptance::CaseStatus::from_diagnostic_code
+fn botwork::core::acceptance::CaseStatus::label
+fn botwork::core::acceptance::CaseStatus::view
+fn botwork::core::acceptance::CaseTotals::count
+fn botwork::core::acceptance::CaseTotals::finish
+fn botwork::core::acceptance::CaseTotals::record
+fn botwork::core::acceptance::CaseTotals::record_many
+fn botwork::core::acceptance::CaseTotals::total
+fn botwork::core::acceptance::Delivery::as_str
+fn botwork::core::acceptance::FailureKind::from_diagnostic
+fn botwork::core::acceptance::FailureKind::from_diagnostic_code
+fn botwork::core::acceptance::RunVerdict::cases
+fn botwork::core::acceptance::RunVerdict::complete
+fn botwork::core::acceptance::RunVerdict::delivery
+fn botwork::core::acceptance::RunVerdict::exit_code
+fn botwork::core::acceptance::RunVerdict::failed
+fn botwork::core::acceptance::RunVerdict::fixture_failures
+fn botwork::core::acceptance::RunVerdict::status
+fn botwork::core::acceptance::RunVerdict::view
+fn botwork::core::acceptance::SkipReason::message
+fn botwork::core::acceptance::StatusView::complete
+fn botwork::core::acceptance::StatusView::exit_code
+fn botwork::core::acceptance::StatusView::failed
+fn botwork::core::acceptance::StatusView::html
+fn botwork::core::acceptance::StatusView::label
+fn botwork::core::acceptance::StatusView::status
+fn botwork::core::analysis::Analyzer::check_program
+fn botwork::core::analysis::Analyzer::check_suite
+fn botwork::core::analysis::Analyzer::report_program
+fn botwork::core::analysis::Analyzer::report_suite
+fn botwork::core::analysis::Analyzer::with_modules
+fn botwork::core::analysis::Analyzer::with_statements
+fn botwork::core::analysis::External::as_str
+fn botwork::core::analysis::Finding::severity
+fn botwork::core::analysis::Report::errors
+fn botwork::core::analysis::Report::warnings
+fn botwork::core::analysis::Rule::as_str
+fn botwork::core::analysis::Rule::code
+fn botwork::core::analysis::Rule::severity
+fn botwork::core::analysis::Severity::as_str
+fn botwork::core::ast::Program::parse
+fn botwork::core::ast::Program::parse_bounded
+fn botwork::core::ast::Program::parse_detailed
+fn botwork::core::ast::Program::parse_with_budgets
+fn botwork::core::ast::Program::validate
+fn botwork::core::ast::Program::validate_detailed
+fn botwork::core::ast::Program::validate_with_limits
+fn botwork::core::ast::SourceFile::name
+fn botwork::core::ast::SourceFile::text
+fn botwork::core::ast::Span::end
+fn botwork::core::ast::Span::end_line_column
+fn botwork::core::ast::Span::line_column
+fn botwork::core::ast::Span::location
+fn botwork::core::ast::Span::source
+fn botwork::core::ast::Span::start
+fn botwork::core::ast::Span::text
+fn botwork::core::diagnostic::CallFrame::shown
+fn botwork::core::diagnostic::Diagnostic::at
+fn botwork::core::diagnostic::Diagnostic::code
+fn botwork::core::diagnostic::Diagnostic::discard
+fn botwork::core::diagnostic::Diagnostic::help
+fn botwork::core::diagnostic::Diagnostic::help_with_limit
+fn botwork::core::diagnostic::Diagnostic::into_error
+fn botwork::core::diagnostic::Diagnostic::new
+fn botwork::core::diagnostic::Diagnostic::render_with_limits
+fn botwork::core::diagnostic::Diagnostic::to_value
+fn botwork::core::diagnostic::Diagnostic::to_value_with_limits
+fn botwork::core::diagnostic::Diagnostic::try_clone_with_limits
+fn botwork::core::diagnostic::Diagnostic::value_size_with_limits
+fn botwork::core::diagnostic::DiagnosticCode::as_str
+fn botwork::core::diagnostic::DiagnosticCode::parse
+fn botwork::core::diagnostic::DiagnosticLimits::admit
+fn botwork::core::diagnostic::DiagnosticLimits::check
+fn botwork::core::eval::CompiledModules::clear
+fn botwork::core::eval::CompiledModules::statistics
+fn botwork::core::eval::CompiledModules::with_capacity
+fn botwork::core::eval::Context::attach_recording
+fn botwork::core::eval::Context::checkpoint
+fn botwork::core::eval::Context::complete_statements
+fn botwork::core::eval::Context::init_statements
+fn botwork::core::eval::Context::register_native
+fn botwork::core::eval::Context::register_native_with_signature
+fn botwork::core::eval::Context::register_operation
+fn botwork::core::eval::Context::set_compiled_modules
+fn botwork::core::eval::Context::set_input_variables
+fn botwork::core::eval::Context::set_secrets
+fn botwork::core::eval::Context::set_statement_tracing
+fn botwork::core::eval::Context::statement_signature
+fn botwork::core::eval::Context::statement_signatures
+fn botwork::core::eval::Context::try_clone
+fn botwork::core::eval::Context::with_control
+fn botwork::core::eval::Context::with_host_environment
+fn botwork::core::eval::Context::with_limits
+fn botwork::core::eval::Context::write_output
+fn botwork::core::eval::Context::write_value
+fn botwork::core::eval::FixtureInputs::control
+fn botwork::core::eval::FixtureInputs::inherit_into
+fn botwork::core::eval::evaluate_program
+fn botwork::core::eval::evaluate_program_async
+fn botwork::core::eval::evaluate_program_detailed
+fn botwork::core::eval::evaluate_suite_fixture_async
+fn botwork::core::format::SourceKind::of_path
+fn botwork::core::format::format
+fn botwork::core::grammar::BWErr::code
+fn botwork::core::grammar::BWErr::help
+fn botwork::core::grammar::BWErr::help_with_limit
+fn botwork::core::grammar::BWErr::undefined_variable
+fn botwork::core::grammar::Literal::kind
+fn botwork::core::input::load_variables
+fn botwork::core::input::load_variables_with_limits
+fn botwork::core::input::parse_variable
+fn botwork::core::input::parse_variable_with_limits
+fn botwork::core::input::parse_variables
+fn botwork::core::input::parse_variables_with_limits
+fn botwork::core::listener::Dispatcher::close
+fn botwork::core::listener::Dispatcher::sender
+fn botwork::core::listener::Dispatcher::spawn
+fn botwork::core::listener::ListenerSender::send
+fn botwork::core::operation::NativeOperation::asynchronous
+fn botwork::core::operation::NativeOperation::blocking
+fn botwork::core::operation::NativeOperation::invoke
+fn botwork::core::operation::NativeOperation::isolated
+fn botwork::core::operation::NativeOperation::isolated_in_flight_bytes
+fn botwork::core::operation::NativeOperation::ownership_budget
+fn botwork::core::operation::NativeOperation::signature
+fn botwork::core::operation::NativeOperation::with_diagnostic_limits
+fn botwork::core::operation::NativeOperation::with_ownership_budget
+fn botwork::core::operation::NativeOperation::with_value_limits
+fn botwork::core::operation::OperationBudget::limits
+fn botwork::core::operation::OperationBudget::new
+fn botwork::core::operation::OperationBudget::usage
+fn botwork::core::operation::OperationControl::abandoned
+fn botwork::core::operation::OperationControl::cancel
+fn botwork::core::operation::OperationControl::checkpoint
+fn botwork::core::operation::OperationControl::child
+fn botwork::core::operation::OperationControl::deadline
+fn botwork::core::operation::OperationControl::is_cancelled
+fn botwork::core::operation::OperationControl::stop_grace
+fn botwork::core::operation::OperationControl::stopped
+fn botwork::core::operation::OperationControl::with_stop_grace
+fn botwork::core::operation::OperationControl::within_grace
+fn botwork::core::paths::canonicalize
+fn botwork::core::report::ErrorRecord::from_diagnostic
+fn botwork::core::report::ErrorRecord::masked
+fn botwork::core::report::EventObserver::new
+fn botwork::core::report::Recording::finish
+fn botwork::core::report::Recording::start
+fn botwork::core::report::RunIdentity::new
+fn botwork::core::report::RunIdentity::with_row
+fn botwork::core::report::RunRecord::apply
+fn botwork::core::report::RunRecord::from_events
+fn botwork::core::report::RunRecord::new
+fn botwork::core::report::SourceLocation::from_span
+fn botwork::core::report::decide
+fn botwork::core::report::timestamp
+fn botwork::core::run::Engine::compiled_modules
+fn botwork::core::run::Engine::register_native
+fn botwork::core::run::Engine::register_native_with_signature
+fn botwork::core::run::Engine::register_operation
+fn botwork::core::run::Engine::run_file
+fn botwork::core::run::Engine::run_file_async
+fn botwork::core::run::Engine::run_program
+fn botwork::core::run::Engine::run_program_async
+fn botwork::core::run::Engine::run_source
+fn botwork::core::run::Engine::run_source_async
+fn botwork::core::run::Engine::share_compiled_modules
+fn botwork::core::run::Engine::with_registry_limits
+fn botwork::core::run::RunEnvironment::control
+fn botwork::core::run::RunEnvironment::get
+fn botwork::core::run::RunEnvironment::variables
+fn botwork::core::run::RunEnvironment::working_directory
+fn botwork::core::run::RunResult::outcome
+fn botwork::core::secret::Secrets::add
+fn botwork::core::secret::Secrets::add_texts
+fn botwork::core::secret::Secrets::is_empty
+fn botwork::core::secret::Secrets::mask_value
+fn botwork::core::secret::Secrets::redact
+fn botwork::core::secret::Secrets::writer
+fn botwork::core::signature::StatementSignature::description
+fn botwork::core::signature::StatementSignature::display_header
+fn botwork::core::signature::StatementSignature::display_help
+fn botwork::core::signature::StatementSignature::documentation
+fn botwork::core::signature::StatementSignature::documented_errors
+fn botwork::core::signature::StatementSignature::documents_error
+fn botwork::core::signature::StatementSignature::header
+fn botwork::core::signature::StatementSignature::help
+fn botwork::core::signature::StatementSignature::native
+fn botwork::core::signature::StatementSignature::normalized
+fn botwork::core::signature::StatementSignature::origin
+fn botwork::core::signature::StatementSignature::parameter
+fn botwork::core::signature::StatementSignature::parameters
+fn botwork::core::signature::StatementSignature::return_kinds
+fn botwork::core::signature::StatementSignature::returns
+fn botwork::core::signature::ValueKind::as_str
+fn botwork::core::signature::ValueKinds::contains
+fn botwork::core::signature::ValueKinds::iter
+fn botwork::core::signature::ValueKinds::one
+fn botwork::core::signature::ValueKinds::union
+fn botwork::core::suite::Case::binding
+fn botwork::core::suite::Case::metadata
+fn botwork::core::suite::Case::span
+fn botwork::core::suite::Dataset::from_csv
+fn botwork::core::suite::Dataset::from_json
+fn botwork::core::suite::Dataset::metadata
+fn botwork::core::suite::Dataset::parse
+fn botwork::core::suite::Dataset::parse_format
+fn botwork::core::suite::Dataset::rows
+fn botwork::core::suite::Dataset::source
+fn botwork::core::suite::Dataset::value_nodes
+fn botwork::core::suite::DatasetDefinition::data
+fn botwork::core::suite::DatasetDefinition::external
+fn botwork::core::suite::DatasetDefinition::format
+fn botwork::core::suite::DatasetDefinition::id
+fn botwork::core::suite::Metadata::id
+fn botwork::core::suite::Metadata::name
+fn botwork::core::suite::Metadata::tags
+fn botwork::core::suite::Row::metadata
+fn botwork::core::suite::Row::span
+fn botwork::core::suite::Row::value
+fn botwork::core::suite::SelectedCase::bind_inputs
+fn botwork::core::suite::SelectedCase::case
+fn botwork::core::suite::SelectedCase::case_id
+fn botwork::core::suite::SelectedCase::dataset
+fn botwork::core::suite::SelectedCase::display_name
+fn botwork::core::suite::SelectedCase::id
+fn botwork::core::suite::SelectedCase::program
+fn botwork::core::suite::SelectedCase::row
+fn botwork::core::suite::SelectedCase::shared_suite
+fn botwork::core::suite::SelectedCase::suite
+fn botwork::core::suite::SelectedCase::tags
+fn botwork::core::suite::Selection::select
+fn botwork::core::suite::Suite::cases
+fn botwork::core::suite::Suite::datasets
+fn botwork::core::suite::Suite::fixture_programs
+fn botwork::core::suite::Suite::has_suite_fixture
+fn botwork::core::suite::Suite::metadata
+fn botwork::core::suite::Suite::parse
+fn botwork::core::suite::Suite::program
+fn botwork::core::suite::Suite::resolve_datasets
+fn botwork::core::suite::Suite::run_count
+fn botwork::core::suite::Suite::source
+fn botwork::core::value_limits::ValueLimits::check
+fn botwork::core::value_limits::discard
+fn botwork::core::worker::WorkerHandle::cancel
+fn botwork::core::worker::WorkerHandle::id
+fn botwork::core::worker::WorkerHandle::journal_id
+fn botwork::core::worker::WorkerHandle::wait
+fn botwork::core::worker::WorkerPool::limits
+fn botwork::core::worker::WorkerPool::new
+fn botwork::core::worker::WorkerPool::shutdown
+fn botwork::core::worker::WorkerPool::shutdown_wait
+fn botwork::core::worker::WorkerPool::snapshot
+fn botwork::core::worker::WorkerPool::start
+fn botwork::core::worker::WorkerPool::with_pid_namespace
+fn botwork::core::worker::WorkerPool::with_process_tree
+fn botwork::core::worker::WorkerPool::with_recovery
+fn botwork::core::worker::journal::WorkerJournal::flush_wait
+fn botwork::core::worker::journal::WorkerJournal::open
+fn botwork::core::worker::journal::WorkerJournal::records
+fn botwork::core::worker::protocol::WorkerProtocol::decode_request
+fn botwork::core::worker::protocol::WorkerProtocol::decode_response
+fn botwork::core::worker::protocol::WorkerProtocol::encode_request
+fn botwork::core::worker::protocol::WorkerProtocol::encode_response
+fn botwork::core::worker::protocol::WorkerProtocol::read_request
+fn botwork::core::worker::protocol::WorkerProtocol::serve_once
+fn botwork::core::worker::protocol::WorkerProtocol::write_response
+impl Clone for botwork::core::acceptance::AssertionMode
+impl Clone for botwork::core::acceptance::CaseCompletion
+impl Clone for botwork::core::acceptance::CaseExpectation
+impl Clone for botwork::core::acceptance::CaseStatus
+impl Clone for botwork::core::acceptance::CaseTotals
+impl Clone for botwork::core::acceptance::Delivery
+impl Clone for botwork::core::acceptance::FailureKind
+impl Clone for botwork::core::acceptance::ParentStop
+impl Clone for botwork::core::acceptance::PhaseOutcome
+impl Clone for botwork::core::acceptance::RunVerdict
+impl Clone for botwork::core::acceptance::SkipReason
+impl Clone for botwork::core::acceptance::StatusView
+impl Clone for botwork::core::analysis::External
+impl Clone for botwork::core::analysis::Finding
+impl Clone for botwork::core::analysis::Rule
+impl Clone for botwork::core::analysis::Severity
+impl Clone for botwork::core::ast::Program
+impl Clone for botwork::core::ast::SourceFile
+impl Clone for botwork::core::ast::Span
+impl Clone for botwork::core::ast_limits::AstLimits
+impl Clone for botwork::core::diagnostic::CallFrame
+impl Clone for botwork::core::diagnostic::Diagnostic
+impl Clone for botwork::core::diagnostic::DiagnosticCode
+impl Clone for botwork::core::diagnostic::DiagnosticLimits
+impl Clone for botwork::core::diagnostic::DiagnosticOmissions
+impl Clone for botwork::core::diagnostic::DiagnosticRenderLimits
+impl Clone for botwork::core::diagnostic::DiagnosticRenderTruncation
+impl Clone for botwork::core::diagnostic::DiagnosticSize
+impl Clone for botwork::core::diagnostic::DiagnosticValueLimits
+impl Clone for botwork::core::diagnostic::OmittedSource
+impl Clone for botwork::core::diagnostic::RelatedLocation
+impl Clone for botwork::core::diagnostic::RenderedDiagnostic
+impl Clone for botwork::core::eval::CompiledModules
+impl Clone for botwork::core::eval::CompiledStatistics
+impl Clone for botwork::core::eval::Context
+impl Clone for botwork::core::eval::FixtureInputs
+impl Clone for botwork::core::format::SourceKind
+impl Clone for botwork::core::grammar::BWErr
+impl Clone for botwork::core::grammar::Literal
+impl Clone for botwork::core::input::InputLimits
+impl Clone for botwork::core::listener::ListenerFailure
+impl Clone for botwork::core::listener::ListenerOptions
+impl Clone for botwork::core::listener::ListenerOutcome
+impl Clone for botwork::core::listener::ListenerSender
+impl Clone for botwork::core::operation::NativeOperation
+impl Clone for botwork::core::operation::OperationBudget
+impl Clone for botwork::core::operation::OperationControl
+impl Clone for botwork::core::operation::OperationOwnershipLimits
+impl Clone for botwork::core::operation::OperationUsage
+impl Clone for botwork::core::report::ArtifactRecord
+impl Clone for botwork::core::report::ErrorRecord
+impl Clone for botwork::core::report::Event
+impl Clone for botwork::core::report::EventObserver
+impl Clone for botwork::core::report::EventRecord
+impl Clone for botwork::core::report::LogRecord
+impl Clone for botwork::core::report::RecordError
+impl Clone for botwork::core::report::RecordLimits
+impl Clone for botwork::core::report::RecordOptions
+impl Clone for botwork::core::report::RunIdentity
+impl Clone for botwork::core::report::RunRecord
+impl Clone for botwork::core::report::SourceLocation
+impl Clone for botwork::core::report::StatementRecord
+impl Clone for botwork::core::run::CleanupLimits
+impl Clone for botwork::core::run::Engine
+impl Clone for botwork::core::run::ImportLimits
+impl Clone for botwork::core::run::OutputLimits
+impl Clone for botwork::core::run::ResultLimits
+impl Clone for botwork::core::run::RetainedDefinitionLimits
+impl Clone for botwork::core::run::RetainedDiagnosticLimits
+impl Clone for botwork::core::run::RetainedNameLimits
+impl Clone for botwork::core::run::RetainedRegistryLimits
+impl Clone for botwork::core::run::RetainedValueLimits
+impl Clone for botwork::core::run::RunEnvironment
+impl Clone for botwork::core::run::RunLimits
+impl Clone for botwork::core::run::RunOptions
+impl Clone for botwork::core::run::RunOutcome
+impl Clone for botwork::core::run::SnapshotLimits
+impl Clone for botwork::core::run::TemporaryLimits
+impl Clone for botwork::core::secret::Secrets
+impl Clone for botwork::core::signature::ParameterSignature
+impl Clone for botwork::core::signature::StatementError
+impl Clone for botwork::core::signature::StatementOrigin
+impl Clone for botwork::core::signature::StatementSignature
+impl Clone for botwork::core::signature::ValueKind
+impl Clone for botwork::core::signature::ValueKinds
+impl Clone for botwork::core::suite::Case
+impl Clone for botwork::core::suite::Dataset
+impl Clone for botwork::core::suite::DatasetDefinition
+impl Clone for botwork::core::suite::DatasetFormat
+impl Clone for botwork::core::suite::Metadata
+impl Clone for botwork::core::suite::Row
+impl Clone for botwork::core::suite::SelectedCase
+impl Clone for botwork::core::suite::Selection
+impl Clone for botwork::core::suite::Suite
+impl Clone for botwork::core::syntax_limits::SyntaxLimits
+impl Clone for botwork::core::value_limits::ValueLimits
+impl Clone for botwork::core::value_limits::ValueSize
+impl Clone for botwork::core::worker::ActiveWorker
+impl Clone for botwork::core::worker::WorkerCleanup
+impl Clone for botwork::core::worker::WorkerCommand
+impl Clone for botwork::core::worker::WorkerLimits
+impl Clone for botwork::core::worker::WorkerOutcome
+impl Clone for botwork::core::worker::WorkerPool
+impl Clone for botwork::core::worker::WorkerRecord
+impl Clone for botwork::core::worker::WorkerSnapshot
+impl Clone for botwork::core::worker::journal::GuardianReceipt
+impl Clone for botwork::core::worker::journal::JournalFlush
+impl Clone for botwork::core::worker::journal::JournalId
+impl Clone for botwork::core::worker::journal::JournalMetadata
+impl Clone for botwork::core::worker::journal::RecoveredWorker
+impl Clone for botwork::core::worker::journal::WorkerJournal
+impl Clone for botwork::core::worker::protocol::ProtocolLimits
+impl Clone for botwork::core::worker::protocol::WorkerProtocol
+impl Copy for botwork::core::acceptance::AssertionMode
+impl Copy for botwork::core::acceptance::CaseCompletion
+impl Copy for botwork::core::acceptance::CaseStatus
+impl Copy for botwork::core::acceptance::CaseTotals
+impl Copy for botwork::core::acceptance::Delivery
+impl Copy for botwork::core::acceptance::FailureKind
+impl Copy for botwork::core::acceptance::ParentStop
+impl Copy for botwork::core::acceptance::PhaseOutcome
+impl Copy for botwork::core::acceptance::RunVerdict
+impl Copy for botwork::core::acceptance::SkipReason
+impl Copy for botwork::core::acceptance::StatusView
+impl Copy for botwork::core::analysis::External
+impl Copy for botwork::core::analysis::Rule
+impl Copy for botwork::core::analysis::Severity
+impl Copy for botwork::core::diagnostic::DiagnosticCode
+impl Copy for botwork::core::diagnostic::DiagnosticSize
+impl Copy for botwork::core::eval::CompiledStatistics
+impl Copy for botwork::core::format::SourceKind
+impl Copy for botwork::core::operation::OperationUsage
+impl Copy for botwork::core::report::RecordError
+impl Copy for botwork::core::run::RunOutcome
+impl Copy for botwork::core::signature::StatementOrigin
+impl Copy for botwork::core::signature::ValueKind
+impl Copy for botwork::core::signature::ValueKinds
+impl Copy for botwork::core::suite::DatasetFormat
+impl Copy for botwork::core::value_limits::ValueSize
+impl Copy for botwork::core::worker::WorkerCleanup
+impl Copy for botwork::core::worker::WorkerOutcome
+impl Copy for botwork::core::worker::journal::GuardianReceipt
+impl Copy for botwork::core::worker::journal::JournalFlush
+impl Copy for botwork::core::worker::journal::JournalId
+impl Copy for botwork::core::worker::journal::JournalMetadata
+impl Debug for botwork::core::acceptance::AssertionMode
+impl Debug for botwork::core::acceptance::CaseCompletion
+impl Debug for botwork::core::acceptance::CaseExpectation
+impl Debug for botwork::core::acceptance::CaseStatus
+impl Debug for botwork::core::acceptance::CaseTotals
+impl Debug for botwork::core::acceptance::Delivery
+impl Debug for botwork::core::acceptance::FailureKind
+impl Debug for botwork::core::acceptance::ParentStop
+impl Debug for botwork::core::acceptance::PhaseOutcome
+impl Debug for botwork::core::acceptance::RunVerdict
+impl Debug for botwork::core::acceptance::SkipReason
+impl Debug for botwork::core::acceptance::StatusView
+impl Debug for botwork::core::analysis::External
+impl Debug for botwork::core::analysis::Finding
+impl Debug for botwork::core::analysis::Report
+impl Debug for botwork::core::analysis::Rule
+impl Debug for botwork::core::analysis::Severity
+impl Debug for botwork::core::ast::Program
+impl Debug for botwork::core::ast::SourceFile
+impl Debug for botwork::core::ast::Span
+impl Debug for botwork::core::ast_limits::AstLimits
+impl Debug for botwork::core::diagnostic::CallFrame
+impl Debug for botwork::core::diagnostic::Diagnostic
+impl Debug for botwork::core::diagnostic::DiagnosticCode
+impl Debug for botwork::core::diagnostic::DiagnosticLimits
+impl Debug for botwork::core::diagnostic::DiagnosticOmissions
+impl Debug for botwork::core::diagnostic::DiagnosticRenderLimits
+impl Debug for botwork::core::diagnostic::DiagnosticRenderTruncation
+impl Debug for botwork::core::diagnostic::DiagnosticSize
+impl Debug for botwork::core::diagnostic::DiagnosticValueLimits
+impl Debug for botwork::core::diagnostic::OmittedSource
+impl Debug for botwork::core::diagnostic::RelatedLocation
+impl Debug for botwork::core::diagnostic::RenderedDiagnostic
+impl Debug for botwork::core::eval::CompiledModules
+impl Debug for botwork::core::eval::CompiledStatistics
+impl Debug for botwork::core::format::SourceKind
+impl Debug for botwork::core::grammar::BWErr
+impl Debug for botwork::core::grammar::Literal
+impl Debug for botwork::core::input::InputLimits
+impl Debug for botwork::core::listener::ListenerFailure
+impl Debug for botwork::core::listener::ListenerOptions
+impl Debug for botwork::core::listener::ListenerOutcome
+impl Debug for botwork::core::listener::ListenerSender
+impl Debug for botwork::core::operation::OperationBudget
+impl Debug for botwork::core::operation::OperationControl
+impl Debug for botwork::core::operation::OperationOwnershipLimits
+impl Debug for botwork::core::operation::OperationUsage
+impl Debug for botwork::core::report::ArtifactRecord
+impl Debug for botwork::core::report::ErrorRecord
+impl Debug for botwork::core::report::Event
+impl Debug for botwork::core::report::EventObserver
+impl Debug for botwork::core::report::EventRecord
+impl Debug for botwork::core::report::LogRecord
+impl Debug for botwork::core::report::RecordError
+impl Debug for botwork::core::report::RecordLimits
+impl Debug for botwork::core::report::RecordOptions
+impl Debug for botwork::core::report::Recording
+impl Debug for botwork::core::report::RunIdentity
+impl Debug for botwork::core::report::RunRecord
+impl Debug for botwork::core::report::SourceLocation
+impl Debug for botwork::core::report::StatementRecord
+impl Debug for botwork::core::run::CleanupLimits
+impl Debug for botwork::core::run::ImportLimits
+impl Debug for botwork::core::run::OutputLimits
+impl Debug for botwork::core::run::ResultLimits
+impl Debug for botwork::core::run::RetainedDefinitionLimits
+impl Debug for botwork::core::run::RetainedDiagnosticLimits
+impl Debug for botwork::core::run::RetainedNameLimits
+impl Debug for botwork::core::run::RetainedRegistryLimits
+impl Debug for botwork::core::run::RetainedValueLimits
+impl Debug for botwork::core::run::RunEnvironment
+impl Debug for botwork::core::run::RunLimits
+impl Debug for botwork::core::run::RunOptions
+impl Debug for botwork::core::run::RunOutcome
+impl Debug for botwork::core::run::RunResult
+impl Debug for botwork::core::run::SnapshotLimits
+impl Debug for botwork::core::run::TemporaryLimits
+impl Debug for botwork::core::secret::Secrets
+impl Debug for botwork::core::signature::ParameterSignature
+impl Debug for botwork::core::signature::StatementError
+impl Debug for botwork::core::signature::StatementOrigin
+impl Debug for botwork::core::signature::StatementSignature
+impl Debug for botwork::core::signature::ValueKind
+impl Debug for botwork::core::signature::ValueKinds
+impl Debug for botwork::core::suite::Case
+impl Debug for botwork::core::suite::Dataset
+impl Debug for botwork::core::suite::DatasetDefinition
+impl Debug for botwork::core::suite::DatasetFormat
+impl Debug for botwork::core::suite::Metadata
+impl Debug for botwork::core::suite::Row
+impl Debug for botwork::core::suite::SelectedCase
+impl Debug for botwork::core::suite::Selection
+impl Debug for botwork::core::suite::Suite
+impl Debug for botwork::core::syntax_limits::SyntaxLimits
+impl Debug for botwork::core::value_limits::ValueLimits
+impl Debug for botwork::core::value_limits::ValueSize
+impl Debug for botwork::core::worker::ActiveWorker
+impl Debug for botwork::core::worker::WorkerCleanup
+impl Debug for botwork::core::worker::WorkerCommand
+impl Debug for botwork::core::worker::WorkerLimits
+impl Debug for botwork::core::worker::WorkerOutcome
+impl Debug for botwork::core::worker::WorkerRecord
+impl Debug for botwork::core::worker::WorkerReport
+impl Debug for botwork::core::worker::WorkerSnapshot
+impl Debug for botwork::core::worker::journal::GuardianReceipt
+impl Debug for botwork::core::worker::journal::JournalFlush
+impl Debug for botwork::core::worker::journal::JournalId
+impl Debug for botwork::core::worker::journal::JournalMetadata
+impl Debug for botwork::core::worker::journal::RecoveredWorker
+impl Debug for botwork::core::worker::protocol::ProtocolLimits
+impl Debug for botwork::core::worker::protocol::WorkerProtocol
+impl Default for botwork::core::acceptance::AssertionMode
+impl Default for botwork::core::acceptance::CaseExpectation
+impl Default for botwork::core::acceptance::CaseTotals
+impl Default for botwork::core::analysis::Analyzer
+impl Default for botwork::core::analysis::Report
+impl Default for botwork::core::ast_limits::AstLimits
+impl Default for botwork::core::diagnostic::DiagnosticLimits
+impl Default for botwork::core::diagnostic::DiagnosticOmissions
+impl Default for botwork::core::diagnostic::DiagnosticRenderLimits
+impl Default for botwork::core::diagnostic::DiagnosticSize
+impl Default for botwork::core::diagnostic::DiagnosticValueLimits
+impl Default for botwork::core::eval::CompiledModules
+impl Default for botwork::core::eval::CompiledStatistics
+impl Default for botwork::core::eval::Context
+impl Default for botwork::core::grammar::Literal
+impl Default for botwork::core::input::InputLimits
+impl Default for botwork::core::listener::ListenerOptions
+impl Default for botwork::core::operation::OperationBudget
+impl Default for botwork::core::operation::OperationControl
+impl Default for botwork::core::operation::OperationOwnershipLimits
+impl Default for botwork::core::operation::OperationUsage
+impl Default for botwork::core::report::RecordLimits
+impl Default for botwork::core::report::RecordOptions
+impl Default for botwork::core::report::RunIdentity
+impl Default for botwork::core::run::CleanupLimits
+impl Default for botwork::core::run::Engine
+impl Default for botwork::core::run::ImportLimits
+impl Default for botwork::core::run::OutputLimits
+impl Default for botwork::core::run::ResultLimits
+impl Default for botwork::core::run::RetainedDefinitionLimits
+impl Default for botwork::core::run::RetainedDiagnosticLimits
+impl Default for botwork::core::run::RetainedNameLimits
+impl Default for botwork::core::run::RetainedRegistryLimits
+impl Default for botwork::core::run::RetainedValueLimits
+impl Default for botwork::core::run::RunLimits
+impl Default for botwork::core::run::RunOptions
+impl Default for botwork::core::run::SnapshotLimits
+impl Default for botwork::core::run::TemporaryLimits
+impl Default for botwork::core::secret::Secrets
+impl Default for botwork::core::suite::Selection
+impl Default for botwork::core::syntax_limits::SyntaxLimits
+impl Default for botwork::core::value_limits::ValueLimits
+impl Default for botwork::core::value_limits::ValueSize
+impl Default for botwork::core::worker::WorkerLimits
+impl Default for botwork::core::worker::journal::JournalFlush
+impl Default for botwork::core::worker::protocol::ProtocolLimits
+impl Default for botwork::core::worker::protocol::WorkerProtocol
+impl Deserialize for botwork::core::acceptance::AssertionMode
+impl Deserialize for botwork::core::acceptance::CaseStatus
+impl Deserialize for botwork::core::acceptance::SkipReason
+impl Deserialize for botwork::core::report::ArtifactRecord
+impl Deserialize for botwork::core::report::ErrorRecord
+impl Deserialize for botwork::core::report::LogRecord
+impl Deserialize for botwork::core::report::RunIdentity
+impl Deserialize for botwork::core::report::RunRecord
+impl Deserialize for botwork::core::report::SourceLocation
+impl Deserialize for botwork::core::report::StatementRecord
+impl Display for botwork::core::acceptance::HtmlStatus
+impl Display for botwork::core::analysis::Finding
+impl Display for botwork::core::diagnostic::Diagnostic
+impl Display for botwork::core::diagnostic::DiagnosticCode
+impl Display for botwork::core::grammar::BWErr
+impl Display for botwork::core::grammar::Literal
+impl Display for botwork::core::listener::ListenerFailure
+impl Display for botwork::core::report::RecordError
+impl Display for botwork::core::signature::ValueKinds
+impl Display for botwork::core::worker::journal::JournalId
+impl Drop for botwork::core::listener::Dispatcher
+impl Drop for botwork::core::secret::Redacting
+impl Drop for botwork::core::worker::WorkerHandle
+impl Eq for botwork::core::acceptance::AssertionMode
+impl Eq for botwork::core::acceptance::CaseCompletion
+impl Eq for botwork::core::acceptance::CaseExpectation
+impl Eq for botwork::core::acceptance::CaseStatus
+impl Eq for botwork::core::acceptance::CaseTotals
+impl Eq for botwork::core::acceptance::Delivery
+impl Eq for botwork::core::acceptance::FailureKind
+impl Eq for botwork::core::acceptance::ParentStop
+impl Eq for botwork::core::acceptance::PhaseOutcome
+impl Eq for botwork::core::acceptance::RunVerdict
+impl Eq for botwork::core::acceptance::SkipReason
+impl Eq for botwork::core::acceptance::StatusView
+impl Eq for botwork::core::analysis::External
+impl Eq for botwork::core::analysis::Rule
+impl Eq for botwork::core::analysis::Severity
+impl Eq for botwork::core::ast::SourceFile
+impl Eq for botwork::core::ast::Span
+impl Eq for botwork::core::ast_limits::AstLimits
+impl Eq for botwork::core::diagnostic::DiagnosticCode
+impl Eq for botwork::core::diagnostic::DiagnosticOmissions
+impl Eq for botwork::core::diagnostic::DiagnosticRenderTruncation
+impl Eq for botwork::core::diagnostic::DiagnosticSize
+impl Eq for botwork::core::diagnostic::OmittedSource
+impl Eq for botwork::core::diagnostic::RenderedDiagnostic
+impl Eq for botwork::core::eval::CompiledStatistics
+impl Eq for botwork::core::format::SourceKind
+impl Eq for botwork::core::listener::ListenerFailure
+impl Eq for botwork::core::listener::ListenerOptions
+impl Eq for botwork::core::listener::ListenerOutcome
+impl Eq for botwork::core::operation::OperationUsage
+impl Eq for botwork::core::report::ArtifactRecord
+impl Eq for botwork::core::report::ErrorRecord
+impl Eq for botwork::core::report::Event
+impl Eq for botwork::core::report::EventRecord
+impl Eq for botwork::core::report::LogRecord
+impl Eq for botwork::core::report::RecordError
+impl Eq for botwork::core::report::RecordLimits
+impl Eq for botwork::core::report::RunIdentity
+impl Eq for botwork::core::report::RunRecord
+impl Eq for botwork::core::report::SourceLocation
+impl Eq for botwork::core::report::StatementRecord
+impl Eq for botwork::core::run::RunOutcome
+impl Eq for botwork::core::signature::StatementOrigin
+impl Eq for botwork::core::signature::ValueKind
+impl Eq for botwork::core::signature::ValueKinds
+impl Eq for botwork::core::suite::DatasetFormat
+impl Eq for botwork::core::syntax_limits::SyntaxLimits
+impl Eq for botwork::core::value_limits::ValueSize
+impl Eq for botwork::core::worker::WorkerCleanup
+impl Eq for botwork::core::worker::WorkerOutcome
+impl Eq for botwork::core::worker::journal::GuardianReceipt
+impl Eq for botwork::core::worker::journal::JournalFlush
+impl Eq for botwork::core::worker::journal::JournalId
+impl Eq for botwork::core::worker::journal::JournalMetadata
+impl Error for botwork::core::diagnostic::Diagnostic
+impl Error for botwork::core::grammar::BWErr
+impl Error for botwork::core::report::RecordError
+impl From for botwork::core::diagnostic::Diagnostic
+impl From for botwork::core::grammar::BWErr
+impl From for botwork::core::signature::ValueKind
+impl From for botwork::core::signature::ValueKinds
+impl From for botwork::core::worker::WorkerReport
+impl From for botwork::core::worker::journal::JournalMetadata
+impl Hash for botwork::core::analysis::External
+impl Hash for botwork::core::analysis::Rule
+impl Hash for botwork::core::analysis::Severity
+impl Hash for botwork::core::diagnostic::DiagnosticCode
+impl Hash for botwork::core::signature::ValueKind
+impl Hash for botwork::core::suite::DatasetFormat
+impl Ord for botwork::core::analysis::External
+impl Ord for botwork::core::analysis::Rule
+impl Ord for botwork::core::analysis::Severity
+impl Ord for botwork::core::worker::journal::JournalId
+impl PartialEq for botwork::core::acceptance::AssertionMode
+impl PartialEq for botwork::core::acceptance::CaseCompletion
+impl PartialEq for botwork::core::acceptance::CaseExpectation
+impl PartialEq for botwork::core::acceptance::CaseStatus
+impl PartialEq for botwork::core::acceptance::CaseTotals
+impl PartialEq for botwork::core::acceptance::Delivery
+impl PartialEq for botwork::core::acceptance::FailureKind
+impl PartialEq for botwork::core::acceptance::ParentStop
+impl PartialEq for botwork::core::acceptance::PhaseOutcome
+impl PartialEq for botwork::core::acceptance::RunVerdict
+impl PartialEq for botwork::core::acceptance::SkipReason
+impl PartialEq for botwork::core::acceptance::StatusView
+impl PartialEq for botwork::core::analysis::External
+impl PartialEq for botwork::core::analysis::Rule
+impl PartialEq for botwork::core::analysis::Severity
+impl PartialEq for botwork::core::ast::SourceFile
+impl PartialEq for botwork::core::ast::Span
+impl PartialEq for botwork::core::ast_limits::AstLimits
+impl PartialEq for botwork::core::diagnostic::DiagnosticCode
+impl PartialEq for botwork::core::diagnostic::DiagnosticOmissions
+impl PartialEq for botwork::core::diagnostic::DiagnosticRenderTruncation
+impl PartialEq for botwork::core::diagnostic::DiagnosticSize
+impl PartialEq for botwork::core::diagnostic::OmittedSource
+impl PartialEq for botwork::core::diagnostic::RenderedDiagnostic
+impl PartialEq for botwork::core::eval::CompiledStatistics
+impl PartialEq for botwork::core::format::SourceKind
+impl PartialEq for botwork::core::listener::ListenerFailure
+impl PartialEq for botwork::core::listener::ListenerOptions
+impl PartialEq for botwork::core::listener::ListenerOutcome
+impl PartialEq for botwork::core::operation::OperationUsage
+impl PartialEq for botwork::core::report::ArtifactRecord
+impl PartialEq for botwork::core::report::ErrorRecord
+impl PartialEq for botwork::core::report::Event
+impl PartialEq for botwork::core::report::EventRecord
+impl PartialEq for botwork::core::report::LogRecord
+impl PartialEq for botwork::core::report::RecordError
+impl PartialEq for botwork::core::report::RecordLimits
+impl PartialEq for botwork::core::report::RunIdentity
+impl PartialEq for botwork::core::report::RunRecord
+impl PartialEq for botwork::core::report::SourceLocation
+impl PartialEq for botwork::core::report::StatementRecord
+impl PartialEq for botwork::core::run::RunOutcome
+impl PartialEq for botwork::core::signature::StatementOrigin
+impl PartialEq for botwork::core::signature::ValueKind
+impl PartialEq for botwork::core::signature::ValueKinds
+impl PartialEq for botwork::core::suite::DatasetFormat
+impl PartialEq for botwork::core::syntax_limits::SyntaxLimits
+impl PartialEq for botwork::core::value_limits::ValueSize
+impl PartialEq for botwork::core::worker::WorkerCleanup
+impl PartialEq for botwork::core::worker::WorkerOutcome
+impl PartialEq for botwork::core::worker::journal::GuardianReceipt
+impl PartialEq for botwork::core::worker::journal::JournalFlush
+impl PartialEq for botwork::core::worker::journal::JournalId
+impl PartialEq for botwork::core::worker::journal::JournalMetadata
+impl PartialOrd for botwork::core::analysis::External
+impl PartialOrd for botwork::core::analysis::Rule
+impl PartialOrd for botwork::core::analysis::Severity
+impl PartialOrd for botwork::core::worker::journal::JournalId
+impl Serialize for botwork::core::acceptance::AssertionMode
+impl Serialize for botwork::core::acceptance::CaseStatus
+impl Serialize for botwork::core::acceptance::CaseTotals
+impl Serialize for botwork::core::acceptance::Delivery
+impl Serialize for botwork::core::acceptance::RunVerdict
+impl Serialize for botwork::core::acceptance::SkipReason
+impl Serialize for botwork::core::acceptance::StatusView
+impl Serialize for botwork::core::listener::ListenerFailure
+impl Serialize for botwork::core::report::ArtifactRecord
+impl Serialize for botwork::core::report::ErrorRecord
+impl Serialize for botwork::core::report::Event
+impl Serialize for botwork::core::report::EventRecord
+impl Serialize for botwork::core::report::LogRecord
+impl Serialize for botwork::core::report::RecordLimits
+impl Serialize for botwork::core::report::RunIdentity
+impl Serialize for botwork::core::report::RunRecord
+impl Serialize for botwork::core::report::SourceLocation
+impl Serialize for botwork::core::report::StatementRecord
+impl Serialize for botwork::core::suite::Metadata
+impl StructuralPartialEq for botwork::core::acceptance::AssertionMode
+impl StructuralPartialEq for botwork::core::acceptance::CaseCompletion
+impl StructuralPartialEq for botwork::core::acceptance::CaseExpectation
+impl StructuralPartialEq for botwork::core::acceptance::CaseStatus
+impl StructuralPartialEq for botwork::core::acceptance::CaseTotals
+impl StructuralPartialEq for botwork::core::acceptance::Delivery
+impl StructuralPartialEq for botwork::core::acceptance::FailureKind
+impl StructuralPartialEq for botwork::core::acceptance::ParentStop
+impl StructuralPartialEq for botwork::core::acceptance::PhaseOutcome
+impl StructuralPartialEq for botwork::core::acceptance::RunVerdict
+impl StructuralPartialEq for botwork::core::acceptance::SkipReason
+impl StructuralPartialEq for botwork::core::acceptance::StatusView
+impl StructuralPartialEq for botwork::core::analysis::External
+impl StructuralPartialEq for botwork::core::analysis::Rule
+impl StructuralPartialEq for botwork::core::analysis::Severity
+impl StructuralPartialEq for botwork::core::ast::SourceFile
+impl StructuralPartialEq for botwork::core::ast::Span
+impl StructuralPartialEq for botwork::core::ast_limits::AstLimits
+impl StructuralPartialEq for botwork::core::diagnostic::DiagnosticCode
+impl StructuralPartialEq for botwork::core::diagnostic::DiagnosticOmissions
+impl StructuralPartialEq for botwork::core::diagnostic::DiagnosticRenderTruncation
+impl StructuralPartialEq for botwork::core::diagnostic::DiagnosticSize
+impl StructuralPartialEq for botwork::core::diagnostic::OmittedSource
+impl StructuralPartialEq for botwork::core::diagnostic::RenderedDiagnostic
+impl StructuralPartialEq for botwork::core::eval::CompiledStatistics
+impl StructuralPartialEq for botwork::core::format::SourceKind
+impl StructuralPartialEq for botwork::core::listener::ListenerFailure
+impl StructuralPartialEq for botwork::core::listener::ListenerOptions
+impl StructuralPartialEq for botwork::core::listener::ListenerOutcome
+impl StructuralPartialEq for botwork::core::operation::OperationUsage
+impl StructuralPartialEq for botwork::core::report::ArtifactRecord
+impl StructuralPartialEq for botwork::core::report::ErrorRecord
+impl StructuralPartialEq for botwork::core::report::Event
+impl StructuralPartialEq for botwork::core::report::EventRecord
+impl StructuralPartialEq for botwork::core::report::LogRecord
+impl StructuralPartialEq for botwork::core::report::RecordError
+impl StructuralPartialEq for botwork::core::report::RecordLimits
+impl StructuralPartialEq for botwork::core::report::RunIdentity
+impl StructuralPartialEq for botwork::core::report::RunRecord
+impl StructuralPartialEq for botwork::core::report::SourceLocation
+impl StructuralPartialEq for botwork::core::report::StatementRecord
+impl StructuralPartialEq for botwork::core::run::RunOutcome
+impl StructuralPartialEq for botwork::core::signature::StatementOrigin
+impl StructuralPartialEq for botwork::core::signature::ValueKind
+impl StructuralPartialEq for botwork::core::signature::ValueKinds
+impl StructuralPartialEq for botwork::core::suite::DatasetFormat
+impl StructuralPartialEq for botwork::core::syntax_limits::SyntaxLimits
+impl StructuralPartialEq for botwork::core::value_limits::ValueSize
+impl StructuralPartialEq for botwork::core::worker::WorkerCleanup
+impl StructuralPartialEq for botwork::core::worker::WorkerOutcome
+impl StructuralPartialEq for botwork::core::worker::journal::GuardianReceipt
+impl StructuralPartialEq for botwork::core::worker::journal::JournalFlush
+impl StructuralPartialEq for botwork::core::worker::journal::JournalId
+impl StructuralPartialEq for botwork::core::worker::journal::JournalMetadata
+impl Write for botwork::core::secret::Redacting
+mod botwork::core
+mod botwork::core::acceptance
+mod botwork::core::analysis
+mod botwork::core::ast
+mod botwork::core::ast_limits
+mod botwork::core::diagnostic
+mod botwork::core::eval
+mod botwork::core::format
+mod botwork::core::grammar
+mod botwork::core::input
+mod botwork::core::listener
+mod botwork::core::operation
+mod botwork::core::paths
+mod botwork::core::report
+mod botwork::core::run
+mod botwork::core::secret
+mod botwork::core::signature
+mod botwork::core::suite
+mod botwork::core::syntax_limits
+mod botwork::core::value_limits
+mod botwork::core::worker
+mod botwork::core::worker::journal
+mod botwork::core::worker::protocol
+struct botwork::core::acceptance::CaseCompletion
+struct botwork::core::acceptance::CaseExpectation
+struct botwork::core::acceptance::CaseTotals
+struct botwork::core::acceptance::HtmlStatus
+struct botwork::core::acceptance::RunVerdict
+struct botwork::core::acceptance::StatusView
+struct botwork::core::analysis::Analyzer
+struct botwork::core::analysis::Finding #[non_exhaustive]
+struct botwork::core::analysis::Report #[non_exhaustive]
+struct botwork::core::ast::Program #[non_exhaustive]
+struct botwork::core::ast::SourceFile
+struct botwork::core::ast::Span
+struct botwork::core::ast_limits::AstLimits
+struct botwork::core::diagnostic::CallFrame
+struct botwork::core::diagnostic::Diagnostic #[non_exhaustive]
+struct botwork::core::diagnostic::DiagnosticLimits
+struct botwork::core::diagnostic::DiagnosticOmissions #[non_exhaustive]
+struct botwork::core::diagnostic::DiagnosticRenderLimits
+struct botwork::core::diagnostic::DiagnosticRenderTruncation #[non_exhaustive]
+struct botwork::core::diagnostic::DiagnosticSize #[non_exhaustive]
+struct botwork::core::diagnostic::DiagnosticValueLimits
+struct botwork::core::diagnostic::OmittedSource #[non_exhaustive]
+struct botwork::core::diagnostic::RelatedLocation
+struct botwork::core::diagnostic::RenderedDiagnostic #[non_exhaustive]
+struct botwork::core::eval::CompiledModules
+struct botwork::core::eval::CompiledStatistics #[non_exhaustive]
+struct botwork::core::eval::Context
+struct botwork::core::eval::FixtureInputs
+struct botwork::core::eval::FixtureResult #[non_exhaustive]
+struct botwork::core::input::InputLimits
+struct botwork::core::listener::Dispatcher
+struct botwork::core::listener::ListenerOptions
+struct botwork::core::listener::ListenerOutcome #[non_exhaustive]
+struct botwork::core::listener::ListenerSender
+struct botwork::core::operation::NativeOperation
+struct botwork::core::operation::OperationBudget
+struct botwork::core::operation::OperationControl
+struct botwork::core::operation::OperationOwnershipLimits
+struct botwork::core::operation::OperationUsage #[non_exhaustive]
+struct botwork::core::report::ArtifactRecord
+struct botwork::core::report::ErrorRecord
+struct botwork::core::report::EventObserver
+struct botwork::core::report::EventRecord
+struct botwork::core::report::LogRecord
+struct botwork::core::report::RecordLimits
+struct botwork::core::report::RecordOptions
+struct botwork::core::report::Recording
+struct botwork::core::report::RunIdentity
+struct botwork::core::report::RunRecord
+struct botwork::core::report::SourceLocation
+struct botwork::core::report::StatementRecord
+struct botwork::core::run::CleanupLimits
+struct botwork::core::run::Engine
+struct botwork::core::run::ImportLimits
+struct botwork::core::run::OutputLimits
+struct botwork::core::run::ResultLimits
+struct botwork::core::run::RetainedDefinitionLimits
+struct botwork::core::run::RetainedDiagnosticLimits
+struct botwork::core::run::RetainedNameLimits
+struct botwork::core::run::RetainedRegistryLimits
+struct botwork::core::run::RetainedValueLimits
+struct botwork::core::run::RunEnvironment
+struct botwork::core::run::RunLimits
+struct botwork::core::run::RunOptions
+struct botwork::core::run::RunResult #[non_exhaustive]
+struct botwork::core::run::SnapshotLimits
+struct botwork::core::run::TemporaryLimits
+struct botwork::core::secret::Redacting
+struct botwork::core::secret::Secrets
+struct botwork::core::signature::ParameterSignature #[non_exhaustive]
+struct botwork::core::signature::StatementError #[non_exhaustive]
+struct botwork::core::signature::StatementSignature
+struct botwork::core::signature::ValueKinds
+struct botwork::core::suite::Case
+struct botwork::core::suite::Dataset
+struct botwork::core::suite::DatasetDefinition
+struct botwork::core::suite::FixturePrograms #[non_exhaustive]
+struct botwork::core::suite::Metadata
+struct botwork::core::suite::Row
+struct botwork::core::suite::SelectedCase
+struct botwork::core::suite::Selection
+struct botwork::core::suite::Suite
+struct botwork::core::syntax_limits::SyntaxLimits
+struct botwork::core::value_limits::ValueLimits
+struct botwork::core::value_limits::ValueSize #[non_exhaustive]
+struct botwork::core::worker::ActiveWorker #[non_exhaustive]
+struct botwork::core::worker::WorkerCommand
+struct botwork::core::worker::WorkerHandle
+struct botwork::core::worker::WorkerLimits
+struct botwork::core::worker::WorkerPool
+struct botwork::core::worker::WorkerRecord #[non_exhaustive]
+struct botwork::core::worker::WorkerReport #[non_exhaustive]
+struct botwork::core::worker::WorkerSnapshot #[non_exhaustive]
+struct botwork::core::worker::journal::JournalFlush #[non_exhaustive]
+struct botwork::core::worker::journal::JournalId #[non_exhaustive]
+struct botwork::core::worker::journal::JournalMetadata #[non_exhaustive]
+struct botwork::core::worker::journal::RecoveredWorker #[non_exhaustive]
+struct botwork::core::worker::journal::WorkerJournal
+struct botwork::core::worker::protocol::ProtocolLimits
+struct botwork::core::worker::protocol::WorkerProtocol
+trait botwork::core::listener::Listener
+trait-item botwork::core::listener::Listener::deliver
+trait-item botwork::core::listener::Listener::finish
+type botwork::core::diagnostic::DiagnosticResult
+type botwork::core::grammar::LiteralResult
+variant botwork::core::acceptance::AssertionMode::Immediate
+variant botwork::core::acceptance::CaseStatus::Cancelled
+variant botwork::core::acceptance::CaseStatus::ExpectedFailure
+variant botwork::core::acceptance::CaseStatus::Failed
+variant botwork::core::acceptance::CaseStatus::Interrupted
+variant botwork::core::acceptance::CaseStatus::LimitExceeded
+variant botwork::core::acceptance::CaseStatus::Skipped
+variant botwork::core::acceptance::CaseStatus::Succeeded
+variant botwork::core::acceptance::CaseStatus::TimedOut
+variant botwork::core::acceptance::CaseStatus::UnexpectedPass
+variant botwork::core::acceptance::Delivery::Complete
+variant botwork::core::acceptance::Delivery::Failed
+variant botwork::core::acceptance::Delivery::Interrupted
+variant botwork::core::acceptance::FailureKind::Assertion
+variant botwork::core::acceptance::FailureKind::Cancelled
+variant botwork::core::acceptance::FailureKind::LimitExceeded
+variant botwork::core::acceptance::FailureKind::Other
+variant botwork::core::acceptance::FailureKind::TimedOut
+variant botwork::core::acceptance::ParentStop::Cancelled
+variant botwork::core::acceptance::ParentStop::LimitExceeded
+variant botwork::core::acceptance::ParentStop::TimedOut
+variant botwork::core::acceptance::PhaseOutcome::Failed
+variant botwork::core::acceptance::PhaseOutcome::Succeeded
+variant botwork::core::acceptance::SkipReason::SuiteSetupFailed
+variant botwork::core::acceptance::SkipReason::SuiteStopped
+variant botwork::core::analysis::External::Clock
+variant botwork::core::analysis::External::Environment
+variant botwork::core::analysis::External::Files
+variant botwork::core::analysis::External::Network
+variant botwork::core::analysis::External::Processes
+variant botwork::core::analysis::Rule::ArgumentKind
+variant botwork::core::analysis::Rule::ConditionKind
+variant botwork::core::analysis::Rule::DuplicateNamespace
+variant botwork::core::analysis::Rule::DuplicateStatement
+variant botwork::core::analysis::Rule::ImportCycle
+variant botwork::core::analysis::Rule::ImportFailure
+variant botwork::core::analysis::Rule::StatementBeforeDefinition
+variant botwork::core::analysis::Rule::UndefinedStatement
+variant botwork::core::analysis::Rule::UndefinedVariable
+variant botwork::core::analysis::Rule::UnreachableCode
+variant botwork::core::analysis::Severity::Error
+variant botwork::core::analysis::Severity::Warning
+variant botwork::core::diagnostic::DiagnosticCode::Arithmetic
+variant botwork::core::diagnostic::DiagnosticCode::Assertion
+variant botwork::core::diagnostic::DiagnosticCode::AsyncRuntime
+variant botwork::core::diagnostic::DiagnosticCode::Cancelled
+variant botwork::core::diagnostic::DiagnosticCode::CollectionAccess
+variant botwork::core::diagnostic::DiagnosticCode::ConditionNotMet
+variant botwork::core::diagnostic::DiagnosticCode::DuplicateNamespace
+variant botwork::core::diagnostic::DiagnosticCode::DuplicateParameter
+variant botwork::core::diagnostic::DiagnosticCode::DuplicateStatement
+variant botwork::core::diagnostic::DiagnosticCode::ExplicitFailure
+variant botwork::core::diagnostic::DiagnosticCode::ImportCycle
+variant botwork::core::diagnostic::DiagnosticCode::ImportRead
+variant botwork::core::diagnostic::DiagnosticCode::IncompatibleType
+variant botwork::core::diagnostic::DiagnosticCode::Input
+variant botwork::core::diagnostic::DiagnosticCode::InvalidControl
+variant botwork::core::diagnostic::DiagnosticCode::InvalidNumber
+variant botwork::core::diagnostic::DiagnosticCode::Native
+variant botwork::core::diagnostic::DiagnosticCode::NativePanic
+variant botwork::core::diagnostic::DiagnosticCode::Output
+variant botwork::core::diagnostic::DiagnosticCode::ParameterCount
+variant botwork::core::diagnostic::DiagnosticCode::ResourceLimit
+variant botwork::core::diagnostic::DiagnosticCode::RetriesExhausted
+variant botwork::core::diagnostic::DiagnosticCode::RunConfiguration
+variant botwork::core::diagnostic::DiagnosticCode::Signature
+variant botwork::core::diagnostic::DiagnosticCode::SourceRead
+variant botwork::core::diagnostic::DiagnosticCode::Syntax
+variant botwork::core::diagnostic::DiagnosticCode::Timeout
+variant botwork::core::diagnostic::DiagnosticCode::UndefinedStatement
+variant botwork::core::diagnostic::DiagnosticCode::UndefinedVariable
+variant botwork::core::format::SourceKind::Dataset
+variant botwork::core::format::SourceKind::Script
+variant botwork::core::format::SourceKind::Suite
+variant botwork::core::grammar::BWErr::ArithmeticError
+variant botwork::core::grammar::BWErr::AssertionFailed
+variant botwork::core::grammar::BWErr::AssertionMismatch
+variant botwork::core::grammar::BWErr::AsyncRuntime
+variant botwork::core::grammar::BWErr::Cancelled
+variant botwork::core::grammar::BWErr::CollectionAccessError
+variant botwork::core::grammar::BWErr::ConditionNotMet
+variant botwork::core::grammar::BWErr::ControlFlowError
+variant botwork::core::grammar::BWErr::DuplicateNamespace
+variant botwork::core::grammar::BWErr::DuplicateParameter
+variant botwork::core::grammar::BWErr::DuplicateStatement
+variant botwork::core::grammar::BWErr::ExplicitFailure
+variant botwork::core::grammar::BWErr::ImportCycle
+variant botwork::core::grammar::BWErr::ImportRead
+variant botwork::core::grammar::BWErr::InputError
+variant botwork::core::grammar::BWErr::NativeError
+variant botwork::core::grammar::BWErr::NativePanic
+variant botwork::core::grammar::BWErr::OperationIncompatibleError
+variant botwork::core::grammar::BWErr::OutputError
+variant botwork::core::grammar::BWErr::ParameterMissingError
+variant botwork::core::grammar::BWErr::ParsingError
+variant botwork::core::grammar::BWErr::ParsingIntegerError
+variant botwork::core::grammar::BWErr::ResourceLimit
+variant botwork::core::grammar::BWErr::RetriesExhausted
+variant botwork::core::grammar::BWErr::RunConfiguration
+variant botwork::core::grammar::BWErr::SignatureError
+variant botwork::core::grammar::BWErr::SourceRead
+variant botwork::core::grammar::BWErr::StatementNotDefined
+variant botwork::core::grammar::BWErr::Timeout
+variant botwork::core::grammar::BWErr::VariableNotDefined
+variant botwork::core::grammar::Literal::Array
+variant botwork::core::grammar::Literal::Bool
+variant botwork::core::grammar::Literal::Float
+variant botwork::core::grammar::Literal::Int
+variant botwork::core::grammar::Literal::Map
+variant botwork::core::grammar::Literal::None
+variant botwork::core::grammar::Literal::String
+variant botwork::core::listener::ListenerFailure::Overflow
+variant botwork::core::listener::ListenerFailure::Panicked
+variant botwork::core::listener::ListenerFailure::Rejected
+variant botwork::core::listener::ListenerFailure::Timeout
+variant botwork::core::report::Event::Artifact
+variant botwork::core::report::Event::Log
+variant botwork::core::report::Event::RunFinished
+variant botwork::core::report::Event::RunSkipped
+variant botwork::core::report::Event::RunStarted
+variant botwork::core::report::Event::StatementFinished
+variant botwork::core::report::Event::StatementStarted
+variant botwork::core::report::RecordError::AfterTerminal
+variant botwork::core::report::RecordError::AlreadyStarted
+variant botwork::core::report::RecordError::NotStarted
+variant botwork::core::report::RecordError::Sequence
+variant botwork::core::report::RecordError::StatementOrder
+variant botwork::core::run::RunOutcome::Cancelled
+variant botwork::core::run::RunOutcome::Failed
+variant botwork::core::run::RunOutcome::LimitExceeded
+variant botwork::core::run::RunOutcome::Succeeded
+variant botwork::core::run::RunOutcome::TimedOut
+variant botwork::core::signature::StatementOrigin::Dsl
+variant botwork::core::signature::StatementOrigin::Native
+variant botwork::core::signature::ValueKind::Array
+variant botwork::core::signature::ValueKind::Bool
+variant botwork::core::signature::ValueKind::Float
+variant botwork::core::signature::ValueKind::Int
+variant botwork::core::signature::ValueKind::Map
+variant botwork::core::signature::ValueKind::None
+variant botwork::core::signature::ValueKind::String
+variant botwork::core::suite::DatasetFormat::Botwork
+variant botwork::core::suite::DatasetFormat::Csv
+variant botwork::core::suite::DatasetFormat::Json
+variant botwork::core::worker::WorkerCleanup::NamespaceReaped
+variant botwork::core::worker::WorkerCleanup::NotStarted
+variant botwork::core::worker::WorkerCleanup::Pending
+variant botwork::core::worker::WorkerCleanup::Reaped
+variant botwork::core::worker::WorkerCleanup::TreeReaped
+variant botwork::core::worker::WorkerCleanup::Unverified
+variant botwork::core::worker::WorkerOutcome::Cancelled
+variant botwork::core::worker::WorkerOutcome::Failed
+variant botwork::core::worker::WorkerOutcome::Interrupted
+variant botwork::core::worker::WorkerOutcome::Succeeded
+variant botwork::core::worker::WorkerOutcome::TimedOut
+variant botwork::core::worker::journal::GuardianReceipt::NotStarted
+variant botwork::core::worker::journal::GuardianReceipt::TreeSettled

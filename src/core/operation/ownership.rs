@@ -38,6 +38,7 @@ impl Default for OperationOwnershipLimits {
 
 /// Current logical charges. Sources are deduplicated within each diagnostic tree.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct OperationUsage {
     pub invocations: usize,
     pub values: usize,

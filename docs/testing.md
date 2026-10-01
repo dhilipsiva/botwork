@@ -175,7 +175,7 @@ samples from becoming successful measurement evidence.
 literal-only inline and external data, tag/ID selection, isolated row execution,
 discovery limits, per-row output/deadlines, and exact failed-row reruns.
 Run `cargo test --locked --test suite_cli --test parameterized_cases` for CLI
-checks, or `cargo test --locked --lib core::ast::suite` for model boundaries.
+checks, or `cargo test --locked --lib core::suite` for model boundaries.
 Linux FIFO tests verify sibling progress and immutable discovered data while
 rows are queued; history tests cover version migration and maximum-length IDs.
 

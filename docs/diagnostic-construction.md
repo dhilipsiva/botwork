@@ -54,7 +54,7 @@ After value admission and compatibility checks, stream incompatible unary/binary
 
 Compatible operations and structural equality construct no incompatible-operand diagnostic. Preserve arithmetic/finiteness validation and concatenation/value admission order. Ordinary binary operands finish left then right before an incompatible-type failure; unary operators evaluate their operand once. Logical operators retain short-circuit behavior and reject a non-boolean left operand before evaluating the right. Their short-circuit type-error messages also pass construction admission.
 
-Operand temporary reservations remain live during formatting and release on failure. Runtime rejection latches the Context and retains bounded incompatible-type/source evidence. Public `Operate` and `operate_*_bounded` preserve their legacy LiteralResult signatures and use default DiagnosticLimits for incompatible descriptions; an over-budget description returns BW8001. Legacy results expose the primary BWErr only, so detailed omitted-cause evidence remains available through Context/Engine detailed execution. Explicit value limits on raw operators do not change this default diagnostic quota.
+Operand temporary reservations remain live during formatting and release on failure. Runtime rejection latches the Context and retains bounded incompatible-type/source evidence. The internal `Operate` trait and `operate_*_bounded` preserve their legacy LiteralResult signatures and use default DiagnosticLimits for incompatible descriptions; an over-budget description returns BW8001. Legacy results expose the primary BWErr only, so detailed omitted-cause evidence remains available through Context/Engine detailed execution. Explicit value limits on raw operators do not change this default diagnostic quota.
 
 ## Numeric Conversion and Arithmetic
 
@@ -126,7 +126,7 @@ DSL syntax errors borrow the parser's existing error object until the complete s
 
 Program parsing and native-signature helpers use default diagnostic quotas. Engine source/file parsing and imported modules use their installed local quotas and current call frames. Rejection keeps BW1001 as the bounded original cause, a byte-location/rule summary explicitly marked `source excerpt omitted`, and one omitted detail field. It retains no source owner or excerpt. Runtime construction failures latch the requesting Context and bypass Catch; standalone helpers remain independent. Existing source/syntax checks and prior cancellation keep priority. No earlier statements in a malformed file run; preserve completed importer effects and attach import sites through their existing separate unwinding admission.
 
-Pest already owns its error-line and rule-attempt buffers when this check runs. Parser execution and source ownership retain their separate bounds. The public BWParser facade still returns Pest errors for host-managed rendering. This contract bounds the interpreter's additional syntax-detail construction, not arbitrary host formatting or the final Diagnostic Display output.
+Pest already owns its error-line and rule-attempt buffers when this check runs. Parser execution and source ownership retain their separate bounds. The internal BWParser facade still returns Pest errors for host-managed rendering. This contract bounds the interpreter's additional syntax-detail construction, not arbitrary host formatting or the final Diagnostic Display output.
 
 ## Source and Syntax Guard Ownership
 

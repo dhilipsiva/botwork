@@ -12,7 +12,6 @@ use super::grammar::{BWErr, BWParser, Rule, PRATT_PARSER};
 use super::syntax_limits::{SyntaxLimits, DEFAULT_SOURCE_BYTES};
 
 mod parse_diagnostic;
-pub mod suite;
 pub(crate) use parse_diagnostic::ParseDisplay;
 
 #[cfg(test)]
@@ -21,7 +20,7 @@ mod tests;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceFile {
     name: String,
-    text: String,
+    pub(crate) text: String,
 }
 
 impl SourceFile {
@@ -145,7 +144,7 @@ impl Span {
         LocationDisplay(self)
     }
 
-    fn of(pair: &Pair<Rule>, source: &Arc<SourceFile>) -> Self {
+    pub(crate) fn of(pair: &Pair<Rule>, source: &Arc<SourceFile>) -> Self {
         let span = pair.as_span();
         Self {
             source: Arc::clone(source),
@@ -156,8 +155,11 @@ impl Span {
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Program {
     pub source: Arc<SourceFile>,
+    /// The syntax tree, which is not part of the embedding API.
+    #[doc(hidden)]
     pub statements: Vec<Statement>,
 }
 
@@ -302,12 +304,14 @@ fn guard_source<E>(
     })
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct Statement {
     pub span: Span,
     pub(crate) kind: StatementKind,
 }
 
+#[doc(hidden)]
 /// Every name [`Statement::kind_name`] reports, as run records store them.
 pub const STATEMENT_KIND_NAMES: [&str; 15] = [
     "assignment",
@@ -360,6 +364,7 @@ impl Statement {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub enum StatementKind {
     Assign {
@@ -410,6 +415,7 @@ pub enum StatementKind {
     },
 }
 
+#[doc(hidden)]
 /// Eventually observes a condition; Retry repeats an action with side effects.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PollMode {
@@ -673,30 +679,35 @@ impl AstFailure<'_> {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub enum AssignmentValue {
     Expression(Expr),
     Call(Call),
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub enum ElseBranch {
     Block(Block),
     If(Box<Statement>),
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct Name {
     pub text: String,
     pub span: Span,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct Block {
     pub span: Span,
     pub statements: Vec<Statement>,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct Definition {
     pub span: Span,
@@ -706,6 +717,7 @@ pub struct Definition {
     pub body: Block,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct Call {
     pub span: Span,
@@ -713,18 +725,21 @@ pub struct Call {
     pub arguments: Vec<Expr>,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct Expr {
     pub span: Span,
     pub kind: ExprKind,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub enum AccessSegment {
     Literal(Name),
     Computed { span: Span, index: Expr },
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub enum ExprKind {
     Integer(String),
@@ -752,6 +767,7 @@ pub enum ExprKind {
     },
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnaryOp {
     Negate,
@@ -775,6 +791,7 @@ impl UnaryOp {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
@@ -900,10 +917,10 @@ pub(crate) fn from_pair_with_reporter<E>(
 }
 
 #[derive(Debug)]
-struct LoweringFailure(&'static str);
+pub(crate) struct LoweringFailure(&'static str);
 
 impl LoweringFailure {
-    fn at(self, span: Option<&Span>) -> AstFailure<'_> {
+    pub(crate) fn at(self, span: Option<&Span>) -> AstFailure<'_> {
         AstFailure::Lowering { part: self.0, span }
     }
 }
@@ -932,7 +949,7 @@ fn finish<'i>(mut inner: impl Iterator<Item = Pair<'i, Rule>>) -> Result<(), Low
     }
 }
 
-fn lower_name(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Name {
+pub(crate) fn lower_name(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Name {
     Name {
         text: pair.as_str().to_owned(),
         span: Span::of(&pair, source),
@@ -1092,7 +1109,7 @@ fn statement(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Statement, Lo
     Ok(Statement { span, kind })
 }
 
-fn block(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Block, LoweringFailure> {
+pub(crate) fn block(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Block, LoweringFailure> {
     let span = Span::of(&pair, source);
     // Else and unbound Catch wrappers are accepted by the compatibility entry point.
     let mut statements = Vec::new();
@@ -1128,7 +1145,7 @@ pub(crate) fn normalize_sentence(text: &str) -> String {
         .collect()
 }
 
-fn parse_error<E>(
+pub(crate) fn parse_error<E>(
     error: pest::error::Error<Rule>,
     source: &Arc<SourceFile>,
     report: impl Fn(AstFailure<'_>) -> E,
@@ -1345,7 +1362,7 @@ fn expression(pair: Pair<Rule>, source: &Arc<SourceFile>) -> Result<Expr, Loweri
     Ok(Expr { span, kind })
 }
 
-fn decode_string(pair: Pair<Rule>) -> Result<String, LoweringFailure> {
+pub(crate) fn decode_string(pair: Pair<Rule>) -> Result<String, LoweringFailure> {
     let content = pair
         .into_inner()
         .next()

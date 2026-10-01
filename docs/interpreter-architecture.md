@@ -87,9 +87,9 @@ assert_eq!(error.span.as_ref().unwrap().line_column(), (1, 17));
 
 The original entry points convert detailed failures back into `BWErr` at their public boundary. Detailed methods retain spans, entered calls, related declarations, and handler causes. Parser-pair lowering retains locations for both construction and execution failures.
 
-`evaluate_program` validates its entire statement list before executing any statement. This also checks programs assembled by Rust callers from extracted syntax nodes. `execute_statement` validates its subtree at script scope. Neither entry point invokes the parser; internal loops and invocations do not repeat validation. The CLI finishes parsing/validation before any statement trace or output. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.
+`evaluate_program` validates its entire statement list before executing any statement. This also checks programs assembled by Rust callers from extracted syntax nodes. The internal `execute_statement` validates its subtree at script scope. Neither entry point invokes the parser; internal loops and invocations do not repeat validation. The CLI finishes parsing/validation before any statement trace or output. An expression failure returns immediately, before later operands are visited. For `and` and `or`, the evaluator checks the left boolean and selects whether to visit the right expression. The value-level operator API remains strict when both values are supplied.
 
-The existing `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once, validates the resulting statement/block at script scope, and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Validation covers only the supplied subtree, so use the program API to reject a later invalid statement before earlier effects in a whole file. Separate compatibility calls allocate separate source owners.
+The internal `botwork(Pair<Rule>, &mut Context)` entry point lowers its supplied pair once, validates the resulting statement/block at script scope, and delegates to the same evaluator. It retains the pair's complete original input so nested offsets remain valid. Validation covers only the supplied subtree, so use the program API to reject a later invalid statement before earlier effects in a whole file. Separate compatibility calls allocate separate source owners.
 
 ## Completion Outcomes
 
@@ -310,17 +310,16 @@ assert_eq!(report.steps, 2);
 
 ## Source Preflight
 
-`syntax_limits` scans source before entering the generated Pest parser. The public Pest-compatible wrapper lives in grammar.rs, keeping maintained guard code in coverage scope while excluding generated code. Program parsing uses the private generated parser only after a successful preflight. Guard failures retain a bounded source prefix and typed resource diagnostics. Engine options tighten syntax limits locally; CLI and legacy module reads use the default byte cap. [Source-limit rules](syntax-limits.md) specify counting, lexical contexts, fixed ceilings, and compatibility.
+`syntax_limits` scans source before entering the generated Pest parser. The internal Pest-compatible wrapper lives in grammar.rs, keeping maintained guard code in coverage scope while excluding generated code. Program parsing uses the private generated parser only after a successful preflight. Guard failures retain a bounded source prefix and typed resource diagnostics. Engine options tighten syntax limits locally; CLI and legacy module reads use the default byte cap. [Source-limit rules](syntax-limits.md) specify counting, lexical contexts, fixed ceilings, and compatibility.
 
 
 ## Configure Owned Syntax Admission
 
-Set tree budgets independently of execution steps and parser syntax limits. Reassembled programs are checked before effects; shared source owners count once.
+Set tree budgets independently of execution steps and parser syntax limits. A program over its budget is rejected before any effect; shared source owners count once.
 
 ```rust
 use botwork::core::{ast::Program, ast_limits::AstLimits, run::{Engine, RunLimits, RunOptions, RunOutcome}};
-let mut program = Program::parse("host", "|x| = |1|")?;
-program.statements.push(program.statements[0].clone());
+let program = Program::parse("host", "|x| = |1|\n|y| = |2|")?;
 let run = Engine::default().run_program(&program, RunOptions {
     limits: RunLimits {
         ast: AstLimits { nodes: 5, ..AstLimits::default() },

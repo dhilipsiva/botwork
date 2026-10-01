@@ -26,7 +26,7 @@ Breaking one needs a new major version and migration notes.
 | Diagnostic codes | Each `BW` code keeps its meaning ([diagnostics](diagnostics.md#stable-codes-and-repairs)) | New codes may be added; retired codes are never reused |
 | Output formats | The JSON report, event stream, run records, and failed-case records ([reports and outputs](reporting.md)) | Each format's `version`, under the rules in its table |
 | CLI | The [options](cli.md) and [exit statuses](cli.md#exit-statuses) | New options in minor versions |
-| Rust API | The `botwork` crate's public API | SemVer, after a review before 1.0 that hides implementation details |
+| Rust API | The `botwork` crate's public API, as [`public-api.txt`](public-api.txt) lists it; hidden items are not part of it ([Rust API](rust-api.md)) | SemVer, with additions to `#[non_exhaustive]` types and to option structs allowed in minor versions |
 
 ## Rust toolchain
 

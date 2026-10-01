@@ -36,6 +36,7 @@ impl Default for DiagnosticRenderLimits {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DiagnosticRenderTruncation {
     pub resource: &'static str,
     pub limit: usize,
@@ -43,6 +44,7 @@ pub struct DiagnosticRenderTruncation {
 
 /// Rendering never changes the borrowed diagnostic or its original error category.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RenderedDiagnostic {
     pub text: String,
     pub truncation: Option<DiagnosticRenderTruncation>,

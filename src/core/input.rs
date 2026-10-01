@@ -18,6 +18,7 @@ pub use limits::InputLimits;
 use limits::{resource, Budget};
 
 /// Maximum container nesting in one JSON document, including its root object.
+#[doc(hidden)]
 pub const MAX_JSON_DEPTH: usize = 128;
 
 fn invalid(

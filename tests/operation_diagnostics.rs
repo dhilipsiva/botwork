@@ -485,15 +485,7 @@ async fn absent_source_uses_the_header_and_rejected_headers_keep_only_byte_evide
 async fn host_emergency_shaped_fields_cannot_bypass_admission() {
     for blocking in [false, true] {
         let mut summary = Diagnostic::new(BWErr::NativeError("x".repeat(65_536)));
-        summary.omissions = Some(Box::new(DiagnosticOmissions {
-            detail_fields: 0,
-            call_frames: 0,
-            related_locations: 0,
-            direct_causes: 0,
-            label: false,
-            prior_summary: false,
-            source: None,
-        }));
+        summary.omissions = Some(Box::new(DiagnosticOmissions::default()));
         let mut original = Diagnostic::new(BWErr::ResourceLimit {
             resource: "host",
             limit: 0,

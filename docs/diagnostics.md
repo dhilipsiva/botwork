@@ -59,7 +59,7 @@ Ordinary source calls with the wrong arity normally fail signature resolution as
 | `related` | Associated locations, such as the first conflicting definition/parameter |
 | `causes` | Errors being handled when this failure occurred, with their original spans/stacks |
 
-Use `Program::parse_detailed`, `Program::validate_detailed`, `evaluate_program_detailed`, `execute_statement_detailed`, or `botwork_detailed`. Each returns `DiagnosticResult<T>`. The [execution API example](interpreter-architecture.md#execution-api) is checked by rustdoc.
+Use `Program::parse_detailed`, `Program::validate_detailed`, or `evaluate_program_detailed`. Each returns `DiagnosticResult<T>`. The [execution API example](interpreter-architecture.md#execution-api) is checked by rustdoc.
 
 Original methods without `_detailed` retain their `BWErr` results and discard diagnostic context at the public boundary. `Diagnostic::into_error()` makes that conversion explicit. The value-level operator API also retains `BWErr`, since it has no source tree.
 

@@ -39,9 +39,13 @@ pub use cleanup::CleanupLimits;
 pub(crate) mod blocking_io;
 mod import_limits;
 mod output_limits;
+pub use import_limits::ImportLimits;
 pub(crate) use import_limits::ImportResource;
-pub use import_limits::{ImportLimits, MAX_MODULE_CHAIN_DEPTH};
-pub use output_limits::{OutputLimits, DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES};
+#[doc(hidden)]
+pub use import_limits::MAX_MODULE_CHAIN_DEPTH;
+pub use output_limits::OutputLimits;
+#[doc(hidden)]
+pub use output_limits::{DEFAULT_OUTPUT_BYTES, DEFAULT_OUTPUT_RECORD_BYTES};
 mod retained_values;
 pub use retained_values::RetainedValueLimits;
 pub(crate) use retained_values::{StoredValue, ValueReservation};
@@ -66,10 +70,12 @@ mod temporary_values;
 pub use temporary_values::TemporaryLimits;
 pub(crate) use temporary_values::{TemporaryReservation, TemporaryValue};
 
+#[doc(hidden)]
 pub const DEFAULT_STEPS: u64 = 1_000_000;
 pub const MAX_EVALUATION_DEPTH: usize = 96;
+#[doc(hidden)]
 pub const MAX_IMPORT_DEPTH: usize = 16;
-pub const MAX_PARSER_CALLER_DEPTH: usize = 16;
+pub(crate) const MAX_PARSER_CALLER_DEPTH: usize = 16;
 
 /// Run budgets. Temporary allocations and hard native termination
 /// have separate contracts; these limits do not make execution a sandbox.
@@ -445,6 +451,7 @@ pub enum RunOutcome {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RunResult {
     pub result: DiagnosticResult<Literal>,
     /// Completed root assignments, including inputs, unless snapshot_error is Some.

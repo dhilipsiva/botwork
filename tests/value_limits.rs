@@ -6,7 +6,7 @@ use botwork::core::{
     operation::{NativeOperation, OperationControl},
     run::{Engine, RunLimits, RunOptions, RunOutcome},
     signature::StatementSignature,
-    value_limits::{discard, ValueLimits, ValueSize, MAX_VALUE_DEPTH},
+    value_limits::{discard, ValueLimits, MAX_VALUE_DEPTH},
 };
 use std::{
     collections::BTreeMap,
@@ -49,14 +49,8 @@ fn counts_are_exact_for_nodes_depth_unicode_and_scalar_payload() {
         entries: 3,
         payload_bytes: 10,
     };
-    assert_eq!(
-        exact.check(&value).unwrap(),
-        ValueSize {
-            nodes: 5,
-            depth: 3,
-            payload_bytes: 10
-        }
-    );
+    let size = exact.check(&value).unwrap();
+    assert_eq!((size.nodes, size.depth, size.payload_bytes), (5, 3, 10));
     for (limits, resource) in [
         (
             ValueLimits {

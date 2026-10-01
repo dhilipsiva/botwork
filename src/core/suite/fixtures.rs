@@ -10,6 +10,7 @@ pub(super) struct Fixtures {
 
 /// Setup includes the suite's Library. Teardown uses the same retained context.
 /// Case programs initialize their own Library and invocation/module state.
+#[non_exhaustive]
 pub struct FixturePrograms {
     pub setup: Program,
     pub teardown: Program,

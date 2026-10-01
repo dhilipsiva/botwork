@@ -1,5 +1,5 @@
 {
-  "version": 49,
+  "version": 51,
   "mutations": [
     {
       "id": "precedence-products",
@@ -193,14 +193,14 @@
     {
       "id": "suite-library-discarded",
       "area": "scope",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "self.fixtures.case_statements(&self.library, &case.body)",
       "after": "self.fixtures.case_statements(&[], &case.body)"
     },
     {
       "id": "suite-tag-filter-discarded",
       "area": "selection",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "&& (self.tags.is_empty() || self.tags.iter().any(|tag| tags.contains(tag.as_str())))",
       "after": "&& true"
     },
@@ -235,7 +235,7 @@
     {
       "id": "suite-case-id-becomes-display-name",
       "area": "selection",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "format!(\"{}/{}\", self.suite.metadata.id, self.case().metadata.id)",
       "after": "format!(\"{}/{}\", self.suite.metadata.id, self.case().metadata.name)"
     },
@@ -249,28 +249,28 @@
     {
       "id": "dataset-row-input-does-not-override",
       "area": "isolation",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "inputs.insert(parameters.binding.text.clone(), row.value().clone());",
       "after": "inputs.entry(parameters.binding.text.clone()).or_insert_with(|| row.value().clone());"
     },
     {
       "id": "dataset-rows-share-first-value",
       "area": "isolation",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": ".rows()[index]",
       "after": ".rows()[0]"
     },
     {
       "id": "dataset-rerun-parent-accepted",
       "area": "selection",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "(values, false)))",
       "after": "(values, true)))"
     },
     {
       "id": "dataset-tags-discarded",
       "area": "selection",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "if let Some(dataset) = self.dataset() {",
       "after": "if let Some(dataset) = None::<&DatasetDefinition> {"
     },
@@ -284,14 +284,14 @@
     {
       "id": "dataset-overwritten-nodes-uncounted",
       "area": "admission",
-      "file": "src/core/ast/suite/dataset.rs",
+      "file": "src/core/suite/dataset.rs",
       "before": "values.insert(key, value);",
       "after": "if values.insert(key, value).is_some() { budget.nodes -= 1; }"
     },
     {
       "id": "dataset-file-validation-skipped-for-unused",
       "area": "admission",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": "for definition in &mut self.datasets {",
       "after": "for definition in &mut self.datasets[..0] {"
     },
@@ -368,21 +368,21 @@
     {
       "id": "fixture-skips-case-setup",
       "area": "fixtures",
-      "file": "src/core/ast/suite/fixtures.rs",
+      "file": "src/core/suite/fixtures.rs",
       "before": ".chain(self.case_setup.iter().flat_map(|setup| &setup.statements))",
       "after": ".chain(self.case_setup.iter().take(0).flat_map(|setup| &setup.statements))"
     },
     {
       "id": "fixture-duplicate-allowed",
       "area": "fixtures",
-      "file": "src/core/ast/suite/fixtures.rs",
+      "file": "src/core/suite/fixtures.rs",
       "before": "if slot.is_some() {",
       "after": "if false {"
     },
     {
       "id": "fixture-skips-case-teardown",
       "area": "fixtures",
-      "file": "src/core/ast/suite/fixtures.rs",
+      "file": "src/core/suite/fixtures.rs",
       "before": "cleanup: cleanup.clone(),",
       "after": "cleanup: Block { span: cleanup.span.clone(), statements: vec![] },"
     },
@@ -445,7 +445,7 @@
     {
       "id": "fixture-ignores-case-hooks-ast",
       "area": "fixtures",
-      "file": "src/core/ast/suite.rs",
+      "file": "src/core/suite.rs",
       "before": ".chain(fixtures.statements())",
       "after": ".chain(fixtures.statements().take(0))"
     },
@@ -1635,14 +1635,14 @@
     {
       "id": "dataset-invalid-row-id",
       "area": "structured-data",
-      "file": "src/core/ast/suite/dataset.rs",
+      "file": "src/core/suite/dataset.rs",
       "before": "if id.len() > MAX_ID_BYTES || !valid_id(&id) {",
       "after": "if id.len() > MAX_ID_BYTES {"
     },
     {
       "id": "dataset-duplicate-row-id",
       "area": "structured-data",
-      "file": "src/core/ast/suite/dataset.rs",
+      "file": "src/core/suite/dataset.rs",
       "before": "        if self.ids.contains(&id) {",
       "after": "        if false && self.ids.contains(&id) {"
     },
@@ -1656,7 +1656,7 @@
     {
       "id": "dataset-json-read-as-csv",
       "area": "structured-data",
-      "file": "src/core/ast/suite/dataset.rs",
+      "file": "src/core/suite/dataset.rs",
       "before": "            DatasetFormat::Json => Self::from_json(name, text),",
       "after": "            DatasetFormat::Json => Self::from_csv(name, text),"
     },
@@ -2728,8 +2728,8 @@
       "id": "check-warnings-counted-as-errors",
       "area": "lint",
       "file": "src/check.rs",
-      "before": "                        Severity::Warning => warnings += 1,\n",
-      "after": "                        Severity::Warning => errors += 1,\n"
+      "before": "                    } else {\n                        warnings += 1;\n",
+      "after": "                    } else {\n                        errors += 1;\n"
     },
     {
       "id": "check-always-passes",
@@ -3871,6 +3871,13 @@
       "file": "src/core/worker/journal/format.rs",
       "before": "                && recovered.reconciled == Some(host)\n                && matches!(",
       "after": "                && recovered.reconciled == Some(host)\n                && true\n                || matches!("
+    },
+    {
+      "id": "skip-reason-messages-swapped",
+      "area": "rust-api",
+      "file": "src/core/acceptance.rs",
+      "before": "            Self::SuiteSetupFailed => \"suite setup did not complete\",",
+      "after": "            Self::SuiteSetupFailed => \"suite control stopped\","
     }
   ]
 }

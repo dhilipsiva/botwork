@@ -10,13 +10,14 @@
 //! shadow built-ins while the root scope may not.
 use super::{
     ast::{
-        normalize_sentence, suite::Suite, AccessSegment, AssignmentValue, Block, Call, ElseBranch,
-        Expr, ExprKind, Program, Span, Statement, StatementKind, UnaryOp,
+        normalize_sentence, AccessSegment, AssignmentValue, Block, Call, ElseBranch, Expr,
+        ExprKind, Program, Span, Statement, StatementKind, UnaryOp,
     },
     diagnostic::{Diagnostic, DiagnosticCode},
     eval::Context,
     run::RunLimits,
     signature::{StatementSignature, ValueKind},
+    suite::Suite,
     syntax_limits::DEFAULT_SOURCE_BYTES,
 };
 use std::{
@@ -30,6 +31,7 @@ use std::{
 /// How serious a finding is. Errors predict a failing run; warnings flag code
 /// that is likely wrong but may be intended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum Severity {
     Warning,
     Error,
@@ -46,6 +48,7 @@ impl Severity {
 
 /// A check with a stable name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum Rule {
     /// A call that no built-in, definition, or import can satisfy.
     UndefinedStatement,
@@ -134,6 +137,7 @@ impl Rule {
 
 /// One problem found without running the program.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Finding {
     pub rule: Rule,
     pub span: Span,
@@ -168,6 +172,7 @@ impl fmt::Display for Finding {
 /// What a built-in statement's result depends on outside the script. The check
 /// cannot know these results without running.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum External {
     Files,
     Environment,
@@ -252,6 +257,7 @@ pub const EXTERNAL_STATEMENTS: [(&str, External); 33] = [
 
 /// Everything a check established, and what it could not.
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct Report {
     /// Findings, the checked file's first and then each module's, in source order.
     pub findings: Vec<Finding>,

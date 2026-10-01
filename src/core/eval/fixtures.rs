@@ -69,6 +69,7 @@ impl Context {
 
 /// The fixture result covers setup, teardown and the owner's control. The body
 /// contains independently reported case outcomes, if setup admitted the body.
+#[non_exhaustive]
 pub struct FixtureResult<T> {
     pub result: DiagnosticResult<()>,
     pub body: Option<T>,

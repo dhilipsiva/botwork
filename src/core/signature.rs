@@ -12,6 +12,7 @@ use super::{
 mod tests;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ValueKind {
     None,
     Int,
@@ -103,12 +104,14 @@ impl fmt::Display for ValueKinds {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StatementOrigin {
     Native,
     Dsl,
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct ParameterSignature {
     pub name: String,
     pub accepted: ValueKinds,
@@ -117,6 +120,7 @@ pub struct ParameterSignature {
 
 /// Documented operation errors; additional interpreter or dynamic callee errors can occur.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct StatementError {
     pub code: DiagnosticCode,
     pub description: String,

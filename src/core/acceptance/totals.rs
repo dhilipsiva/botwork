@@ -91,6 +91,7 @@ impl CaseTotals {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Delivery {
     Complete,
     Failed,

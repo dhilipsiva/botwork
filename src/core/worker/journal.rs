@@ -19,6 +19,7 @@ use storage::Directory;
 
 /// Identity is unique across pools sharing a journal and across reopened sessions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
 pub struct JournalId {
     pub session: [u8; 16],
     pub sequence: u64,
@@ -33,6 +34,7 @@ impl fmt::Display for JournalId {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct JournalMetadata {
     pub outcome: WorkerOutcome,
     pub cleanup: WorkerCleanup,
@@ -71,12 +73,14 @@ fn raw_status(status: std::process::ExitStatus) -> i32 {
 /// On Windows the pool writes it for the worker's Job Object, so `errno` holds
 /// a Windows error code there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GuardianReceipt {
     NotStarted { errno: i32 },
     TreeSettled { exit_status: i32, errno: i32 },
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct RecoveredWorker {
     pub id: JournalId,
     pub published: Option<JournalMetadata>,
@@ -90,6 +94,7 @@ pub struct RecoveredWorker {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct JournalFlush {
     /// Accepted metadata writes that have not finished syncing.
     pub pending: usize,

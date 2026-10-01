@@ -2,9 +2,13 @@
 
 use super::{diagnostic::Diagnostic, grammar::BWErr};
 
+#[doc(hidden)]
 pub const DEFAULT_SOURCE_BYTES: usize = 1024 * 1024;
+#[doc(hidden)]
 pub const MAX_SYNTAX_NESTING: usize = 32;
+#[doc(hidden)]
 pub const MAX_EXPRESSION_OPERATORS: usize = 64;
+#[doc(hidden)]
 pub const MAX_SYNTAX_COMPLEXITY: usize = 66;
 
 /// Hosts may tighten the parser guard. Raising its fixed ceilings requires a

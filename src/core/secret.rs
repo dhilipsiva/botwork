@@ -14,7 +14,7 @@ use std::{
 };
 
 /// What replaces every occurrence of a secret's text.
-pub const MASK: &str = "***";
+pub(crate) const MASK: &str = "***";
 
 #[derive(Default)]
 struct Masker {
@@ -105,7 +105,7 @@ impl Secrets {
         self.masker().pattern.is_none()
     }
 
-    /// `text` with every secret occurrence replaced by [`MASK`].
+    /// `text` with every secret occurrence replaced by `***`.
     pub fn redact<'a>(&self, text: &'a str) -> Cow<'a, str> {
         match &self.masker().pattern {
             Some(pattern) => match pattern.replace_all(text, MASK) {

@@ -17,12 +17,10 @@
 mod sources;
 
 use botwork::core::{
-    ast::{
-        suite::{Dataset, Suite},
-        Program,
-    },
+    ast::Program,
     format::{format, SourceKind},
     language::Language,
+    suite::{Dataset, Suite},
 };
 use serde_json::Value;
 use std::{

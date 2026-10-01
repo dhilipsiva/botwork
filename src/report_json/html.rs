@@ -669,18 +669,7 @@ pub(super) fn render(document: &Document<'_>, directory: &Path, budget: usize) -
                     fact(&mut out, "Row", Text(row));
                 }
                 if let Some(reason) = record.skip_reason {
-                    fact(
-                        &mut out,
-                        "Skipped",
-                        match reason {
-                            botwork::core::acceptance::SkipReason::SuiteSetupFailed => {
-                                "suite setup did not complete"
-                            }
-                            botwork::core::acceptance::SkipReason::SuiteStopped => {
-                                "suite control stopped"
-                            }
-                        },
-                    );
+                    fact(&mut out, "Skipped", reason.message());
                 }
                 if let Some(started) = &record.started_at {
                     fact(&mut out, "Started", Text(started));

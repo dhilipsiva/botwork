@@ -18,6 +18,7 @@ pub const MAX_DATASET_PATH_BYTES: usize = 4096;
 
 /// How an external dataset file is read. Suffixes never select a format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum DatasetFormat {
     /// A literal-only `Dataset` document.
     Botwork,

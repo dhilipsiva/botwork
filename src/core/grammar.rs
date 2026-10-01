@@ -7,9 +7,11 @@ use thiserror::Error;
 #[cfg(test)]
 mod tests;
 
+#[doc(hidden)]
 pub use super::parser::Rule;
 
 /// Public Pest-compatible parser with default source/syntax preflight bounds.
+#[doc(hidden)]
 pub struct BWParser;
 
 /// Exact identifier recognition shared with input admission. Keep parity tests
@@ -99,6 +101,7 @@ impl pest::Parser<Rule> for BWParser {
 }
 
 lazy_static::lazy_static! {
+    #[doc(hidden)]
     pub static ref PRATT_PARSER: PrattParser<Rule> = {
         use pest::pratt_parser::{Assoc::*, Op};
         use Rule::*;
@@ -121,6 +124,7 @@ lazy_static::lazy_static! {
 
 /// botwork Err
 #[derive(Error, Debug, Clone)]
+#[non_exhaustive]
 pub enum BWErr {
     #[error("Variable not defined: {name}")]
     VariableNotDefined {
@@ -222,6 +226,7 @@ pub enum BWErr {
 }
 
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub enum Literal {
     #[default]
     None,
@@ -456,6 +461,7 @@ fn float_power(base: f64, exponent: i32) -> Result<Literal, ArithmeticFailure> {
     finite_float(result as f32, "Exponentiation")
 }
 
+#[doc(hidden)]
 pub trait Operate {
     fn operate_unary(&self, rhs: Literal) -> LiteralResult;
     fn operate_binary(&self, lhs: Literal, rhs: Literal) -> LiteralResult;

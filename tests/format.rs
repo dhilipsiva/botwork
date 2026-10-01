@@ -7,11 +7,11 @@ mod sources;
 
 use botwork::core::{
     ast::{
-        suite::{Dataset, Suite},
         AccessSegment, AssignmentValue, Block, Call, ElseBranch, Expr, ExprKind, Program,
         Statement, StatementKind,
     },
     format::{format, SourceKind},
+    suite::{Dataset, Suite},
 };
 use sources::sources;
 use std::{fmt::Write, fs, path::Path};

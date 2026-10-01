@@ -11,19 +11,19 @@
 //! the same syntax tree, so formatting never changes what a program does.
 use super::{
     ast::{
-        suite::{Dataset, Suite},
         AccessSegment, AssignmentValue, Block, Call, ElseBranch, Expr, ExprKind, PollMode, Program,
         Statement, StatementKind,
     },
     diagnostic::{Diagnostic, DiagnosticResult},
     grammar::{BWErr, Literal},
     parser::{BWParser, Rule},
+    suite::{Dataset, Suite},
 };
 use pest::{iterators::Pair, Parser};
 use std::{fmt::Write, path::Path};
 
 /// Lines longer than this are wrapped between sentence words and parameters.
-pub const MAX_WIDTH: usize = 100;
+pub(crate) const MAX_WIDTH: usize = 100;
 const INDENT: &str = "    ";
 
 /// What a file holds, which decides its grammar.

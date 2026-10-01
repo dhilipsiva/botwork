@@ -34,8 +34,8 @@ pub struct ListenerOptions {
     pub close_timeout: Duration,
 }
 
-pub const DEFAULT_LISTENER_CAPACITY: usize = 8192;
-pub const DEFAULT_LISTENER_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const DEFAULT_LISTENER_CAPACITY: usize = 8192;
+pub(crate) const DEFAULT_LISTENER_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Default for ListenerOptions {
     fn default() -> Self {
@@ -49,6 +49,7 @@ impl Default for ListenerOptions {
 /// Why a listener stopped receiving items. The first failure is kept.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ListenerFailure {
     /// `deliver` or `finish` returned an error.
     Rejected { message: String },
@@ -78,6 +79,7 @@ impl fmt::Display for ListenerFailure {
 
 /// Counts for one listener's stream. `accepted - delivered` items were lost.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ListenerOutcome {
     pub accepted: u64,
     pub delivered: u64,
