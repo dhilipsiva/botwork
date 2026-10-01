@@ -86,6 +86,9 @@ impl Drop for Sessions {
 /// group, so a browser it started cannot outlive it.
 pub(super) struct Driver {
     child: Child,
+    /// Whether the driver was reaped: its ID may then belong to another
+    /// process, so its group must not be signalled.
+    reaped: bool,
 }
 
 impl Driver {
@@ -121,11 +124,15 @@ impl Driver {
                 executable.display()
             )
         })?;
-        let mut driver = Self { child };
+        let mut driver = Self {
+            child,
+            reaped: false,
+        };
         let endpoint = Endpoint::loopback(port);
         let deadline = Instant::now() + timeout;
         loop {
             if let Ok(Some(status)) = driver.child.try_wait() {
+                driver.reaped = true;
                 return Err(format!(
                     "the driver `{}` exited with {status} before it listened",
                     executable.display()
@@ -159,8 +166,9 @@ impl Driver {
 impl Drop for Driver {
     fn drop(&mut self) {
         #[cfg(unix)]
-        if let Ok(group) = libc::pid_t::try_from(self.child.id()) {
-            // SAFETY: signals the driver's own process group, which it leads.
+        if let (false, Ok(group)) = (self.reaped, libc::pid_t::try_from(self.child.id())) {
+            // SAFETY: signals the driver's own process group, which it leads;
+            // the driver is not yet reaped, so its ID is still its own.
             unsafe { libc::killpg(group, libc::SIGKILL) };
         }
         let _ = self.child.kill();
