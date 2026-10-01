@@ -23,7 +23,7 @@ mod polling;
 mod results;
 mod snapshots;
 mod temporaries;
-pub(crate) use imports::webdriver;
+pub(crate) use imports::{playwright, webdriver};
 use imports::{LoadedModule, ModuleCache};
 use temporaries::TemporaryArguments;
 

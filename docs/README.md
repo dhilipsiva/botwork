@@ -20,6 +20,8 @@ index.
 - [Complete automation examples](automation-examples.md)
 - [Browser automation with WebDriver](webdriver.md): drive Chrome, Firefox, or
   a Selenium Grid through a W3C WebDriver server.
+- [Browser automation with Playwright](playwright.md): drive Chromium, Firefox,
+  or WebKit with the Playwright library a project installs.
 - [Running scripts in parallel](parallel-cli.md)
 - [Input variables](input-variables.md)
 - [Secret inputs](secrets.md)

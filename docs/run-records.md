@@ -125,7 +125,8 @@ order (`causes` and `omitted_causes`). The complete `Diagnostic` remains in
 
 **Artifacts.** An `Artifact` event records a `kind` and a `path`. A
 [WebDriver screenshot](webdriver.md#screenshots) records one, with `kind`
-`screenshot`, when it is taken. The CLI [JSON report](json-report.md) also
+`screenshot`, when it is taken, and so do [Playwright](playwright.md#artifacts)
+screenshots, traces (`trace`), and videos (`video`). The CLI [JSON report](json-report.md) also
 attaches assertion evidence files to the run that produced them.
 
 ## Events and ordering

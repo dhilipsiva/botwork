@@ -1,5 +1,5 @@
 {
-  "version": 62,
+  "version": 63,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4494,6 +4494,104 @@
       "file": "src/core/eval/imports/webdriver/client.rs",
       "before": "        if url.scheme() != \"http\" {\n",
       "after": "        if url.scheme() == \"ftp\" {\n"
+    },
+    {
+      "id": "playwright-handle-kind-unchecked",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "  if (!entry || handle.playwright !== kind || entry.kind !== kind) {\n",
+      "after": "  if (!entry) {\n"
+    },
+    {
+      "id": "playwright-expectations-do-not-retry",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "    if (Date.now() >= deadline) return last;\n",
+      "after": "    return last;\n"
+    },
+    {
+      "id": "playwright-assertions-reported-as-native",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "        \"assertion\" => Diagnostic::new(BWErr::AssertionFailed(failure.message)),\n",
+      "after": "        \"assertion\" => Diagnostic::new(BWErr::NativeError(failure.message)),\n"
+    },
+    {
+      "id": "playwright-waits-reported-as-native",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "        \"wait\" => Diagnostic::new(BWErr::ConditionNotMet {\n",
+      "after": "        \"wait\" if false => Diagnostic::new(BWErr::ConditionNotMet {\n"
+    },
+    {
+      "id": "playwright-run-end-leaves-browsers-open",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright/host.rs",
+      "before": "                .take(),\n        );\n        let mut child = process\n",
+      "after": "                .as_mut()\n                .map(|_| ()),\n        );\n        let mut child = process\n"
+    },
+    {
+      "id": "playwright-host-group-survives",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright/host.rs",
+      "before": "            unsafe { libc::killpg(group, libc::SIGKILL) };\n",
+      "after": "            let _ = group;\n"
+    },
+    {
+      "id": "playwright-artifacts-unrecorded",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                recorder.artifact(kind, &path);\n",
+      "after": "                let _ = (recorder, kind);\n"
+    },
+    {
+      "id": "playwright-videos-dropped",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "    const videos = entry.pages.map((page) => page.video()).filter(Boolean);\n",
+      "after": "    const videos = [];\n"
+    },
+    {
+      "id": "playwright-check-unknown",
+      "area": "playwright",
+      "file": "src/core/analysis.rs",
+      "before": "        if path == crate::core::eval::playwright::PATH {\n",
+      "after": "        if path == \"botwork:none\" {\n"
+    },
+    {
+      "id": "playwright-unknown-launch-options-accepted",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                        \"browser\" | \"headless\" | \"args\" | \"executable_path\" | \"timeout_ms\"\n",
+      "after": "                        \"browser\" | \"headless\" | \"args\" | \"executable_path\" | \"timeout_ms\" | \"headed\"\n"
+    },
+    {
+      "id": "playwright-node-not-found",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright/host.rs",
+      "before": "        .find(|path| path.is_absolute() && path.is_file())\n",
+      "after": "        .find(|path| path.is_absolute() && path.is_file() && false)\n"
+    },
+    {
+      "id": "playwright-missing-package-unexplained",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "    if (missing) {\n",
+      "after": "    if (false) {\n"
+    },
+    {
+      "id": "playwright-arguments-swapped",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, v(1)?, v(0)?],\n",
+      "after": "            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, v(0)?, v(1)?],\n"
+    },
+    {
+      "id": "playwright-uncheck-checks",
+      "area": "playwright",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "            Self::Uncheck => vec![v(1)?, v(0)?, json!(false)],\n",
+      "after": "            Self::Uncheck => vec![v(1)?, v(0)?, json!(true)],\n"
     }
   ]
 }

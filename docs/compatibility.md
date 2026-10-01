@@ -111,6 +111,7 @@ macOS, and Ctrl-C and Ctrl-Break on Windows. See
 | Vim | 9 | The version Ubuntu ships, in CI |
 | Neovim | 0.11 or later | Configuration documented, not tested |
 | Node.js, to build the VS Code extension | 22 | 22 in CI |
+| Playwright, for [Playwright statements](playwright.md) | 1.63 | 1.63.0 with Chromium in CI |
 
 See [editor support](editors.md) for the packages and how they are tested.
 

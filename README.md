@@ -202,7 +202,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
 - [ ] integrations
   - [x] Selenium/Webdriver ([D11](docs/decisions.md#d11-browser-and-mobile-integrations)); see [browser automation with WebDriver](docs/webdriver.md)
   - [ ] Appium
-  - [ ] Playwirght
+  - [x] Playwright ([D11](docs/decisions.md#d11-browser-and-mobile-integrations)); see [browser automation with Playwright](docs/playwright.md)
 - [x] Reports
   - [x] [Console Reports](docs/console-report.md)
   - [x] [JSON Reports](docs/json-report.md)

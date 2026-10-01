@@ -13,6 +13,7 @@ with the run's full authority, so it must be code you trust.
 | [JavaScript statements](javascript.md) | A Node process per call | Everything the user can: Node has no sandbox here | The [worker limits](isolated-workers.md): 30 seconds and 1 MiB of output per call; a stop ends the process |
 | [WebAssembly statements](wasm.md) | In the process, in a Wasmtime instance per call | The clocks and random numbers only: no files, network, environment, or arguments | Fuel, a memory cap, bounded output, and epoch interruption |
 | [WebDriver drivers](webdriver.md), such as chromedriver | A process `Open Browser` starts, or a server it connects to | Everything the user can, and the browser it starts | Each command's `timeout_ms`; the run's end closes its sessions and ends the drivers it started |
+| [Playwright](playwright.md) and the project's `playwright` package | A Node process per run | Everything the user can, and the browsers it launches | Each browser's `timeout_ms`; the run's end closes its browsers and ends the process |
 
 ## The policy
 

@@ -86,7 +86,7 @@ pub(super) fn describe(using: &str, value: &str) -> String {
 }
 
 /// A Botwork value as JSON for the driver; element handles become references.
-pub(super) fn to_json(value: &Literal) -> Result<Value, String> {
+pub(in crate::core::eval) fn to_json(value: &Literal) -> Result<Value, String> {
     Ok(match value {
         Literal::None => Value::Null,
         Literal::Bool(value) => Value::Bool(*value),
@@ -116,7 +116,7 @@ pub(super) fn to_json(value: &Literal) -> Result<Value, String> {
 
 /// The driver's JSON as a Botwork value: element references become handles of
 /// `session`, and numbers keep their exact value or fail.
-pub(super) fn from_json(value: &Value, session: &str) -> Result<Literal, String> {
+pub(in crate::core::eval) fn from_json(value: &Value, session: &str) -> Result<Literal, String> {
     convert(value, session, 0)
 }
 

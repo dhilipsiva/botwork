@@ -1,0 +1,8 @@
+{
+  "name": "botwork-playwright-tests",
+  "private": true,
+  "description": "The Playwright that tests/playwright.rs runs against, pinned by package-lock.json.",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

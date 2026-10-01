@@ -269,6 +269,28 @@ jobs:
       - name: Check Clippy warnings without the wasm feature
         run: cargo +stable clippy --locked --no-default-features --all-targets -- -D warnings
 
+  playwright:
+    name: Playwright (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Install the pinned Playwright and its Chromium
+        working-directory: tests/playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the Playwright tests against them (decision D11)
+        env:
+          BOTWORK_REQUIRE_NODE: "1"
+          BOTWORK_REQUIRE_PLAYWRIGHT: "1"
+        run: BOTWORK_PLAYWRIGHT="$PWD/tests/playwright" cargo +stable test --locked --test playwright
+
   tree-sitter:
     name: Tree-sitter grammars
     runs-on: ubuntu-latest

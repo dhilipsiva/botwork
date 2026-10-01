@@ -26,6 +26,7 @@ impl std::fmt::Display for ImportChain<'_> {
 }
 
 mod javascript;
+pub(crate) mod playwright;
 #[cfg(feature = "python")]
 mod python;
 #[cfg(feature = "wasm")]
@@ -49,6 +50,8 @@ pub(super) struct ModuleCache {
     project: Option<Arc<crate::core::packages::Project>>,
     /// The browser sessions this run opened, made at its first WebDriver import.
     webdriver: Option<Arc<webdriver::Sessions>>,
+    /// The Playwright host this run's statements share, made at its first import.
+    playwright: Option<Arc<playwright::Host>>,
 }
 
 impl Clone for ModuleCache {
@@ -84,6 +87,7 @@ impl Clone for ModuleCache {
                 .collect(),
             project: self.project.clone(),
             webdriver: self.webdriver.clone(),
+            playwright: self.playwright.clone(),
         }
     }
 }
@@ -125,6 +129,18 @@ impl ModuleCache {
     /// The sessions a run's WebDriver statements share, made at the first import.
     fn webdriver_sessions(&mut self) -> Arc<webdriver::Sessions> {
         Arc::clone(self.webdriver.get_or_insert_with(Default::default))
+    }
+
+    /// The Playwright host a run's statements share, made at the first import;
+    /// it starts its Node process at the first command.
+    fn playwright_host(
+        &mut self,
+        directory: &Path,
+        variables: std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+    ) -> Arc<playwright::Host> {
+        Arc::clone(self.playwright.get_or_insert_with(|| {
+            Arc::new(playwright::Host::new(directory.to_owned(), variables))
+        }))
     }
 
     /// The pool a run's JavaScript calls share, made at the first import.
@@ -195,6 +211,9 @@ pub(super) async fn evaluate_import(
     }
     if path == webdriver::PATH {
         return webdriver::evaluate_import(namespace, &normalized, import_site, context).await;
+    }
+    if path == playwright::PATH {
+        return playwright::evaluate_import(namespace, &normalized, import_site, context).await;
     }
     if javascript::handles(path) {
         return javascript::evaluate_import(

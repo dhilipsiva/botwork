@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, ffi::OsString, sync::OnceLock, time::Duration};
 
 mod client;
 mod sessions;
-mod values;
+pub(in crate::core::eval) mod values;
 
 use client::{segment, Endpoint, Failure};
 pub(in crate::core::eval) use sessions::Sessions;

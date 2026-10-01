@@ -80,8 +80,9 @@ and `event` names the kind:
   output. The complete output is still written to stdout.
 - **Fixtures.** Logs inside shared suite fixtures are not events; the fixture's
   outcome is.
-- **Artifacts.** A [WebDriver screenshot](webdriver.md#screenshots) is an
-  `artifact` event when it is taken. Assertion artifacts are attached to JSON
+- **Artifacts.** A [WebDriver screenshot](webdriver.md#screenshots), and a
+  [Playwright](playwright.md#artifacts) screenshot, trace, or video, is an
+  `artifact` event when it is made. Assertion artifacts are attached to JSON
   report records after a run finishes, and are not streamed.
 - **The trailer.** `status`, `cases`, and `fixture_failures` in `stream_finished`
   describe execution: the verdict of every run and fixture. Report and listener
