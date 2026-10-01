@@ -17,9 +17,10 @@ the boundary.
 | HTTP connections | Each request opens its own connection; no connection pool, cookie jar, or `Set-Cookie` replay crosses requests or runs |
 | Budgets and deadlines | Steps, output, retained state, and deadlines start fresh for each run |
 | Records and artifacts | Each run's record, listener events, and assertion artifacts carry its own number and identity; see [terminal outcomes](terminal-outcomes.md#ownership-of-events-and-artifacts) |
+| Browser sessions | Each belongs to the run that opened it: another run's handle is refused, and the run's end closes any it left open; see [WebDriver](webdriver.md#handles) |
 
-Browser and device sessions arrive with their integrations. Each will state its
-own session ownership and use the same boundary.
+Device sessions arrive with the Appium integration, which will state its own
+session ownership and use the same boundary.
 
 ## What runs share
 

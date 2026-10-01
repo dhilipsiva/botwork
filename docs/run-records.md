@@ -123,9 +123,10 @@ polling attempts. Log output is still written to stdout; the record is a copy.
 order (`causes` and `omitted_causes`). The complete `Diagnostic` remains in
 `RunResult::result`.
 
-**Artifacts.** An `Artifact` event records a `kind` and a `path`. Embedded runs
-produce none. The CLI [JSON report](json-report.md) attaches assertion evidence
-files to the run that produced them.
+**Artifacts.** An `Artifact` event records a `kind` and a `path`. A
+[WebDriver screenshot](webdriver.md#screenshots) records one, with `kind`
+`screenshot`, when it is taken. The CLI [JSON report](json-report.md) also
+attaches assertion evidence files to the run that produced them.
 
 ## Events and ordering
 

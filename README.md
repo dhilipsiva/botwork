@@ -200,7 +200,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Making HTTP Requests](docs/http.md)
   - [x] [JSON and CSV data](docs/structured-data.md)
 - [ ] integrations
-  - [ ] Selenium/Webdriver
+  - [x] Selenium/Webdriver ([D11](docs/decisions.md#d11-browser-and-mobile-integrations)); see [browser automation with WebDriver](docs/webdriver.md)
   - [ ] Appium
   - [ ] Playwirght
 - [x] Reports

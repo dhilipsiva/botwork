@@ -712,6 +712,10 @@ impl Checker<'_, '_> {
         else {
             return None;
         };
+        // WebDriver's statements are fixed, so calls through it are checked.
+        if path == crate::core::eval::webdriver::PATH {
+            return Some(Rc::new(crate::core::eval::webdriver::exports().collect()));
+        }
         let directory = self.analyzer.directory.as_ref()?;
         // A Python, JavaScript, or WebAssembly module's statements are known
         // only when it loads, so calls through it are reported unchecked, not

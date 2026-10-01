@@ -140,6 +140,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: node --input-type=module -e "await import('node:url'); console.log(process.version)"
+      - name: Use the runner's chromedriver for the WebDriver tests
+        # Hosted Linux runners ship Chrome with a matching chromedriver, so the
+        # real browser test runs there and cannot be skipped (decision D11).
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          echo "BOTWORK_WEBDRIVER=$CHROMEWEBDRIVER/chromedriver" >> "$GITHUB_ENV"
+          echo "BOTWORK_REQUIRE_WEBDRIVER=1" >> "$GITHUB_ENV"
       - name: Run tests and examples
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
 

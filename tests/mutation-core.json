@@ -1,5 +1,5 @@
 {
-  "version": 61,
+  "version": 62,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4389,6 +4389,111 @@
       "file": "src/core/eval/imports/python.rs",
       "before": "    env!(\"CARGO_PKG_VERSION\"),\n",
       "after": "    \"0.0.0\",\n"
+    },
+    {
+      "id": "webdriver-closed-session-kept",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "                if let Some(session) = run.sessions.remove(&id) {\n",
+      "after": "                if let Ok(session) = run.sessions.get(&id) {\n"
+    },
+    {
+      "id": "webdriver-run-end-leaves-sessions",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/sessions.rs",
+      "before": "            session.endpoint.delete_blocking(&id, CLOSE_TIMEOUT);\n",
+      "after": "            let _ = &id;\n"
+    },
+    {
+      "id": "webdriver-driver-group-survives",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/sessions.rs",
+      "before": "            unsafe { libc::killpg(group, libc::SIGKILL) };\n",
+      "after": "            let _ = group;\n"
+    },
+    {
+      "id": "webdriver-foreign-handles-accepted",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/sessions.rs",
+      "before": "        self.open().get(id).cloned().ok_or_else(|| {\n",
+      "after": "        self.open().values().next().cloned().ok_or_else(|| {\n"
+    },
+    {
+      "id": "webdriver-path-segments-unencoded",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/client.rs",
+      "before": "        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {\n",
+      "after": "        if byte != 0 {\n"
+    },
+    {
+      "id": "webdriver-wait-gives-up-at-once",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "                            if tokio::time::Instant::now() >= deadline {\n",
+      "after": "                            if attempts > 0 {\n"
+    },
+    {
+      "id": "webdriver-command-timeout-ignored",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/client.rs",
+      "before": "        match tokio::time::timeout(timeout, self.exchange(method.clone(), path, body)).await {\n",
+      "after": "        match tokio::time::timeout(timeout * 1000, self.exchange(method.clone(), path, body)).await {\n"
+    },
+    {
+      "id": "webdriver-screenshot-unrecorded",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "                    recorder.artifact(\"screenshot\", &path);\n",
+      "after": "                    let _ = recorder;\n"
+    },
+    {
+      "id": "webdriver-result-elements-unrecognized",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/values.rs",
+      "before": "            if let (Some(Value::String(id)), 1) = (object.get(ELEMENT), object.len()) {\n",
+      "after": "            if let (Some(Value::String(id)), 0) = (object.get(ELEMENT), object.len()) {\n"
+    },
+    {
+      "id": "webdriver-argument-elements-unrecognized",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/values.rs",
+      "before": "                (map.get(\"session\"), map.get(\"element\"), map.len())\n",
+      "after": "                (map.get(\"session\"), map.get(\"element\"), map.len() + 1)\n"
+    },
+    {
+      "id": "webdriver-whole-numbers-rounded",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/values.rs",
+      "before": "    if float.fract() == 0.0 && f64::from(single) != float {\n",
+      "after": "    if float.fract() == 0.0 && f64::from(single) != float && false {\n"
+    },
+    {
+      "id": "webdriver-driver-errors-unreported",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/client.rs",
+      "before": "    if let Some(error) = value.get(\"error\").and_then(Value::as_str) {\n",
+      "after": "    if let Some(error) = value.get(\"failure\").and_then(Value::as_str) {\n"
+    },
+    {
+      "id": "webdriver-unknown-options-accepted",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "        if !matches!(key.as_str(), \"driver\" | \"capabilities\" | \"timeout_ms\") {\n",
+      "after": "        if !matches!(key.as_str(), \"driver\" | \"capabilities\" | \"timeout_ms\" | \"timeout\") {\n"
+    },
+    {
+      "id": "webdriver-check-unknown",
+      "area": "webdriver",
+      "file": "src/core/analysis.rs",
+      "before": "        if path == crate::core::eval::webdriver::PATH {\n",
+      "after": "        if path == \"botwork:none\" {\n"
+    },
+    {
+      "id": "webdriver-https-accepted",
+      "area": "webdriver",
+      "file": "src/core/eval/imports/webdriver/client.rs",
+      "before": "        if url.scheme() != \"http\" {\n",
+      "after": "        if url.scheme() == \"ftp\" {\n"
     }
   ]
 }

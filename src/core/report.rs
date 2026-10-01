@@ -852,6 +852,16 @@ impl Recorder {
         live.emit(Event::Log(log));
     }
 
+    /// Record a file the run produced, such as a screenshot, while it is active.
+    pub(crate) fn artifact(&self, kind: &str, path: &str) {
+        let mut live = self.live();
+        let path = live.secrets.redact(path).into_owned();
+        live.emit(Event::Artifact(ArtifactRecord {
+            kind: kind.to_owned(),
+            path,
+        }));
+    }
+
     /// Emit the terminal event and return the folded record.
     pub(crate) fn finish(
         &self,

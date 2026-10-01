@@ -30,6 +30,7 @@ mod javascript;
 mod python;
 #[cfg(feature = "wasm")]
 mod wasm;
+pub(crate) mod webdriver;
 
 #[derive(Default)]
 pub(super) struct ModuleCache {
@@ -46,6 +47,8 @@ pub(super) struct ModuleCache {
     wasm: HashMap<PathBuf, Arc<wasm::Module>>,
     /// The package project of this run's `@` imports, found at the first.
     project: Option<Arc<crate::core::packages::Project>>,
+    /// The browser sessions this run opened, made at its first WebDriver import.
+    webdriver: Option<Arc<webdriver::Sessions>>,
 }
 
 impl Clone for ModuleCache {
@@ -80,6 +83,7 @@ impl Clone for ModuleCache {
                 .map(|(key, value)| (key.clone(), Arc::clone(value)))
                 .collect(),
             project: self.project.clone(),
+            webdriver: self.webdriver.clone(),
         }
     }
 }
@@ -116,6 +120,11 @@ impl ModuleCache {
             size.path(requested);
             size.path(canonical);
         }
+    }
+
+    /// The sessions a run's WebDriver statements share, made at the first import.
+    fn webdriver_sessions(&mut self) -> Arc<webdriver::Sessions> {
+        Arc::clone(self.webdriver.get_or_insert_with(Default::default))
     }
 
     /// The pool a run's JavaScript calls share, made at the first import.
@@ -183,6 +192,9 @@ pub(super) async fn evaluate_import(
             statement.metadata().header(),
             &namespace.span,
         ));
+    }
+    if path == webdriver::PATH {
+        return webdriver::evaluate_import(namespace, &normalized, import_site, context).await;
     }
     if javascript::handles(path) {
         return javascript::evaluate_import(

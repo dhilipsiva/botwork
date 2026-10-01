@@ -12,6 +12,7 @@ with the run's full authority, so it must be code you trust.
 | [Python statements](python.md) | In the process, on a worker thread | Everything the process can | Stops, which raise `botwork.Stopped` in Python code |
 | [JavaScript statements](javascript.md) | A Node process per call | Everything the user can: Node has no sandbox here | The [worker limits](isolated-workers.md): 30 seconds and 1 MiB of output per call; a stop ends the process |
 | [WebAssembly statements](wasm.md) | In the process, in a Wasmtime instance per call | The clocks and random numbers only: no files, network, environment, or arguments | Fuel, a memory cap, bounded output, and epoch interruption |
+| [WebDriver drivers](webdriver.md), such as chromedriver | A process `Open Browser` starts, or a server it connects to | Everything the user can, and the browser it starts | Each command's `timeout_ms`; the run's end closes its sessions and ends the drivers it started |
 
 ## The policy
 
