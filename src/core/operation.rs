@@ -494,7 +494,7 @@ impl NativeOperation {
                 validate_numeric_values(&value).map_err(|error| fail(self.numeric_error(error)))?;
                 self.signature
                     .validate_return(&value, |message| self.signature_error(message))
-                    .map_err(&fail)?;
+                    .map_err(fail)?;
                 let reservation = self
                     .ownership
                     .value(size)

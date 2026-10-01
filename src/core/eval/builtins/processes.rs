@@ -259,7 +259,7 @@ struct GlobalReservation(usize);
 impl GlobalReservation {
     fn new(context: &Context, bytes: usize) -> EvaluationResult<Self> {
         IN_FLIGHT
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
                 used.checked_add(bytes)
                     .filter(|next| *next <= MAX_IN_FLIGHT_BYTES)
             })

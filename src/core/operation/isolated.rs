@@ -40,7 +40,7 @@ impl WireBudget {
         };
         let bytes = bytes.ok_or_else(rejected)?;
         self.used
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
                 used.checked_add(bytes).filter(|next| *next <= self.limit)
             })
             .map_err(|_| rejected())?;
@@ -98,7 +98,7 @@ impl Isolated {
         let plan = self
             .protocol
             .request_plan(&admission.values, &control)
-            .map_err(&fail)?;
+            .map_err(fail)?;
         if plan.bytes() > self.pool.limits().request_bytes {
             return Err(fail(Diagnostic::new(BWErr::ResourceLimit {
                 resource: "worker request bytes",
@@ -112,8 +112,8 @@ impl Isolated {
                     .checked_add(self.pool.limits().stdout_bytes)
                     .and_then(|bytes| bytes.checked_add(self.pool.limits().stderr_bytes)),
             )
-            .map_err(&fail)?;
-        let input = plan.encode().map_err(&fail)?;
+            .map_err(fail)?;
+        let input = plan.encode().map_err(fail)?;
         let retention: Arc<dyn Send + Sync> = Arc::new(Retention {
             _scope: admission.scope.clone(),
             _wire: wire,
@@ -126,7 +126,7 @@ impl Isolated {
                 control.clone(),
                 Some(retention),
             )
-            .map_err(&fail)?;
+            .map_err(fail)?;
         // The worker owns an encoded copy; scope remains charged through cleanup.
         drop(admission);
         let mut retained = worker.wait_retained().await;
@@ -228,7 +228,7 @@ impl Isolated {
                     reservation: Some(reservation),
                     _scope: scope.clone(),
                 };
-                control.checkpoint().map_err(&fail)?;
+                control.checkpoint().map_err(fail)?;
                 Ok(value)
             }
             Err(error) if successful => Err(fail(error)),

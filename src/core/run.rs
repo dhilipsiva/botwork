@@ -748,17 +748,17 @@ impl RunBudget {
         self.checkpoint()?;
         self.0
             .used
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
                 (used < self.0.limits.steps).then(|| used + 1)
             })
             .map_err(|_| self.limit("evaluation steps", self.0.limits.steps))?;
         if self.0.cleaning {
-            let _ =
-                self.0
-                    .cleanup_steps
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
-                        Some(used.saturating_add(1))
-                    });
+            let _ = self
+                .0
+                .cleanup_steps
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                    Some(used.saturating_add(1))
+                });
         }
         Ok(())
     }
@@ -767,7 +767,7 @@ impl RunBudget {
         self.checkpoint()?;
         self.0
             .active
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |active| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |active| {
                 (active < self.0.limits.evaluation_depth).then(|| active + 1)
             })
             .map_err(|_| self.limit("evaluation depth", self.0.limits.evaluation_depth as u64))?;

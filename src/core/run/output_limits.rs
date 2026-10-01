@@ -45,7 +45,7 @@ impl RunBudget {
         let limit = self.0.limits.output.total_bytes;
         self.0
             .output
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
                 used.checked_add(bytes).filter(|next| *next <= limit)
             })
             .map(|_| ())

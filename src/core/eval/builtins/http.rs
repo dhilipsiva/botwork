@@ -172,7 +172,7 @@ struct Global(usize);
 impl Global {
     fn new(context: &Context, bytes: usize) -> EvaluationResult<Self> {
         BYTES
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
                 used.checked_add(bytes).filter(|next| *next <= GLOBAL_BYTES)
             })
             .map_err(|_| limit(context, "HTTP in-flight bytes", GLOBAL_BYTES))?;
