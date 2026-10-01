@@ -181,8 +181,9 @@ A package's Botwork, Python, and JavaScript modules run with the importing
 run's full capabilities, as any local module does: fetch packages only from
 sources you trust, and review changes to `botwork.lock`. Its
 [WebAssembly modules](wasm.md) run sandboxed. The lockfile's hashes make what
-runs reproducible; they do not vouch for it. A verified package registry is
-planned after 1.0.
+runs reproducible; they do not vouch for it. [Extension trust](trust.md) sets
+out what each kind of code can reach. A verified package registry is planned
+after 1.0.
 
 ## Tests
 

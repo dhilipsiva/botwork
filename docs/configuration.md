@@ -1,9 +1,11 @@
 # Configuration
 
-Botwork has no configuration file and reads no `BOTWORK_*` environment
-variables. An invocation is configured entirely by its
-[command-line options](cli.md). A script is configured by the inputs, secrets,
-directory, and environment it runs with.
+Botwork has no configuration file. An invocation is configured by its
+[command-line options](cli.md), and one environment variable of Botwork's
+own, `BOTWORK_CACHE_DIR`, which moves the [package cache](packages.md#the-cache).
+A script is configured by the inputs, secrets, directory, and environment it
+runs with, and by its project's `botwork.toml` and `botwork.lock` when it
+imports [packages or URL files](packages.md).
 
 ## What configures a run
 
@@ -14,6 +16,7 @@ directory, and environment it runs with.
 | Working directory | The directory the command starts in | Relative paths in file and process statements, and relative variable-file paths, resolve against it. | [Operating-system statements](operating-system.md) |
 | Environment | The process environment | Scripts see the environment `botwork` was started with. | [Operating-system statements](operating-system.md) |
 | Imports | `Import \|"path"\| As \|alias\|` | Paths resolve relative to the importing file, not the working directory. | [Local modules](language.md#local-modules) |
+| Packages and URL files | The nearest `botwork.toml` above the importing file, its `botwork.lock`, and the package cache (`BOTWORK_CACHE_DIR`, else the platform's) | `@name/path` and URL imports resolve through the lockfile; only `botwork --fetch` writes it or downloads. | [Packages](packages.md) |
 | Resource limits | `--max-*` options and timeouts | Apply to every run of the invocation. | [Limits](cli.md#limits) |
 | Concurrency | `--jobs` | Bounds simultaneous runs; each run still has its own variables and state. | [Parallel runs](parallel-cli.md) |
 | Outputs | `--report-json`, `--report-html`, `--listener`, `--failures` | Written for the whole invocation. | [Reports and outputs](reporting.md) |

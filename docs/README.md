@@ -85,6 +85,8 @@ index.
   a lockfile, and an offline cache.
 - [Adapter conformance](adapter-conformance.md): the one suite every language
   adapter passes, and where the languages differ.
+- [Extension trust](trust.md): which extensions run with the run's full
+  authority, and the WebAssembly sandbox.
 - [Embedded Rust runs](embedded-runs.md)
 - [Interpreter architecture](interpreter-architecture.md)
 - [Asynchronous execution](async-execution.md)

@@ -78,3 +78,5 @@ installed.
 The default binary stays a single file, WebAssembly support included. Python
 support needs a python-enabled build, and JavaScript support needs Node on the
 machine. All three pass one [conformance suite](adapter-conformance.md).
+Only WebAssembly runs sandboxed; [extension trust](trust.md) sets out what
+each kind of extension can reach.

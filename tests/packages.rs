@@ -862,3 +862,38 @@ fn files_imported_by_url_are_pinned_fetched_once_and_named_by_their_url() {
         "package and URL imports need a botwork.toml",
     );
 }
+
+#[test]
+fn a_package_runs_its_botwork_code_trusted_and_its_webassembly_sandboxed() {
+    let world = World::new();
+    let secret = world.write("secret.txt", "hidden");
+    world.package(
+        "mixed",
+        "[package]\nname = \"mixed\"\nversion = \"1.0.0\"\n",
+        &[(
+            "reader.botwork",
+            "Peek |path| {\n    Return |@{ Read File |path| }|\n}\n",
+        )],
+    );
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/wasm/statements.wasm"),
+        world.path("mixed/statements.wasm"),
+    )
+    .unwrap();
+    world.write(
+        "project/botwork.toml",
+        "[dependencies]\nmixed = { path = \"../mixed\" }\n",
+    );
+    let path = secret.display().to_string().replace('\\', "\\\\");
+    world.write(
+        "project/main.botwork",
+        &format!(
+            "Import |\"@mixed/reader.botwork\"| As |trusted|\nImport |\"@mixed/statements.wasm\"| As |sandboxed|\nLog |@{{ trusted::Peek |\"{path}\"| }}|\nTry {{\n    Log |@{{ sandboxed::Read file |\"{path}\"| }}|\n}} Catch |error| {{\n    Log |\"denied\"|\n}}\n"
+        ),
+    );
+    succeeded(&world.fetch("project", &[]));
+    let run = world.run("project", "main.botwork");
+    succeeded(&run);
+    // The package's Botwork code reads the file; its component cannot.
+    assert_eq!(stdout(&run), "hidden\ndenied\n");
+}
