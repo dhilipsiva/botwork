@@ -10,6 +10,12 @@ import { pathToFileURL } from "node:url";
 const [mode, file, index] = process.argv.slice(1);
 const TRACE_BYTES = 2048;
 
+// Stdout carries the response alone. What a module prints, to process.stdout
+// or through the console, which writes there, goes to stderr instead, which
+// Botwork bounds and discards.
+const respond = process.stdout.write.bind(process.stdout);
+process.stdout.write = process.stderr.write.bind(process.stderr);
+
 async function statements() {
   const module = await import(pathToFileURL(file).href);
   const table = module.statements ?? module.default?.statements;
@@ -250,12 +256,12 @@ async function call() {
       ? failure(9001, error.message || "a JavaScript assertion failed")
       : failure(4002, explain(error));
   }
-  process.stdout.write(response);
+  respond(response);
 }
 
 if (mode === "list") {
   const table = await statements();
-  process.stdout.write(JSON.stringify(table.map(([header, implementation]) => [header, implementation.length])));
+  respond(JSON.stringify(table.map(([header, implementation]) => [header, implementation.length])));
 } else if (mode === "call") {
   await call();
 } else {

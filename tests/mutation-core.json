@@ -1,5 +1,5 @@
 {
-  "version": 54,
+  "version": 55,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3983,6 +3983,13 @@
       "file": "src/core/eval/imports/javascript_host.mjs",
       "before": "      if (prototype === Object.prototype || prototype === null) {\n",
       "after": "      if (prototype !== undefined) {\n"
+    },
+    {
+      "id": "js-host-stdout-not-redirected",
+      "area": "javascript",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "process.stdout.write = process.stderr.write.bind(process.stderr);\n",
+      "after": "void 0;\n"
     },
     {
       "id": "check-flags-adapter-imports",

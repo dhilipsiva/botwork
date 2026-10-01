@@ -18,6 +18,8 @@ const HELPERS: &str = r#"
 import assert from "node:assert";
 
 let count = 0;
+// Printing while loading, as while calling, leaves the response intact.
+console.log("loading helpers");
 
 class Point {
     constructor(x) { this.x = x; }
@@ -57,6 +59,13 @@ export const statements = {
     "Spin": () => { for (;;) {} },
     "Quick": () => "done",
     "Env |name|": (name) => process.env[name] ?? null,
+    "Chatty |x|": (x) => {
+        console.log("calling with", x);
+        console.info({ x });
+        process.stdout.write("raw output\n");
+        return x + 1;
+    },
+    "Print |bytes|": (bytes) => { process.stdout.write("x".repeat(bytes)); return bytes; },
 };
 "#;
 
@@ -223,6 +232,21 @@ fn each_call_runs_in_a_process_of_its_own() {
         .run("Import |\"helpers.mjs\"| As |js|\n|first| = js::Count\n|second| = js::Count");
     assert_eq!(value(&result, "first").to_string(), "1");
     assert_eq!(value(&result, "second").to_string(), "1");
+}
+
+#[test]
+fn printing_leaves_the_response_intact() {
+    if !node() {
+        return;
+    }
+    let workspace = Workspace::new(&[("helpers.mjs", HELPERS)]);
+    let result = workspace.run("Import |\"helpers.mjs\"| As |js|\n|n| = js::Chatty |1|");
+    assert_eq!(value(&result, "n").to_string(), "2");
+    // Printed output is bounded like any worker's stderr.
+    let result = workspace.run("Import |\"helpers.mjs\"| As |js|\n|n| = js::Print |2000000|");
+    let error = failure(&result);
+    assert_eq!(error.code(), DiagnosticCode::ResourceLimit);
+    assert!(error.to_string().contains("worker stderr bytes"), "{error}");
 }
 
 #[test]

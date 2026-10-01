@@ -42,6 +42,9 @@ Import |"pricing.mjs"| As |pricing|
 - Each call imports the module afresh in a new process, so module-level
   variables do not carry from one call to the next. Keep state in the script,
   or in files and services the statements use.
+- What a module prints, through `console` or `process.stdout`, goes to Node's
+  standard error, which Botwork discards: return values instead. Printing more
+  than 1 MiB in one call fails it with BW8001.
 - Namespaces follow the [module rules](extending.md#botwork-modules): a
   namespace already in use fails with BW6003, and an unknown statement in it
   with BW2002.
@@ -92,6 +95,6 @@ into one as not checked rather than as errors.
 
 `cargo test --locked --test javascript_adapter` covers values in both
 directions and the ones refused, exceptions and stacks, calls in processes of
-their own, `async` functions and CommonJS modules, a stop that ends a busy
-call, loading failures, and the CLI with and without Node. Without Node the
+their own, printing, `async` functions and CommonJS modules, a stop that ends
+a busy call, loading failures, and the CLI with and without Node. Without Node the
 tests are skipped unless `BOTWORK_REQUIRE_NODE` is set, as it is in CI.
