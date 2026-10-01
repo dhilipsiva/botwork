@@ -109,6 +109,31 @@ summary, and the others still publish.
 The [compatibility guide](compatibility.md) lists the supported platforms and
 tool versions.
 
+## Language adapters and the single binary
+
+Botwork aims to be one self-contained executable. The language adapters keep
+that goal to different degrees ([D6](decisions.md#d6-adapters) to
+[D9](decisions.md#d9-python-packaging)):
+
+| Adapter | In released binaries | To build | To run | Still a single file |
+| --- | --- | --- | --- | --- |
+| [WebAssembly](wasm.md) | Yes | Nothing: the default `wasm` feature | Nothing | Yes; Wasmtime adds about 16 MB |
+| [JavaScript](javascript.md) | Yes | Nothing | Node.js on `PATH`, one process per call | Yes, with Node installed beside it |
+| [Python](python.md) | No | The `python` feature and Python's development files | The libpython the build linked, 3.10 or later | No: it loads libpython, a shared library, at start |
+
+- Released binaries are built with the default features and nothing more, so
+  they run WebAssembly statements anywhere and JavaScript statements wherever
+  Node is installed.
+- A Python build depends on the Python it was built against. Without that
+  libpython, or on Windows without its directory on `PATH`, the binary does
+  not start at all, whatever the script does.
+- A Rust program that embeds Botwork can leave WebAssembly out with
+  `default-features = false`, which saves the size of Wasmtime. Without the
+  feature, a `.wasm` import fails with BW6001, as a `.py` import does without
+  `python`.
+- Statements written in Rust, as native operations, need nothing more than
+  the program they are compiled into.
+
 ## Sharing Botwork code
 
 Today, share statements as [modules](extending.md#botwork-modules): `.botwork`
