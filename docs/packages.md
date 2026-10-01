@@ -51,8 +51,14 @@ retry = { git = "https://github.com/acme/retry.git", tag = "v2.0.0" }
 ```
 
 `version` is the package's semver version. `botwork` (optional) is the
-Botwork versions it works with; fetching it with another fails. A project may
-have a `[package]` section too, but needs none. A package fetched from git or
+Botwork versions it works with, as a semver requirement. Fetching it with
+another Botwork fails, and so does a run that imports from it, as after
+upgrading Botwork: the error says to upgrade Botwork, or to depend on a version
+of the package that supports this one. A manifest with a key this Botwork does
+not know is an error too, and when its `botwork` requirement excludes this
+Botwork, the error names that requirement instead. A project may have a
+`[package]` section too, but needs none; its `botwork` requirement holds for
+its own runs. A package fetched from git or
 a URL can depend only on git and URL sources: a `path` would point outside it.
 
 ## Fetching
@@ -125,6 +131,11 @@ tree hash of its files, and every file it fetched by URL, with its SHA-256. Comm
 machine runs the same files, and `botwork --fetch --locked` there fetches
 exactly them.
 
+Its `version` is 1. A lockfile from a newer Botwork is refused, by runs and
+fetches alike, before its other keys are read: upgrade Botwork, or delete it
+and run `botwork --fetch` to lock the project again with this one. See
+[versioned contracts](compatibility.md#versioned-contracts).
+
 A tree hash covers the package's regular files: SHA-256 over one line per
 file, in byte order of its `/`-separated path, holding the path, a NUL, and
 the file's own SHA-256. Packages hold only regular files and directories;
@@ -169,8 +180,9 @@ collisions, caching, and cycles.
   and so is a link in a path package that leads out of it.
 - **Failures** are BW6001, saying what to do: a missing `botwork.toml`, a
   package the lockfile does not list or the cache lacks (run
-  `botwork --fetch`), or a lockfile that pins another source than the
-  manifest names.
+  `botwork --fetch`), a lockfile that pins another source than the
+  manifest names, or a project or package whose `botwork` requirement
+  excludes this Botwork.
 
 [`--check`](check.md) and the [language server](lsp.md) follow `@` imports
 into packages too, through the same lockfile.

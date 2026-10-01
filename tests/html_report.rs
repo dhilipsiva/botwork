@@ -326,6 +326,34 @@ fn unrelated_outputs_are_never_replaced() {
         fs::read_to_string(harness.workspace.join("index.html")).unwrap(),
         "<!doctype html><p>keep me</p>"
     );
+    // A report of another version is still a report; a marker without one is not.
+    for (marker, replaced) in [
+        (
+            r#"<meta name="generator" content="botwork-report-html 2">"#,
+            true,
+        ),
+        (
+            r#"<meta name="generator" content="botwork-report-html ">"#,
+            false,
+        ),
+        (
+            r#"<meta name="generator" content="botwork-report-html 2x">"#,
+            false,
+        ),
+    ] {
+        write(&harness, "other.html", &format!("<!doctype html>{marker}"));
+        let output = command(
+            &harness,
+            &["--file", "effect.botwork", "--report-html", "other.html"],
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(if replaced { 0 } else { 1 }),
+            "{marker}"
+        );
+        let page = fs::read_to_string(harness.workspace.join("other.html")).unwrap();
+        assert_eq!(page.contains("botwork-report-html 1"), replaced, "{marker}");
+    }
     let output = command(
         &harness,
         &[

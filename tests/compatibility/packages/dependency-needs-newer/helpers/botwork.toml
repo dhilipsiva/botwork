@@ -1,0 +1,5 @@
+# Changed after the project was locked: it now needs a later Botwork.
+[package]
+name = "helpers"
+version = "1.0.0"
+botwork = ">=99"

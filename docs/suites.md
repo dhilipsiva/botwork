@@ -112,7 +112,11 @@ cargo run -- --suite examples/23-named-cases.suite.botwork --rerun-failed failed
 `--failures PATH` writes a small versioned selection record, not a full execution
 report. Version 2 contains exactly `format` (`botwork-failed-cases`), `version`
 (`2`), `complete` (boolean), and `failed` (distinct qualified case or row IDs). Readers also accept version 1
-records containing ordinary case IDs. Reruns never expand a saved parent ID
+records containing ordinary case IDs. Version 1 is
+[deprecated](compatibility.md#deprecations): rerunning one prints a
+`[deprecated]` line, and passing the same path to `--failures` rewrites it as
+version 2. A record from a newer Botwork is neither read nor replaced; the
+error says to upgrade. Reruns never expand a saved parent ID
 into rows; each saved ID must identify one runnable case or row. Failed
 IDs follow discovery order, regardless of completion order. Runtime errors,
 timeouts, and resource-limit stops count as failures. Earlier successful effects

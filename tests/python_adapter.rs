@@ -277,6 +277,19 @@ fn files_import_their_neighbours_while_loading() {
 }
 
 #[test]
+fn modules_read_the_botwork_version_running_them() {
+    let workspace = Workspace::new(&[(
+        "version.py",
+        "import botwork\n\n@botwork.statement(\"Botwork Version\")\ndef version():\n    return botwork.__version__\n",
+    )]);
+    let result = workspace.run("Import |\"version.py\"| As |v|\n|version| = v::Botwork Version");
+    assert_eq!(
+        value(&result, "version").to_string(),
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
+#[test]
 fn loading_failures_are_import_errors() {
     let workspace = Workspace::new(&[
         ("helpers.py", HELPERS),

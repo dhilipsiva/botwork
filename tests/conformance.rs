@@ -598,7 +598,17 @@ Case |"other"| { Log |8| }
                     assert!(output.status.success(), "{stderr}");
                     assert!(stderr.contains("[case stable/keep] succeeded:"));
                     assert!(!stderr.contains("stable/other"));
-                    assert_eq!(stderr.lines().count(), 3);
+                    // A version 1 record is deprecated, with one notice.
+                    let rerun = matches!(case.input, Input::SuiteCliRerun);
+                    assert_eq!(
+                        stderr
+                            .lines()
+                            .filter(|line| line.starts_with("[deprecated] "))
+                            .count(),
+                        usize::from(rerun),
+                        "{stderr}"
+                    );
+                    assert_eq!(stderr.lines().count(), 3 + usize::from(rerun));
                 }
                 if matches!(case.input, Input::SuiteCliRerun) {
                     let record: serde_json::Value = serde_json::from_slice(

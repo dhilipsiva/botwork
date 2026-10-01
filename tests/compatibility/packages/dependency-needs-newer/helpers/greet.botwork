@@ -1,0 +1,3 @@
+Greet |name| {
+    Log |"Hello, " + name|
+}

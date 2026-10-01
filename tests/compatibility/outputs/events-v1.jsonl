@@ -1,0 +1,13 @@
+{"position":0,"event":"stream_started","format":"botwork-events","version":1,"mode":"suites","started_at":"2026-10-01T18:30:28.131185Z"}
+{"position":1,"run":1,"sequence":0,"event":"run_started","identity":{"id":"compat/passes","name":"A passing case","dataset":null,"row":null},"started_at":"2026-10-01T18:30:28.137372Z"}
+{"position":2,"run":2,"sequence":0,"event":"run_started","identity":{"id":"compat/fails","name":"A failing case","dataset":null,"row":null},"started_at":"2026-10-01T18:30:28.137583Z"}
+{"position":3,"run":1,"sequence":1,"event":"statement_started","index":0,"kind":"call","location":{"file":"compat.suite.botwork","start_byte":197,"end_byte":210,"line":4,"column":9,"end_line":4,"end_column":22},"offset_us":3490}
+{"position":4,"run":2,"sequence":1,"event":"statement_started","index":0,"kind":"assignment","location":{"file":"compat.suite.botwork","start_byte":271,"end_byte":284,"line":7,"column":9,"end_line":7,"end_column":22},"offset_us":3478}
+{"position":5,"run":1,"sequence":2,"event":"log","statement":0,"offset_us":3706,"bytes":5,"text":"hello","truncated":false}
+{"position":6,"run":2,"sequence":2,"event":"statement_finished","index":0,"status":"succeeded","code":null,"offset_us":3546}
+{"position":7,"run":2,"sequence":3,"event":"statement_started","index":1,"kind":"call","location":{"file":"compat.suite.botwork","start_byte":293,"end_byte":318,"line":8,"column":9,"end_line":8,"end_column":34},"offset_us":3567}
+{"position":8,"run":2,"sequence":4,"event":"statement_finished","index":1,"status":"failed","code":"BW9001","offset_us":3702}
+{"position":9,"run":2,"sequence":5,"event":"run_finished","status":"failed","finished_at":"2026-10-01T18:30:28.141384Z","duration_us":3801,"error":{"code":"BW9001","status":"failed","message":"Assertion failed: Expected 2 (Int), got 1 (Int)\n  difference at $: expected 2 (Int), got 1 (Int)\n  full operands: details.expected / details.actual (typed JSON)","truncated":false,"location":{"file":"compat.suite.botwork","start_byte":293,"end_byte":318,"line":8,"column":9,"end_line":8,"end_column":34},"causes":[],"omitted_causes":0}}
+{"position":10,"run":1,"sequence":3,"event":"statement_finished","index":0,"status":"succeeded","code":null,"offset_us":4080}
+{"position":11,"run":1,"sequence":4,"event":"run_finished","status":"succeeded","finished_at":"2026-10-01T18:30:28.141496Z","duration_us":4123,"error":null}
+{"position":12,"event":"stream_finished","finished_at":"2026-10-01T18:30:28.145400Z","status":"failed","cases":{"total":2,"succeeded":1,"expected_failure":0,"failed":1,"unexpected_pass":0,"skipped":0,"cancelled":0,"timed_out":0,"limit_exceeded":0,"interrupted":0},"fixture_failures":0}

@@ -235,8 +235,30 @@ pub(super) fn read(path: &Path) -> Result<Contents, CliError> {
         .filter(|line| !line.is_empty())
         .enumerate()
     {
-        let entry: Stored = serde_json::from_slice(line)
-            .map_err(|error| failure(path, format_args!("line {}: {error}", number + 1)))?;
+        let parse =
+            |error: serde_json::Error| failure(path, format_args!("line {}: {error}", number + 1));
+        let entry: Stored = if number == 0 {
+            // The header's version comes first, so a newer journal's reshaped
+            // header is reported as its version.
+            let value: serde_json::Value = serde_json::from_slice(line).map_err(parse)?;
+            if value.get("format").and_then(serde_json::Value::as_str) == Some(FORMAT) {
+                if let Some(version) = value
+                    .get("version")
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|version| *version > u64::from(VERSION))
+                {
+                    return Err(failure(
+                        path,
+                        format_args!(
+                            "the journal is version {version}, from a newer Botwork; this one reads version {VERSION}. Reconcile it with the Botwork that wrote it"
+                        ),
+                    ));
+                }
+            }
+            serde_json::from_value(value).map_err(parse)?
+        } else {
+            serde_json::from_slice(line).map_err(parse)?
+        };
         let header = matches!(entry, Stored::Header { .. });
         if header != (number == 0) {
             return Err(failure(

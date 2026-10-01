@@ -17,6 +17,8 @@ use std::{
 
 /// Identifies a replaceable HTML report within its first bytes.
 pub(super) const GENERATOR: &str = r#"<meta name="generator" content="botwork-report-html 1">"#;
+/// The generator marker up to its version, which any version shares.
+const MARKER: &str = r#"<meta name="generator" content="botwork-report-html "#;
 const RECOGNITION_BYTES: u64 = 4096;
 /// Run details are rendered while the page is smaller than this; later runs
 /// keep their summary. Escaping can enlarge recorded text several times over.
@@ -89,13 +91,20 @@ impl fmt::Display for Text<'_> {
     }
 }
 
-/// Accept an existing file only when it starts like a Botwork HTML report.
+/// Accept an existing file only when it starts like a Botwork HTML report, of
+/// any version: a newer Botwork's report is still a report.
 pub(super) fn recognized(path: &Path) -> Result<(), CliError> {
     let mut start = Vec::new();
     File::open(path)
         .and_then(|file| file.take(RECOGNITION_BYTES).read_to_end(&mut start))
         .map_err(|error| rejected(path, &error.to_string()))?;
-    if String::from_utf8_lossy(&start).contains(GENERATOR) {
+    let start = String::from_utf8_lossy(&start);
+    let marked = start.match_indices(MARKER).any(|(index, _)| {
+        let version = &start[index + MARKER.len()..];
+        let digits = version.bytes().take_while(u8::is_ascii_digit).count();
+        digits > 0 && version[digits..].starts_with("\">")
+    });
+    if marked {
         Ok(())
     } else {
         Err(rejected(

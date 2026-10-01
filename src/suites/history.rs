@@ -6,6 +6,8 @@ use std::{collections::HashSet, fs::OpenOptions, io::Read, path::Path};
 
 const MAX_HISTORY_BYTES: usize = 2 * 1024 * 1024;
 const FORMAT: &str = "botwork-failed-cases";
+/// The version `--failures` writes. Version 1 is still read, and deprecated.
+const VERSION: u8 = 2;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,14 +77,31 @@ fn read(path: &Path) -> Result<Record, CliError> {
     if bytes.len() > MAX_HISTORY_BYTES {
         return Err(suite::resource("failed-case record bytes", MAX_HISTORY_BYTES).into());
     }
-    let record: Record = serde_json::from_slice(&bytes).map_err(|error| {
+    let invalid = |error: serde_json::Error| {
         suite::configuration(format!(
             "Invalid failed-case record {}: {error}",
             path.display()
         ))
-    })?;
+    };
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(invalid)?;
+    // The version comes first, so a newer record's new fields are reported as
+    // its version rather than as unknown fields.
+    if value.get("format").and_then(serde_json::Value::as_str) == Some(FORMAT) {
+        if let Some(version) = value
+            .get("version")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|version| *version > u64::from(VERSION))
+        {
+            return Err(suite::configuration(format!(
+                "Failed-case record {} is version {version}, from a newer Botwork; this one reads versions 1 and {VERSION}. Upgrade Botwork to use it",
+                path.display()
+            ))
+            .into());
+        }
+    }
+    let record: Record = serde_json::from_value(value).map_err(invalid)?;
     if record.format != FORMAT
-        || !matches!(record.version, 1 | 2)
+        || !matches!(record.version, 1 | VERSION)
         || (record.version == 1 && record.failed.iter().any(|id| !suite::valid_case_id(id)))
         || (!record.complete && !record.failed.is_empty())
     {
@@ -91,7 +110,9 @@ fn read(path: &Path) -> Result<Record, CliError> {
     Ok(record)
 }
 
-pub(super) fn load(path: &Path) -> Result<Vec<String>, CliError> {
+/// The IDs a completed record selects, and a deprecation notice when it is
+/// version 1.
+pub(super) fn load(path: &Path) -> Result<(Vec<String>, Option<String>), CliError> {
     let record = read(path)?;
     if !record.complete {
         return Err(suite::configuration(
@@ -99,7 +120,14 @@ pub(super) fn load(path: &Path) -> Result<Vec<String>, CliError> {
         )
         .into());
     }
-    Ok(record.failed)
+    let deprecated = (record.version < VERSION).then(|| {
+        let path = path.display();
+        format!(
+            "failed-case record {path} is version {}, which a later Botwork will stop reading; rewrite it as version {VERSION} by also passing --failures {path}",
+            record.version
+        )
+    });
+    Ok((record.failed, deprecated))
 }
 
 pub(super) struct History {
@@ -133,7 +161,7 @@ impl History {
         }
         self.file.write(&Record {
             format: FORMAT.into(),
-            version: 2,
+            version: VERSION,
             complete,
             failed,
         })

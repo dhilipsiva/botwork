@@ -1,0 +1,9 @@
+# A run killed while its second case sleeps leaves a report journal.
+Suite |"interrupted"| {
+    Case |"finished"| {
+        Log |"done"|
+    }
+    Case |"killed"| {
+        Sleep |60000|
+    }
+}

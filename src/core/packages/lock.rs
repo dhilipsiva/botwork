@@ -61,14 +61,29 @@ impl Lock {
         if text.len() > MAX_MANIFEST_BYTES {
             return Err(format!("larger than {MAX_MANIFEST_BYTES} bytes"));
         }
-        let lock: Self = toml::from_str(text).map_err(|error| error.message().to_owned())?;
-        if lock.version != Self::VERSION {
-            return Err(format!(
-                "lockfile version {} is not {}; run `botwork --fetch` to rewrite it",
-                lock.version,
-                Self::VERSION
-            ));
+        // The version comes first, so a newer lockfile's new keys are reported
+        // as its version rather than as unknown fields.
+        let table: toml::Table =
+            toml::from_str(text).map_err(|error| error.message().to_owned())?;
+        match table.get("version").map(toml::Value::as_integer) {
+            Some(Some(version)) if version == i64::from(Self::VERSION) => {}
+            Some(Some(version)) if version > i64::from(Self::VERSION) => {
+                return Err(format!(
+                    "lockfile version {version} is from a newer Botwork; this one reads version {}. \
+                     Upgrade Botwork, or delete {LOCKFILE} and run `botwork --fetch` to lock the project again",
+                    Self::VERSION
+                ))
+            }
+            _ => {
+                return Err(format!(
+                    "no lockfile version Botwork reads (version {}); delete {LOCKFILE} and run `botwork --fetch` to lock the project again",
+                    Self::VERSION
+                ))
+            }
         }
+        let lock: Self = table
+            .try_into()
+            .map_err(|error: toml::de::Error| error.message().to_owned())?;
         let mut names = BTreeSet::new();
         for package in &lock.packages {
             if !valid_name(&package.name) || !names.insert(package.name.as_str()) {

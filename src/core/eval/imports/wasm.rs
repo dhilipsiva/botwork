@@ -21,6 +21,12 @@ use bindings::{
     ModulePre,
 };
 
+/// The interface components export, as `wit/botwork.wit` names it.
+const INTERFACE: &str = "botwork:statements/statements";
+/// The version of `wit/botwork.wit`. Components built for any version it is
+/// semver-compatible with load, as Wasmtime matches their exports.
+const INTERFACE_VERSION: &str = "0.1.0";
+
 /// Calls of one statement that may run at once, each on a blocking thread.
 const CAPACITY: usize = 4;
 /// The most of a trap's stderr, and of its backtrace, a diagnostic keeps.
@@ -279,6 +285,9 @@ async fn load(
         let engine = engine().map_err(other)?;
         let component = wasmtime::component::Component::new(engine, &bytes)
             .map_err(|error| other(format!("not a WebAssembly component: {}", root(&error))))?;
+        // Before linking: a component for another interface version may also
+        // import what this Botwork lacks.
+        interface(engine, &component).map_err(other)?;
         let pre = linker(engine)
             .map_err(other)?
             .instantiate_pre(&component)
@@ -439,6 +448,34 @@ fn trapped(
 }
 
 /// The innermost cause of a Wasmtime error, without its backtrace.
+/// Refuse a component that exports the statements interface at a version this
+/// Botwork does not support, saying which it does.
+fn interface(engine: &Engine, component: &wasmtime::component::Component) -> Result<(), String> {
+    let current =
+        semver::Version::parse(INTERFACE_VERSION).expect("the interface version is semver");
+    let supported = semver::VersionReq::parse(&format!("^{current}")).expect("a caret requirement");
+    let kind = component.component_type();
+    let Some(version) = kind
+        .exports(engine)
+        .filter_map(|(name, _)| name.strip_prefix(INTERFACE)?.strip_prefix('@'))
+        .find_map(|version| semver::Version::parse(version).ok())
+    else {
+        return Ok(());
+    };
+    if supported.matches(&version) {
+        return Ok(());
+    }
+    let range = match current.major {
+        0 => format!("0.{}.x", current.minor),
+        major => format!("{major}.x"),
+    };
+    Err(format!(
+        "the component implements {INTERFACE}@{version}, but this Botwork supports {range}; \
+         rebuild it against this Botwork's wit/botwork.wit ({INTERFACE_VERSION}), \
+         or use a Botwork that supports {version}"
+    ))
+}
+
 fn root(error: &wasmtime::Error) -> String {
     error.root_cause().to_string()
 }

@@ -1,0 +1,9 @@
+# A manifest using a key a later Botwork added, which says it needs that Botwork.
+[package]
+name = "newer-keys"
+version = "1.0.0"
+botwork = ">=99"
+registry = "https://packages.example"
+
+[dependencies]
+helpers = { path = "../locked/helpers" }

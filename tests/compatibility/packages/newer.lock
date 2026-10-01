@@ -1,0 +1,9 @@
+# A lockfile from a later Botwork: version 2, with a key version 1 lacks.
+version = 2
+
+[[package]]
+name = "helpers"
+version = "1.0.0"
+source = "path helpers"
+path = "helpers"
+integrity = "sha256-0000000000000000000000000000000000000000000000000000000000000000"

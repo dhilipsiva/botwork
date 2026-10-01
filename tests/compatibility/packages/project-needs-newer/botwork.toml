@@ -1,0 +1,7 @@
+[package]
+name = "needs-newer"
+version = "1.0.0"
+botwork = ">=99"
+
+[dependencies]
+helpers = { path = "../locked/helpers" }

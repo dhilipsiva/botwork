@@ -62,7 +62,7 @@ assert!(pool.shutdown().active.is_empty());
 
 All integers use little endian. Counts, byte lengths, indices, offsets, and resource-limit values are unsigned 64-bit integers; counts/offsets must fit the receiver's `usize`. Strings are a byte length followed by valid UTF-8. Booleans occupy one byte, exactly zero or one. There is no padding. Unknown versions, tags, diagnostic codes, static names, truncated fields, or trailing bytes fail with BW5003; configured quota violations use BW8001.
 
-Every frame begins with ASCII `BWIP`, a `u16` version equal to 1, a one-byte kind, and a `u64` body byte length. The 15-byte header counts toward the frame limit. Kind 0 requests contain an argument count followed by that many values. Kind 1 responses contain exactly one value. Kind 2 responses contain exactly one diagnostic tree. No negotiation, batching, streamed partial result, or implicit JSON conversion occurs.
+Every frame begins with ASCII `BWIP`, a `u16` version equal to 1, a one-byte kind, and a `u64` body byte length. A frame of another version fails with BW5003 naming both versions: a worker and the Botwork that runs it need the same protocol version. The 15-byte header counts toward the frame limit. Kind 0 requests contain an argument count followed by that many values. Kind 1 responses contain exactly one value. Kind 2 responses contain exactly one diagnostic tree. No negotiation, batching, streamed partial result, or implicit JSON conversion occurs.
 
 | Value tag | Payload |
 | --- | --- |

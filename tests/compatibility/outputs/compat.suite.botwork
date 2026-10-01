@@ -1,0 +1,10 @@
+# The suite behind the output fixtures: one case passes and one fails.
+Suite |"compat"| Named |"Compatibility fixtures"| Tags |["fixture"]| {
+    Case |"passes"| Named |"A passing case"| {
+        Log |"hello"|
+    }
+    Case |"fails"| Named |"A failing case"| {
+        |value| = |1|
+        Assert |value| Equals |2|
+    }
+}

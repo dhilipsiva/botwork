@@ -172,7 +172,9 @@ bounded by these limits rather than by run length.
 
 Records and events serialize with serde, using snake_case field and status
 names. `RunRecord` and its parts also deserialize, so hosts can store records and
-load them back. Loading validates the format and version, every diagnostic code
+load them back. Loading checks the format and version first, so a record from
+a newer Botwork is refused by its version, saying to upgrade, before any field
+it changed. It then validates every diagnostic code
 and statement kind (`ast::STATEMENT_KIND_NAMES`), and the status vocabulary.
 Unknown fields are ignored. A loaded record is a finished snapshot: further
 events fold with default limits. An event is tagged by its `event` field. Adding fields or event kinds

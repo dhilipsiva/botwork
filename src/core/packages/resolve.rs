@@ -43,7 +43,7 @@ pub fn fetch(root: &Path, options: &FetchOptions) -> Result<FetchReport, String>
     let manifest = Manifest::read(&root.join(MANIFEST))?;
     let current = botwork_version();
     if let Some(package) = &manifest.package {
-        compatible(package, &current)?;
+        compatible(package, &current, false)?;
     }
     let lock_path = root.join(LOCKFILE);
     let previous = if lock_path.is_file() {
@@ -159,7 +159,7 @@ pub fn fetch(root: &Path, options: &FetchOptions) -> Result<FetchReport, String>
                 package.name
             ));
         }
-        compatible(package, &current)?;
+        compatible(package, &current, true)?;
         accepts(
             &name,
             &dependent,
@@ -240,12 +240,26 @@ pub fn fetch(root: &Path, options: &FetchOptions) -> Result<FetchReport, String>
     })
 }
 
-/// Whether `package` works with this Botwork.
-fn compatible(package: &Package, current: &Version) -> Result<(), String> {
+/// Whether `package`, the project's own or a `dependency`, works with this
+/// Botwork.
+pub(super) fn compatible(
+    package: &Package,
+    current: &Version,
+    dependency: bool,
+) -> Result<(), String> {
     match &package.botwork {
         Some(requirement) if !requirement.matches(current) => Err(format!(
-            "version incompatibility: `{}` {} needs Botwork {requirement}, but this is Botwork {current}",
-            package.name, package.version
+            "version incompatibility: `{}` {} needs Botwork {requirement}, but this is Botwork {current}; upgrade Botwork{}",
+            package.name,
+            package.version,
+            if dependency {
+                format!(
+                    ", or depend on a version of `{}` that supports Botwork {current} and run `botwork --fetch`",
+                    package.name
+                )
+            } else {
+                String::new()
+            }
         )),
         _ => Ok(()),
     }

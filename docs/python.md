@@ -57,6 +57,8 @@ Import |"pricing.py"| As |pricing|
 - Namespaces follow the [module rules](extending.md#botwork-modules): a
   namespace already in use fails with BW6003, and an unknown statement in it
   with BW2002.
+- `botwork.__version__` is the version of the Botwork running the module, such
+  as `"0.2.0"`, so a module can check it supports that Botwork.
 
 ## Values
 

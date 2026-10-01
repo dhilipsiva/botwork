@@ -151,6 +151,20 @@ fn hex(text: &str, length: usize) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+/// Why a manifest this Botwork cannot read was refused, when it says it needs
+/// another Botwork: keys a newer one added are then expected, not mistakes.
+fn newer(text: &str) -> Option<String> {
+    let table: toml::Table = toml::from_str(text).ok()?;
+    let requirement = table.get("package")?.get("botwork")?.as_str()?;
+    let current = botwork_version();
+    VersionReq::parse(requirement)
+        .ok()
+        .filter(|parsed| !parsed.matches(&current))
+        .map(|_| {
+            format!("it needs Botwork {requirement}, but this is Botwork {current}; upgrade Botwork to read it")
+        })
+}
+
 impl Manifest {
     pub fn read(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
@@ -162,7 +176,8 @@ impl Manifest {
         if text.len() > MAX_MANIFEST_BYTES {
             return Err(format!("larger than {MAX_MANIFEST_BYTES} bytes"));
         }
-        let raw: Raw = toml::from_str(text).map_err(|error| error.message().to_owned())?;
+        let raw: Raw = toml::from_str(text)
+            .map_err(|error| newer(text).unwrap_or_else(|| error.message().to_owned()))?;
         let package = raw
             .package
             .map(|package| {

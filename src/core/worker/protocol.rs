@@ -382,8 +382,11 @@ fn validate_header(bytes: &[u8]) -> DiagnosticResult<()> {
     if bytes.len() < HEADER || &bytes[..4] != MAGIC {
         return Err(invalid("Invalid worker frame header"));
     }
-    if u16::from_le_bytes(bytes[4..6].try_into().unwrap()) != VERSION {
-        return Err(invalid("Unsupported worker protocol version"));
+    let version = u16::from_le_bytes(bytes[4..6].try_into().unwrap());
+    if version != VERSION {
+        return Err(invalid(&format!(
+            "Unsupported worker protocol version {version}; this side speaks version {VERSION}, so the worker and the Botwork that runs it need the same protocol version"
+        )));
     }
     Ok(())
 }

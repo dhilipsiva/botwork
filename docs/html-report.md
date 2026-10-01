@@ -99,8 +99,9 @@ The HTML report follows the JSON report's [lifecycle](json-report.md#lifecycle):
   run has a record, and the marker stays when the invocation stops early.
 - **Existing files.** An existing file is replaced only when its first 4 KiB
   contain the report's generator marker,
-  `<meta name="generator" content="botwork-report-html 1">`. Other files,
-  directories, and special files are refused before any run starts.
+  `<meta name="generator" content="botwork-report-html 1">`, of this or any
+  other version. Other files, directories, and special files are refused
+  before any run starts.
 - **Shared paths.** The same lock rejects using one path for two outputs.
 - **Stopped invocations.** After an interruption or a reconciliation, a banner
   says the invocation was interrupted. A second banner notes that runs without a

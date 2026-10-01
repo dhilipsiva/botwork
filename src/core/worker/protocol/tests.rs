@@ -93,6 +93,13 @@ fn malformed_headers_truncation_and_trailing_bytes_are_rejected() {
             "{length}"
         );
     }
+    let mut newer = frame.clone();
+    newer[4] = 2;
+    let error = protocol.decode_response(&newer).unwrap_err().to_string();
+    assert!(
+        error.contains("Unsupported worker protocol version 2; this side speaks version 1"),
+        "{error}"
+    );
     for (index, byte) in [(0, 0), (4, 2), (6, 0), (7, 255)] {
         let mut invalid = frame.clone();
         invalid[index] = byte;

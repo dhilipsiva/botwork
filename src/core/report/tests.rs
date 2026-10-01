@@ -355,6 +355,26 @@ fn stored_records_round_trip_and_reject_unknown_values() {
             "{field} must be validated"
         );
     }
+    // A newer record is refused by its version, before the fields it reshaped.
+    let mut newer = stored.clone();
+    newer["version"] = serde_json::json!(2);
+    newer["statements"] = serde_json::json!({"reshaped": true});
+    let error = serde_json::from_value::<RunRecord>(newer)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("botwork-run record version 2 is from a newer Botwork; this one reads version 1. Upgrade Botwork"),
+        "{error}"
+    );
+    let mut older = stored.clone();
+    older["version"] = serde_json::json!(0);
+    let error = serde_json::from_value::<RunRecord>(older)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("no botwork-run record version this Botwork reads (version 1)"),
+        "{error}"
+    );
     let mut extended = stored;
     extended["added_later"] = serde_json::json!(true);
     assert!(

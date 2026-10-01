@@ -142,9 +142,25 @@ fn lockfiles_render_the_same_bytes_for_the_same_resolution_and_read_back() {
     let read = Lock::parse(&one.render()).unwrap();
     assert_eq!(read.packages[0].name, "a");
     assert_eq!(read.packages[1].dependencies, ["a", "z"]);
-    assert!(Lock::parse("version = 2\n")
+    // A newer lockfile's new keys are reported as its version, and every
+    // refusal says how to lock again.
+    let newer = Lock::parse("version = 2\nresolver = \"x\"\n").unwrap_err();
+    assert!(
+        newer.contains("lockfile version 2 is from a newer Botwork"),
+        "{newer}"
+    );
+    assert!(newer.contains("Upgrade Botwork, or delete botwork.lock and run `botwork --fetch`"));
+    for text in ["version = 0\n", "version = \"1\"\n", "[[package]]\n"] {
+        let error = Lock::parse(text).unwrap_err();
+        assert!(
+            error.contains("no lockfile version Botwork reads (version 1)"),
+            "{text}: {error}"
+        );
+        assert!(error.contains("delete botwork.lock and run `botwork --fetch`"));
+    }
+    assert!(Lock::parse("version = 1\nresolver = \"x\"\n")
         .unwrap_err()
-        .contains("lockfile version 2"));
+        .contains("unknown field `resolver`"));
     let twice = format!(
         "{}\n[[package]]\nname = \"a\"\nversion = \"1.0.0\"\nsource = \"x\"\n",
         one.render()

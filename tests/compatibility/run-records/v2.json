@@ -1,0 +1,79 @@
+{
+  "format": "botwork-run",
+  "version": 2,
+  "identity": {
+    "id": "compat/fails",
+    "name": "A failing case",
+    "dataset": null,
+    "row": null
+  },
+  "status": "failed",
+  "complete": true,
+  "skip_reason": null,
+  "started_at": "2026-10-01T18:30:28.137583Z",
+  "finished_at": "2026-10-01T18:30:28.141384Z",
+  "duration_us": 3801,
+  "statements": {
+    "recorded": 2,
+    "items": [
+      {
+        "index": 0,
+        "kind": "assignment",
+        "location": {
+          "file": "compat.suite.botwork",
+          "start_byte": 271,
+          "end_byte": 284,
+          "line": 7,
+          "column": 9,
+          "end_line": 7,
+          "end_column": 22
+        },
+        "offset_us": 3478,
+        "duration_us": 68,
+        "status": "succeeded",
+        "code": null
+      },
+      {
+        "index": 1,
+        "kind": "call",
+        "location": {
+          "file": "compat.suite.botwork",
+          "start_byte": 293,
+          "end_byte": 318,
+          "line": 8,
+          "column": 9,
+          "end_line": 8,
+          "end_column": 34
+        },
+        "offset_us": 3567,
+        "duration_us": 135,
+        "status": "failed",
+        "code": "BW9001"
+      }
+    ]
+  },
+  "omitted_statements": 0,
+  "logs": [],
+  "omitted_logs": 0,
+  "logged_bytes": 0,
+  "error": {
+    "code": "BW9001",
+    "status": "failed",
+    "message": "Assertion failed: Expected 2 (Int), got 1 (Int)\n  difference at $: expected 2 (Int), got 1 (Int)\n  full operands: details.expected / details.actual (typed JSON)",
+    "truncated": false,
+    "location": {
+      "file": "compat.suite.botwork",
+      "start_byte": 293,
+      "end_byte": 318,
+      "line": 8,
+      "column": 9,
+      "end_line": 8,
+      "end_column": 34
+    },
+    "causes": [],
+    "omitted_causes": 0
+  },
+  "artifacts": [],
+  "omitted_artifacts": 0,
+  "events": 6
+}

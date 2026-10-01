@@ -28,6 +28,55 @@ Breaking one needs a new major version and migration notes.
 | CLI | The [options](cli.md) and [exit statuses](cli.md#exit-statuses) | New options in minor versions |
 | Rust API | The `botwork` crate's public API, as [`public-api.txt`](public-api.txt) lists it; hidden items are not part of it ([Rust API](rust-api.md)) | SemVer, with additions to `#[non_exhaustive]` types and to option structs allowed in minor versions |
 
+## Versioned contracts
+
+Everything Botwork writes for another release to read, and everything an
+extension or package is built against, carries a version. Botwork reads the
+versions in the table. It refuses others before acting on them, with a
+message that names the version found, the versions it reads, and what to do.
+
+| Contract | Current | Also reads | Another version | Fixtures |
+| --- | --- | --- | --- | --- |
+| Botwork, as `botwork --version` prints | 0.2.0 | | A project's or package's `botwork` requirement that excludes it fails `--fetch`, and any run that imports from the project, with a version incompatibility: upgrade Botwork, or depend on a version of the package that supports this one | `packages/project-needs-newer`, `packages/dependency-needs-newer` |
+| [Package manifest](packages.md), `botwork.toml` | | | A key this Botwork does not know is an error, unless the manifest's `botwork` requirement excludes this Botwork: then the error is that requirement | `packages/newer-keys` |
+| [Lockfile](packages.md#fetching), `botwork.lock` | 1 | | A newer lockfile: upgrade Botwork, or delete it and run `botwork --fetch` to lock the project again. Any other: delete it and fetch again | `packages/locked`, `packages/newer.lock` |
+| [JSON report](json-report.md), `botwork-report` | 1 | | Botwork only writes reports. It replaces an existing report of any version | `outputs/report-v1.json` |
+| [HTML report](html-report.md), `botwork-report-html` | 1 | | As for the JSON report | |
+| [Event stream](listeners.md), `botwork-events` | 1 | | Botwork only writes the stream | `outputs/events-v1.jsonl` |
+| [Run record](run-records.md), `botwork-run` | 1 | | A newer record: upgrade Botwork | `run-records/v1.json`, `run-records/v2.json` |
+| Report journal, `botwork-report-journal` | 1 | | A newer journal: reconcile it with the Botwork that wrote it | `journals/v1`, `journals/v2` |
+| [Failed-case record](suites.md#rerun-failed-cases), `botwork-failed-cases` | 2 | 1, [deprecated](#deprecations) | A newer record is neither read nor replaced: upgrade Botwork | `failed-cases/v1.json`, `failed-cases/v2.json`, `failed-cases/v3.json` |
+| [Worker protocol](worker-protocol.md), `BWIP` | 1 | | BW5003, naming both versions: the worker and Botwork need the same protocol | `worker/response-v1.bin`, `worker/response-v2.bin` |
+| [WebAssembly interface](wasm.md), `botwork:statements` | 0.1.0 | 0.1.x | BW6001, naming the component's version and the range this Botwork supports: rebuild the component against this Botwork's `wit/botwork.wit` | `wasm/statements-0.2.0.wasm` |
+
+The other adapters have no versions of their own. The [JavaScript
+host](javascript.md) ships inside Botwork and speaks the worker protocol.
+[Python modules](python.md) read the running Botwork's version as
+`botwork.__version__`.
+
+### Deprecations
+
+Botwork deprecates a version it still reads before it stops reading it.
+Reading a deprecated version prints a `[deprecated]` line on stderr that says
+how to replace it; the run is otherwise unchanged, exit status included.
+
+| Deprecated | Replacement | Notice |
+| --- | --- | --- |
+| Failed-case record version 1 | Version 2, which `--failures` writes | `[deprecated] failed-case record PATH is version 1, which a later Botwork will stop reading; rewrite it as version 2 by also passing --failures PATH` |
+
+### Compatibility fixtures
+
+`tests/compatibility/` keeps a sample of each version in the table, and of
+newer versions Botwork must refuse; its README says how each was made.
+`tests/compatibility.rs` checks each:
+
+- Botwork reads every sample of a version it reads, and refuses each other one
+  with the message above.
+- The JSON report has exactly its fixture's fields, and the event stream at
+  least its fixture's fields, with the same types. A field change without a new
+  version fails, and so does a new version without a new fixture.
+- The rows of this table match the fixtures and the versions in the code.
+
 ## Rust toolchain
 
 Botwork builds with the latest stable Rust release, and CI tests the newest

@@ -104,6 +104,11 @@ nothing is coerced.
   component, a component that does not export `statements` or that imports
   more than WASI Preview 2, a trap while listing its headers, or a header that
   is not valid.
+- `wit/botwork.wit` is version 0.1.0 of the `botwork:statements` package.
+  Botwork loads components built for any 0.1.x, and refuses one built for
+  another version, naming both: rebuild it against the `wit/botwork.wit` of
+  the Botwork that runs it. See
+  [versioned contracts](compatibility.md#versioned-contracts).
 
 ## Capabilities
 

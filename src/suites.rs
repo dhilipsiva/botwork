@@ -39,11 +39,16 @@ impl From<&Args> for Request {
 struct Discovered {
     cases: Vec<SelectedCase>,
     history: Option<history::History>,
+    /// Why the rerun's record is deprecated, when it is.
+    deprecated: Option<String>,
 }
 
 fn discover(mut request: Request) -> Result<Discovered, CliError> {
+    let mut deprecated = None;
     if let Some(path) = &request.rerun {
-        request.selection.failed = Some(history::load(path)?);
+        let (failed, notice) = history::load(path)?;
+        request.selection.failed = Some(failed);
+        deprecated = notice;
     }
     let history = request.failures.map(history::History::begin).transpose()?;
     if request.paths.len() > suite::MAX_SUITES {
@@ -71,7 +76,11 @@ fn discover(mut request: Request) -> Result<Discovered, CliError> {
         suites.push(Arc::new(parsed));
     }
     let cases = request.selection.select(&suites)?;
-    Ok(Discovered { cases, history })
+    Ok(Discovered {
+        cases,
+        history,
+        deprecated,
+    })
 }
 
 pub(super) async fn run(
@@ -85,6 +94,12 @@ pub(super) async fn run(
         .map_err(|_| {
             Diagnostic::new(BWErr::AsyncRuntime("Suite discovery worker failed".into()))
         })??;
+    if let Some(notice) = &discovered.deprecated {
+        Context::with_limits(configuration.limits.clone())?.write_output(
+            &mut io::stderr().lock(),
+            format_args!("[deprecated] {notice}\n"),
+        )?;
+    }
     if listing {
         return tokio::task::spawn_blocking(move || {
             let context = Context::with_limits(configuration.limits)?;

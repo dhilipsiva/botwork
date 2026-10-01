@@ -14,6 +14,8 @@ pub struct Project {
     directories: BTreeMap<String, PathBuf>,
     /// Each URL file's place in the cache, canonical once fetched, by URL.
     files: BTreeMap<String, PathBuf>,
+    /// The packages whose `botwork` requirement this Botwork has met.
+    supported: std::sync::Arc<std::sync::Mutex<BTreeSet<String>>>,
 }
 
 /// The package a path names, if it names one: `@name/rest` gives the name
@@ -63,6 +65,10 @@ impl Project {
         let root = crate::core::paths::canonicalize(root)
             .map_err(|error| format!("{}: {error}", root.display()))?;
         let manifest = Manifest::read(&root.join(MANIFEST))?;
+        if let Some(package) = &manifest.package {
+            super::resolve::compatible(package, &botwork_version(), false)
+                .map_err(|error| format!("{}: {error}", root.join(MANIFEST).display()))?;
+        }
         let lock_path = root.join(LOCKFILE);
         let lock = if lock_path.is_file() {
             Lock::read(&lock_path)?
@@ -111,6 +117,7 @@ impl Project {
             lock,
             directories,
             files,
+            supported: Default::default(),
         })
     }
 
@@ -198,7 +205,26 @@ impl Project {
                 directory.display()
             ));
         }
+        self.supports(name, directory)?;
         Ok(directory.join(file))
+    }
+
+    /// Whether the package `name` in `directory` works with this Botwork, as
+    /// its manifest says: a Botwork upgraded after the fetch may not.
+    fn supports(&self, name: &str, directory: &Path) -> Result<(), String> {
+        let mut supported = self
+            .supported
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if supported.contains(name) {
+            return Ok(());
+        }
+        let manifest = Manifest::read(&directory.join(MANIFEST))?;
+        if let Some(package) = &manifest.package {
+            super::resolve::compatible(package, &botwork_version(), true)?;
+        }
+        supported.insert(name.to_owned());
+        Ok(())
     }
 
     /// The canonical directory of the locked package `name`.

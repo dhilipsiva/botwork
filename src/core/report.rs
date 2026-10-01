@@ -23,6 +23,7 @@ mod tests;
 pub const RECORD_FORMAT: &str = "botwork-run";
 /// Incremented for incompatible record changes; additions keep the version.
 pub const RECORD_VERSION: u32 = 1;
+const RECORD_VERSION_U64: u64 = RECORD_VERSION as u64;
 const TRUNCATED: &str = "…[truncated]";
 
 /// Stable run identity: a script name or `suite/case[/row]` ID, a display name,
@@ -343,8 +344,6 @@ impl<'de> Deserialize<'de> for RunRecord {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         struct Stored {
-            format: String,
-            version: u32,
             identity: RunIdentity,
             status: CaseStatus,
             complete: bool,
@@ -362,13 +361,30 @@ impl<'de> Deserialize<'de> for RunRecord {
             omitted_artifacts: u64,
             events: u64,
         }
-        let stored = Stored::deserialize(deserializer)?;
-        if stored.format != RECORD_FORMAT || stored.version != RECORD_VERSION {
-            return Err(D::Error::custom(format!(
-                "unsupported record {} version {}",
-                stored.format, stored.version
+        // The format and version come first, so a newer record's new or
+        // reshaped fields are reported as its version.
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let format = value.get("format").and_then(serde_json::Value::as_str);
+        if format != Some(RECORD_FORMAT) {
+            return Err(D::Error::custom(format_args!(
+                "not a {RECORD_FORMAT} record: its format is {}",
+                value.get("format").unwrap_or(&serde_json::Value::Null)
             )));
         }
+        match value.get("version").and_then(serde_json::Value::as_u64) {
+            Some(RECORD_VERSION_U64) => {}
+            Some(version) if version > RECORD_VERSION_U64 => {
+                return Err(D::Error::custom(format_args!(
+                    "{RECORD_FORMAT} record version {version} is from a newer Botwork; this one reads version {RECORD_VERSION}. Upgrade Botwork to read it"
+                )))
+            }
+            _ => {
+                return Err(D::Error::custom(format_args!(
+                    "no {RECORD_FORMAT} record version this Botwork reads (version {RECORD_VERSION})"
+                )))
+            }
+        }
+        let stored = Stored::deserialize(value).map_err(D::Error::custom)?;
         let mut record = Self::new(stored.identity, RecordLimits::default());
         record.status = stored.status;
         record.complete = stored.complete;

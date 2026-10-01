@@ -1,5 +1,5 @@
 {
-  "version": 59,
+  "version": 60,
   "mutations": [
     {
       "id": "precedence-products",
@@ -208,8 +208,8 @@
       "id": "suite-rerun-filter-discarded",
       "area": "selection",
       "file": "src/suites.rs",
-      "before": "request.selection.failed = Some(history::load(path)?);",
-      "after": "let _ = history::load(path)?;"
+      "before": "        request.selection.failed = Some(failed);\n",
+      "after": "        let _ = failed;\n"
     },
     {
       "id": "suite-history-complete-before-effects",
@@ -1349,7 +1349,7 @@
       "id": "assertion-truncation-hidden",
       "area": "assertion-diagnostics",
       "file": "src/core/eval/builtins/assertions.rs",
-      "before": "const TRUNCATED: &str = \"\u2026[truncated]\";",
+      "before": "const TRUNCATED: &str = \"…[truncated]\";",
       "after": "const TRUNCATED: &str = \"\";"
     },
     {
@@ -2049,8 +2049,8 @@
       "id": "html-foreign-page-replaced",
       "area": "html-report",
       "file": "src/report_json/html.rs",
-      "before": "    if String::from_utf8_lossy(&start).contains(GENERATOR) {",
-      "after": "    if true {"
+      "before": "    if marked {\n",
+      "after": "    if true {\n"
     },
     {
       "id": "html-link-bytes-unencoded",
@@ -2245,8 +2245,8 @@
       "id": "outcomes-stored-version-unchecked",
       "area": "terminal-outcomes",
       "file": "src/core/report.rs",
-      "before": "        if stored.format != RECORD_FORMAT || stored.version != RECORD_VERSION {",
-      "after": "        if stored.format != RECORD_FORMAT {"
+      "before": "        match value.get(\"version\").and_then(serde_json::Value::as_u64) {\n            Some(RECORD_VERSION_U64) => {}\n",
+      "after": "        match Some(RECORD_VERSION_U64) {\n            Some(RECORD_VERSION_U64) => {}\n"
     },
     {
       "id": "outcomes-suite-admits-after-interrupt",
@@ -4270,6 +4270,118 @@
       "file": "src/core/eval/imports/javascript_host.mjs",
       "before": "      if (Number.isInteger(value) && narrow !== value) {\n",
       "after": "      if (false) {\n"
+    },
+    {
+      "id": "versions-lock-newer-undistinguished",
+      "area": "versions",
+      "file": "src/core/packages/lock.rs",
+      "before": "            Some(Some(version)) if version > i64::from(Self::VERSION) => {\n",
+      "after": "            Some(Some(version)) if version > i64::from(Self::VERSION) && false => {\n"
+    },
+    {
+      "id": "versions-lock-version-unchecked",
+      "area": "versions",
+      "file": "src/core/packages/lock.rs",
+      "before": "            Some(Some(version)) if version == i64::from(Self::VERSION) => {}\n",
+      "after": "            Some(Some(_)) => {}\n"
+    },
+    {
+      "id": "versions-manifest-requirement-unexplained",
+      "area": "versions",
+      "file": "src/core/packages/manifest.rs",
+      "before": "            .map_err(|error| newer(text).unwrap_or_else(|| error.message().to_owned()))?;\n",
+      "after": "            .map_err(|error| error.message().to_owned())?;\n"
+    },
+    {
+      "id": "versions-project-requirement-unchecked",
+      "area": "versions",
+      "file": "src/core/packages/project.rs",
+      "before": "        if let Some(package) = &manifest.package {\n            super::resolve::compatible(package, &botwork_version(), false)\n",
+      "after": "        if let Some(package) = manifest.package.as_ref().filter(|_| false) {\n            super::resolve::compatible(package, &botwork_version(), false)\n"
+    },
+    {
+      "id": "versions-package-requirement-unchecked",
+      "area": "versions",
+      "file": "src/core/packages/project.rs",
+      "before": "        if supported.contains(name) {\n",
+      "after": "        if true {\n"
+    },
+    {
+      "id": "versions-dependency-advice-dropped",
+      "area": "versions",
+      "file": "src/core/packages/resolve.rs",
+      "before": "            if dependency {\n",
+      "after": "            if false {\n"
+    },
+    {
+      "id": "versions-failed-case-newer-undistinguished",
+      "area": "versions",
+      "file": "src/suites/history.rs",
+      "before": "            .filter(|version| *version > u64::from(VERSION))\n",
+      "after": "            .filter(|_| false)\n"
+    },
+    {
+      "id": "versions-failed-case-v1-not-deprecated",
+      "area": "versions",
+      "file": "src/suites/history.rs",
+      "before": "    let deprecated = (record.version < VERSION).then(|| {\n",
+      "after": "    let deprecated = (record.version < 1).then(|| {\n"
+    },
+    {
+      "id": "versions-deprecation-not-printed",
+      "area": "versions",
+      "file": "src/suites.rs",
+      "before": "    if let Some(notice) = &discovered.deprecated {\n",
+      "after": "    if let Some(notice) = discovered.deprecated.as_ref().filter(|_| false) {\n"
+    },
+    {
+      "id": "versions-run-record-newer-undistinguished",
+      "area": "versions",
+      "file": "src/core/report.rs",
+      "before": "            Some(version) if version > RECORD_VERSION_U64 => {\n",
+      "after": "            Some(version) if version > RECORD_VERSION_U64 && false => {\n"
+    },
+    {
+      "id": "versions-journal-newer-undistinguished",
+      "area": "versions",
+      "file": "src/report_json/journal.rs",
+      "before": "                    .filter(|version| *version > u64::from(VERSION))\n",
+      "after": "                    .filter(|_| false)\n"
+    },
+    {
+      "id": "versions-protocol-versions-unnamed",
+      "area": "versions",
+      "file": "src/core/worker/protocol.rs",
+      "before": "            \"Unsupported worker protocol version {version}; this side speaks version {VERSION}, so the worker and the Botwork that runs it need the same protocol version\"\n",
+      "after": "            \"Unsupported worker protocol version\"\n"
+    },
+    {
+      "id": "versions-wasm-interface-unchecked",
+      "area": "versions",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        interface(engine, &component).map_err(other)?;\n",
+      "after": "        interface(engine, &component).ok();\n"
+    },
+    {
+      "id": "versions-wasm-interface-any-version",
+      "area": "versions",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "    if supported.matches(&version) {\n",
+      "after": "    if true {\n"
+    },
+    {
+      "id": "versions-html-unversioned-marker-accepted",
+      "area": "versions",
+      "file": "src/report_json/html.rs",
+      "before": "        digits > 0 && version[digits..].starts_with(\"\\\">\")\n",
+      "after": "        version[digits..].starts_with(\"\\\">\")\n"
+    },
+    {
+      "id": "versions-python-version-wrong",
+      "area": "versions",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    env!(\"CARGO_PKG_VERSION\"),\n",
+      "after": "    \"0.0.0\",\n"
     }
   ]
 }

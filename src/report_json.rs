@@ -781,6 +781,75 @@ mod tests {
     }
 
     #[test]
+    fn journals_and_their_run_records_are_refused_by_newer_versions() {
+        let directory = tempfile::tempdir().unwrap();
+        let (json, _) = abandoned(directory.path());
+        let journal = journal::path_for(&json);
+        let original = fs::read_to_string(&journal).unwrap();
+        let mut lines: Vec<serde_json::Value> = original
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let rewrite = |lines: &[serde_json::Value]| {
+            let text: String = lines.iter().map(|line| format!("{line}\n")).collect();
+            fs::write(&journal, &text).unwrap();
+            text
+        };
+        // A newer header, reshaped, is refused by its version.
+        let mut newer = lines.clone();
+        newer[0]["version"] = serde_json::json!(2);
+        newer[0].as_object_mut().unwrap().remove("mode");
+        let text = rewrite(&newer);
+        let error = Report::reconcile(&json)
+            .err()
+            .expect("newer journal")
+            .to_string();
+        assert!(
+            error.contains("the journal is version 2, from a newer Botwork; this one reads version 1. Reconcile it with the Botwork that wrote it"),
+            "{error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&journal).unwrap(),
+            text,
+            "nothing changes"
+        );
+        let mut older = lines.clone();
+        older[0]["version"] = serde_json::json!(0);
+        rewrite(&older);
+        let error = Report::reconcile(&json)
+            .err()
+            .expect("older journal")
+            .to_string();
+        assert!(
+            error.contains("unsupported journal botwork-report-journal version 0"),
+            "{error}"
+        );
+        // A run record inside the journal is refused by its own version.
+        let run = lines
+            .iter()
+            .position(|line| line["entry"] == "run")
+            .expect("a run line");
+        let record = lines[run]
+            .as_object_mut()
+            .unwrap()
+            .values_mut()
+            .find(|value| value["format"] == "botwork-run")
+            .expect("a run record");
+        record["version"] = serde_json::json!(2);
+        rewrite(&lines);
+        let error = Report::reconcile(&json)
+            .err()
+            .expect("newer record")
+            .to_string();
+        assert!(
+            error.contains("botwork-run record version 2 is from a newer Botwork"),
+            "{error}"
+        );
+        fs::write(&journal, original).unwrap();
+        Report::reconcile(&json).unwrap();
+    }
+
+    #[test]
     fn a_pending_journal_blocks_new_reports_but_not_its_reconciliation() {
         let directory = tempfile::tempdir().unwrap();
         let (json, _) = abandoned(directory.path());

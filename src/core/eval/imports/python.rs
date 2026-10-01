@@ -18,9 +18,14 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-/// The module scripts import as `botwork`.
-const BOTWORK: &str = r#"
+/// The module scripts import as `botwork`, with the Botwork version running it.
+const BOTWORK: &str = concat!(
+    r#"
 """Statements for Botwork scripts, written in Python."""
+
+__version__ = ""#,
+    env!("CARGO_PKG_VERSION"),
+    r#""
 
 
 class Stopped(BaseException):
@@ -40,7 +45,8 @@ def statement(header):
         return function
 
     return mark
-"#;
+"#
+);
 
 /// Calls one statement may have in flight; the interpreter lock runs one
 /// Python thread at a time in any case.
