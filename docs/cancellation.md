@@ -18,7 +18,7 @@ the tests that prove it; the linked pages hold the detailed contracts.
 | `RunOptions::timeout`, `--timeout-ms` | The run from admission | BW5002 `timed_out` |
 | `--suite-timeout-ms` | A suite owner's setup, borrowers, and teardown | BW5002 |
 | An operation's own `timeout_ms` (HTTP, processes, `Eventually`) | That operation, which then stops the run | BW5002 |
-| SIGINT or SIGTERM | Every run, suite case, and fixture, through the CLI's root control | BW5001; see [terminal outcomes](terminal-outcomes.md#interruption) |
+| SIGINT or SIGTERM; Ctrl-C or Ctrl-Break on Windows | Every run, suite case, and fixture, through the CLI's root control | BW5001; see [terminal outcomes](terminal-outcomes.md#interruption) |
 
 A child control inherits its parent's cancellation and the earlier of the two
 deadlines, so a stop anywhere above an operation reaches it. `Catch` never
@@ -69,7 +69,7 @@ detects leaks. [Stress repetition](stress.md) repeats handshake-driven
 cancellation, deadline, abandonment, HTTP, process, and CLI interrupt scenarios
 1,000 times each with the same release checks.
 
-The CLI tests in `tests/cancellation.rs` cover three cases:
+The CLI tests in `tests/cancellation.rs` cover three cases on Linux and macOS:
 
 - **Interrupt.** A SIGINT stops a process statement and an HTTP request running in
   parallel within the bound, runs their `Finally` cleanup, and leaves the

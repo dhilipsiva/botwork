@@ -140,9 +140,10 @@ Runs never wait for a listener.
 - **Closing.** After the last event, the listener's stdin is closed, and Botwork
   waits up to `--listener-timeout-ms` for queued events to be written and the
   program to exit.
-- **Timeouts.** A listener still running at the timeout fails. Its process group
-  is killed while the listener is still unreaped, so processes it started are
-  stopped too and a reused group ID is never signalled.
+- **Timeouts.** A listener still running at the timeout fails. On Linux and
+  macOS its process group is killed while the listener is still unreaped, so
+  processes it started are stopped too and a reused group ID is never
+  signalled. On Windows only the listener itself is killed.
 
 ## Embedded listeners
 

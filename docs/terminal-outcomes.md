@@ -25,7 +25,8 @@ reconciled afterwards. Runs that had started but have no outcome then become
 
 ## Interruption
 
-The first SIGINT (Ctrl-C) or SIGTERM stops the invocation cooperatively:
+The first interrupt stops the invocation cooperatively. On Linux and macOS that
+is SIGINT (Ctrl-C) or SIGTERM; on Windows, Ctrl-C or Ctrl-Break:
 
 - No new run, case, or shared fixture starts.
 - Every started run and fixture is cancelled through the invocation's root
@@ -44,13 +45,14 @@ The first SIGINT (Ctrl-C) or SIGTERM stops the invocation cooperatively:
 - A `--failures` record stays incomplete, so no rerun selection comes from
   partial results.
 
-A second signal exits at once with status 130 and leaves the reports as
+A second interrupt exits at once with status 130 and leaves the reports as
 incomplete markers with their journal for reconciliation.
 
-Cooperative interruption is Linux-only until the macOS and Windows ports land
-([D12](decisions.md#d12-platform-parity)). On those platforms the first
-interrupt already ends the process at once, as a second signal does on Linux,
-with the operating system's exit status.
+Every platform behaves the same way ([D12](decisions.md#d12-platform-parity)).
+On Windows, other console events, such as closing the console window or logging
+off, keep their default and end the process at once; reconcile its reports as
+after any forced termination. `tests/terminal_outcomes.rs` covers Linux and
+macOS, and `tests/console_interrupts.rs` sends Ctrl-Break on Windows.
 
 ## Reporter failures
 

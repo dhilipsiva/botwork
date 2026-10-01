@@ -1,4 +1,4 @@
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 //! Interrupts and deadlines reach nested statements, process and HTTP I/O,
 //! listeners, and cleanup through the CLI.
 #[path = "support/cli_harness.rs"]
@@ -15,15 +15,16 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Whether `pid` runs: a zombie has already ended, and only its parent's wait
+/// remains.
 fn alive(pid: u32) -> bool {
-    fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
-        !stat
-            .rsplit(')')
-            .next()
-            .unwrap_or("")
-            .trim_start()
-            .starts_with('Z')
-    })
+    let output = Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .unwrap();
+    let state = String::from_utf8_lossy(&output.stdout);
+    let state = state.trim();
+    !state.is_empty() && !state.starts_with('Z')
 }
 
 fn spawn_cli(workspace: &Path, arguments: &[&str]) -> std::process::Child {

@@ -12,7 +12,7 @@ The worker API advertises Linux with the facilities required by the selected mod
 | `with_pid_namespace` | Guardian facilities, `clone3`, user/PID/mount namespaces, proc identity mappings, private mount propagation, proc mounting, sessions, parent-death signalling, `no_new_privs` | Whole-tree acknowledgment, or owned namespace reaping without claiming worker success |
 | Optional worker journal | Private local directory, exclusive advisory locks, random IDs, positional record I/O, file and directory synchronization | Transport interruption/publication records; separate flush acknowledgment |
 
-[PID descriptors](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) and [clone3](https://man7.org/linux/man-pages/man2/clone.2.html) were added in Linux 5.3. That is an interface minimum for the latter two modes, **not a tested minimum-kernel certification**. Other operating systems reject `start` before effects; Linux-specific constructors and journaling are not exported there. No non-Linux worker backend is advertised.
+[PID descriptors](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) and [clone3](https://man7.org/linux/man-pages/man2/clone.2.html) were added in Linux 5.3. That is an interface minimum for the latter two modes, **not a tested minimum-kernel certification**. Other operating systems reject `start` before effects. The PID-namespace constructor and journaling are exported on Linux only, and macOS refuses `with_process_tree` at construction.
 
 Workers and helpers remain trusted executables. These facilities establish process ownership, not filesystem/network isolation, rollback, or a real-time kernel guarantee. See [worker guarantees and limitations](isolated-workers.md).
 

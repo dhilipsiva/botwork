@@ -7,8 +7,8 @@ is executed by the test suite, so the output shown is what you will see.
 ## Install
 
 botwork builds with a stable Rust toolchain; install one from
-[rustup.rs](https://rustup.rs) if you do not have it. Linux is the tested
-platform, and isolated process workers are Linux-only.
+[rustup.rs](https://rustup.rs) if you do not have it. CI tests it on Linux,
+macOS, and Windows; [platforms](compatibility.md#platforms) lists what differs.
 
 ```sh
 git clone https://github.com/dhilipsiva/botwork.git

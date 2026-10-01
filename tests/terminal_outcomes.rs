@@ -1,4 +1,4 @@
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 #[path = "support/cli_harness.rs"]
 #[allow(dead_code)]
 mod cli_harness;

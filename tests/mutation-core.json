@@ -1,5 +1,5 @@
 {
-  "version": 47,
+  "version": 48,
   "mutations": [
     {
       "id": "precedence-products",
@@ -1349,7 +1349,7 @@
       "id": "assertion-truncation-hidden",
       "area": "assertion-diagnostics",
       "file": "src/core/eval/builtins/assertions.rs",
-      "before": "const TRUNCATED: &str = \"…[truncated]\";",
+      "before": "const TRUNCATED: &str = \"\u2026[truncated]\";",
       "after": "const TRUNCATED: &str = \"\";"
     },
     {
@@ -2140,8 +2140,8 @@
       "id": "outcomes-second-signal-ignored",
       "area": "terminal-outcomes",
       "file": "src/interrupt.rs",
-      "before": "        if RECEIVED.fetch_add(1, Ordering::SeqCst) != 0 {",
-      "after": "        if RECEIVED.fetch_add(1, Ordering::SeqCst) == usize::MAX {"
+      "before": "        if RECEIVED.fetch_add(1, Ordering::SeqCst) != 0 {\n            unsafe { libc::_exit(super::FORCED) };",
+      "after": "        if RECEIVED.fetch_add(1, Ordering::SeqCst) == usize::MAX {\n            unsafe { libc::_exit(super::FORCED) };"
     },
     {
       "id": "outcomes-records-dropped-after-console-failure",

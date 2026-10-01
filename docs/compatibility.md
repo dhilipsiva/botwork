@@ -45,9 +45,9 @@ no `rust-version`.
 
 Process statements and the default worker pool run on every platform above,
 and the process-tree mode on Linux and Windows; macOS refuses it at
-construction. The PID-namespace mode and the worker journal are Linux-only, and
-so is cooperative interruption until its port lands; elsewhere an interrupt ends
-the process at once. See
+construction. The PID-namespace mode and the worker journal are Linux-only.
+Cooperative interruption works on all three: SIGINT and SIGTERM on Linux and
+macOS, and Ctrl-C and Ctrl-Break on Windows. See
 [worker platforms](worker-platforms.md) and
 [terminal outcomes](terminal-outcomes.md#interruption).
 

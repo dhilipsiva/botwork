@@ -1,4 +1,4 @@
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 //! A stopped run returns within its stop grace even when started blocking work
 //! cannot stop: a full output pipe, a FIFO nobody opens, or a callback that
 //! ignores its control. That work is abandoned, and cleanup gets its own bound.
@@ -14,11 +14,9 @@ use botwork::core::{
 use cli_harness::Harness;
 use std::{
     fs::{self, File},
+    io::PipeReader,
     num::NonZeroUsize,
-    os::{
-        fd::{FromRawFd, OwnedFd},
-        unix::fs::OpenOptionsExt,
-    },
+    os::unix::fs::OpenOptionsExt,
     path::Path,
     process::{Child, Command, Stdio},
     sync::{
@@ -89,13 +87,8 @@ fn wait_for(workspace: &Path, marker: &str) {
 }
 
 /// A pipe whose read end stays open and is never read.
-fn unread_pipe() -> (OwnedFd, Stdio) {
-    let mut descriptors = [0; 2];
-    assert_eq!(
-        unsafe { libc::pipe2(descriptors.as_mut_ptr(), libc::O_CLOEXEC) },
-        0
-    );
-    let [read, write] = descriptors.map(|descriptor| unsafe { OwnedFd::from_raw_fd(descriptor) });
+fn unread_pipe() -> (PipeReader, Stdio) {
+    let (read, write) = std::io::pipe().unwrap();
     (read, Stdio::from(write))
 }
 

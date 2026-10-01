@@ -306,7 +306,6 @@ fn slow_listeners_are_detached_without_slowing_runs() {
     );
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn hung_listeners_and_their_processes_are_stopped_at_the_close_timeout() {
     let harness = Harness::new();
@@ -336,22 +335,21 @@ fn hung_listeners_and_their_processes_are_stopped_at_the_close_timeout() {
         "{stderr}"
     );
     let helper = fs::read_to_string(harness.workspace.join("helper.pid")).unwrap();
-    let status = std::path::Path::new("/proc")
-        .join(helper.trim())
-        .join("status");
+    // A zombie has already ended; only its parent's wait remains.
+    let running = || {
+        let output = std::process::Command::new("ps")
+            .args(["-o", "stat=", "-p", helper.trim()])
+            .output()
+            .unwrap();
+        let state = String::from_utf8_lossy(&output.stdout);
+        let state = state.trim();
+        !state.is_empty() && !state.starts_with('Z')
+    };
     let deadline = Instant::now() + Duration::from_secs(5);
-    while fs::read_to_string(&status)
-        .is_ok_and(|status| !status.lines().any(|line| line.starts_with("State:\tZ")))
-        && Instant::now() < deadline
-    {
+    while running() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(
-        fs::read_to_string(&status).map_or(true, |status| status
-            .lines()
-            .any(|line| line.starts_with("State:\tZ"))),
-        "the listener's own processes are stopped too"
-    );
+    assert!(!running(), "the listener's own processes are stopped too");
 }
 
 #[test]

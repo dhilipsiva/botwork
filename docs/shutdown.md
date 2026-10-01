@@ -108,7 +108,7 @@ the bound above, and the listener's close timeout when one is attached.
 
 ## Verification
 
-`cargo test --locked --test shutdown` covers:
+`cargo test --locked --test shutdown` covers, on Linux and macOS:
 
 - **Blocked output.** A CLI run writing to a pipe that is never read exits after
   a deadline, and after a single interrupt, with the abandoned cause.

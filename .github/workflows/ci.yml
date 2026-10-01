@@ -46,9 +46,9 @@ jobs:
             target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             timeout: 15
-          # Process statements, workers, and cooperative interruption are
-          # Linux-only until their ports land; tests/platform_gaps.rs checks
-          # that they fail clearly here (decision D12).
+          # macOS refuses the process-tree and namespace worker modes, and
+          # tests/platform_gaps.rs checks that they fail clearly there; the
+          # worker journal is Linux-only (decision D12).
           - profile: debug
             flags: ""
             target: aarch64-apple-darwin

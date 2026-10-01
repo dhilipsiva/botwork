@@ -227,7 +227,7 @@ impl Hub {
             if let Ok(None) = process.try_wait() {
                 // The leader is unreaped under this lock, so its group ID has not
                 // been reused.
-                #[cfg(target_os = "linux")]
+                #[cfg(unix)]
                 unsafe {
                     libc::kill(-(process.id() as libc::pid_t), libc::SIGKILL);
                 }
