@@ -1199,3 +1199,25 @@ fn call_frames_show_statements_as_written_under_the_namespaces_used() {
         "shop::pricing::linetotalof|param|at|param|"
     );
 }
+
+/// Python modules need a build with the `python` feature; elsewhere the import
+/// says so, before running anything.
+#[cfg(not(feature = "python"))]
+#[test]
+fn python_modules_need_a_python_build() {
+    let project = Project::new();
+    project.write(
+        "helpers.py",
+        "import botwork\n\n@botwork.statement(\"Greet\")\ndef greet():\n    return 1\n",
+    );
+    let error = project
+        .run("Import |\"helpers.py\"| As |py|", &mut Context::default())
+        .unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::ImportRead);
+    assert!(
+        error
+            .to_string()
+            .contains("`helpers.py` is a Python module, which needs a Botwork build with the `python` feature"),
+        "{error}"
+    );
+}

@@ -127,6 +127,33 @@ jobs:
       - name: Run tests and examples
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
 
+  python:
+    name: Python adapter
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust and checking tools
+        run: rustup toolchain install stable --profile minimal --component clippy
+      - name: Install the Python development files
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3-dev
+          python3 --version
+      - name: Check Clippy warnings with Python
+        run: cargo +stable clippy --locked --features python --all-targets -- -D warnings
+      - name: Allow unprivileged user namespaces for isolated workers
+        # As in the Rust jobs: the PID-namespace worker tests need them.
+        run: |
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Run tests and examples with Python
+        run: cargo +stable test --locked --no-fail-fast --features python
+
   public-api:
     name: Public API
     runs-on: ubuntu-latest

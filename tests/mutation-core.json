@@ -1,5 +1,5 @@
 {
-  "version": 51,
+  "version": 52,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3878,6 +3878,62 @@
       "file": "src/core/acceptance.rs",
       "before": "            Self::SuiteSetupFailed => \"suite setup did not complete\",",
       "after": "            Self::SuiteSetupFailed => \"suite control stopped\","
+    },
+    {
+      "id": "python-bool-read-as-int",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    if let Ok(flag) = value.cast::<PyBool>() {\n        return Ok(Literal::Bool(flag.is_true()));\n    }\n",
+      "after": "    if false {\n        return Ok(Literal::None);\n    }\n"
+    },
+    {
+      "id": "python-int-range-unchecked",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "            .extract::<i32>()\n            .map(Literal::Int)",
+      "after": "            .extract::<i64>()\n            .map(|number| Literal::Int(number as i32))"
+    },
+    {
+      "id": "python-dict-keys-coerced",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "                .cast::<PyString>()\n                .map_err(|_| \"a dict with a key that is not a str\".to_owned())?",
+      "after": "                .str()\n                .map_err(|_| \"a dict with a key that is not a str\".to_owned())?"
+    },
+    {
+      "id": "python-assertion-not-mapped",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    if error.is_instance_of::<PyAssertionError>(py) {",
+      "after": "    if false && error.is_instance_of::<PyAssertionError>(py) {"
+    },
+    {
+      "id": "python-stop-not-raised",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "            unsafe { ffi::PyThreadState_SetAsyncExc(thread, stopped.as_ptr()) };",
+      "after": "            let _ = (thread, stopped);"
+    },
+    {
+      "id": "python-file-loaded-twice-in-a-run",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    if let Some(module) = context.modules.python.get(&canonical) {",
+      "after": "    if let Some(module) = context.modules.python.get(&canonical).filter(|_| false) {"
+    },
+    {
+      "id": "python-arity-unchecked",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "        if !Python::attach(|py| accepts(py, &function, count)) {",
+      "after": "        if false && !Python::attach(|py| accepts(py, &function, count)) {"
+    },
+    {
+      "id": "python-float-overflow-accepted",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "        return if narrow.is_finite() {",
+      "after": "        return if !wide.is_nan() {"
     }
   ]
 }

@@ -25,10 +25,16 @@ impl std::fmt::Display for ImportChain<'_> {
     }
 }
 
+#[cfg(feature = "python")]
+mod python;
+
 #[derive(Default)]
 pub(super) struct ModuleCache {
     loaded: HashMap<PathBuf, Arc<LoadedModule>>,
     resolved: HashMap<PathBuf, PathBuf>,
+    /// Python files this run has loaded, each in a module object of its own.
+    #[cfg(feature = "python")]
+    python: HashMap<PathBuf, Arc<python::Module>>,
 }
 
 impl Clone for ModuleCache {
@@ -44,6 +50,12 @@ impl Clone for ModuleCache {
                 .iter()
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
+            #[cfg(feature = "python")]
+            python: self
+                .python
+                .iter()
+                .map(|(key, value)| (key.clone(), Arc::clone(value)))
+                .collect(),
         }
     }
 }
@@ -54,6 +66,13 @@ impl ModuleCache {
         size.entries(self.resolved.len());
         for path in self.loaded.keys() {
             size.path(path);
+        }
+        #[cfg(feature = "python")]
+        {
+            size.entries(self.python.len());
+            for path in self.python.keys() {
+                size.path(path);
+            }
         }
         for (requested, canonical) in &self.resolved {
             size.path(requested);
@@ -117,6 +136,27 @@ pub(super) async fn evaluate_import(
             &normalized,
             statement.metadata().header(),
             &namespace.span,
+        ));
+    }
+    if Path::new(path).extension().and_then(|value| value.to_str()) == Some("py") {
+        #[cfg(feature = "python")]
+        return python::evaluate_import(
+            path,
+            path_span,
+            namespace,
+            &normalized,
+            import_site,
+            context,
+        )
+        .await;
+        #[cfg(not(feature = "python"))]
+        return Err(context.import_error(
+            BWErr::ImportRead,
+            format_args!(
+                "`{path}` is a Python module, which needs a Botwork build with the `python` feature"
+            ),
+            path_span,
+            import_site,
         ));
     }
     let module = load_module(path, path_span, import_site, context).await?;
@@ -267,6 +307,70 @@ async fn read_module_source(path: &Path, context: &mut Context) -> Result<String
     })
 }
 
+/// The canonical path of the local file `path` names, relative to the source
+/// that imports it, recorded once per run so that a repeated import reads no
+/// metadata.
+async fn resolve(
+    path: &str,
+    span: &Span,
+    import_site: &Span,
+    context: &mut Context,
+) -> EvaluationResult<PathBuf> {
+    let failure = |context: &Context, reason: std::fmt::Arguments<'_>| {
+        context.import_error(BWErr::ImportRead, reason, span, import_site)
+    };
+    let related = |context: &Context, error: Diagnostic| {
+        RuntimeDiagnostic::from(error).with_related_in(
+            "imported here",
+            import_site,
+            context.budget.as_ref(),
+            Some((span, false)),
+            context.calls.iter().map(|record| &record.frame),
+        )
+    };
+    let importer = Path::new(span.source().name());
+    let base = if importer.is_absolute() {
+        importer.parent().unwrap_or(Path::new("/")).to_owned()
+    } else {
+        context
+            .working_directory
+            .as_ref()
+            .map_err(|reason| failure(context, format_args!("{reason}")))?
+            .join(importer.parent().unwrap_or(Path::new("")))
+    };
+    let requested = base.join(path);
+    if let Some(canonical) = context.modules.resolved.get(&requested) {
+        return Ok(canonical.clone());
+    }
+    let canonical = context
+        .canonicalize_source(&requested)
+        .await
+        .map_err(|error| match error {
+            SourceFailure::Io(error) => {
+                failure(context, format_args!("{}: {error}", requested.display()))
+            }
+            SourceFailure::Diagnostic(error) => related(context, error),
+        })?;
+    if let Some(budget) = &context.budget {
+        let bytes = requested
+            .as_os_str()
+            .len()
+            .checked_add(canonical.as_os_str().len())
+            .ok_or_else(|| related(context, budget.import_limit(ImportResource::MetadataBytes)))?;
+        budget
+            .charge_imports(&[
+                (ImportResource::Paths, 1),
+                (ImportResource::MetadataBytes, bytes),
+            ])
+            .map_err(|error| related(context, error))?;
+    }
+    context
+        .modules
+        .resolved
+        .insert(requested, canonical.clone());
+    Ok(canonical)
+}
+
 async fn load_module(
     path: &str,
     span: &Span,
@@ -295,34 +399,7 @@ async fn load_module(
             format_args!("`{path}` must name a local .botwork file"),
         ));
     }
-    let importer = Path::new(span.source().name());
-    let base = if importer.is_absolute() {
-        importer.parent().unwrap_or(Path::new("/")).to_owned()
-    } else {
-        context
-            .working_directory
-            .as_ref()
-            .map_err(|reason| failure(context, format_args!("{reason}")))?
-            .join(importer.parent().unwrap_or(Path::new("")))
-    };
-    let requested = base.join(path);
-    if let Some(module) = context
-        .modules
-        .resolved
-        .get(&requested)
-        .and_then(|canonical| context.modules.loaded.get(canonical))
-    {
-        return Ok(Arc::clone(module));
-    }
-    let canonical = context
-        .canonicalize_source(&requested)
-        .await
-        .map_err(|error| match error {
-            SourceFailure::Io(error) => {
-                failure(context, format_args!("{}: {error}", requested.display()))
-            }
-            SourceFailure::Diagnostic(error) => related(context, error),
-        })?;
+    let canonical = resolve(path, span, import_site, context).await?;
     if let Some(start) = context
         .loading
         .iter()
@@ -338,27 +415,6 @@ async fn load_module(
             span,
             import_site,
         ));
-    }
-    if !context.modules.resolved.contains_key(&requested) {
-        if let Some(budget) = &context.budget {
-            let bytes = requested
-                .as_os_str()
-                .len()
-                .checked_add(canonical.as_os_str().len())
-                .ok_or_else(|| {
-                    related(context, budget.import_limit(ImportResource::MetadataBytes))
-                })?;
-            budget
-                .charge_imports(&[
-                    (ImportResource::Paths, 1),
-                    (ImportResource::MetadataBytes, bytes),
-                ])
-                .map_err(|error| related(context, error))?;
-        }
-        context
-            .modules
-            .resolved
-            .insert(requested, canonical.clone());
     }
     if let Some(module) = context.modules.loaded.get(&canonical) {
         return Ok(Arc::clone(module));

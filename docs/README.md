@@ -74,7 +74,9 @@ index.
 ## Extending and embedding
 
 - [Extending Botwork](extending.md): modules, Rust statements, listeners, and
-  planned language adapters.
+  language adapters.
+- [Python statements](python.md): statements written in Python, in builds with
+  the `python` feature.
 - [Embedded Rust runs](embedded-runs.md)
 - [Interpreter architecture](interpreter-architecture.md)
 - [Asynchronous execution](async-execution.md)

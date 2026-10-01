@@ -213,7 +213,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [TreeSitter grammar](docs/tree-sitter.md)
   - [x] [Linting](docs/check.md)
   - [ ] Trusted & Verified registry (for botwork packages), after 1.0 ([D10](docs/decisions.md#d10-packages-and-registry))
-  - [ ] Python extension support (via PyO3, [D9](docs/decisions.md#d9-python-packaging))
+  - [x] Python extension support (via PyO3, [D9](docs/decisions.md#d9-python-packaging)); see [Python statements](docs/python.md)
   - [ ] JavaScript extension support (via an out-of-process Node worker, [D7](docs/decisions.md#d7-javascript-hosting))
   - [ ] WASM extension support (via Wasmtime and WASI, [D8](docs/decisions.md#d8-wasm-runtime))
 - [x] CLI

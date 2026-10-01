@@ -27,6 +27,7 @@ UNMEASURED = {
     "src/core/worker/protocol/catalog.rs": "a constant table, with no executable lines",
     "src/core/worker/supervisor/windows.rs": "built only for Windows; coverage is measured on Linux",
     "src/core/worker/journal/storage/windows.rs": "built only for Windows; coverage is measured on Linux",
+    "src/core/eval/imports/python.rs": "built only with the python feature; tests/python_adapter.rs runs it in CI",
 }
 LIBRARY_FILES = {
     "src/core/suggest.rs", "src/core/stack.rs", "src/core/paths.rs",

@@ -19,6 +19,8 @@ running system call or callback. That work includes:
 - file and environment operations;
 - `Log` and `--debug` output;
 - blocking native callbacks (`NativeOperation::blocking`);
+- [Python statements](python.md), which also receive `botwork.Stopped` at the
+  stop and end at once unless blocked in native code;
 - CLI preparation, which loads the entry file, variable files, and inputs.
 
 After a stop, such work gets the control's **stop grace** to return. It defaults

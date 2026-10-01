@@ -102,7 +102,8 @@ summary, and the others still publish.
 | Running scripts and suites, reports, `--check`, `--format`, `--lsp` | Nothing beyond the binary |
 | Process statements and isolated workers | Linux, macOS, or Windows; see [worker platforms](worker-platforms.md) |
 | HTTP statements | Network access to the servers a script calls |
-| Planned Python and JavaScript adapters | libpython or Node; see [extending Botwork](extending.md#language-adapters) |
+| [Python statements](python.md) | A build with the `python` feature, and libpython 3.10 or later |
+| The planned JavaScript adapter | Node; see [extending Botwork](extending.md#language-adapters) |
 
 The [compatibility guide](compatibility.md) lists the supported platforms and
 tool versions.
