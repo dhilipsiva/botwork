@@ -196,10 +196,12 @@ impl<'a> Plan<'a> {
         if self.inherit {
             for (name, value) in self.environment.variables() {
                 context.checkpoint()?;
-                if name
-                    .to_str()
-                    .is_some_and(|name| self.overlay.is_some_and(|map| map.contains_key(name)))
-                {
+                // An option replaces the variable its name names: on Windows,
+                // whatever that variable's case.
+                if self.overlay.is_some_and(|map| {
+                    map.keys()
+                        .any(|key| crate::core::run::same_environment_name(OsStr::new(key), name))
+                }) {
                     continue;
                 }
                 environment_name(context, name)?;

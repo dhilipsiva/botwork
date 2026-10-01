@@ -70,7 +70,7 @@ impl ProcessOp {
             ),
             (
                 Code::RunConfiguration,
-                "Requires Linux or macOS and a configured run environment.",
+                "Requires a configured run environment on a supported platform.",
             ),
             (
                 Code::AsyncRuntime,
@@ -98,10 +98,10 @@ impl ProcessOp {
 
     pub(super) fn invoke(self, arguments: &[TemporaryValue], context: &Context) -> TemporaryResult {
         context.checkpoint()?;
-        if !cfg!(unix) {
+        if !cfg!(any(unix, windows)) {
             return Err(context.detail_error(
                 BWErr::RunConfiguration,
-                "Process statements currently require Linux or macOS",
+                "Process statements are unavailable on this platform",
                 None,
                 false,
             ));

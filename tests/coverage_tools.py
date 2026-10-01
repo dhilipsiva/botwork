@@ -57,6 +57,16 @@ class CoverageTests(unittest.TestCase):
         for path in ("src/main.rs", "src/core/ast.rs", "src/core/eval.rs", "src/core/grammar.rs"):
             self.assertIsNone(re.search(COVERAGE["EXCLUSIONS"], "root/" + path))
 
+    def test_every_source_file_is_measured_or_set_aside(self):
+        sources = {path.relative_to(ROOT).as_posix() for path in (ROOT / "src").rglob("*.rs")}
+        measured = COVERAGE["EXPECTED_FILES"]["all"]
+        excluded = {path for path in sources if re.search(COVERAGE["EXCLUSIONS"], "root/" + path)}
+        unmeasured = set(COVERAGE["UNMEASURED"])
+        self.assertEqual(sources - measured - excluded - unmeasured, set(), "add them to a list")
+        self.assertEqual(measured - sources, set(), "measured files that do not exist")
+        self.assertEqual(unmeasured - sources, set(), "set-aside files that do not exist")
+        self.assertEqual(measured & unmeasured, set())
+
     def test_collection_separates_scopes_and_counts_ignored_tests(self):
         commands = []
 

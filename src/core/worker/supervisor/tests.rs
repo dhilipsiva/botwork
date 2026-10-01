@@ -56,7 +56,10 @@ fn cleanup_errors_after_pending_handoff_preserve_the_published_terminal_outcome(
             runtime(format_args!("original")),
         );
         let original = report.diagnostic.take(); // Already transferred in the Pending report.
-        append_cleanup(&mut report, io::Error::from_raw_os_error(libc::ECHILD));
+        append_cleanup(
+            &mut report,
+            io::Error::other("the child was reaped elsewhere"),
+        );
         assert_eq!(report.outcome, outcome);
         assert!(report.diagnostic.is_some());
         assert_eq!(
@@ -67,6 +70,7 @@ fn cleanup_errors_after_pending_handoff_preserve_the_published_terminal_outcome(
 }
 
 /// Whether no process has this ID: signal 0 reaches even a zombie.
+#[cfg(unix)]
 pub(super) fn gone(pid: u32) -> bool {
     // SAFETY: signal 0 only checks that the process exists.
     let result = unsafe { libc::kill(pid as libc::pid_t, 0) };

@@ -2,7 +2,7 @@
 use super::observation::{Observation, Stream};
 use super::*;
 
-fn close_pipe<T>(pipe: &mut Option<T>, _observation: &Observation, _pid: u32) {
+pub(super) fn close_pipe<T>(pipe: &mut Option<T>, _observation: &Observation, _pid: u32) {
     if pipe.is_some() {
         #[cfg(test)]
         _observation.hook(Point::Close, _pid);
@@ -99,11 +99,9 @@ pub(super) fn run(
     {
         child.observer = Some(observation.clone());
     }
-    let pid = child.child.id();
+    let pid = child.id();
     observation.started(pid);
-    let mut stdin = child.child.stdin.take();
-    let mut stdout = child.child.stdout.take();
-    let mut stderr = child.child.stderr.take();
+    let (mut stdin, mut stdout, mut stderr) = child.take_pipes();
     #[cfg(test)]
     observation.hook(Point::Setup, pid);
     let setup = nonblocking(stdin.as_ref().expect("piped stdin"))
@@ -243,11 +241,7 @@ pub(super) fn run(
     close_pipe(&mut stdin, observation, pid);
     close_pipe(&mut stdout, observation, pid);
     close_pipe(&mut stderr, observation, pid);
-    #[cfg(test)]
-    if child.guardian.is_some() {
-        observation.hook(Point::ControlClose, pid);
-    }
-    close_pipe(&mut child.guardian, observation, pid);
+    child.close_control(observation, pid);
     drop(child);
     let io_complete =
         cleanup != WorkerCleanup::NotStarted && !output_failed && written == input.len();
@@ -258,28 +252,4 @@ pub(super) fn run(
     } else {
         observation.finish(cleanup, io_complete);
     }
-}
-
-fn launch_worker(
-    specification: WorkerCommand,
-    observation: &Observation,
-) -> io::Result<ChildOwner> {
-    #[cfg(target_os = "linux")]
-    if let Some(executable) = &observation.shared.guardian {
-        let record = observation
-            .request
-            .journal
-            .as_ref()
-            .map(|ticket| ticket.file())
-            .transpose()?;
-        return guardian::spawn(
-            executable,
-            specification,
-            record.as_deref(),
-            observation.shared.namespaced,
-        );
-    }
-    #[cfg(not(target_os = "linux"))]
-    let _ = observation;
-    launch::spawn(specification)
 }

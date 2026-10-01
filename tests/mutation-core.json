@@ -1005,35 +1005,35 @@
     {
       "id": "guardian-eof-not-published",
       "area": "guardian-completion",
-      "file": "src/core/worker/unix/guardian.rs",
+      "file": "src/core/worker/supervisor/unix/guardian.rs",
       "before": "\n        .and_then(|()| control.shutdown(std::net::Shutdown::Write))",
       "after": ""
     },
     {
       "id": "guardian-completion-allows-open-peer",
       "area": "guardian-completion",
-      "file": "src/core/worker/unix/guardian.rs",
+      "file": "src/core/worker/supervisor/unix/guardian.rs",
       "before": "if control.read(&mut trailing)? != 0 || &frame[..4] != MAGIC {",
       "after": "if control.read(&mut trailing).unwrap_or(0) != 0 || &frame[..4] != MAGIC {"
     },
     {
       "id": "guardian-completion-ignores-exit-status",
       "area": "guardian-completion",
-      "file": "src/core/worker/unix/guardian.rs",
+      "file": "src/core/worker/supervisor/unix/guardian.rs",
       "before": "if !status.success() {",
       "after": "if false && !status.success() {"
     },
     {
       "id": "guardian-entry-omits-acknowledgment",
       "area": "guardian-completion",
-      "file": "src/core/worker/unix/guardian.rs",
+      "file": "src/core/worker/supervisor/unix/guardian.rs",
       "before": "let _ = acknowledge(&mut control, &frame);",
       "after": "let _ = &frame;"
     },
     {
       "id": "worker-abandonment-read-before-cancellation",
       "area": "guardian-completion",
-      "file": "src/core/worker/unix.rs",
+      "file": "src/core/worker/supervisor.rs",
       "before": "    let stopped = checkpoint();\n    if request.abandoned.load(Ordering::Acquire) {\n        return Some((\n            WorkerOutcome::Interrupted,\n            Diagnostic::formatted(\n                BWErr::Cancelled,\n                format_args!(\"Worker invocation abandoned; completed effects are not rolled back\"),\n            ),\n        ));\n    }\n",
       "after": "    if request.abandoned.load(Ordering::Acquire) {\n        return Some((\n            WorkerOutcome::Interrupted,\n            Diagnostic::formatted(\n                BWErr::Cancelled,\n                format_args!(\"Worker invocation abandoned; completed effects are not rolled back\"),\n            ),\n        ));\n    }\n    let stopped = checkpoint();\n"
     },
@@ -1048,8 +1048,8 @@
       "id": "process-removed-environment-kept",
       "area": "processes",
       "file": "src/core/eval/builtins/processes/config.rs",
-      "before": ".is_some_and(|name| self.overlay.is_some_and(|map| map.contains_key(name)))",
-      "after": ".is_some_and(|name| self.overlay.is_some_and(|map| matches!(map.get(name), Some(Literal::String(_)))))"
+      "before": "                    map.keys()\n                        .any(|key| crate::core::run::same_environment_name(OsStr::new(key), name))\n",
+      "after": "                    map.iter().any(|(key, value)| {\n                        matches!(value, Literal::String(_))\n                            && crate::core::run::same_environment_name(OsStr::new(key), name)\n                    })\n"
     },
     {
       "id": "process-directory-override-ignored",
@@ -1187,7 +1187,7 @@
     {
       "id": "process-cleanup-uses-pool-deadline",
       "area": "processes",
-      "file": "src/core/worker/unix/observation.rs",
+      "file": "src/core/worker/supervisor/observation.rs",
       "before": "start.elapsed() >= self.request.limits.cleanup_timeout)\n                {",
       "after": "start.elapsed() >= self.shared.limits.cleanup_timeout)\n                {"
     },

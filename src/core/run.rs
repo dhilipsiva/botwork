@@ -286,6 +286,15 @@ impl Context {
 /// as the operating system matches them.
 const NAMES_IGNORE_CASE: bool = cfg!(windows);
 
+/// Whether two environment names name the same variable on this platform.
+pub(crate) fn same_environment_name(left: &OsStr, right: &OsStr) -> bool {
+    if NAMES_IGNORE_CASE {
+        left.eq_ignore_ascii_case(right)
+    } else {
+        left == right
+    }
+}
+
 /// The stored name that `name` names among `variables`.
 fn environment_key<'a>(
     variables: &'a BTreeMap<OsString, OsString>,

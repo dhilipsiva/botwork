@@ -55,6 +55,20 @@ futures-util = { version = "0.3.32", default-features = false, features = ["std"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"
 
+# The Windows worker backend: Job Objects, suspended launch, and pipes read and
+# written without waiting.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_IO",
+    "Win32_System_JobObjects",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
+
 [dev-dependencies]
 tokio = { version = "1.53.1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util", "test-util"] }
 

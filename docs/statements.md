@@ -1491,7 +1491,7 @@ Run a Linux process with literal String arguments. Return stdout/stderr byte Arr
 
 Returns: Map.
 
-Requires: Linux or macOS and a configured run environment (BW7002).
+Requires: a configured run environment on a supported platform (BW7002).
 
 Errors:
 
@@ -1499,7 +1499,7 @@ Errors:
 - BW5001: Cancellation stops the process group and observes cleanup.
 - BW5002: The process or inherited run deadline expired; cleanup is observed.
 - BW5003: Process launch, I/O or cleanup could not be verified.
-- BW7002: Requires Linux or macOS and a configured run environment.
+- BW7002: Requires a configured run environment on a supported platform.
 - BW8001: Command, input, capture or in-flight admission exceeded its limit.
 
 Example: [processes.md](processes.md) (`process-variants`).
@@ -1516,7 +1516,7 @@ Run a Linux process with literal String arguments. Return stdout/stderr byte Arr
 
 Returns: Map.
 
-Requires: Linux or macOS and a configured run environment (BW7002).
+Requires: a configured run environment on a supported platform (BW7002).
 
 Errors:
 
@@ -1524,7 +1524,7 @@ Errors:
 - BW5001: Cancellation stops the process group and observes cleanup.
 - BW5002: The process or inherited run deadline expired; cleanup is observed.
 - BW5003: Process launch, I/O or cleanup could not be verified.
-- BW7002: Requires Linux or macOS and a configured run environment.
+- BW7002: Requires a configured run environment on a supported platform.
 - BW8001: Command, input, capture or in-flight admission exceeded its limit.
 
 Example: [processes.md](processes.md) (`process-statements`).
@@ -1540,7 +1540,7 @@ Run a Linux process with literal String arguments. Return strict UTF-8 stdout/st
 
 Returns: Map.
 
-Requires: Linux or macOS and a configured run environment (BW7002).
+Requires: a configured run environment on a supported platform (BW7002).
 
 Errors:
 
@@ -1548,7 +1548,7 @@ Errors:
 - BW5001: Cancellation stops the process group and observes cleanup.
 - BW5002: The process or inherited run deadline expired; cleanup is observed.
 - BW5003: Process launch, I/O or cleanup could not be verified.
-- BW7002: Requires Linux or macOS and a configured run environment.
+- BW7002: Requires a configured run environment on a supported platform.
 - BW8001: Command, input, capture or in-flight admission exceeded its limit.
 
 Example: [processes.md](processes.md) (`process-statements`).
@@ -1565,7 +1565,7 @@ Run a Linux process with literal String arguments. Return strict UTF-8 stdout/st
 
 Returns: Map.
 
-Requires: Linux or macOS and a configured run environment (BW7002).
+Requires: a configured run environment on a supported platform (BW7002).
 
 Errors:
 
@@ -1573,7 +1573,7 @@ Errors:
 - BW5001: Cancellation stops the process group and observes cleanup.
 - BW5002: The process or inherited run deadline expired; cleanup is observed.
 - BW5003: Process launch, I/O or cleanup could not be verified.
-- BW7002: Requires Linux or macOS and a configured run environment.
+- BW7002: Requires a configured run environment on a supported platform.
 - BW8001: Command, input, capture or in-flight admission exceeded its limit.
 
 Example: [processes.md](processes.md) (`process-variants`).

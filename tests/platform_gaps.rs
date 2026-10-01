@@ -1,6 +1,7 @@
 //! Facilities not yet ported fail clearly and before any effect (decision D12):
-//! process statements and worker pools on Windows, and process-tree pools
-//! everywhere but Linux. Each test goes when its facility's port lands.
+//! process-tree pools everywhere but Linux, and process statements and worker
+//! pools on a platform without a worker backend, which no supported platform
+//! lacks any longer. Each test goes when its facility's port lands.
 #![cfg(not(target_os = "linux"))]
 
 use botwork::core::{
@@ -8,8 +9,8 @@ use botwork::core::{
     worker::{WorkerLimits, WorkerPool},
 };
 
-#[cfg(windows)]
-mod windows {
+#[cfg(not(any(unix, windows)))]
+mod unsupported {
     use super::*;
     use botwork::core::{
         operation::OperationControl,
@@ -19,7 +20,7 @@ mod windows {
     use std::{collections::BTreeMap, path::Path, process::Command};
 
     /// A program and arguments that would create `marker` in its directory.
-    const MARKER: (&str, &[&str]) = ("cmd", &["/c", "type nul > marker"]);
+    const MARKER: (&str, &[&str]) = ("touch", &["marker"]);
 
     fn arguments() -> String {
         let quoted: Vec<String> = MARKER.1.iter().map(|word| format!("{word:?}")).collect();
@@ -49,7 +50,7 @@ mod windows {
                 assert!(
                     error
                         .to_string()
-                        .contains("Process statements currently require Linux or macOS"),
+                        .contains("Process statements are unavailable on this platform"),
                     "{error}"
                 );
             }
@@ -75,7 +76,7 @@ mod windows {
         assert_eq!(output.status.code(), Some(1), "{stderr}");
         assert!(
             stderr.contains("[BW7002]")
-                && stderr.contains("Process statements currently require Linux or macOS"),
+                && stderr.contains("Process statements are unavailable on this platform"),
             "{stderr}"
         );
         assert!(!dir.path().join("marker").exists());
@@ -86,7 +87,7 @@ mod windows {
         let dir = tempfile::tempdir().unwrap();
         let (program, arguments) = MARKER;
         let pool = WorkerPool::new(WorkerLimits::default()).unwrap();
-        let executable = Path::new(r"C:\Windows\System32").join(format!("{program}.exe"));
+        let executable = std::env::temp_dir().join(program);
         // More attempts than the pool has slots: a refusal must not hold one.
         for _ in 0..=WorkerLimits::default().max_in_flight.get() {
             let command = WorkerCommand {
@@ -103,7 +104,7 @@ mod windows {
             assert!(
                 error
                     .to_string()
-                    .contains("Isolated workers currently require Linux or macOS"),
+                    .contains("Isolated workers are unavailable on this platform"),
                 "{error}"
             );
         }

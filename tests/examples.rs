@@ -23,8 +23,8 @@ fn assert_example(name: &str, expected_lines: &[&str]) {
     );
 }
 
-// Process statements run on Linux and macOS until their Windows port lands
-// (decision D12); tests/platform_gaps.rs checks their refusal there.
+// The example calls Unix programs such as /usr/bin/printf;
+// tests/worker_backends.rs runs process statements on Windows.
 #[cfg(unix)]
 #[test]
 fn process_example_captures_text_binary_and_nonzero_exit() {

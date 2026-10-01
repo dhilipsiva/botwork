@@ -1,9 +1,10 @@
 # Process statements
 
 The default Engine and CLI provide four process signatures within the 100-statement
-fixed catalogue. They execute on Linux and macOS, both synchronously and
-asynchronously. Windows returns BW7002 before starting a process until its port
-lands. A standalone Context
+fixed catalogue. They execute on Linux, macOS, and Windows, both synchronously
+and asynchronously. On Linux and macOS a process runs in its own process group;
+on Windows in its own Job Object, which also holds every process it starts. A
+standalone Context
 without a run environment also returns BW7002. CLI preparation captures the host
 environment and directory using `Context::with_host_environment`; low-level hosts
 can use the same constructor before initializing statements.

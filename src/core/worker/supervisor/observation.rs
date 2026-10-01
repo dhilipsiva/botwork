@@ -326,5 +326,6 @@ pub(super) fn supervise(
     observation.watch(delivery);
 }
 
-#[cfg(test)]
+// These drive Unix commands and signals.
+#[cfg(all(test, unix))]
 mod tests;

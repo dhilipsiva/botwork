@@ -25,10 +25,10 @@ use super::{
 #[cfg(target_os = "linux")]
 pub mod journal;
 pub mod protocol;
+#[cfg(any(unix, windows))]
+mod supervisor;
 #[cfg(all(test, unix))]
 mod tests;
-#[cfg(unix)]
-mod unix;
 mod waiting;
 
 /// Trusted host configuration; the supervisor never constructs a shell command.
@@ -138,7 +138,7 @@ struct Request {
     control: OperationControl,
     abandoned: AtomicBool,
     // Read by the Linux supervisor; other platforms refuse entry before it.
-    #[cfg_attr(not(unix), allow(dead_code))]
+    #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     journal: Option<Arc<journal::Ticket>>,
@@ -162,10 +162,10 @@ struct State {
 
 struct Shared {
     changed: Condvar,
-    #[cfg(all(test, unix))]
-    launcher: Mutex<Option<unix::LaunchHook>>,
-    #[cfg(all(test, unix))]
-    io_hooks: Mutex<VecDeque<unix::IoHook>>,
+    #[cfg(all(test, any(unix, windows)))]
+    launcher: Mutex<Option<supervisor::LaunchHook>>,
+    #[cfg(all(test, any(unix, windows)))]
+    io_hooks: Mutex<VecDeque<supervisor::IoHook>>,
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     guardian: Option<PathBuf>,
@@ -250,9 +250,9 @@ impl WorkerPool {
         }
         Ok(Self(Arc::new(Owner(Arc::new(Shared {
             changed: Condvar::new(),
-            #[cfg(all(test, unix))]
+            #[cfg(all(test, any(unix, windows)))]
             launcher: Mutex::new(None),
-            #[cfg(all(test, unix))]
+            #[cfg(all(test, any(unix, windows)))]
             io_hooks: Mutex::new(VecDeque::new()),
             limits,
             #[cfg(target_os = "linux")]
@@ -319,9 +319,9 @@ impl WorkerPool {
             _retention: retention.clone(),
         };
         control.checkpoint()?;
-        if !cfg!(unix) {
+        if !cfg!(any(unix, windows)) {
             return Err(configuration(
-                "Isolated workers currently require Linux or macOS",
+                "Isolated workers are unavailable on this platform",
             ));
         }
         let bare_name = command.executable.components().count() == 1
@@ -393,8 +393,8 @@ impl WorkerPool {
         let spawn = std::thread::Builder::new()
             .name(format!("botwork-worker-{id}"))
             .spawn(move || {
-                #[cfg(unix)]
-                unix::supervise(
+                #[cfg(any(unix, windows))]
+                supervisor::supervise(
                     id,
                     command,
                     input,
@@ -403,7 +403,7 @@ impl WorkerPool {
                     thread_shared,
                     send,
                 );
-                #[cfg(not(unix))]
+                #[cfg(not(any(unix, windows)))]
                 let _ = (
                     id,
                     command,
@@ -524,7 +524,7 @@ impl std::ops::Deref for RetainedInput {
         &self.bytes
     }
 }
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 struct WorkerDelivery {
     send: Option<oneshot::Sender<RetainedReport>>,
     retention: Option<Arc<dyn Send + Sync>>,
@@ -589,7 +589,7 @@ impl Shared {
         }
         self.changed.notify_all();
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn update(&self, id: u64, pid: Option<u32>, stopping: bool, cleanup: Option<WorkerCleanup>) {
         if let Some(active) = self
             .state
@@ -603,7 +603,7 @@ impl Shared {
             active.cleanup = cleanup;
         }
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn finish(&self, report: &WorkerReport) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if report.cleanup != WorkerCleanup::Unverified {
@@ -670,7 +670,7 @@ fn limit(resource: &'static str, limit: usize) -> Diagnostic {
 pub fn guardian_main() -> Option<u8> {
     #[cfg(target_os = "linux")]
     {
-        unix::guardian::entry()
+        supervisor::unix::guardian::entry()
     }
     #[cfg(not(target_os = "linux"))]
     {

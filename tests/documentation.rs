@@ -257,9 +257,9 @@ fn every_documented_botwork_example_matches_its_cli_output() {
         ("first-failure", (1, "[BW9001] Assertion failed")),
         ("check-example", (1, "[BW2002] Statement not defined")),
     ]);
-    // Process statements run on Linux and macOS until their Windows port lands
-    // (decision D12); there their examples stop at the first one, printing nothing.
-    let unported = |document: &str| !cfg!(unix) && document == "docs/processes.md";
+    // The process examples call Unix programs such as /usr/bin/printf;
+    // tests/worker_backends.rs runs process statements on Windows.
+    let unix_programs = |document: &str| !cfg!(unix) && document == "docs/processes.md";
     let mut seen = BTreeSet::new();
     let harness = Harness::new();
     for (document, blocks) in documents() {
@@ -276,6 +276,9 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 .get(id)
                 .unwrap_or_else(|| panic!("{document}:{}: register output for {id}", block.line));
             assert_eq!(&document, expected_document, "{id}: unexpected document");
+            if unix_programs(&document) {
+                continue;
+            }
             let output = harness
                 .run(id, &block.source, Duration::from_secs(5))
                 .unwrap_or_else(|error| panic!("{document}:{}: {error}", block.line));
@@ -284,15 +287,7 @@ fn every_documented_botwork_example_matches_its_cli_output() {
                 "{document}:{} ({id}); {}; timeout=5s\n{}",
                 block.line, harness.environment, block.source
             );
-            let (status, evidence) = if unported(&document) {
-                (
-                    1,
-                    "[BW7002] Invalid run configuration: Process statements currently require Linux or macOS",
-                )
-            } else {
-                failing.get(id).copied().unwrap_or((0, ""))
-            };
-            let stdout: &[u8] = if unported(&document) { b"" } else { stdout };
+            let (status, evidence) = failing.get(id).copied().unwrap_or((0, ""));
             assert_eq!(
                 output.status.code(),
                 Some(status),

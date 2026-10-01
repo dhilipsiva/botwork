@@ -431,8 +431,8 @@ fn conformance_inputs_match_status_stdout_and_error_contracts() {
     inventory(&cases, SPECIFICATION).unwrap();
     let harness = Harness::new();
     for case in cases {
-        // Process statements (B6) run on Linux and macOS until their Windows
-        // port lands (decision D12); tests/platform_gaps.rs checks their refusal there.
+        // The process cases (B6) call Unix programs such as /usr/bin/printf;
+        // tests/worker_backends.rs runs process statements on Windows.
         let rules = [case.positive, case.invalid, case.boundary].concat();
         if !cfg!(unix) && rules.contains(&"B6") {
             continue;

@@ -333,7 +333,7 @@ mod tests {
         const MARKER: &str = "BOTWORK_TEST_NAMESPACE_SIGPIPE";
         if std::env::var_os(MARKER).is_none() {
             let status = Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "core::worker::unix::namespace::tests::failed_startup_gate_does_not_deliver_sigpipe_to_the_host"])
+                .args(["--exact", "core::worker::supervisor::unix::namespace::tests::failed_startup_gate_does_not_deliver_sigpipe_to_the_host"])
                 .env(MARKER, "1").stdout(Stdio::null()).status().unwrap();
             assert!(
                 status.success(),
