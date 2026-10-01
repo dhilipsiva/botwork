@@ -1,5 +1,5 @@
 {
-  "version": 55,
+  "version": 56,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3995,8 +3995,120 @@
       "id": "check-flags-adapter-imports",
       "area": "javascript",
       "file": "src/core/analysis.rs",
-      "before": "            Some(\"py\" | \"js\" | \"mjs\" | \"cjs\")\n",
+      "before": "            Some(\"py\" | \"js\" | \"mjs\" | \"cjs\" | \"wasm\")\n",
       "after": "            Some(\"never\")\n"
+    },
+    {
+      "id": "wasm-memory-unlimited",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        if Self::grow(&mut self.memory_used, current, desired, self.memory_bytes).is_none() {\n",
+      "after": "        if false {\n"
+    },
+    {
+      "id": "wasm-fuel-unlimited",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "    let _ = store.set_fuel(limits.fuel);\n",
+      "after": "    let _ = store.set_fuel(u64::MAX);\n"
+    },
+    {
+      "id": "wasm-epoch-ignores-stops",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        Ok(if store.data().control.checkpoint().is_err() {\n",
+      "after": "        Ok(if false {\n"
+    },
+    {
+      "id": "wasm-stop-not-signalled",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        engine.increment_epoch();\n",
+      "after": "        let _ = &engine;\n"
+    },
+    {
+      "id": "wasm-stop-reported-as-trap",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        Err(_) if control.checkpoint().is_err() => Ok(Literal::None),\n",
+      "after": "        Err(_) if false => Ok(Literal::None),\n"
+    },
+    {
+      "id": "wasm-network-allowed",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        .allow_tcp(false)\n",
+      "after": "        .allow_tcp(true)\n        .inherit_network()\n"
+    },
+    {
+      "id": "wasm-fuel-unreported",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "    if error.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::OutOfFuel) {\n",
+      "after": "    if false {\n"
+    },
+    {
+      "id": "wasm-stdout-limit-unreported",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "    if full(&output.stdout) {\n",
+      "after": "    if false {\n"
+    },
+    {
+      "id": "wasm-stderr-dropped",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "    let stderr = stderr.trim_end();\n",
+      "after": "    let stderr = \"\";\n"
+    },
+    {
+      "id": "wasm-assertion-not-mapped",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "            FailureKind::Assertion => BWErr::AssertionFailed(message),\n",
+      "after": "            FailureKind::Assertion => BWErr::NativeError(message),\n"
+    },
+    {
+      "id": "wasm-tree-order-unchecked",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "            if child <= index || child >= nodes.len() {\n",
+      "after": "            if child >= nodes.len() {\n"
+    },
+    {
+      "id": "wasm-shared-nodes-accepted",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "            if depths[child].replace(depth + 1).is_some() {\n",
+      "after": "            if depths[child].replace(depth + 1).is_some() && false {\n"
+    },
+    {
+      "id": "wasm-orphans-accepted",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "        let depth = depths[index]\n            .ok_or_else(|| format!(\"a value whose node {index} is not in its tree\"))?;\n",
+      "after": "        let depth = depths[index].unwrap_or(0);\n"
+    },
+    {
+      "id": "wasm-depth-unchecked",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "            if depth + 1 > limits.depth {\n",
+      "after": "            if false {\n"
+    },
+    {
+      "id": "wasm-nonfinite-accepted",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "            Node::Float(number) if number.is_finite() => Literal::Float(number),\n",
+      "after": "            Node::Float(number) if !number.is_nan() => Literal::Float(number),\n"
+    },
+    {
+      "id": "wasm-duplicate-keys-merged",
+      "area": "wasm",
+      "file": "src/core/eval/imports/wasm.rs",
+      "before": "                    if map.contains_key(&key) {\n",
+      "after": "                    if false {\n"
     }
   ]
 }

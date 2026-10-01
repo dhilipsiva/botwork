@@ -12,7 +12,9 @@ Most work ends at the stop itself:
 - statements, loops, and calls stop at their next checkpoint;
 - sleeps, asynchronous operations, and HTTP requests race the stop;
 - process statements kill and reap their child within the cleanup allowance,
-  and so do [JavaScript statements](javascript.md), each a Node process.
+  and so do [JavaScript statements](javascript.md), each a Node process;
+- [WebAssembly statements](wasm.md) are interrupted at their next loop
+  iteration or function entry.
 
 Started blocking work cannot be interrupted: neither Rust nor Tokio can stop a
 running system call or callback. That work includes:

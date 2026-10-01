@@ -68,7 +68,9 @@ pub use retained_diagnostics::RetainedDiagnosticLimits;
 pub(crate) use retained_diagnostics::{RuntimeDiagnostic, StoredCallFrame, StoredDiagnostic};
 mod temporary_values;
 pub use temporary_values::TemporaryLimits;
+mod wasm_limits;
 pub(crate) use temporary_values::{TemporaryReservation, TemporaryValue};
+pub use wasm_limits::{WasmLimits, MAX_WASM_MEMORY_BYTES};
 
 #[doc(hidden)]
 pub const DEFAULT_STEPS: u64 = 1_000_000;
@@ -102,6 +104,7 @@ pub struct RunLimits {
     pub retained_diagnostics: RetainedDiagnosticLimits,
     pub output: OutputLimits,
     pub cleanup: CleanupLimits,
+    pub wasm: WasmLimits,
 }
 
 impl Default for RunLimits {
@@ -128,6 +131,7 @@ impl Default for RunLimits {
             retained_diagnostics: RetainedDiagnosticLimits::default(),
             output: OutputLimits::default(),
             cleanup: CleanupLimits::default(),
+            wasm: WasmLimits::default(),
         }
     }
 }
@@ -139,6 +143,7 @@ impl RunLimits {
         self.diagnostic_values.values.validate()?;
         self.diagnostics.validate()?;
         self.cleanup.validate()?;
+        self.wasm.validate()?;
         if self.imports.dependency_depth > MAX_MODULE_CHAIN_DEPTH {
             return Err(Diagnostic::formatted(
                 BWErr::RunConfiguration,

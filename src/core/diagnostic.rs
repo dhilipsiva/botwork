@@ -233,7 +233,7 @@ impl fmt::Display for Help<'_> {
             BWErr::ConditionNotMet { .. } => "Inspect the last attempt's failure and the attempt history; fix the behavior or give the condition a deliberate deadline.",
             BWErr::RetriesExhausted { .. } => "Inspect the last attempt's failure; each attempt may have repeated the action's effects before the next retry.",
             BWErr::ResourceLimit { .. } => "Reduce the workload or adjust configurable budgets within documented ceilings; completed effects are not rolled back.",
-            BWErr::ImportRead(_) => "Use a readable local .botwork file, a .py file in a build with Python, or a JavaScript file with Node on PATH, resolving relative paths from the importing source file.",
+            BWErr::ImportRead(_) => "Use a readable local .botwork file, a .py file in a build with Python, a JavaScript file with Node on PATH, or a WebAssembly component, resolving relative paths from the importing source file.",
             BWErr::ImportCycle(_) => "Break the shown import cycle by moving shared definitions into a separate module.",
             BWErr::DuplicateNamespace { .. } => "Choose a distinct namespace or remove conflicting declarations in this scope; the original remains registered.",
         };

@@ -28,7 +28,7 @@ Use `BWErr::code()` or `Diagnostic::code()` to obtain `DiagnosticCode`; `as_str(
 | BW5001 | Operation cancellation | Inspect completed effects; use fresh control for an intentional retry |
 | BW5002 | Operation deadline | Inspect completed effects and choose an appropriate new deadline |
 | BW5003 | Async runtime failure | Keep a Tokio runtime with time enabled alive through operation completion; after a stop, unblock or isolate work that outlives the [stop grace](shutdown.md) |
-| BW6001 | Module loading | Check the source-relative local .botwork, [.py](python.md), or [.mjs/.js/.cjs](javascript.md) path, permissions, and UTF-8 contents/path |
+| BW6001 | Module loading | Check the source-relative local .botwork, [.py](python.md), [.mjs/.js/.cjs](javascript.md), or [.wasm](wasm.md) path, permissions, and UTF-8 contents/path |
 | BW6002 | Import cycle | Move shared definitions into a module outside the reported cycle |
 | BW6003 | Namespace collision | Use a distinct alias or remove the same-scope qualified declaration |
 | BW7001 | Input variables | Use exact variable names and JSON with checked i32/finite f32 values and at most 128 nested containers |

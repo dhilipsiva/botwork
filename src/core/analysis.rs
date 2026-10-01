@@ -655,11 +655,12 @@ impl Checker<'_, '_> {
             return None;
         };
         let directory = self.analyzer.directory.as_ref()?;
-        // A Python or JavaScript module's statements are known only when it
-        // loads, so calls through it are reported unchecked, not as errors.
+        // A Python, JavaScript, or WebAssembly module's statements are known
+        // only when it loads, so calls through it are reported unchecked, not
+        // as errors.
         if matches!(
             Path::new(path).extension().and_then(|value| value.to_str()),
-            Some("py" | "js" | "mjs" | "cjs")
+            Some("py" | "js" | "mjs" | "cjs" | "wasm")
         ) {
             return None;
         }

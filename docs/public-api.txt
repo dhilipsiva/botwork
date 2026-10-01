@@ -9,6 +9,7 @@ const botwork::core::operation::DEFAULT_STOP_GRACE
 const botwork::core::report::RECORD_FORMAT
 const botwork::core::report::RECORD_VERSION
 const botwork::core::run::MAX_EVALUATION_DEPTH
+const botwork::core::run::MAX_WASM_MEMORY_BYTES
 const botwork::core::worker::protocol::VERSION
 enum botwork::core::acceptance::AssertionMode #[non_exhaustive]
 enum botwork::core::acceptance::CaseStatus #[non_exhaustive]
@@ -252,6 +253,7 @@ field botwork::core::run::RunLimits::steps
 field botwork::core::run::RunLimits::syntax
 field botwork::core::run::RunLimits::temporaries
 field botwork::core::run::RunLimits::values
+field botwork::core::run::RunLimits::wasm
 field botwork::core::run::RunOptions::control
 field botwork::core::run::RunOptions::environment
 field botwork::core::run::RunOptions::inherit_environment
@@ -272,6 +274,10 @@ field botwork::core::run::SnapshotLimits::path_bytes
 field botwork::core::run::TemporaryLimits::nodes
 field botwork::core::run::TemporaryLimits::payload_bytes
 field botwork::core::run::TemporaryLimits::values
+field botwork::core::run::WasmLimits::fuel
+field botwork::core::run::WasmLimits::memory_bytes
+field botwork::core::run::WasmLimits::module_bytes
+field botwork::core::run::WasmLimits::output_bytes
 field botwork::core::signature::ParameterSignature::accepted
 field botwork::core::signature::ParameterSignature::name
 field botwork::core::signature::ParameterSignature::span
@@ -708,6 +714,7 @@ impl Clone for botwork::core::run::RunOptions
 impl Clone for botwork::core::run::RunOutcome
 impl Clone for botwork::core::run::SnapshotLimits
 impl Clone for botwork::core::run::TemporaryLimits
+impl Clone for botwork::core::run::WasmLimits
 impl Clone for botwork::core::secret::Secrets
 impl Clone for botwork::core::signature::ParameterSignature
 impl Clone for botwork::core::signature::StatementError
@@ -852,6 +859,7 @@ impl Debug for botwork::core::run::RunOutcome
 impl Debug for botwork::core::run::RunResult
 impl Debug for botwork::core::run::SnapshotLimits
 impl Debug for botwork::core::run::TemporaryLimits
+impl Debug for botwork::core::run::WasmLimits
 impl Debug for botwork::core::secret::Secrets
 impl Debug for botwork::core::signature::ParameterSignature
 impl Debug for botwork::core::signature::StatementError
@@ -924,6 +932,7 @@ impl Default for botwork::core::run::RunLimits
 impl Default for botwork::core::run::RunOptions
 impl Default for botwork::core::run::SnapshotLimits
 impl Default for botwork::core::run::TemporaryLimits
+impl Default for botwork::core::run::WasmLimits
 impl Default for botwork::core::secret::Secrets
 impl Default for botwork::core::suite::Selection
 impl Default for botwork::core::syntax_limits::SyntaxLimits
@@ -1251,6 +1260,7 @@ struct botwork::core::run::RunOptions
 struct botwork::core::run::RunResult #[non_exhaustive]
 struct botwork::core::run::SnapshotLimits
 struct botwork::core::run::TemporaryLimits
+struct botwork::core::run::WasmLimits
 struct botwork::core::secret::Redacting
 struct botwork::core::secret::Secrets
 struct botwork::core::signature::ParameterSignature #[non_exhaustive]

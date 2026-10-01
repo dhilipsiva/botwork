@@ -28,6 +28,8 @@ impl std::fmt::Display for ImportChain<'_> {
 mod javascript;
 #[cfg(feature = "python")]
 mod python;
+#[cfg(feature = "wasm")]
+mod wasm;
 
 #[derive(Default)]
 pub(super) struct ModuleCache {
@@ -39,6 +41,9 @@ pub(super) struct ModuleCache {
     /// JavaScript files this run has loaded, and the pool their calls run in.
     javascript: HashMap<PathBuf, Arc<javascript::Module>>,
     javascript_pool: Option<crate::core::worker::WorkerPool>,
+    /// WebAssembly files this run has compiled.
+    #[cfg(feature = "wasm")]
+    wasm: HashMap<PathBuf, Arc<wasm::Module>>,
 }
 
 impl Clone for ModuleCache {
@@ -66,6 +71,12 @@ impl Clone for ModuleCache {
                 .map(|(key, value)| (key.clone(), Arc::clone(value)))
                 .collect(),
             javascript_pool: self.javascript_pool.clone(),
+            #[cfg(feature = "wasm")]
+            wasm: self
+                .wasm
+                .iter()
+                .map(|(key, value)| (key.clone(), Arc::clone(value)))
+                .collect(),
         }
     }
 }
@@ -87,6 +98,13 @@ impl ModuleCache {
         size.entries(self.javascript.len());
         for path in self.javascript.keys() {
             size.path(path);
+        }
+        #[cfg(feature = "wasm")]
+        {
+            size.entries(self.wasm.len());
+            for path in self.wasm.keys() {
+                size.path(path);
+            }
         }
         for (requested, canonical) in &self.resolved {
             size.path(requested);
@@ -170,6 +188,27 @@ pub(super) async fn evaluate_import(
             context,
         )
         .await;
+    }
+    if Path::new(path).extension().and_then(|value| value.to_str()) == Some("wasm") {
+        #[cfg(feature = "wasm")]
+        return wasm::evaluate_import(
+            path,
+            path_span,
+            namespace,
+            &normalized,
+            import_site,
+            context,
+        )
+        .await;
+        #[cfg(not(feature = "wasm"))]
+        return Err(context.import_error(
+            BWErr::ImportRead,
+            format_args!(
+                "`{path}` is a WebAssembly module, which needs a Botwork build with the `wasm` feature"
+            ),
+            path_span,
+            import_site,
+        ));
     }
     if Path::new(path).extension().and_then(|value| value.to_str()) == Some("py") {
         #[cfg(feature = "python")]
@@ -396,6 +435,25 @@ fn admit_namespace(
         ])?;
     }
     Ok(())
+}
+
+/// Read a binary module of at most `maximum` bytes, counted as one load. Its
+/// bytes are not source text, so they leave the source byte budget alone.
+#[cfg(feature = "wasm")]
+async fn read_module_bytes(
+    path: &Path,
+    maximum: usize,
+    context: &mut Context,
+) -> Result<Vec<u8>, SourceFailure> {
+    if let Some(budget) = context.budget.as_ref().map(RunBudget::shared) {
+        budget
+            .charge_imports(&[
+                (ImportResource::Loads, 1),
+                (ImportResource::MetadataBytes, path.as_os_str().len()),
+            ])
+            .map_err(SourceFailure::Diagnostic)?;
+    }
+    context.read_source_bytes(path, maximum).await
 }
 
 async fn read_module_source(path: &Path, context: &mut Context) -> Result<String, SourceFailure> {

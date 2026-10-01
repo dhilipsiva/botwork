@@ -9,7 +9,7 @@ languages are planned.
 | [Rust statements](#rust-statements) | New built-ins in a program that embeds Botwork | Trusted, in-process | Available |
 | [Listeners](#listeners) | Live integrations fed by execution events | A separate process | Available |
 | [Editor packages](#editor-packages) | Highlighting and editor features | Editor plugins | Available |
-| [Language adapters](#language-adapters) | Statements written in Python, JavaScript, or WASM | Depends on the adapter | Python and JavaScript available; WASM planned |
+| [Language adapters](#language-adapters) | Statements written in Python, JavaScript, or WASM | Depends on the adapter | Available |
 
 ## Botwork modules
 
@@ -63,15 +63,17 @@ language server. See [editor support](editors.md).
 ## Language adapters
 
 The [roadmap decisions](decisions.md) fix these adapters' design for 1.0.
+[WebAssembly statements](wasm.md) are part of the binary,
 [Python statements](python.md) are available in builds with the `python`
 feature, and [JavaScript statements](javascript.md) wherever Node is
-installed; the WASM adapter is still planned.
+installed.
 
 | Adapter | Hosting | Runtime needed | Trust |
 | --- | --- | --- | --- |
-| WASM | Wasmtime, in-process, with the component model and WASI Preview 2 ([D8](decisions.md#d8-wasm-runtime)) | None: part of the binary | Sandboxed, with only the capabilities granted, and fuel and epoch limits |
+| WASM | Wasmtime, in-process, with the component model and WASI Preview 2 ([D8](decisions.md#d8-wasm-runtime)); see [WebAssembly statements](wasm.md) | None: part of the binary | Sandboxed: clocks and randomness only, with fuel, memory, and epoch limits |
 | Python | PyO3, behind the optional `python` build feature ([D9](decisions.md#d9-python-packaging)); see [Python statements](python.md) | libpython 3.10 or later | Trusted, in-process |
 | JavaScript | A Node process per call over the worker protocol ([D7](decisions.md#d7-javascript-hosting)); see [JavaScript statements](javascript.md) | Node.js | A separate process, ended at a stop |
 
-The default binary stays a single file. Python support needs a python-enabled
-build, and JavaScript support needs Node on the machine.
+The default binary stays a single file, WebAssembly support included. Python
+support needs a python-enabled build, and JavaScript support needs Node on the
+machine.

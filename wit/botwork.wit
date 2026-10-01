@@ -1,0 +1,49 @@
+package botwork:statements@0.1.0;
+
+/// The values that cross between Botwork and a statement.
+interface types {
+    /// One node of a value. A value lists its nodes root first; arrays and maps
+    /// name their items by index, each index after the node naming it, and every
+    /// node but the root is named exactly once, so a value is always a tree.
+    variant node {
+        none,
+        int(s32),
+        float(f32),
+        boolean(bool),
+        text(string),
+        array(list<u32>),
+        %map(list<tuple<string, u32>>),
+    }
+
+    /// A value's nodes, root first.
+    type value = list<node>;
+
+    enum failure-kind {
+        /// An assertion that did not hold: BW9001.
+        assertion,
+        /// Any other failure: BW4002.
+        error,
+    }
+
+    /// Why a call failed.
+    record failure {
+        kind: failure-kind,
+        message: string,
+    }
+}
+
+/// The statements a module provides.
+interface statements {
+    use types.{value, failure};
+
+    /// The statements' headers, such as "Greet |name|", in order.
+    headers: func() -> list<string>;
+
+    /// Run the statement at `index` in `headers`, with one value per parameter.
+    call: func(index: u32, arguments: list<value>) -> result<value, failure>;
+}
+
+/// A Botwork WASM module.
+world module {
+    export statements;
+}

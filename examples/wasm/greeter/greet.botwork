@@ -1,0 +1,3 @@
+Import |"greeter.wasm"| As |greeter|
+|greeting| = greeter::Greet |"Ada"|
+Log |greeting|

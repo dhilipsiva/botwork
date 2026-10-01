@@ -25,6 +25,9 @@ DRIVER_SCHEMA = 1
 TARGETS = ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl")
 PROFILES = ("debug", "release", "dist")
 BASELINE = ROOT / "docs/performance-baseline-evidence.json"
+# Owner decision (D4, 2026-10-01): WebAssembly support (D8) put Wasmtime in the
+# binary, so a campaign at that revision re-baselined the binary's size alone.
+BINARY_BASELINE = ROOT / "docs/performance-binary-baseline-evidence.json"
 BUDGETS = ROOT / "benches/runtime/budgets.json"
 # Roadmap decision D4: budgets are the accepted baseline's p95 workload time,
 # maximum peak heap, and CLI binary size, each times 1.25; item 249 blocks
@@ -277,13 +280,19 @@ def host(record):
             "target": record["target"], "profile": record["profile"]}
 
 
-def budgets_from(baseline):
-    """The budgets roadmap decision D4 registers from an accepted baseline campaign."""
-    if baseline.get("kind") != "measurement" or not baseline.get("complete"):
-        raise ValueError("budgets need a complete measurement campaign")
-    if baseline.get("schema") != VERSION:
-        raise ValueError(f"budgets need a protocol {VERSION} campaign")
-    binary = baseline["binaries"]["botwork"]["bytes"]
+def budgets_from(baseline, binary_baseline=None):
+    """The budgets roadmap decision D4 registers from an accepted baseline
+    campaign; a later campaign, `binary_baseline`, may set the binary's alone."""
+    for campaign in filter(None, (baseline, binary_baseline)):
+        if campaign.get("kind") != "measurement" or not campaign.get("complete"):
+            raise ValueError("budgets need a complete measurement campaign")
+        if campaign.get("schema") != VERSION:
+            raise ValueError(f"budgets need a protocol {VERSION} campaign")
+    binary = (binary_baseline or baseline)["binaries"]["botwork"]["bytes"]
+    sized = {"baseline_bytes": binary, "budget_bytes": math.ceil(binary * BUDGET_FACTOR)}
+    if binary_baseline is not None:
+        sized.update(record=str(BINARY_BASELINE.relative_to(ROOT)),
+                     base_revision=binary_baseline["base_revision"])
     return {
         "schema": 3, "protocol": VERSION, "decision": "D4",
         "baseline": {"record": str(BASELINE.relative_to(ROOT)),
@@ -293,7 +302,7 @@ def budgets_from(baseline):
                      "inputs_sha256": inputs_digest(baseline["input_sha256"])},
         "host": host(baseline), "budget_factor": BUDGET_FACTOR,
         "regression_limit": REGRESSION_LIMIT,
-        "binary": {"baseline_bytes": binary, "budget_bytes": math.ceil(binary * BUDGET_FACTOR)},
+        "binary": sized,
         "workloads": {
             name: {"baseline_p95_ns": stats["workload_elapsed_ns"]["p95"],
                    "p95_budget_ns": round(stats["workload_elapsed_ns"]["p95"] * BUDGET_FACTOR),
@@ -463,10 +472,12 @@ def main():
                         help="accept a workload's regression beyond the limit, with the reason; "
                              "`binary` names the CLI binary's size (repeatable)")
     parser.add_argument("--write-budgets", action="store_true",
-                        help=f"register budgets from the accepted baseline in {BASELINE.relative_to(ROOT)}")
+                        help=f"register budgets from the accepted baseline in {BASELINE.relative_to(ROOT)}, "
+                             f"with the binary's size from {BINARY_BASELINE.relative_to(ROOT)} once recorded")
     args = parser.parse_args()
     if args.write_budgets:
-        BUDGETS.write_text(json.dumps(budgets_from(json.loads(BASELINE.read_text())), indent=2) + "\n")
+        binary = json.loads(BINARY_BASELINE.read_text()) if BINARY_BASELINE.exists() else None
+        BUDGETS.write_text(json.dumps(budgets_from(json.loads(BASELINE.read_text()), binary), indent=2) + "\n")
         print(f"wrote {BUDGETS.relative_to(ROOT)}")
         return
     if args.scaling:

@@ -110,6 +110,9 @@ jobs:
       - name: Check public API helper
         if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: python3 tests/api_tools.py
+      - name: Check WebAssembly guest helper
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: python3 tests/wasm_tools.py
       - name: Build all targets
         run: cargo +stable build --locked --all-targets --target ${{ matrix.target }} ${{ matrix.flags }}
       - name: Check performance measurement helper
@@ -213,6 +216,32 @@ jobs:
           tar --extract --gzip --file actionlint.tar.gz actionlint
       - name: Check the workflows
         run: '"$RUNNER_TEMP/actionlint" -color'
+
+  wasm:
+    name: WebAssembly guest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust with the WASI Preview 2 target
+        run: rustup toolchain install stable --profile minimal --component clippy --target wasm32-wasip2
+      - name: Check that the committed component matches its sources
+        run: python3 scripts/wasm_guest.py check
+      - name: Rebuild the component and run the tests against it
+        env:
+          BOTWORK_WASM_GUEST: ${{ runner.temp }}/statements.wasm
+        run: |
+          python3 scripts/wasm_guest.py build "$BOTWORK_WASM_GUEST"
+          cargo +stable test --locked --test wasm_adapter
+      - name: Build and run the documented example
+        run: |
+          cargo +stable build --locked --bin botwork
+          python3 scripts/wasm_guest.py example target/debug/botwork
+      - name: Check Clippy warnings without the wasm feature
+        run: cargo +stable clippy --locked --no-default-features --all-targets -- -D warnings
 
   tree-sitter:
     name: Tree-sitter grammars

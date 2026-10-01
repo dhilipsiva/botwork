@@ -79,6 +79,8 @@ index.
   the `python` feature.
 - [JavaScript statements](javascript.md): statements written in JavaScript,
   run with Node.js.
+- [WebAssembly statements](wasm.md): statements in WebAssembly components,
+  run in a sandbox with Wasmtime.
 - [Embedded Rust runs](embedded-runs.md)
 - [Interpreter architecture](interpreter-architecture.md)
 - [Asynchronous execution](async-execution.md)

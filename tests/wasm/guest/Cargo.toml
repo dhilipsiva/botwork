@@ -1,0 +1,21 @@
+# The component the WASM adapter's tests call (decision D8). Rebuild it with
+# `python3 scripts/wasm_guest.py build` after changing it or wit/botwork.wit.
+[package]
+name = "botwork-test-statements"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.62.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = "debuginfo"

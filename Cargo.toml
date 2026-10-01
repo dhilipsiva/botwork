@@ -58,8 +58,15 @@ futures-util = { version = "0.3.32", default-features = false, features = ["std"
 # which link the system's libpython 3.10 or later.
 pyo3 = { version = "0.29.3", optional = true, features = ["abi3-py310"] }
 
+# The WebAssembly adapter (decision D8): Wasmtime with the component model and
+# WASI Preview 2, in every build with the default `wasm` feature.
+wasmtime = { version = "49.0.1", optional = true, default-features = false, features = ["cranelift", "runtime", "component-model", "std", "backtrace", "demangle"] }
+wasmtime-wasi = { version = "49.0.1", optional = true, default-features = false, features = ["p2"] }
+
 [features]
+default = ["wasm"]
 python = ["dep:pyo3"]
+wasm = ["dep:wasmtime", "dep:wasmtime-wasi"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"
@@ -90,6 +97,47 @@ tokio = { version = "1.53.1", features = ["rt", "rt-multi-thread", "sync", "time
 # The distributed binary (roadmap decision D19): one codegen unit with fat LTO
 # makes it smaller and faster to start. `release` stays the quick default, so
 # `cargo test --release` does not link every test binary with LTO.
+# Cranelift compiles WebAssembly at import. Unoptimized, it takes seconds a
+# module, so development builds and tests optimize the compiler alone.
+[profile.dev.package.cranelift-assembler-x64]
+opt-level = 3
+
+[profile.dev.package.cranelift-bforest]
+opt-level = 3
+
+[profile.dev.package.cranelift-bitset]
+opt-level = 3
+
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+
+[profile.dev.package.cranelift-control]
+opt-level = 3
+
+[profile.dev.package.cranelift-entity]
+opt-level = 3
+
+[profile.dev.package.cranelift-frontend]
+opt-level = 3
+
+[profile.dev.package.regalloc2]
+opt-level = 3
+
+[profile.dev.package.wasmparser]
+opt-level = 3
+
+[profile.dev.package.wasmtime-environ]
+opt-level = 3
+
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 3
+
+[profile.dev.package.gimli]
+opt-level = 3
+
+[profile.dev.package.object]
+opt-level = 3
+
 [profile.dist]
 inherits = "release"
 lto = "fat"

@@ -126,7 +126,7 @@ pub(super) fn run(files: &[PathBuf], suites: &[PathBuf]) -> Result<(), CliError>
         context.write_output(
             &mut stderr,
             format_args!(
-                "[check] not checked: {} into Python or JavaScript modules, or modules that could not be read\n",
+                "[check] not checked: {} into Python, JavaScript, or WebAssembly modules, or modules that could not be read\n",
                 plural(unchecked_imports, "call")
             ),
         )?;
