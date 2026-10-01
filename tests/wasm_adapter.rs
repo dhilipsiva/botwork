@@ -96,6 +96,11 @@ Assert |back| Equals |values|
     assert_eq!(laid.len(), 2);
     assert_eq!(laid["b"].to_string(), "[\"deep\"]");
     assert_eq!(laid["a"].to_string(), "true");
+}
+
+#[test]
+fn values_that_are_not_trees_or_not_botwork_values_are_refused() {
+    let workspace = Workspace::new();
     for (kind, reason) in [
         ("empty", "a value with no nodes"),
         ("cycle", "node 0 names node 0, which is not after it"),
