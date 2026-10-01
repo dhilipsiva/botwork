@@ -500,6 +500,31 @@ fn simultaneous_pipe_backpressure_is_drained_without_deadlock() {
     assert!(report.progress_complete);
 }
 
+/// Output a worker leaves in its pipe when it exits drains without a pause per
+/// chunk. On Linux the pipe holds 64 KiB, sixteen reads, so pausing after each
+/// would outlast this cleanup bound. Other systems' pipes hold less, so the
+/// bound would not tell the two apart there.
+#[cfg(target_os = "linux")]
+#[test]
+fn output_left_at_exit_drains_without_pausing_between_chunks() {
+    let pool = WorkerPool::new(WorkerLimits {
+        cleanup_timeout: Duration::from_millis(60),
+        ..limits()
+    })
+    .unwrap();
+    let report = wait(
+        pool.start(
+            command("/usr/bin/head -c 65536 /dev/zero"),
+            Vec::new(),
+            OperationControl::default(),
+        )
+        .unwrap(),
+    );
+    assert_eq!(report.outcome, WorkerOutcome::Succeeded);
+    assert_eq!(report.stdout, vec![0; 65536]);
+    assert!(report.io_complete);
+}
+
 #[test]
 fn inherited_deadlines_and_explicit_parent_cancellation_stop_only_their_workers() {
     let pool = WorkerPool::new(limits()).unwrap();

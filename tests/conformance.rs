@@ -2440,8 +2440,10 @@ fn check_progress_case(case: &Case) {
             directory: std::env::temp_dir(),
             environment: Default::default(),
         },
+        // More than any pipe holds, so a worker that never reads cannot have
+        // accepted it all.
         if case.error.is_some() {
-            vec![1; 64 * 1024]
+            vec![1; WorkerLimits::default().request_bytes]
         } else {
             vec![]
         },
@@ -2464,7 +2466,7 @@ fn check_progress_case(case: &Case) {
         if let Some(expected) = case.error {
             assert_eq!(report.outcome, WorkerOutcome::Failed);
             assert!(!report.io_complete);
-            assert!(report.stdin_written < 64 * 1024);
+            assert!(report.stdin_written < WorkerLimits::default().request_bytes);
             let error = report.diagnostic.unwrap();
             assert_eq!(error.code().as_str(), case.code.unwrap());
             assert!(error.to_string().contains(expected));

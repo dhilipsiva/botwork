@@ -10,18 +10,20 @@ pub(super) fn close_pipe<T>(pipe: &mut Option<T>, _observation: &Observation, _p
     }
 }
 
+/// Read one bounded chunk, reporting whether the stream moved: data arrived or
+/// it ended.
 fn read_pipe(
     pipe: &mut Option<impl Read>,
     observation: &Observation,
     stream: Stream,
     _pid: u32,
-) -> DiagnosticResult<()> {
+) -> DiagnosticResult<bool> {
     let Some(reader) = pipe.as_mut() else {
-        return Ok(());
+        return Ok(false);
     };
     if observation.status().published {
         close_pipe(pipe, observation, _pid);
-        return Ok(());
+        return Ok(false);
     }
     let mut buffer = [0; CHUNK];
     let size = CHUNK.min(observation.remaining(stream).saturating_add(1));
@@ -30,12 +32,13 @@ fn read_pipe(
     match reader.read(&mut buffer[..size]) {
         Ok(0) => {
             close_pipe(pipe, observation, _pid);
-            Ok(())
+            Ok(true)
         }
         Ok(count) => {
             #[cfg(test)]
             observation.hook(Point::ReadComplete, _pid);
-            observation.capture(stream, &buffer[..count])
+            observation.capture(stream, &buffer[..count])?;
+            Ok(true)
         }
         Err(error)
             if matches!(
@@ -43,7 +46,7 @@ fn read_pipe(
                 io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
             ) =>
         {
-            Ok(())
+            Ok(false)
         }
         Err(error) => Err(io_failure(error)),
     }
@@ -120,6 +123,9 @@ pub(super) fn run(
         close_pipe(&mut stderr, observation, pid);
     }
     loop {
+        // A turn that moved data is followed at once; an idle one waits a
+        // quantum, so a large request or result is not paced by the sleep.
+        let mut moved = false;
         let state = observation.status();
         if state.stopped {
             close_pipe(&mut stdin, observation, pid);
@@ -153,6 +159,7 @@ pub(super) fn run(
                         observation.hook(Point::WriteComplete, pid);
                         written += count;
                         observation.wrote(written);
+                        moved = true;
                     }
                     Err(error)
                         if matches!(
@@ -168,11 +175,14 @@ pub(super) fn run(
                 Stream::Stdout => read_pipe(&mut stdout, observation, stream, pid),
                 Stream::Stderr => read_pipe(&mut stderr, observation, stream, pid),
             };
-            if let Err(error) = result {
-                observation.error(error);
-                output_failed = true;
-                close_pipe(&mut stdout, observation, pid);
-                close_pipe(&mut stderr, observation, pid);
+            match result {
+                Ok(progress) => moved |= progress,
+                Err(error) => {
+                    observation.error(error);
+                    output_failed = true;
+                    close_pipe(&mut stdout, observation, pid);
+                    close_pipe(&mut stderr, observation, pid);
+                }
             }
         }
         if child.owned {
@@ -236,7 +246,9 @@ pub(super) fn run(
         if !child.owned && stdout.is_none() && stderr.is_none() {
             break;
         }
-        std::thread::sleep(QUANTUM);
+        if !moved {
+            std::thread::sleep(QUANTUM);
+        }
     }
     close_pipe(&mut stdin, observation, pid);
     close_pipe(&mut stdout, observation, pid);
