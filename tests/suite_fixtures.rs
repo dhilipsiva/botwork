@@ -274,10 +274,12 @@ fn budget_stops_still_unwind_both_owners_and_suite_timeout_is_explicit() {
         1,
         "1\n2\n",
     );
+    // The suite deadline covers setup too, so it must leave the case time to
+    // start; its endless loop then runs until the deadline.
     let stderr = check(
         command(
             &harness,
-            &["--suite-timeout-ms", "30", "--max-steps", "100000000"],
+            &["--suite-timeout-ms", "1000", "--max-steps", "100000000"],
         ),
         1,
         "1\n2\n",
