@@ -1,5 +1,5 @@
 {
-  "version": 64,
+  "version": 65,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4583,15 +4583,15 @@
       "id": "playwright-arguments-swapped",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright.rs",
-      "before": "            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, v(1)?, v(0)?],\n",
-      "after": "            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, v(0)?, v(1)?],\n"
+      "before": "            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, s(1)?, v(0)?],\n",
+      "after": "            Self::Press | Self::Select | Self::Attribute => vec![v(0)?, s(1)?, v(2)?],\n"
     },
     {
       "id": "playwright-uncheck-checks",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright.rs",
-      "before": "            Self::Uncheck => vec![v(1)?, v(0)?, json!(false)],\n",
-      "after": "            Self::Uncheck => vec![v(1)?, v(0)?, json!(true)],\n"
+      "before": "            Self::Uncheck => vec![v(1)?, s(0)?, json!(false)],\n",
+      "after": "            Self::Uncheck => vec![v(1)?, s(0)?, json!(true)],\n"
     },
     {
       "id": "appium-accessibility-strategy-missing",
@@ -4613,6 +4613,34 @@
       "file": "src/core/eval/imports/webdriver.rs",
       "before": "        .or_else(|| capabilities[\"platformName\"].as_str())\n",
       "after": "        .or_else(|| capabilities[\"browserName\"].as_str())\n"
+    },
+    {
+      "id": "conventions-playwright-xpath-maps-as-css",
+      "area": "conventions",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                \"xpath\" => format!(\"xpath={text}\"),\n",
+      "after": "                \"xpath\" => format!(\"css={text}\"),\n"
+    },
+    {
+      "id": "conventions-playwright-link-text-loosened",
+      "area": "conventions",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                \"link_text\" => format!(\"a:text-is({})\", quoted(text)),\n",
+      "after": "                \"link_text\" => format!(\"a:has-text({})\", quoted(text)),\n"
+    },
+    {
+      "id": "conventions-playwright-appium-strategies-unnamed",
+      "area": "conventions",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                \"accessibility_id\" | \"id\" | \"class_name\" | \"android_uiautomator\" | \"ios_predicate\" | \"ios_class_chain\" => {\n",
+      "after": "                \"accessibility\" | \"id\" | \"class_name\" | \"android_uiautomator\" | \"ios_predicate\" | \"ios_class_chain\" => {\n"
+    },
+    {
+      "id": "conventions-playwright-zero-timeout-accepted",
+      "area": "conventions",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                    milliseconds(timeout, \"`timeout_ms`\", 1)?;\n",
+      "after": "                    milliseconds(timeout, \"`timeout_ms`\", 0)?;\n"
     }
   ]
 }

@@ -161,6 +161,7 @@ pw::Close Browser |browser|
             json!(["setChecked", "#agree", false]),
             json!(["hover", "nav"]),
             json!(["selectOption", "#pick", ["a", "b"]]),
+            json!(["innerText", "h1"]),
             json!(["closePage"]),
             json!(["closeContext"]),
             json!(["closeBrowser"]),
@@ -270,7 +271,7 @@ fn handles_belong_to_their_run_and_their_kind() {
         ("{headed: true}", "Unknown Launch Browser option `headed`"),
         (
             "{timeout_ms: -5}",
-            "`timeout_ms` is an Int from 0 to 600000",
+            "`timeout_ms` is an Int from 1 to 600000",
         ),
     ] {
         workspace.write(

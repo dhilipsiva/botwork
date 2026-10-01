@@ -128,6 +128,7 @@ impl Command {
         let map: ValueKinds = Kind::Map.into();
         let string: ValueKinds = Kind::String.into();
         let none: ValueKinds = Kind::None.into();
+        let selector = string.union(map);
         let (parameters, returns, description): (Vec<(&str, ValueKinds)>, ValueKinds, &str) = match self {
             Self::Launch => (vec![("options", map)], map, "Launch a browser and return its handle. Options: browser (chromium, firefox, or webkit; default chromium), headless (default true), args, executable_path, and timeout_ms, the bound on each action and expectation in it (default 30000)."),
             Self::CloseBrowser => (vec![("browser", map)], none, "Close a browser, its contexts, and their pages."),
@@ -138,20 +139,20 @@ impl Command {
             Self::Goto => (vec![("url", string), ("page", map)], none, "Load a URL and wait for the page to load."),
             Self::Url => (vec![("page", map)], string, "The page's URL."),
             Self::Title => (vec![("page", map)], string, "The page's title."),
-            Self::Click => (vec![("selector", string), ("page", map)], none, "Click the first element matching a Playwright selector, once it is actionable."),
-            Self::Fill => (vec![("selector", string), ("text", string), ("page", map)], none, "Fill an input with text."),
-            Self::Press => (vec![("key", string), ("selector", string), ("page", map)], none, "Press a key, such as Enter or Control+A, on an element."),
-            Self::Check => (vec![("selector", string), ("page", map)], none, "Check a checkbox or radio button."),
-            Self::Uncheck => (vec![("selector", string), ("page", map)], none, "Uncheck a checkbox."),
-            Self::Hover => (vec![("selector", string), ("page", map)], none, "Hover over an element."),
-            Self::Select => (vec![("values", ValueKinds::one(Kind::String).union(Kind::Array.into())), ("selector", string), ("page", map)], Kind::Array.into(), "Select options of a select element by value or label, and return the values selected."),
-            Self::Text => (vec![("selector", string), ("page", map)], string, "An element's rendered text."),
-            Self::Attribute => (vec![("name", string), ("selector", string), ("page", map)], string.union(none), "An element's attribute, or None when it has none."),
-            Self::Count => (vec![("selector", string), ("page", map)], Kind::Int.into(), "How many elements match a selector now."),
-            Self::Visible => (vec![("selector", string), ("page", map)], Kind::Bool.into(), "Whether the first match is visible now."),
-            Self::Wait => (vec![("selector", string), ("page", map), ("milliseconds", Kind::Int.into())], none, "Wait until an element matching a selector is visible."),
-            Self::ExpectText => (vec![("selector", string), ("page", map), ("text", string)], none, "Assert that the first match has exactly this text, looking again until the browser's timeout."),
-            Self::ExpectVisible => (vec![("selector", string), ("page", map)], none, "Assert that the first match is visible, looking again until the browser's timeout."),
+            Self::Click => (vec![("selector", selector), ("page", map)], none, "Click the first element matching a Playwright selector, once it is actionable."),
+            Self::Fill => (vec![("selector", selector), ("text", string), ("page", map)], none, "Fill an input with text."),
+            Self::Press => (vec![("key", string), ("selector", selector), ("page", map)], none, "Press a key, such as Enter or Control+A, on an element."),
+            Self::Check => (vec![("selector", selector), ("page", map)], none, "Check a checkbox or radio button."),
+            Self::Uncheck => (vec![("selector", selector), ("page", map)], none, "Uncheck a checkbox."),
+            Self::Hover => (vec![("selector", selector), ("page", map)], none, "Hover over an element."),
+            Self::Select => (vec![("values", ValueKinds::one(Kind::String).union(Kind::Array.into())), ("selector", selector), ("page", map)], Kind::Array.into(), "Select options of a select element by value or label, and return the values selected."),
+            Self::Text => (vec![("selector", selector), ("page", map)], string, "An element's rendered text."),
+            Self::Attribute => (vec![("name", string), ("selector", selector), ("page", map)], string.union(none), "An element's attribute, or None when it has none."),
+            Self::Count => (vec![("selector", selector), ("page", map)], Kind::Int.into(), "How many elements match a selector now."),
+            Self::Visible => (vec![("selector", selector), ("page", map)], Kind::Bool.into(), "Whether the first match is visible now."),
+            Self::Wait => (vec![("selector", selector), ("page", map), ("milliseconds", Kind::Int.into())], none, "Wait until an element matching a selector is visible."),
+            Self::ExpectText => (vec![("selector", selector), ("page", map), ("text", string)], none, "Assert that the first match has exactly this text, looking again until the browser's timeout."),
+            Self::ExpectVisible => (vec![("selector", selector), ("page", map)], none, "Assert that the first match is visible, looking again until the browser's timeout."),
             Self::ExpectTitle => (vec![("page", map), ("title", string)], none, "Assert the page's title, looking again until the browser's timeout."),
             Self::Evaluate => (vec![("script", string), ("arguments", Kind::Array.into()), ("page", map)], ValueKinds::ANY, "Run JavaScript in the page as a function body with `arguments`, and return its result."),
             Self::Screenshot => (vec![("page", map), ("path", string)], string, "Save a PNG of the viewport, record it as the run's artifact, and return its absolute path."),
@@ -283,14 +284,56 @@ fn failed(failure: host::Failure) -> Diagnostic {
     }
 }
 
-/// A timeout or wait in milliseconds, within bounds.
-fn milliseconds(value: &Literal, what: &str) -> DiagnosticResult<i32> {
+/// A wait in milliseconds, from `least` to the longest.
+fn milliseconds(value: &Literal, what: &str, least: i32) -> DiagnosticResult<i32> {
     match value {
-        Literal::Int(milliseconds) if (0..=MAX_TIMEOUT_MS).contains(milliseconds) => {
+        Literal::Int(milliseconds) if (least..=MAX_TIMEOUT_MS).contains(milliseconds) => {
             Ok(*milliseconds)
         }
         other => Err(incompatible(format_args!(
-            "{what} is an Int from 0 to {MAX_TIMEOUT_MS}, not {other}"
+            "{what} is an Int from {least} to {MAX_TIMEOUT_MS}, not {other}"
+        ))),
+    }
+}
+
+/// A Playwright selector: a String as it is (CSS, or one of Playwright's own
+/// engines, such as `text=`), or a Map naming one of the strategies WebDriver
+/// statements take, so one selector works with both.
+fn selector(value: &Literal) -> DiagnosticResult<String> {
+    let quoted = |text: &str| serde_json::to_string(text).expect("a String serializes");
+    match value {
+        Literal::String(text) => Ok(text.clone()),
+        Literal::Map(map) if map.len() == 1 => {
+            let (key, value) = map.iter().next().expect("one entry");
+            let Literal::String(text) = value else {
+                return Err(incompatible(format_args!(
+                    "The `{key}` selector must be a String, not a {}",
+                    value.kind().as_str()
+                )));
+            };
+            Ok(match key.as_str() {
+                "css" | "tag_name" => format!("css={text}"),
+                "xpath" => format!("xpath={text}"),
+                "link_text" => format!("a:text-is({})", quoted(text)),
+                "partial_link_text" => format!("a:has-text({})", quoted(text)),
+                "accessibility_id" | "id" | "class_name" | "android_uiautomator" | "ios_predicate" | "ios_class_chain" => {
+                    return Err(incompatible(format_args!(
+                        "`{key}` is an Appium strategy; Playwright takes css, xpath, link_text, partial_link_text, or tag_name, or a Playwright selector String"
+                    )))
+                }
+                _ => {
+                    return Err(incompatible(format_args!(
+                        "Unknown selector strategy `{key}`; use css, xpath, link_text, partial_link_text, or tag_name, or a Playwright selector String"
+                    )))
+                }
+            })
+        }
+        Literal::Map(_) => Err(incompatible(
+            "A selector Map names exactly one strategy, such as {xpath: \"//h1\"}",
+        )),
+        other => Err(incompatible(format_args!(
+            "A selector is a String or a Map, not a {}",
+            other.kind().as_str()
         ))),
     }
 }
@@ -336,6 +379,7 @@ impl Command {
         _control: OperationControl,
     ) -> DiagnosticResult<Literal> {
         let v = |index: usize| value(&values[index]);
+        let s = |index: usize| selector(&values[index]).map(Value::String);
         // A path the host writes: from the run's directory, absolute.
         let file = |index: usize| -> DiagnosticResult<String> {
             let Literal::String(path) = &values[index] else {
@@ -359,7 +403,7 @@ impl Command {
                     }
                 }
                 if let Some(timeout) = options.get("timeout_ms") {
-                    milliseconds(timeout, "`timeout_ms`")?;
+                    milliseconds(timeout, "`timeout_ms`", 1)?;
                 }
                 vec![v(0)?]
             }
@@ -377,17 +421,17 @@ impl Command {
             | Self::Text
             | Self::Count
             | Self::Visible
-            | Self::ExpectVisible => vec![v(1)?, v(0)?],
-            Self::Check => vec![v(1)?, v(0)?, json!(true)],
-            Self::Uncheck => vec![v(1)?, v(0)?, json!(false)],
-            Self::Fill => vec![v(2)?, v(0)?, v(1)?],
-            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, v(1)?, v(0)?],
+            | Self::ExpectVisible => vec![v(1)?, s(0)?],
+            Self::Check => vec![v(1)?, s(0)?, json!(true)],
+            Self::Uncheck => vec![v(1)?, s(0)?, json!(false)],
+            Self::Fill => vec![v(2)?, s(0)?, v(1)?],
+            Self::Press | Self::Select | Self::Attribute => vec![v(2)?, s(1)?, v(0)?],
             Self::Wait => vec![
                 v(1)?,
-                v(0)?,
-                json!(milliseconds(&values[2], "Wait For's time")?),
+                s(0)?,
+                json!(milliseconds(&values[2], "Wait For's time", 0)?),
             ],
-            Self::ExpectText => vec![v(1)?, v(0)?, v(2)?],
+            Self::ExpectText => vec![v(1)?, s(0)?, v(2)?],
             Self::ExpectTitle => vec![v(0)?, v(1)?],
             Self::Evaluate => vec![v(2)?, v(0)?, v(1)?],
             Self::Screenshot => vec![v(0)?, json!(file(1)?), json!(false)],

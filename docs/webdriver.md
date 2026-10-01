@@ -96,7 +96,8 @@ A String selector is CSS. A Map names one strategy:
 
 With [Appium](appium.md#selectors), a Map can also name `accessibility_id`,
 `id`, `class_name`, `android_uiautomator`, `ios_predicate`, or
-`ios_class_chain`.
+`ios_class_chain`. The [Playwright statements](playwright.md) take the same
+Maps, except Appium's; see [browser and device conventions](browser-conventions.md).
 
 `Find Element` and `Find Elements` with an element as the scope search inside
 it.

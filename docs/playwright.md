@@ -77,7 +77,10 @@ The namespace is the import's alias; the table writes `pw`.
 
 Selectors are [Playwright selectors](https://playwright.dev/docs/selectors):
 CSS by default, and `text=`, `xpath=`, `role=`, and the others it supports.
-A statement acts on the first match. `botwork --check` and the language server
+A selector Map names one of the strategies the WebDriver statements take, such
+as `{xpath: "//h1"}` or `{link_text: "More"}`; see
+[browser and device conventions](browser-conventions.md#selectors). A
+statement acts on the first match. `botwork --check` and the language server
 know these statements, so a misspelled one is an error before the run.
 
 ## Launching
@@ -90,7 +93,7 @@ know these statements, so a misspelled one is an error before the run.
 | `headless` | Bool | true | Run without a window |
 | `args` | Array | | Extra browser arguments |
 | `executable_path` | String | | A browser binary to launch instead of Playwright's |
-| `timeout_ms` | Int, 0–600000 | 30000 | How long each action and expectation in this browser waits |
+| `timeout_ms` | Int, 1–600000 | 30000 | How long each action and expectation in this browser waits |
 
 ## Handles
 

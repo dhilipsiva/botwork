@@ -24,6 +24,8 @@ index.
   or WebKit with the Playwright library a project installs.
 - [Mobile automation with Appium](appium.md): drive Android and iOS apps
   through Appium with the WebDriver statements.
+- [Browser and device conventions](browser-conventions.md): the selectors,
+  timeouts, waits, retries, and session ownership all three share.
 - [Running scripts in parallel](parallel-cli.md)
 - [Input variables](input-variables.md)
 - [Secret inputs](secrets.md)

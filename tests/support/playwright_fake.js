@@ -59,6 +59,7 @@ class Locator {
     return Array.isArray(values) ? values : [values];
   }
   async innerText() {
+    log("innerText", this.selector);
     if (!this.present()) throw new TimeoutError(`waiting for ${this.selector}`);
     return this.text();
   }
