@@ -1,5 +1,5 @@
 {
-  "version": 56,
+  "version": 57,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4109,6 +4109,104 @@
       "file": "src/core/eval/imports/wasm.rs",
       "before": "                    if map.contains_key(&key) {\n",
       "after": "                    if false {\n"
+    },
+    {
+      "id": "pkg-extract-parent-allowed",
+      "area": "packages",
+      "file": "src/core/packages/tree.rs",
+      "before": "            Component::RootDir | Component::Prefix(_) | Component::ParentDir => return None,\n",
+      "after": "            Component::RootDir | Component::Prefix(_) => return None,\n            Component::ParentDir => {}\n"
+    },
+    {
+      "id": "pkg-extract-links-allowed",
+      "area": "packages",
+      "file": "src/core/packages/tree.rs",
+      "before": "            tar::EntryType::Regular | tar::EntryType::Continuous => {\n",
+      "after": "            tar::EntryType::Regular | tar::EntryType::Continuous | tar::EntryType::Symlink | tar::EntryType::Link => {\n"
+    },
+    {
+      "id": "pkg-archive-hash-unchecked",
+      "area": "packages",
+      "file": "src/core/packages/source.rs",
+      "before": "    if actual != sha256 {\n",
+      "after": "    if false {\n"
+    },
+    {
+      "id": "pkg-offline-downloads",
+      "area": "packages",
+      "file": "src/core/packages/source.rs",
+      "before": "    if offline {\n        return Err(format!(\n            \"{url} is not in the cache, and --offline forbids fetching it\"\n",
+      "after": "    if false {\n        return Err(format!(\n            \"{url} is not in the cache, and --offline forbids fetching it\"\n"
+    },
+    {
+      "id": "pkg-tree-pin-unchecked",
+      "area": "packages",
+      "file": "src/core/packages/cache.rs",
+      "before": "        if tree != expected {\n",
+      "after": "        if false {\n"
+    },
+    {
+      "id": "pkg-conflict-ignored",
+      "area": "packages",
+      "file": "src/core/packages/resolve.rs",
+      "before": "            if earlier.source != source {\n",
+      "after": "            if false {\n"
+    },
+    {
+      "id": "pkg-botwork-version-unchecked",
+      "area": "packages",
+      "file": "src/core/packages/resolve.rs",
+      "before": "        Some(requirement) if !requirement.matches(current) => Err(format!(\n",
+      "after": "        Some(requirement) if false && !requirement.matches(current) => Err(format!(\n"
+    },
+    {
+      "id": "pkg-version-requirement-unchecked",
+      "area": "packages",
+      "file": "src/core/packages/resolve.rs",
+      "before": "        Some(requirement) if !requirement.matches(version) => Err(format!(\n",
+      "after": "        Some(requirement) if false && !requirement.matches(version) => Err(format!(\n"
+    },
+    {
+      "id": "pkg-locked-rewrites",
+      "area": "packages",
+      "file": "src/core/packages/resolve.rs",
+      "before": "    if options.locked {\n        return Err(\"botwork.lock is out of date; run `botwork --fetch` without --locked\".into());\n",
+      "after": "    if false {\n        return Err(\"botwork.lock is out of date; run `botwork --fetch` without --locked\".into());\n"
+    },
+    {
+      "id": "pkg-dotdot-allowed",
+      "area": "packages",
+      "file": "src/core/packages/project.rs",
+      "before": "            \"..\" => return Some(Err(format!(\"`{path}` leaves the package `{name}`\"))),\n",
+      "after": "            \"..\" => relative.push(\"..\"),\n"
+    },
+    {
+      "id": "pkg-foreign-dependency-allowed",
+      "area": "packages",
+      "file": "src/core/packages/project.rs",
+      "before": "        if !dependencies.contains(&name) {\n",
+      "after": "        if false {\n"
+    },
+    {
+      "id": "pkg-lock-drift-ignored",
+      "area": "packages",
+      "file": "src/core/packages/project.rs",
+      "before": "                && wanted != locked.source\n",
+      "after": "                && false\n"
+    },
+    {
+      "id": "pkg-lock-unsorted",
+      "area": "packages",
+      "file": "src/core/packages/lock.rs",
+      "before": "        lock.packages\n            .sort_by(|left, right| left.name.cmp(&right.name));\n",
+      "after": "        lock.packages.sort_by(|_, _| std::cmp::Ordering::Equal);\n"
+    },
+    {
+      "id": "pkg-link-escape-allowed",
+      "area": "packages",
+      "file": "src/core/eval/imports.rs",
+      "before": "        if !canonical.starts_with(&directory) {\n",
+      "after": "        if false {\n"
     }
   ]
 }

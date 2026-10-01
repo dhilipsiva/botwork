@@ -57,4 +57,35 @@ impl Context {
         self.checkpoint().map_err(SourceFailure::Diagnostic)?;
         Ok(canonical)
     }
+
+    /// The package project around `directory`, read off the runtime's
+    /// threads in asynchronous runs: the nearest `botwork.toml` above it and
+    /// its lockfile.
+    pub(super) async fn load_project(
+        &mut self,
+        directory: &Path,
+    ) -> Result<crate::core::packages::Project, SourceFailure> {
+        self.checkpoint().map_err(SourceFailure::Diagnostic)?;
+        let load = |directory: &Path| {
+            let root = crate::core::packages::Project::find(directory).ok_or_else(|| {
+                format!(
+                    "`@` imports need a {} at or above {}",
+                    crate::core::packages::MANIFEST,
+                    directory.display()
+                )
+            })?;
+            crate::core::packages::Project::load(&root, None)
+        };
+        let project = if self.asynchronous {
+            let directory = directory.to_owned();
+            blocking_io::run(self.filesystem_control(), move |_| {
+                load(&directory).map_err(|reason| SourceFailure::Io(std::io::Error::other(reason)))
+            })
+            .await?
+        } else {
+            load(directory).map_err(|reason| SourceFailure::Io(std::io::Error::other(reason)))?
+        };
+        self.checkpoint().map_err(SourceFailure::Diagnostic)?;
+        Ok(project)
+    }
 }

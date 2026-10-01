@@ -81,6 +81,8 @@ index.
   run with Node.js.
 - [WebAssembly statements](wasm.md): statements in WebAssembly components,
   run in a sandbox with Wasmtime.
+- [Packages](packages.md): sharing modules between projects with a manifest,
+  a lockfile, and an offline cache.
 - [Embedded Rust runs](embedded-runs.md)
 - [Interpreter architecture](interpreter-architecture.md)
 - [Asynchronous execution](async-execution.md)

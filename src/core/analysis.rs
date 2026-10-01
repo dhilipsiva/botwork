@@ -441,6 +441,8 @@ type Exports = HashMap<String, String>;
 struct Modules {
     checked: HashMap<PathBuf, Option<Rc<Exports>>>,
     loading: Vec<PathBuf>,
+    /// The package project of `@` imports, found at the first.
+    project: Option<Result<Rc<crate::core::packages::Project>, String>>,
 }
 
 /// Collect what one invocation frame binds. Control blocks share their frame;
@@ -646,6 +648,40 @@ impl Checker<'_, '_> {
         frame
     }
 
+    /// The file an `@name/file` import names from `importer`, and its
+    /// package's directory, through the project found at the first such import.
+    fn package_module(
+        &mut self,
+        parsed: Result<(&str, PathBuf), String>,
+        importer: &str,
+        directory: &Path,
+    ) -> Result<(PathBuf, PathBuf), String> {
+        let (name, file) = parsed?;
+        let base = import_base(importer, directory);
+        let base = super::paths::canonicalize(&base)
+            .map_err(|error| format!("{}: {error}", base.display()))?;
+        let project = self
+            .modules
+            .project
+            .get_or_insert_with(|| {
+                let root = crate::core::packages::Project::find(&base).ok_or_else(|| {
+                    format!(
+                        "`@` imports need a {} at or above {}",
+                        crate::core::packages::MANIFEST,
+                        base.display()
+                    )
+                })?;
+                crate::core::packages::Project::load(&root, None).map(Rc::new)
+            })
+            .clone()?;
+        let requested = project.resolve(&base, name, &file)?;
+        let package = project
+            .directory(name)
+            .map(Path::to_owned)
+            .unwrap_or_default();
+        Ok((requested, package))
+    }
+
     /// Read, parse, and check an imported module once, returning its exports.
     fn module(&mut self, import: &Statement) -> Option<Rc<Exports>> {
         let StatementKind::Import {
@@ -664,7 +700,28 @@ impl Checker<'_, '_> {
         ) {
             return None;
         }
-        let Some(requested) = module_path(path_span.source().name(), directory, path) else {
+        let (requested, package) = match crate::core::packages::package_path(path) {
+            None => (
+                module_path(path_span.source().name(), directory, path),
+                None,
+            ),
+            Some(parsed) => match self.package_module(parsed, path_span.source().name(), directory)
+            {
+                Ok((requested, package)) => (Some(requested), Some(package)),
+                Err(reason) => {
+                    self.push(
+                        Rule::ImportFailure,
+                        path_span,
+                        format!("Loading module failed: {reason}"),
+                        "Name the package in botwork.toml and run `botwork --fetch`.",
+                    );
+                    return None;
+                }
+            },
+        };
+        let Some(requested) = requested.filter(|requested| {
+            requested.extension().and_then(|value| value.to_str()) == Some("botwork")
+        }) else {
             self.push(
                 Rule::ImportFailure,
                 path_span,
@@ -685,6 +742,19 @@ impl Checker<'_, '_> {
                 return None;
             }
         };
+        if let Some(package) = package.filter(|package| !canonical.starts_with(package)) {
+            self.push(
+                Rule::ImportFailure,
+                path_span,
+                format!(
+                    "Loading module failed: `{path}` leads outside its package {}, to {}",
+                    package.display(),
+                    canonical.display()
+                ),
+                "Keep a package's files inside its directory.",
+            );
+            return None;
+        }
         if let Some(start) = self
             .modules
             .loading
@@ -1185,13 +1255,21 @@ pub(crate) fn module_path(importer: &str, directory: &Path, path: &str) -> Optio
     {
         return None;
     }
+    let base = import_base(importer, directory);
+    match crate::core::packages::import_file(&base, path) {
+        Some(file) => file.ok(),
+        None => Some(base.join(path)),
+    }
+}
+
+/// The directory an import from the source `importer` resolves against.
+fn import_base(importer: &str, directory: &Path) -> PathBuf {
     let importer = Path::new(importer);
-    let base = if importer.is_absolute() {
+    if importer.is_absolute() {
         importer.parent().unwrap_or(Path::new("/")).to_owned()
     } else {
         directory.join(importer.parent().unwrap_or(Path::new("")))
-    };
-    Some(base.join(path))
+    }
 }
 
 /// A normalized signature's words without its parameter positions.

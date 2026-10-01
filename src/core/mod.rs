@@ -15,6 +15,10 @@ pub mod suite;
 pub mod language;
 pub mod listener;
 pub mod operation;
+// Package fetching for the CLI and package imports for runs (decision D10);
+// not part of the embedding API.
+#[doc(hidden)]
+pub mod packages;
 mod parser;
 pub mod paths;
 pub mod report;

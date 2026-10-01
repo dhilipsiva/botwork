@@ -183,7 +183,8 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] Custom statements
   - [x] [Map and Array access](docs/language.md#collection-access)
   - [x] [Imports of local botwork files](docs/language.md#local-modules)
-  - [ ] Imports of wasm files and packages, locally or from URL
+  - [x] Imports of [WebAssembly files](docs/wasm.md) and [packages](docs/packages.md)
+  - [ ] Imports from URL
 - [ ] Docs
   - [x] README
   - [x] [Getting started docs](docs/getting-started.md)

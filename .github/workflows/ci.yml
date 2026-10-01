@@ -27,8 +27,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout }}
     env:
-      # The JavaScript statement tests use the runners' Node rather than skip.
+      # The JavaScript statement tests use the runners' Node, and the package
+      # tests their git, rather than skip.
       BOTWORK_REQUIRE_NODE: "1"
+      BOTWORK_REQUIRE_GIT: "1"
     strategy:
       fail-fast: false
       matrix:

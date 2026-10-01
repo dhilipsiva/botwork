@@ -136,17 +136,14 @@ that goal to different degrees ([D6](decisions.md#d6-adapters) to
 
 ## Sharing Botwork code
 
-Today, share statements as [modules](extending.md#botwork-modules): `.botwork`
-files that scripts import by relative path, kept in the same repository or
-added with your usual tools, such as git submodules.
+Within a repository, share statements as [modules](extending.md#botwork-modules):
+`.botwork` files that scripts import by relative path.
 
-Packages are planned for 1.0 ([D10](decisions.md#d10-packages-and-registry)):
-
-- a package manifest;
-- a lockfile with content hashes;
-- git and URL sources pinned by version or content;
-- an offline cache.
-
+Between projects, share them as [packages](packages.md)
+([D10](decisions.md#d10-packages-and-registry)): a `botwork.toml` names a
+project's packages, from local directories, git repositories, or tarball
+URLs; `botwork --fetch` resolves them into a `botwork.lock` with content
+hashes and an offline cache; and scripts import their files as `@name/path`.
 A trusted and verified package registry will follow after 1.0.
 
 ## Editor packages

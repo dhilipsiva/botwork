@@ -38,7 +38,7 @@ mod suites;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Botwork file to run (repeatable; each occurrence starts a fresh run)
-    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help", "reconcile_report", "lsp"])]
+    #[arg(short, long, required_unless_present_any = ["suite", "list_statements", "statement_help", "reconcile_report", "lsp", "fetch"])]
     file: Vec<PathBuf>,
     /// Discover cases from an explicit suite file (repeatable; paths keep their order)
     #[arg(long, conflicts_with_all = ["file", "list_statements", "statement_help"])]
@@ -55,6 +55,16 @@ struct Args {
     /// Serve the Language Server Protocol on stdin and stdout
     #[arg(long, exclusive = true)]
     lsp: bool,
+    /// Resolve the packages that DIRECTORY's botwork.toml names (by default
+    /// the current directory's), fetch them into the cache, and write botwork.lock
+    #[arg(long, value_name = "DIRECTORY", num_args = 0..=1, default_missing_value = ".", conflicts_with_all = ["file", "suite", "check", "format", "format_check", "list_cases", "list_statements", "statement_help", "reconcile_report"])]
+    fetch: Option<PathBuf>,
+    /// With --fetch: use only botwork.lock and the cache, and fetch nothing
+    #[arg(long, requires = "fetch")]
+    offline: bool,
+    /// With --fetch: fail rather than change botwork.lock
+    #[arg(long, requires = "fetch")]
+    locked: bool,
     /// Check files or suites without running them: syntax, control placement, and lint rules
     #[arg(long, conflicts_with_all = ["list_cases", "list_statements", "statement_help", "reconcile_report", "report_json", "report_html", "listener", "failures", "rerun_failed", "assertion_artifacts"])]
     check: bool,
@@ -442,6 +452,55 @@ fn main() -> ExitCode {
     }
 }
 
+/// `--fetch`: resolve a project's packages and report what it locked.
+fn fetch(directory: &Path, offline: bool, locked: bool) -> ExitCode {
+    use botwork::core::packages;
+    let root = match botwork::core::paths::canonicalize(directory) {
+        Ok(root) => root,
+        Err(error) => {
+            eprintln!("[fetch] error: {}: {error}", directory.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    if !root.join(packages::MANIFEST).is_file() {
+        eprintln!(
+            "[fetch] error: {} has no {}",
+            root.display(),
+            packages::MANIFEST
+        );
+        return ExitCode::FAILURE;
+    }
+    let options = packages::FetchOptions {
+        offline,
+        locked,
+        cache: None,
+    };
+    match packages::fetch(&root, &options) {
+        Ok(report) => {
+            for package in &report.lock.packages {
+                println!(
+                    "[fetch] {} {} from {}",
+                    package.name, package.version, package.source
+                );
+            }
+            println!(
+                "[fetch] {} {}",
+                packages::LOCKFILE,
+                if report.written {
+                    "written"
+                } else {
+                    "up to date"
+                }
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("[fetch] error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn cli() -> ExitCode {
     let args = Args::parse();
     // Show imported modules, named by their full path, like the files given here.
@@ -450,6 +509,9 @@ fn cli() -> ExitCode {
     }
     if args.lsp {
         return ExitCode::from(lsp::run() as u8);
+    }
+    if let Some(directory) = &args.fetch {
+        return fetch(directory, args.offline, args.locked);
     }
     let output_limits = OutputLimits {
         record_bytes: args.max_output_record_bytes,

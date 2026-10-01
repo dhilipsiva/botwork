@@ -54,6 +54,14 @@ webpki-roots = "1.0.9"
 url = "2.5.8"
 futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
 
+# Packages (decision D10): manifests and lockfiles in TOML, versions in semver,
+# content hashed with SHA-256, and URL sources as gzipped tarballs.
+toml = { version = "1.1.6", default-features = false, features = ["parse", "display", "serde"] }
+semver = "1.0.28"
+sha2 = "0.10.9"
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
+tar = { version = "0.4.46", default-features = false }
+
 # The Python adapter (decision D9): only in builds with the `python` feature,
 # which link the system's libpython 3.10 or later.
 pyo3 = { version = "0.29.3", optional = true, features = ["abi3-py310"] }

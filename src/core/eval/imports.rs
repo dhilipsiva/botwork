@@ -44,6 +44,8 @@ pub(super) struct ModuleCache {
     /// WebAssembly files this run has compiled.
     #[cfg(feature = "wasm")]
     wasm: HashMap<PathBuf, Arc<wasm::Module>>,
+    /// The package project of this run's `@` imports, found at the first.
+    project: Option<Arc<crate::core::packages::Project>>,
 }
 
 impl Clone for ModuleCache {
@@ -77,6 +79,7 @@ impl Clone for ModuleCache {
                 .iter()
                 .map(|(key, value)| (key.clone(), Arc::clone(value)))
                 .collect(),
+            project: self.project.clone(),
         }
     }
 }
@@ -105,6 +108,9 @@ impl ModuleCache {
             for path in self.wasm.keys() {
                 size.path(path);
             }
+        }
+        if let Some(project) = &self.project {
+            size.path(project.root());
         }
         for (requested, canonical) in &self.resolved {
             size.path(requested);
@@ -512,7 +518,41 @@ async fn resolve(
             .map_err(|reason| failure(context, format_args!("{reason}")))?
             .join(importer.parent().unwrap_or(Path::new("")))
     };
-    let requested = base.join(path);
+    // `@name/file` names a file in a package the project's lockfile resolved.
+    let (requested, package) = match crate::core::packages::package_path(path) {
+        None => (base.join(path), None),
+        Some(Err(reason)) => return Err(failure(context, format_args!("{reason}"))),
+        Some(Ok((name, file))) => {
+            let importer =
+                context
+                    .canonicalize_source(&base)
+                    .await
+                    .map_err(|error| match error {
+                        SourceFailure::Io(error) => {
+                            failure(context, format_args!("{}: {error}", base.display()))
+                        }
+                        SourceFailure::Diagnostic(error) => related(context, error),
+                    })?;
+            let project = match context.modules.project.clone() {
+                Some(project) => project,
+                None => {
+                    let project = Arc::new(context.load_project(&importer).await.map_err(
+                        |error| match error {
+                            SourceFailure::Io(error) => failure(context, format_args!("{error}")),
+                            SourceFailure::Diagnostic(error) => related(context, error),
+                        },
+                    )?);
+                    context.modules.project = Some(Arc::clone(&project));
+                    project
+                }
+            };
+            let requested = project
+                .resolve(&importer, name, &file)
+                .map_err(|reason| failure(context, format_args!("{reason}")))?;
+            let directory = project.directory(name).map(Path::to_owned);
+            (requested, directory)
+        }
+    };
     if let Some(canonical) = context.modules.resolved.get(&requested) {
         return Ok(canonical.clone());
     }
@@ -525,6 +565,18 @@ async fn resolve(
             }
             SourceFailure::Diagnostic(error) => related(context, error),
         })?;
+    // A link inside a path package must not lead out of it.
+    if let Some(directory) = package {
+        if !canonical.starts_with(&directory) {
+            return Err(failure(
+                context,
+                format_args!(
+                    "`{path}` leads outside its package, to {}",
+                    canonical.display()
+                ),
+            ));
+        }
+    }
     if let Some(budget) = &context.budget {
         let bytes = requested
             .as_os_str()
@@ -565,6 +617,9 @@ async fn load_module(
             context.calls.iter().map(|record| &record.frame),
         )
     };
+    if let Some(Err(reason)) = crate::core::packages::package_path(path) {
+        return Err(failure(context, format_args!("{reason}")));
+    }
     if path.contains("://")
         || Path::new(path).extension().and_then(|value| value.to_str()) != Some("botwork")
     {

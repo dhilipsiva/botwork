@@ -16,6 +16,7 @@ One invocation does one of these things:
 | Check without running | `botwork --check --file a.botwork` | [Checking scripts](check.md) |
 | Format | `botwork --format --file a.botwork`, or `--format-check` | [Formatting](format.md) |
 | Language server | `botwork --lsp` | [Language server](lsp.md) |
+| Fetch packages | `botwork --fetch [DIRECTORY]`, with `--offline` or `--locked` | [Packages](packages.md) |
 | Statement help | `botwork --list-statements`, `botwork --statement-help "Log \|value\|"` | [Built-ins](builtins.md), [statement reference](statements.md) |
 | Finish a report | `botwork --reconcile-report report.json` | [Report limits](report-limits.md) |
 
@@ -38,6 +39,9 @@ One invocation does one of these things:
 | Option | Default | Effect | Details |
 | --- | --- | --- | --- |
 | `--lsp` | | Serve the Language Server Protocol on stdin and stdout. Takes no other option. | [Language server](lsp.md) |
+| `--fetch [<DIRECTORY>]` | | Resolve the packages named by the `botwork.toml` in DIRECTORY (by default the current directory), fetch them into the cache, and write `botwork.lock`. | [Packages](packages.md) |
+| `--offline` | | With `--fetch`: use only `botwork.lock` and the cache; fetch nothing. | [Packages](packages.md) |
+| `--locked` | | With `--fetch`: fail rather than change `botwork.lock`. | [Packages](packages.md) |
 | `--check` | | Check files or suites without running them: syntax, control placement, and lint rules. | [Checking scripts](check.md) |
 | `--format` | | Rewrite files or suites in canonical layout. `*.dataset.botwork` files are datasets. | [Formatting](format.md) |
 | `--format-check` | | Report files or suites whose layout is not canonical, without changing them. | [Formatting](format.md) |
