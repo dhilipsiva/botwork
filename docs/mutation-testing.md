@@ -519,6 +519,13 @@ faults were moved to the lines they target now.
 Its 548-entry catalogue adds 12 faults, with the library and binary tests as
 oracles; see [Windows CI evidence](windows-ci-evidence.json).
 
+Version 47 owns process trees on Windows through each worker's Job Object and
+refuses them on macOS. Its faults skip the guardian path's absolute check and
+refuse tree pools on every platform.
+
+Its 550-entry catalogue adds 2 faults, with the `worker_trees` suite as the
+oracle; see [Windows process trees evidence](windows-trees-evidence.json).
+
 ## First campaign — 2026-09-28
 
 [Machine-readable evidence](mutation-core-evidence.json) records each mutation,

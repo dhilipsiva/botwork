@@ -22,9 +22,10 @@ use windows_sys::Win32::{
             CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
         },
         JobObjects::{
-            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-            SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicAccountingInformation,
+            JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
+            TerminateJobObject, JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         },
         Pipes::{CreatePipe, SetNamedPipeHandleState, PIPE_NOWAIT},
         Threading::{
@@ -181,6 +182,26 @@ impl Job {
         Ok(())
     }
 
+    /// How many processes the job still holds.
+    fn active(&self) -> io::Result<u32> {
+        // SAFETY: zero is a valid value for every field of this plain struct.
+        let mut accounting: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { std::mem::zeroed() };
+        // SAFETY: the buffer is the structure this information class fills.
+        let queried = unsafe {
+            QueryInformationJobObject(
+                raw(&self.0),
+                JobObjectBasicAccountingInformation,
+                (&mut accounting as *mut JOBOBJECT_BASIC_ACCOUNTING_INFORMATION).cast::<c_void>(),
+                std::mem::size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                null_mut(),
+            )
+        };
+        if queried == 0 {
+            return Err(last_error());
+        }
+        Ok(accounting.ActiveProcesses)
+    }
+
     /// Terminate every process in the job; an empty job is no error.
     fn terminate(&self) -> io::Result<()> {
         // SAFETY: the handle is open.
@@ -243,6 +264,9 @@ pub(in crate::core::worker) struct ChildOwner {
     stdin: Option<Pipe>,
     stdout: Option<Pipe>,
     stderr: Option<Pipe>,
+    /// Whether the pool owns the whole tree, so reaping waits for the job to
+    /// empty and reports [`WorkerCleanup::TreeReaped`].
+    tree: bool,
     pub(super) owned: bool,
     #[cfg(test)]
     pub(super) observer: Option<Arc<Observation>>,
@@ -279,10 +303,18 @@ impl ChildOwner {
         let Some(status) = self.child.try_wait()? else {
             return Ok(None);
         };
+        // A tree is reaped once the terminated job holds no process at all.
+        if self.tree && self.job.active()? != 0 {
+            return Ok(None);
+        }
         self.owned = false;
         Ok(Some(Completion {
             status: Some(status),
-            cleanup: WorkerCleanup::Reaped,
+            cleanup: if self.tree {
+                WorkerCleanup::TreeReaped
+            } else {
+                WorkerCleanup::Reaped
+            },
             error: None,
         }))
     }
@@ -304,14 +336,14 @@ impl Drop for ChildOwner {
 
 pub(super) fn launch_worker(
     specification: WorkerCommand,
-    _observation: &Observation,
+    observation: &Observation,
 ) -> io::Result<ChildOwner> {
-    spawn(specification)
+    spawn(specification, observation.shared.tree)
 }
 
 /// Start the worker suspended, place it in a new job, then let it run, so that
 /// no descendant can start outside the job.
-pub(super) fn spawn(specification: WorkerCommand) -> io::Result<ChildOwner> {
+pub(super) fn spawn(specification: WorkerCommand, tree: bool) -> io::Result<ChildOwner> {
     let job = Job::new()?;
     let (stdin, input) = pipe()?;
     let (output, stdout) = pipe()?;
@@ -338,6 +370,7 @@ pub(super) fn spawn(specification: WorkerCommand) -> io::Result<ChildOwner> {
         stdin: Some(Pipe(input)),
         stdout: Some(Pipe(output)),
         stderr: Some(Pipe(errors)),
+        tree,
         child,
         job,
         owned: true,

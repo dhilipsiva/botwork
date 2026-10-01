@@ -1,5 +1,5 @@
 {
-  "version": 46,
+  "version": 47,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3836,6 +3836,20 @@
       "file": "src/lsp.rs",
       "before": "    if windows && name.as_bytes().get(1) == Some(&b':') {\n",
       "after": "    if windows && false {\n"
+    },
+    {
+      "id": "tree-guardian-path-unchecked",
+      "area": "process-trees",
+      "file": "src/core/worker.rs",
+      "before": "        if !guardian.is_absolute() {\n",
+      "after": "        if false && !guardian.is_absolute() {\n"
+    },
+    {
+      "id": "tree-refused-everywhere",
+      "area": "process-trees",
+      "file": "src/core/worker.rs",
+      "before": "        if cfg!(target_os = \"macos\") {\n",
+      "after": "        if true {\n"
     }
   ]
 }

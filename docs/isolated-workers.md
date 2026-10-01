@@ -1,6 +1,6 @@
 # Isolated Worker Supervision
 
-`core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux, macOS, and Windows. The default pool supervises the direct child and its inherited process group; `with_process_tree` adds a dedicated Linux guardian for detached descendants and host death; `with_pid_namespace` adds kernel containment when that guardian fails. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
+`core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux, macOS, and Windows. The default pool supervises the direct child and its inherited process group; `with_process_tree` also owns detached descendants and cleans up after the host exits, through a dedicated guardian on Linux and the worker's Job Object on Windows, while macOS refuses it; `with_pid_namespace` adds kernel containment when that guardian fails. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
 
 This is the byte-oriented execution boundary beneath the [typed worker protocol](worker-protocol.md). `NativeOperation::isolated` supplies bounded typed arguments, results, diagnostics, signatures, and shared ownership across this boundary. Async DSL dispatch, persistent run/report recovery after a host crash, and the complete milestone 6 shutdown coordinator remain separate TODO items. This implementation does not claim those integrations are complete.
 
@@ -154,6 +154,22 @@ process-tree repetitions, and targeted fault checks.
 The overall execution timeout includes tree cleanup; the cleanup observation allowance starts when the host observes a stop or its direct guardian exits. All host handles, including the control socket, close before final publication. The guardian remains alive while cleanup is pending. The host never kills its guardian to meet the cleanup observation allowance, since doing so would discard descendant ownership. A stalled or stopped guardian therefore produces `Pending` while the slot and typed reservations remain held. Resuming it reconciles the original outcome with `TreeReaped`. Host death leaves the guardian running until its descendants settle; the host's eventual reaper owns the orphaned guardian itself. This cleanup does not create a durable run result or undo completed effects.
 
 This mode requires Linux 5.3 or later with PID descriptors, subreaper support, proc child enumeration, and permission for Unix-socket IPC and signalling the worker's descendants. Missing facilities or a mismatched helper fail without silently falling back to direct-child guarantees. Workers and the configured helper are trusted host executables. Privilege changes that remove signal permission, interference with the guardian, a killed/crashed guardian, host suspension, and uninterruptible kernel calls remain outside this guardian-only guarantee. The namespace mode below contains guardian failure. This is not a security sandbox or a kernel real-time guarantee. Durable worker metadata requires the optional journal below.
+
+### Windows and macOS
+
+Windows needs no guardian. Each worker already runs in a Job Object of its own
+that forbids breakaway, so the job holds every descendant, detached ones
+included, and closing it, or the host exiting, ends them all. The guardian path
+must still be absolute but is not run. After the worker exits or is stopped,
+the supervisor terminates the job and reports `TreeReaped` only once the job
+holds no process.
+
+macOS cannot follow a process that leaves the worker's group: it has no child
+subreaper or PID namespace, and kqueue stopped tracking forks in Mac OS X 10.5.
+`with_process_tree` therefore fails there with BW7002 rather than run a weaker
+mode under the same name ([D12](decisions.md#d12-platform-parity)).
+`with_recovery` and `with_pid_namespace` take the Linux worker journal and are
+built only on Linux.
 
 ## Bounded Shutdown Wait
 

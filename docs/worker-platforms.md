@@ -8,6 +8,7 @@ The worker API advertises Linux with the facilities required by the selected mod
 | --- | --- | --- |
 | `WorkerPool::new` | OS threads, process creation/exec, pipes with nonblocking access, process groups, signalling, exclusive child waits | Direct child reaped; inherited group termination requested |
 | `with_process_tree` / `with_recovery` | Group-mode facilities, PID descriptors, Unix socket pairs, child subreapers, readable `/proc/thread-self/children` | Guardian acknowledgment and whole-tree reaping |
+| `with_process_tree` on Windows | Job Objects that forbid breakaway and kill on close, suspended process creation, job accounting | Job termination, and no process left in the job |
 | `with_pid_namespace` | Guardian facilities, `clone3`, user/PID/mount namespaces, proc identity mappings, private mount propagation, proc mounting, sessions, parent-death signalling, `no_new_privs` | Whole-tree acknowledgment, or owned namespace reaping without claiming worker success |
 | Optional worker journal | Private local directory, exclusive advisory locks, random IDs, positional record I/O, file and directory synchronization | Transport interruption/publication records; separate flush acknowledgment |
 

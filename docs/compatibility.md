@@ -41,12 +41,13 @@ no `rust-version`.
 | --- | --- |
 | Linux x86_64, GNU and static musl | Supported and tested in CI: every test for both, in debug and release |
 | macOS arm64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run with Linux's process-group guarantees; the process-tree and PID-namespace worker modes are unavailable, since macOS cannot follow detached descendants ([D12](decisions.md#d12-platform-parity)) |
-| Windows x86_64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run each worker in a Job Object, which ends every descendant with it; process-tree ownership is planned for 1.0 ([D12](decisions.md#d12-platform-parity)) |
+| Windows x86_64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run each worker in a Job Object, which ends every descendant with it, and the process-tree mode reports a tree reaped once its job is empty ([D12](decisions.md#d12-platform-parity)) |
 
-Process statements and the default worker pool run on every platform above.
-The process-tree and PID-namespace worker modes, and cooperative interruption,
-are Linux-only until their ports land; elsewhere those modes are refused at
-construction, and an interrupt ends the process at once. See
+Process statements and the default worker pool run on every platform above,
+and the process-tree mode on Linux and Windows; macOS refuses it at
+construction. The PID-namespace mode and the worker journal are Linux-only, and
+so is cooperative interruption until its port lands; elsewhere an interrupt ends
+the process at once. See
 [worker platforms](worker-platforms.md) and
 [terminal outcomes](terminal-outcomes.md#interruption).
 

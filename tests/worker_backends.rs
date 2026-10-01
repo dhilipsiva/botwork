@@ -80,37 +80,14 @@ fn wait(handle: botwork::core::worker::WorkerHandle) -> WorkerReport {
         })
 }
 
-/// Whether no process has this ID any longer.
-#[cfg(unix)]
-fn gone(pid: u32) -> bool {
-    // SAFETY: signal 0 only checks that the process exists.
-    let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
-    result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
-}
-
-#[cfg(windows)]
-fn gone(pid: u32) -> bool {
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, WAIT_OBJECT_0},
-        System::Threading::{
-            OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
-            PROCESS_SYNCHRONIZE,
-        },
-    };
-    // SAFETY: opens the process by ID, checks the result, and closes it.
-    unsafe {
-        let process = OpenProcess(
-            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-            0,
-            pid,
-        );
-        if process.is_null() {
-            return true;
-        }
-        let exited = WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
-        CloseHandle(process);
-        exited
-    }
+/// Whether the heartbeat file has stopped growing, so the descendant that
+/// writes it every 20 ms has ended. A file, unlike a process ID, cannot be
+/// taken over by an unrelated process once the descendant is gone.
+fn stopped(heartbeat: &Path) -> bool {
+    let size = || std::fs::metadata(heartbeat).map_or(0, |metadata| metadata.len());
+    let before = size();
+    std::thread::sleep(Duration::from_millis(300));
+    size() == before
 }
 
 #[test]
@@ -228,8 +205,10 @@ fn large_input_and_output_flow_together_without_deadlock() {
 
 #[test]
 fn descendants_end_with_their_worker() {
+    let directory = tempfile::tempdir().unwrap();
+    let heartbeat = directory.path().join("heartbeat");
     let pool = WorkerPool::new(limits()).unwrap();
-    let report = run(&pool, &["orphan"], b"");
+    let report = run(&pool, &["orphan", heartbeat.to_str().unwrap()], b"");
     assert_eq!(
         report.outcome,
         WorkerOutcome::Succeeded,
@@ -237,16 +216,38 @@ fn descendants_end_with_their_worker() {
         report.diagnostic
     );
     assert_eq!(report.cleanup, WorkerCleanup::Reaped);
-    let descendant: u32 = String::from_utf8(report.stdout).unwrap().parse().unwrap();
     // The worker's group or job is terminated once it exits.
     let begun = Instant::now();
-    while !gone(descendant) {
+    while !stopped(&heartbeat) {
         assert!(
             begun.elapsed() < Duration::from_secs(10),
-            "descendant {descendant} outlived its worker"
+            "the descendant outlived its worker"
         );
-        std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+/// On Windows the worker's Job Object holds its whole tree, so a tree pool
+/// reports the tree reaped only once the job is empty.
+#[cfg(windows)]
+#[test]
+fn process_tree_pools_reap_every_descendant_on_windows() {
+    let directory = tempfile::tempdir().unwrap();
+    let heartbeat = directory.path().join("heartbeat");
+    let pool = WorkerPool::with_process_tree(limits(), python()).unwrap();
+    let report = run(&pool, &["orphan", heartbeat.to_str().unwrap()], b"");
+    assert_eq!(
+        report.outcome,
+        WorkerOutcome::Succeeded,
+        "{:?}",
+        report.diagnostic
+    );
+    assert_eq!(report.cleanup, WorkerCleanup::TreeReaped);
+    assert!(
+        stopped(&heartbeat),
+        "the descendant outlived its reaped tree"
+    );
+    // The guardian path is unused here, but it must be absolute, as on Linux.
+    assert!(WorkerPool::with_process_tree(limits(), "python".into()).is_err());
 }
 
 #[test]

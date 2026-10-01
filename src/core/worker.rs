@@ -81,7 +81,8 @@ pub enum WorkerCleanup {
     NotStarted,
     /// The direct child was reaped. Inherited-group termination was attempted.
     Reaped,
-    /// The guardian reaped the worker and every adopted descendant, then exited.
+    /// Every descendant of the worker ended with it: on Linux the guardian
+    /// reaped them and exited; on Windows the worker's Job Object emptied.
     TreeReaped,
     /// The kernel reaped a namespace init and all its processes. Worker status
     /// was not verified; this cleanup evidence can never establish success.
@@ -169,6 +170,9 @@ struct Shared {
     limits: WorkerLimits,
     #[cfg(target_os = "linux")]
     guardian: Option<PathBuf>,
+    /// Whether the pool owns each worker's whole process tree.
+    #[cfg(windows)]
+    tree: bool,
     #[cfg(target_os = "linux")]
     journal: Option<journal::WorkerJournal>,
     #[cfg(target_os = "linux")]
@@ -192,12 +196,26 @@ impl WorkerPool {
         Self::configured(limits, None)
     }
 
-    /// Supervise detached descendants with a dedicated Botwork guardian executable.
-    /// The absolute path must name a matching Botwork CLI build. Linux only.
+    /// Supervise detached descendants as well as the worker's own group. On
+    /// Linux a dedicated Botwork guardian executable adopts them; the absolute
+    /// path must name a matching Botwork CLI build. On Windows the worker's Job
+    /// Object already holds every descendant, so the path is checked but unused.
+    /// macOS cannot follow a process that leaves the group, so it refuses this
+    /// mode rather than offer a weaker one (decision D12).
     pub fn with_process_tree(limits: WorkerLimits, guardian: PathBuf) -> DiagnosticResult<Self> {
-        if !cfg!(target_os = "linux") || !guardian.is_absolute() {
+        if cfg!(target_os = "macos") {
             return Err(configuration(
-                "Worker guardians require Linux and an absolute executable path",
+                "Process-tree workers are unavailable on macOS, which cannot follow a process that leaves the worker's group",
+            ));
+        }
+        if !cfg!(any(target_os = "linux", windows)) {
+            return Err(configuration(
+                "Process-tree workers are unavailable on this platform",
+            ));
+        }
+        if !guardian.is_absolute() {
+            return Err(configuration(
+                "Worker guardians require an absolute executable path",
             ));
         }
         Self::configured(limits, Some(guardian))
@@ -255,6 +273,8 @@ impl WorkerPool {
             #[cfg(all(test, any(unix, windows)))]
             io_hooks: Mutex::new(VecDeque::new()),
             limits,
+            #[cfg(windows)]
+            tree: _guardian.is_some(),
             #[cfg(target_os = "linux")]
             guardian: _guardian,
             #[cfg(target_os = "linux")]

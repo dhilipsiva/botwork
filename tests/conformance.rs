@@ -2530,7 +2530,45 @@ fn check_tree_case(case: &Case) {
             assert!(pool.snapshot().active.is_empty());
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    // Windows owns the tree through the worker's Job Object, without a
+    // guardian, so no failing guardian can arise there; "/bin/true" is not
+    // even an absolute path on Windows.
+    #[cfg(windows)]
+    if case.error.is_some() {
+        assert!(pool.is_err());
+    } else {
+        use botwork::core::{
+            operation::OperationControl,
+            worker::{WorkerCleanup, WorkerCommand, WorkerOutcome},
+        };
+        let pool = pool.unwrap();
+        let handle = pool
+            .start(
+                WorkerCommand {
+                    executable: r"C:\Windows\System32\cmd.exe".into(),
+                    arguments: vec!["/c".into(), "exit 0".into()],
+                    directory: std::env::temp_dir(),
+                    environment: Default::default(),
+                },
+                vec![],
+                OperationControl::default(),
+            )
+            .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let report = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), handle.wait())
+                .await
+                .unwrap()
+        });
+        assert_eq!(report.cleanup, WorkerCleanup::TreeReaped);
+        assert_eq!(report.outcome, WorkerOutcome::Succeeded);
+        assert!(pool.snapshot().active.is_empty());
+    }
+    // macOS refuses process-tree pools (decision D12).
+    #[cfg(not(any(target_os = "linux", windows)))]
     assert!(pool.is_err());
 }
 

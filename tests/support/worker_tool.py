@@ -6,7 +6,8 @@ Usage: worker_tool.py MODE [ARGUMENT]
   flood         write to standard output until stopped
   sleep         print "begun", then sleep for a minute
   backpressure  write ARGUMENT bytes, then read all input and report its size
-  orphan        start a descendant that sleeps for a minute, print its process
+  orphan        start a descendant that appends a byte to the file ARGUMENT
+                every 20 ms for a minute, wait until it has, print its process
                 ID, and exit without waiting for it
   env           print the environment variable ARGUMENT, or nothing
 """
@@ -35,12 +36,26 @@ elif mode == "backpressure":
     out.flush()
     sys.stderr.write(str(len(sys.stdin.buffer.read())))
 elif mode == "orphan":
+    heartbeat = sys.argv[2]
+    beat = (
+        "import sys, time\n"
+        "with open(sys.argv[1], 'ab', buffering=0) as f:\n"
+        "    for _ in range(3000):\n"
+        "        f.write(b'.')\n"
+        "        time.sleep(0.02)\n"
+    )
     descendant = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(60)"],
+        [sys.executable, "-c", beat, heartbeat],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    # Exit only once the descendant runs, so its stopping proves something.
+    deadline = time.monotonic() + 30
+    while not (os.path.exists(heartbeat) and os.path.getsize(heartbeat) > 0):
+        if time.monotonic() > deadline:
+            sys.exit("the descendant never started")
+        time.sleep(0.01)
     out.write(str(descendant.pid).encode())
 elif mode == "env":
     out.write(os.environ.get(sys.argv[2], "").encode())

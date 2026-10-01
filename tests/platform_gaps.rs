@@ -1,8 +1,10 @@
 //! Facilities not yet ported fail clearly and before any effect (decision D12):
-//! process-tree pools everywhere but Linux, and process statements and worker
-//! pools on a platform without a worker backend, which no supported platform
-//! lacks any longer. Each test goes when its facility's port lands.
-#![cfg(not(target_os = "linux"))]
+//! process-tree pools on macOS, which cannot follow a process that leaves its
+//! group, and process statements and worker pools on a platform without a
+//! worker backend, which no supported platform lacks any longer.
+// Linux has every facility; Windows owns process trees through Job Objects,
+// which tests/worker_backends.rs covers.
+#![cfg(not(any(target_os = "linux", windows)))]
 
 use botwork::core::{
     diagnostic::DiagnosticCode as Code,
@@ -122,7 +124,9 @@ fn process_tree_pools_are_refused_at_construction() {
         .expect("refused");
     assert_eq!(error.code(), Code::RunConfiguration);
     assert!(
-        error.to_string().contains("Worker guardians require Linux"),
+        error
+            .to_string()
+            .contains("Process-tree workers are unavailable on"),
         "{error}"
     );
 }
