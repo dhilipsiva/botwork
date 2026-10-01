@@ -505,3 +505,23 @@ fn stopped_imported_snapshot_restores_iterator_and_skips_catch() {
     assert!(context.calls.is_empty());
     assert!(context.handlers.is_empty());
 }
+
+#[test]
+fn executables_are_found_on_the_runs_path_whatever_windows_calls_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let file = if cfg!(windows) { "tool.exe" } else { "tool" };
+    std::fs::write(directory.path().join(file), "").unwrap();
+    let suffixes: &[&str] = if cfg!(windows) { &[".exe"] } else { &[""] };
+    for key in ["PATH", "Path"] {
+        let variables = std::collections::BTreeMap::from([(
+            std::ffi::OsString::from(key),
+            directory.path().as_os_str().to_owned(),
+        )]);
+        assert_eq!(
+            on_path(&variables, "tool", suffixes),
+            (key == "PATH" || cfg!(windows)).then(|| directory.path().join(file)),
+            "{key}"
+        );
+    }
+    assert_eq!(on_path(&Default::default(), "tool", suffixes), None);
+}

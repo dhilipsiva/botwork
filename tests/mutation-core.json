@@ -4569,8 +4569,8 @@
       "id": "playwright-node-not-found",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright/host.rs",
-      "before": "        .find(|path| path.is_absolute() && path.is_file())\n",
-      "after": "        .find(|path| path.is_absolute() && path.is_file() && false)\n"
+      "before": "        variables,\n        \"node\",\n",
+      "after": "        variables,\n        \"no-such-node\",\n"
     },
     {
       "id": "playwright-missing-package-unexplained",

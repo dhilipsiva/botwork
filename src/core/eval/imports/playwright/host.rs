@@ -270,11 +270,9 @@ fn exited(child: &mut Child) -> bool {
 
 /// Node, on the run's `PATH`.
 fn node(variables: &BTreeMap<OsString, OsString>) -> Option<PathBuf> {
-    let name = if cfg!(windows) { "node.exe" } else { "node" };
-    variables
-        .get(std::ffi::OsStr::new("PATH"))
-        .into_iter()
-        .flat_map(std::env::split_paths)
-        .map(|directory| directory.join(name))
-        .find(|path| path.is_absolute() && path.is_file())
+    on_path(
+        variables,
+        "node",
+        if cfg!(windows) { &[".exe"] } else { &[""] },
+    )
 }

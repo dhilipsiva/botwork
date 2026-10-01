@@ -632,12 +632,11 @@ fn executable(
     if named.components().count() > 1 || named.is_absolute() {
         return Ok(directory.join(named));
     }
-    let suffixes: &[&str] = if cfg!(windows) { &["", ".exe"] } else { &[""] };
-    variables
-        .get(std::ffi::OsStr::new("PATH"))
-        .into_iter()
-        .flat_map(std::env::split_paths)
-        .flat_map(|directory| suffixes.iter().map(move |suffix| directory.join(format!("{driver}{suffix}"))))
-        .find(|path| path.is_absolute() && path.is_file())
-        .ok_or_else(|| format!("No driver `{driver}` on the run's PATH; name its path, or start it and pass its http URL"))
+    // npm installs servers such as Appium as `.cmd` shims on Windows.
+    let suffixes: &[&str] = if cfg!(windows) {
+        &["", ".exe", ".cmd"]
+    } else {
+        &[""]
+    };
+    on_path(variables, driver, suffixes).ok_or_else(|| format!("No driver `{driver}` on the run's PATH; name its path, or start it and pass its http URL"))
 }

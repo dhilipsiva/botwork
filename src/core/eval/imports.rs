@@ -425,6 +425,31 @@ where
     Ok(Literal::None)
 }
 
+/// The first `name`, with one of `suffixes`, in the directories of the run's
+/// `PATH`. On Windows the variable's name is matched in any case, as Windows
+/// matches it: its environment usually spells it `Path`.
+pub(in crate::core::eval) fn on_path(
+    variables: &std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+    name: &str,
+    suffixes: &[&str],
+) -> Option<PathBuf> {
+    let (_, path) = variables.iter().find(|(key, _)| {
+        if cfg!(windows) {
+            key.to_str()
+                .is_some_and(|key| key.eq_ignore_ascii_case("PATH"))
+        } else {
+            key.as_os_str() == "PATH"
+        }
+    })?;
+    std::env::split_paths(path)
+        .flat_map(|directory| {
+            suffixes
+                .iter()
+                .map(move |suffix| directory.join(format!("{name}{suffix}")))
+        })
+        .find(|candidate| candidate.is_absolute() && candidate.is_file())
+}
+
 fn check_dependency_depth(context: &Context, dependency: usize) -> DiagnosticResult<()> {
     if let Some(budget) = &context.budget {
         let maximum = budget.limits().imports.dependency_depth;
