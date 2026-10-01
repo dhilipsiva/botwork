@@ -411,11 +411,14 @@ fn a_runtime_without_time_reports_a_typed_configuration_failure() {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()
         .unwrap();
+    // The deadline only needs the time driver. It must not expire while the
+    // caught panic prints its backtrace, which takes seconds on a slow host,
+    // or the expired deadline, rightly, becomes the primary error.
     let error = runtime.block_on(async {
         never()
             .invoke(
                 vec![Literal::None],
-                OperationControl::default().child(Some(Instant::now() + Duration::from_secs(1))),
+                OperationControl::default().child(Some(Instant::now() + Duration::from_secs(3600))),
             )
             .await
             .unwrap_err()
