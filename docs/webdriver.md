@@ -94,6 +94,10 @@ A String selector is CSS. A Map names one strategy:
 | `{partial_link_text: "Mor"}` | Links whose text contains this |
 | `{tag_name: "h1"}` | Elements by tag |
 
+With [Appium](appium.md#selectors), a Map can also name `accessibility_id`,
+`id`, `class_name`, `android_uiautomator`, `ios_predicate`, or
+`ios_class_chain`.
+
 `Find Element` and `Find Elements` with an element as the scope search inside
 it.
 

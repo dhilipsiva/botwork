@@ -42,14 +42,21 @@ pub(super) fn handle(value: &Literal, what: &str) -> Result<(String, Option<Stri
     Ok((session.clone(), element))
 }
 
-/// A selector: a String is CSS; a Map names one strategy.
+/// A selector: a String is CSS; a Map names one strategy. The W3C strategies
+/// come first, then Appium's, which only Appium servers know.
 pub(super) fn selector(value: &Literal) -> Result<(&'static str, String), String> {
-    const STRATEGIES: [(&str, &str); 5] = [
+    const STRATEGIES: [(&str, &str); 11] = [
         ("css", "css selector"),
         ("xpath", "xpath"),
         ("link_text", "link text"),
         ("partial_link_text", "partial link text"),
         ("tag_name", "tag name"),
+        ("accessibility_id", "accessibility id"),
+        ("id", "id"),
+        ("class_name", "class name"),
+        ("android_uiautomator", "-android uiautomator"),
+        ("ios_predicate", "-ios predicate string"),
+        ("ios_class_chain", "-ios class chain"),
     ];
     match value {
         Literal::String(css) => Ok(("css selector", css.clone())),
@@ -60,7 +67,7 @@ pub(super) fn selector(value: &Literal) -> Result<(&'static str, String), String
                 .find(|(name, _)| name == key)
                 .map(|(_, using)| *using)
                 .ok_or_else(|| {
-                    format!("Unknown selector strategy `{key}`; use css, xpath, link_text, partial_link_text, or tag_name")
+                    format!("Unknown selector strategy `{key}`; use css, xpath, link_text, partial_link_text, tag_name, or, with Appium, accessibility_id, id, class_name, android_uiautomator, ios_predicate, or ios_class_chain")
                 })?;
             match value {
                 Literal::String(text) => Ok((using, text.clone())),

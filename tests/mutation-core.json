@@ -1,5 +1,5 @@
 {
-  "version": 63,
+  "version": 64,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4592,6 +4592,27 @@
       "file": "src/core/eval/imports/playwright.rs",
       "before": "            Self::Uncheck => vec![v(1)?, v(0)?, json!(false)],\n",
       "after": "            Self::Uncheck => vec![v(1)?, v(0)?, json!(true)],\n"
+    },
+    {
+      "id": "appium-accessibility-strategy-missing",
+      "area": "appium",
+      "file": "src/core/eval/imports/webdriver/values.rs",
+      "before": "        (\"accessibility_id\", \"accessibility id\"),\n",
+      "after": "        (\"accessibility\", \"accessibility id\"),\n"
+    },
+    {
+      "id": "appium-uiautomator-strategy-misnamed",
+      "area": "appium",
+      "file": "src/core/eval/imports/webdriver/values.rs",
+      "before": "        (\"android_uiautomator\", \"-android uiautomator\"),\n",
+      "after": "        (\"android_uiautomator\", \"android uiautomator\"),\n"
+    },
+    {
+      "id": "appium-platform-name-ignored",
+      "area": "appium",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "        .or_else(|| capabilities[\"platformName\"].as_str())\n",
+      "after": "        .or_else(|| capabilities[\"browserName\"].as_str())\n"
     }
   ]
 }

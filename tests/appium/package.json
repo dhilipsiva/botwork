@@ -1,0 +1,8 @@
+{
+  "name": "botwork-appium-tests",
+  "private": true,
+  "description": "The Appium that tests/appium.rs runs against, pinned by package-lock.json; CI installs its UiAutomator2 driver.",
+  "dependencies": {
+    "appium": "3.8.0"
+  }
+}

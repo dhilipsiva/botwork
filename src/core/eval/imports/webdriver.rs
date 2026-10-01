@@ -603,8 +603,12 @@ async fn open(run: &Run, options: &Literal) -> DiagnosticResult<Literal> {
         .await
         .map_err(|failure| native(format_args!("the session could not start: {failure}")))?;
     let id = string(&created["sessionId"], "a session ID")?;
-    let browser = created["capabilities"]["browserName"]
+    // An Appium session names its platform rather than a browser.
+    let capabilities = &created["capabilities"];
+    let browser = capabilities["browserName"]
         .as_str()
+        .filter(|name| !name.is_empty())
+        .or_else(|| capabilities["platformName"].as_str())
         .unwrap_or_default()
         .to_owned();
     let version = created["capabilities"]["browserVersion"]

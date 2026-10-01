@@ -161,16 +161,23 @@ fn answer(
     match (method, segments.as_slice()) {
         ("GET", ["status"]) => (200, json!({ "ready": true, "message": "fake" })),
         ("POST", ["session"]) => {
-            if body["capabilities"]["alwaysMatch"]["browserName"] == "refused" {
+            let wanted = &body["capabilities"]["alwaysMatch"];
+            if wanted["browserName"] == "refused" {
                 return (
                     500,
                     json!({ "error": "session not created", "message": "no such browser" }),
                 );
             }
             let number = sessions.fetch_add(1, Ordering::SeqCst) + 1;
+            // An Appium session names its platform, not a browser.
+            let capabilities = if wanted["platformName"].is_string() {
+                json!({ "platformName": wanted["platformName"], "automationName": "UiAutomator2" })
+            } else {
+                json!({ "browserName": "fake", "browserVersion": "1.0" })
+            };
             (
                 200,
-                json!({ "sessionId": format!("s{number}"), "capabilities": { "browserName": "fake", "browserVersion": "1.0" } }),
+                json!({ "sessionId": format!("s{number}"), "capabilities": capabilities }),
             )
         }
         ("DELETE", ["session", _]) => (200, Value::Null),

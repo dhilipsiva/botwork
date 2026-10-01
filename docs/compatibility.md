@@ -112,6 +112,7 @@ macOS, and Ctrl-C and Ctrl-Break on Windows. See
 | Neovim | 0.11 or later | Configuration documented, not tested |
 | Node.js, to build the VS Code extension | 22 | 22 in CI |
 | Playwright, for [Playwright statements](playwright.md) | 1.63 | 1.63.0 with Chromium in CI |
+| Appium, for [mobile automation](appium.md) | 3.8 | 3.8.0, with UiAutomator2 8.7.0 on an Android 14 emulator, in CI |
 
 See [editor support](editors.md) for the packages and how they are tested.
 

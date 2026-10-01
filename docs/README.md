@@ -22,6 +22,8 @@ index.
   a Selenium Grid through a W3C WebDriver server.
 - [Browser automation with Playwright](playwright.md): drive Chromium, Firefox,
   or WebKit with the Playwright library a project installs.
+- [Mobile automation with Appium](appium.md): drive Android and iOS apps
+  through Appium with the WebDriver statements.
 - [Running scripts in parallel](parallel-cli.md)
 - [Input variables](input-variables.md)
 - [Secret inputs](secrets.md)

@@ -19,8 +19,8 @@ the boundary.
 | Records and artifacts | Each run's record, listener events, and assertion artifacts carry its own number and identity; see [terminal outcomes](terminal-outcomes.md#ownership-of-events-and-artifacts) |
 | Browser sessions | Each belongs to the run that opened it: another run's handle is refused, and the run's end closes any it left open; see [WebDriver](webdriver.md#handles) and [Playwright](playwright.md#handles), whose browsers live in a Node process of the run's own |
 
-Device sessions arrive with the Appium integration, which will state its own
-session ownership and use the same boundary.
+[Appium](appium.md) device sessions are WebDriver sessions, so they belong to
+their run in the same way.
 
 ## What runs share
 

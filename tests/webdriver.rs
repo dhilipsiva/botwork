@@ -221,9 +221,9 @@ fn driver_failures_bad_values_and_foreign_handles_are_typed_errors() {
         ),
         (
             fake.url.as_str(),
-            "web::Find Element |{id: \"a\"}| In |browser|",
+            "web::Find Element |{name: \"a\"}| In |browser|",
             "BW3003",
-            "Unknown selector strategy `id`",
+            "Unknown selector strategy `name`",
         ),
         (
             fake.url.as_str(),
@@ -316,6 +316,62 @@ fn driver_failures_bad_values_and_foreign_handles_are_typed_errors() {
             "{options}: {text}"
         );
     }
+}
+
+#[test]
+fn appium_strategies_and_capabilities_reach_the_driver() {
+    let fake = Fake::start();
+    let workspace = Workspace::new();
+    workspace.write(
+        "main.botwork",
+        &format!(
+            r#"Import |"botwork:webdriver"| As |web|
+|device| = web::Open Browser |{{driver: "{url}", capabilities: {{platformName: "Android", "appium:automationName": "UiAutomator2", "appium:appPackage": "com.android.settings"}}}}|
+Log |device.browser|
+web::Find Element |{{accessibility_id: "Search settings"}}| In |device|
+web::Find Element |{{id: "android:id/title"}}| In |device|
+web::Find Elements |{{class_name: "android.widget.TextView"}}| In |device|
+web::Find Element |{{android_uiautomator: "new UiSelector().text(\"Wi-Fi\")"}}| In |device|
+web::Find Element |{{ios_predicate: "label == 'OK'"}}| In |device|
+web::Find Element |{{ios_class_chain: "**/XCUIElementTypeButton"}}| In |device|
+web::Execute Script |"mobile: swipeGesture"| With |[{{direction: "up", percent: 0.5}}]| In |device|
+web::Close Browser |device|
+"#,
+            url = fake.url
+        ),
+    );
+    let output = workspace.botwork(&["--file", "main.botwork"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(stdout(&output), "Android\n");
+    let sent: Vec<Value> = fake
+        .received()
+        .into_iter()
+        .map(|request| request.body)
+        .collect();
+    assert_eq!(
+        sent[0],
+        json!({ "capabilities": { "alwaysMatch": { "platformName": "Android", "appium:automationName": "UiAutomator2", "appium:appPackage": "com.android.settings" } } })
+    );
+    let strategies: Vec<&str> = sent[1..7]
+        .iter()
+        .map(|body| body["using"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        strategies,
+        [
+            "accessibility id",
+            "id",
+            "class name",
+            "-android uiautomator",
+            "-ios predicate string",
+            "-ios class chain"
+        ]
+    );
+    assert_eq!(sent[4]["value"], "new UiSelector().text(\"Wi-Fi\")");
+    assert_eq!(
+        sent[7],
+        json!({ "script": "mobile: swipeGesture", "args": [{ "direction": "up", "percent": 0.5 }] })
+    );
 }
 
 #[test]
