@@ -130,6 +130,14 @@ jobs:
           if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
+      - name: Warm Node's files
+        # A hosted Windows runner reads node.exe from a cold disk. Its first
+        # starts that run a script take from seconds to over a minute, longer
+        # than the 30-second worker deadline of the JavaScript tests' imports;
+        # later starts take a tenth of a second.
+        if: runner.os == 'Windows'
+        shell: bash
+        run: node --input-type=module -e "await import('node:url'); console.log(process.version)"
       - name: Run tests and examples
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
 
@@ -173,6 +181,14 @@ jobs:
           if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
+      - name: Warm Node's files
+        # A hosted Windows runner reads node.exe from a cold disk. Its first
+        # starts that run a script take from seconds to over a minute, longer
+        # than the 30-second worker deadline of the JavaScript tests' imports;
+        # later starts take a tenth of a second.
+        if: runner.os == 'Windows'
+        shell: bash
+        run: node --input-type=module -e "await import('node:url'); console.log(process.version)"
       - name: Run tests and examples with Python
         run: cargo +stable test --locked --no-fail-fast --features python
 

@@ -88,6 +88,12 @@ cancellation, a deadline, or an interrupt, ends the process and everything it
 started, at once. Starting Node takes tens of milliseconds, so a statement
 called in a tight loop is better written to take a batch.
 
+Node's first start after its files leave the disk cache is much slower: on
+hosted Windows CI runners it has taken from seconds to over a minute, longer
+than the 30 seconds an import waits for a module's headers. Start Node once
+before such runs, as Botwork's CI does with a small module script; there,
+`node --version`, which runs no JavaScript, did not help.
+
 `--check` cannot see a JavaScript module's statements, so it reports calls
 into one as not checked rather than as errors.
 
