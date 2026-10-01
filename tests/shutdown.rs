@@ -302,14 +302,16 @@ async fn bounded<F: std::future::Future>(run: F) -> F::Output {
         .expect("the stopped run outlived its shutdown bound")
 }
 
+/// A stop only abandons blocking work that has started, so the deadlines leave
+/// a loaded machine time to start it.
 fn options(directory: &Path) -> RunOptions {
     let mut options = RunOptions {
         working_directory: Some(directory.to_path_buf()),
         control: OperationControl::default().with_stop_grace(Duration::from_millis(100)),
-        timeout: Some(Duration::from_millis(200)),
+        timeout: Some(Duration::from_secs(1)),
         ..RunOptions::default()
     };
-    options.limits.cleanup.timeout = Duration::from_millis(300);
+    options.limits.cleanup.timeout = Duration::from_secs(1);
     options
 }
 
@@ -335,7 +337,7 @@ async fn blocked_engine_reads_and_their_cleanup_are_abandoned_after_the_grace() 
     assert_eq!(text.matches(ABANDONED).count(), 2, "{text}");
     // Deadline, grace, cleanup timeout, grace.
     assert!(
-        elapsed >= Duration::from_millis(700) && elapsed < Duration::from_secs(5),
+        elapsed >= Duration::from_millis(2200) && elapsed < Duration::from_secs(5),
         "{elapsed:?}"
     );
 }
@@ -375,7 +377,7 @@ async fn an_uncooperative_blocking_operation_is_abandoned_but_keeps_its_capacity
     assert_eq!(error.code(), DiagnosticCode::Timeout);
     assert!(error.to_string().contains(ABANDONED), "{error}");
     assert!(
-        elapsed >= Duration::from_millis(300) && elapsed < Duration::from_secs(5),
+        elapsed >= Duration::from_millis(1100) && elapsed < Duration::from_secs(5),
         "{elapsed:?}"
     );
     assert!(!returned.load(Ordering::SeqCst), "the callback still runs");
