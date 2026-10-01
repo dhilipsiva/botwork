@@ -107,7 +107,24 @@ struct Store {
     session: [u8; 16],
     admission: Mutex<(u64, usize)>,
     maximum: usize,
-    sender: mpsc::SyncSender<Job>,
+    /// Taken only when the store drops, to close the writer's queue.
+    sender: Option<mpsc::SyncSender<Job>>,
+    writer: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Drop for Store {
+    /// Close the queue and wait for the writer to release the directory, so
+    /// dropping the last journal handle releases its files: Windows refuses to
+    /// remove a directory while they are open. When the writer itself drops
+    /// the store, after its last job, it releases them as it returns.
+    fn drop(&mut self) {
+        drop(self.sender.take());
+        if let Some(writer) = self.writer.take() {
+            if writer.thread().id() != std::thread::current().id() {
+                let _ = writer.join();
+            }
+        }
+    }
 }
 
 /// One exclusive writer per private directory. Opening/reading may block on disk;
@@ -137,7 +154,7 @@ impl WorkerJournal {
         }
         let (sender, receiver) = mpsc::sync_channel::<Job>(queue);
         let owned_directory = directory.clone();
-        std::thread::Builder::new()
+        let writer = std::thread::Builder::new()
             .name("botwork-journal".into())
             .spawn(move || {
                 while let Ok(job) = receiver.recv() {
@@ -180,7 +197,8 @@ impl WorkerJournal {
             session,
             admission: Mutex::new((1, ids.len())),
             maximum: maximum.get(),
-            sender,
+            sender: Some(sender),
+            writer: Some(writer),
         })))
     }
 
@@ -321,7 +339,12 @@ impl Ticket {
         // The queue holds JOBS_PER_RECORD jobs per reserved record, as many as
         // a record can have. Never block the observer, including if the writer
         // has failed.
-        if self.store.sender.try_send(job).is_err() {
+        let sent = self
+            .store
+            .sender
+            .as_ref()
+            .is_some_and(|sender| sender.try_send(job).is_ok());
+        if !sent {
             self.store.directory.completed(true);
         }
     }

@@ -544,3 +544,17 @@ fn windows_journals_are_private_and_refuse_shared_or_linked_directories() {
     );
     drop(journal);
 }
+
+#[test]
+fn dropping_the_last_handle_releases_the_directory_at_once() {
+    let workspace = Workspace::new();
+    for _ in 0..20 {
+        let journal = workspace.journal(4);
+        let directory = Arc::downgrade(&journal.0.directory);
+        drop(journal);
+        // The writer released its share before the drop returned, so the
+        // directory can be removed at once, as Windows requires.
+        assert!(directory.upgrade().is_none());
+        fs::remove_dir_all(workspace.path()).unwrap();
+    }
+}
