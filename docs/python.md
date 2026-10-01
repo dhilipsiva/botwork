@@ -10,10 +10,18 @@ in-process and is trusted, like a native Rust statement: it is not a sandbox.
 cargo install --path . --locked --profile dist --features python
 ```
 
-The build links the system's libpython, 3.10 or later, which must be present
-where Botwork runs; on Debian and Ubuntu, building also needs `python3-dev`.
-The release binaries leave Python out, so they stay single files. A build
-without the feature refuses a Python import with BW6001, naming the feature.
+The build links the libpython of the `python3` (or, on Windows, `python`) it
+finds, which must be 3.10 or later and present where Botwork runs:
+
+| Platform | Building | Running |
+| --- | --- | --- |
+| Linux | The distribution's Python with its development files, `python3-dev` on Debian and Ubuntu | The same libpython |
+| macOS | A Homebrew or python.org Python | The same Python |
+| Windows | A python.org Python | That Python's directory on `PATH`, so Windows finds its DLLs |
+
+CI builds and tests the feature on all three, against Python 3.12. The release
+binaries leave Python out, so they stay single files. A build without the
+feature refuses a Python import with BW6001, naming the feature.
 
 ## Writing a module
 
@@ -83,6 +91,10 @@ objects, so module-level variables stay within the run, and two imports of a
 file in one run share its module. The interpreter, and the packages a file
 imports into `sys.modules`, serve every run in the process.
 
+Loading a file, which starts the interpreter on first use and runs the file's
+top level, is blocking work too: it runs on a worker thread, and a stop
+interrupts it as it interrupts a call.
+
 Python statements run as blocking native operations, on worker threads, with
 at most 4 calls of each in flight; the interpreter lock runs one Python thread
 at a time. They need asynchronous execution: the CLI, or `Engine`'s `_async`
@@ -102,5 +114,6 @@ interrupts itself.
 `cargo test --locked --features python --test python_adapter` covers values in
 both directions and the ones refused, exceptions and tracebacks, module state
 within and across runs, `async def` statements, neighbouring imports, loading
-failures, a stop that ends a busy loop, and the CLI. A build without the
+failures, stops that end a busy call and a file looping as it loads, and the
+CLI. A build without the
 feature checks its refusal in `tests/local_imports.rs`.

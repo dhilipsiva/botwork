@@ -220,29 +220,47 @@ fn async_statements_run_their_coroutines() {
     assert_eq!(value(&result, "n").to_string(), "42");
 }
 
-#[test]
-fn a_stop_interrupts_python_and_leaves_the_interpreter_usable() {
-    let workspace = Workspace::new(&[("helpers.py", HELPERS)]);
+/// Run `source` with a 300 ms deadline after starting the interpreter, and
+/// return the failure and how long the stopped run took.
+fn stopped(workspace: &Workspace, source: &str) -> (Diagnostic, Duration) {
+    // Start the interpreter first, which can take seconds on a cold host, so
+    // that the time measured is the stop's alone.
+    let warm = workspace.run("Import |\"helpers.py\"| As |py|\n|done| = py::Quick");
+    assert_eq!(value(&warm, "done").to_string(), "done");
     let start = Instant::now();
     let result = workspace.run_with(
-        "Import |\"helpers.py\"| As |py|\npy::Spin",
+        source,
         RunOptions {
             timeout: Some(Duration::from_millis(300)),
             ..RunOptions::default()
         },
     );
-    let error = failure(&result);
+    (failure(&result).clone(), start.elapsed())
+}
+
+#[test]
+fn a_stop_interrupts_python_and_leaves_the_interpreter_usable() {
+    let workspace = Workspace::new(&[("helpers.py", HELPERS)]);
+    let (error, took) = stopped(&workspace, "Import |\"helpers.py\"| As |py|\npy::Spin");
     assert_eq!(error.code(), DiagnosticCode::Timeout);
     // The interruption ended the loop well inside the stop grace, and is the
     // only failure reported.
-    assert!(
-        start.elapsed() < Duration::from_secs(2),
-        "{:?}",
-        start.elapsed()
-    );
+    assert!(took < Duration::from_secs(2), "{took:?}");
     assert!(error.causes.is_empty(), "{error}");
     let result = workspace.run("Import |\"helpers.py\"| As |py|\n|done| = py::Quick");
     assert_eq!(value(&result, "done").to_string(), "done");
+}
+
+#[test]
+fn a_stop_interrupts_a_file_while_it_loads() {
+    let workspace = Workspace::new(&[
+        ("helpers.py", HELPERS),
+        ("endless.py", "while True:\n    pass\n"),
+    ]);
+    let (error, took) = stopped(&workspace, "Import |\"endless.py\"| As |endless|");
+    assert_eq!(error.code(), DiagnosticCode::Timeout, "{error}");
+    assert!(took < Duration::from_secs(2), "{took:?}");
+    assert!(error.causes.is_empty(), "{error}");
 }
 
 #[test]

@@ -1,5 +1,5 @@
 {
-  "version": 52,
+  "version": 53,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3925,8 +3925,8 @@
       "id": "python-arity-unchecked",
       "area": "python",
       "file": "src/core/eval/imports/python.rs",
-      "before": "        if !Python::attach(|py| accepts(py, &function, count)) {",
-      "after": "        if false && !Python::attach(|py| accepts(py, &function, count)) {"
+      "before": "        if !accepts {\n",
+      "after": "        if false && !accepts {\n"
     },
     {
       "id": "python-float-overflow-accepted",
@@ -3934,6 +3934,13 @@
       "file": "src/core/eval/imports/python.rs",
       "before": "        return if narrow.is_finite() {",
       "after": "        return if !wide.is_nan() {"
+    },
+    {
+      "id": "python-load-not-interruptible",
+      "area": "python",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "            let prepared = interruptible(control, |py| {\n",
+      "after": "            let prepared = Python::attach(|py| {\n"
     }
   ]
 }

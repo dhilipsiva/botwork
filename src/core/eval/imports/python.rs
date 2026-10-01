@@ -50,7 +50,17 @@ const TRACEBACK_BYTES: usize = 2048;
 
 /// A loaded Python file: its statements, unqualified, with their functions.
 pub(in crate::core::eval) struct Module {
-    statements: Vec<(StatementSignature, Py<PyAny>)>,
+    statements: Vec<(StatementSignature, Arc<Py<PyAny>>)>,
+}
+
+/// A marked function, with its parsed header and whether it accepts the
+/// header's parameters.
+struct Prepared {
+    name: String,
+    header: String,
+    function: Py<PyAny>,
+    signature: DiagnosticResult<StatementSignature>,
+    accepts: bool,
 }
 
 /// Start the interpreter once and install the `botwork` module.
@@ -60,6 +70,13 @@ fn interpreter() -> Result<(), String> {
         .get_or_init(|| {
             Python::initialize();
             Python::attach(|py| {
+                // `threading` takes the thread that first imports it as the
+                // main thread; make that the thread that started the
+                // interpreter, as CPython's own checks assume. Otherwise
+                // asyncio on Windows believes a worker thread is the main
+                // thread and calls `signal.set_wakeup_fd`, which refuses.
+                py.import("threading")
+                    .map_err(|error| format!("Python could not import threading: {error}"))?;
                 let source = CString::new(BOTWORK).expect("no NUL in the module source");
                 PyModule::from_code(py, &source, c"botwork", c"botwork")
                     .map(|_| ())
@@ -119,15 +136,13 @@ async fn load(
         })?;
     let file = canonical
         .to_str()
-        .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?;
-    interpreter().map_err(|reason| failure(context, format_args!("{reason}")))?;
+        .ok_or_else(|| failure(context, format_args!("Module paths must be valid UTF-8")))?
+        .to_owned();
     let directory = canonical
         .parent()
         .and_then(Path::to_str)
         .unwrap_or_default()
         .to_owned();
-    let marked = Python::attach(|py| execute(py, &source, file, &directory))
-        .map_err(|reason| failure(context, format_args!("{file}: {reason}")))?;
     // Headers are parsed on their own, so their locations name the file
     // without suggesting a line in it, as other native headers do.
     let origin = format!(
@@ -135,14 +150,49 @@ async fn load(
         canonical
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or(file)
+            .unwrap_or(&file)
     );
-    let mut statements = Vec::with_capacity(marked.len());
-    for (name, header, function) in marked {
-        let signature = StatementSignature::native_at(&origin, &header)
-            .map_err(|error| related(context, error))?;
-        let count = signature.parameters().len();
-        if !Python::attach(|py| accepts(py, &function, count)) {
+    // Starting the interpreter and running the file's top level are blocking
+    // work: they run on a worker, like other blocking jobs, and a stop raises
+    // `botwork.Stopped` in them.
+    let work = {
+        let file = file.clone();
+        move |control: &OperationControl| -> Result<Vec<Prepared>, SourceFailure> {
+            let other = |reason: String| SourceFailure::Io(std::io::Error::other(reason));
+            interpreter().map_err(other)?;
+            let prepared = interruptible(control, |py| {
+                prepare(py, &source, &file, &directory, &origin)
+            });
+            control.checkpoint().map_err(SourceFailure::Diagnostic)?;
+            prepared.map_err(other)
+        }
+    };
+    let control = context
+        .budget
+        .as_ref()
+        .map(|budget| budget.control().clone())
+        .unwrap_or_default();
+    let prepared = if context.asynchronous {
+        crate::core::run::blocking_io::run(control, work).await
+    } else {
+        work(&control)
+    }
+    .map_err(|error| match error {
+        SourceFailure::Io(error) => failure(context, format_args!("{file}: {error}")),
+        SourceFailure::Diagnostic(error) => related(context, error),
+    })?;
+    let mut statements = Vec::with_capacity(prepared.len());
+    for Prepared {
+        name,
+        header,
+        function,
+        signature,
+        accepts,
+    } in prepared
+    {
+        let signature = signature.map_err(|error| related(context, error))?;
+        if !accepts {
+            let count = signature.parameters().len();
             return Err(failure(
                 context,
                 format_args!(
@@ -150,7 +200,7 @@ async fn load(
                 ),
             ));
         }
-        statements.push((signature, function));
+        statements.push((signature, Arc::new(function)));
     }
     let module = Arc::new(Module { statements });
     context
@@ -199,6 +249,32 @@ fn execute(
         marked.push((name, header, value.unbind()));
     }
     Ok(marked)
+}
+
+/// Run the file and check each marked function against its header.
+fn prepare(
+    py: Python<'_>,
+    source: &str,
+    file: &str,
+    directory: &str,
+    origin: &str,
+) -> Result<Vec<Prepared>, String> {
+    Ok(execute(py, source, file, directory)?
+        .into_iter()
+        .map(|(name, header, function)| {
+            let signature = StatementSignature::native_at(origin, &header);
+            let accepts = signature
+                .as_ref()
+                .is_ok_and(|signature| accepts(py, &function, signature.parameters().len()));
+            Prepared {
+                name,
+                header,
+                function,
+                signature,
+                accepts,
+            }
+        })
+        .collect())
 }
 
 /// Whether `function` can be called with `count` positional arguments.
@@ -262,7 +338,7 @@ fn publish(
             || Arc::from(qualified.normalized()),
             |reservation| Arc::clone(&reservation.key),
         );
-        let function = Python::attach(|py| function.clone_ref(py));
+        let function = Arc::clone(function);
         let operation = NativeOperation::blocking(
             qualified,
             NonZeroUsize::new(CAPACITY).expect("nonzero capacity"),
@@ -292,36 +368,18 @@ fn publish(
     Ok(Literal::None)
 }
 
-/// Call a statement's function on this blocking worker thread. A stop raises
-/// `botwork.Stopped` in the thread while the call runs; a call blocked in
-/// native code sees it only when it returns to Python.
+/// Call a statement's function on this blocking worker thread.
 fn call(
     function: &Py<PyAny>,
     arguments: Vec<Literal>,
     control: OperationControl,
 ) -> DiagnosticResult<Literal> {
-    // The thread running the call, set and cleared while holding the
-    // interpreter lock, so an interruption never reaches a later call.
-    let running: Arc<Mutex<Option<c_long>>> = Arc::new(Mutex::new(None));
-    let watcher = tokio::runtime::Handle::try_current().ok().map(|runtime| {
-        let control = control.clone();
-        let running = Arc::clone(&running);
-        runtime.spawn(async move {
-            control.stopped().await;
-            let _ = tokio::task::spawn_blocking(move || interrupt(&running)).await;
-        })
-    });
-    let result = Python::attach(|py| -> DiagnosticResult<Literal> {
+    interruptible(&control, |py| {
         let values = arguments
             .iter()
             .map(|value| into_python(py, value))
             .collect::<PyResult<Vec<_>>>()
             .map_err(|error| failure(py, &error))?;
-        let thread: c_long = py
-            .import("threading")
-            .and_then(|threading| threading.getattr("get_ident")?.call0()?.extract())
-            .map_err(|error| failure(py, &error))?;
-        *running.lock().unwrap_or_else(|error| error.into_inner()) = Some(thread);
         let outcome = PyTuple::new(py, values).and_then(|values| {
             let value = function.bind(py).call1(values)?;
             // An `async def` statement runs its coroutine to completion here.
@@ -336,9 +394,6 @@ fn call(
                 Ok(value)
             }
         });
-        *running.lock().unwrap_or_else(|error| error.into_inner()) = None;
-        // SAFETY: clears an interruption that arrived after the call returned.
-        unsafe { ffi::PyThreadState_SetAsyncExc(thread, std::ptr::null_mut()) };
         match outcome {
             Ok(value) => from_python(&value).map_err(|reason| {
                 Diagnostic::new(BWErr::NativeError(format!(
@@ -350,6 +405,37 @@ fn call(
             Err(error) if stopped(py, &error) => Ok(Literal::None),
             Err(error) => Err(failure(py, &error)),
         }
+    })
+}
+
+/// Run `work` with the interpreter lock on this thread. A stop of `control`
+/// meanwhile raises `botwork.Stopped` in the thread; code blocked in native
+/// code sees it only when it returns to Python.
+fn interruptible<T>(control: &OperationControl, work: impl FnOnce(Python<'_>) -> T) -> T {
+    // The thread running `work`, set and cleared while holding the
+    // interpreter lock, so an interruption never reaches later work.
+    let running: Arc<Mutex<Option<c_long>>> = Arc::new(Mutex::new(None));
+    let watcher = tokio::runtime::Handle::try_current().ok().map(|runtime| {
+        let control = control.clone();
+        let running = Arc::clone(&running);
+        runtime.spawn(async move {
+            control.stopped().await;
+            let _ = tokio::task::spawn_blocking(move || interrupt(&running)).await;
+        })
+    });
+    let result = Python::attach(|py| {
+        let thread: Option<c_long> = py
+            .import("threading")
+            .and_then(|threading| threading.getattr("get_ident")?.call0()?.extract())
+            .ok();
+        *running.lock().unwrap_or_else(|error| error.into_inner()) = thread;
+        let value = work(py);
+        *running.lock().unwrap_or_else(|error| error.into_inner()) = None;
+        if let Some(thread) = thread {
+            // SAFETY: clears an interruption that arrived after `work` returned.
+            unsafe { ffi::PyThreadState_SetAsyncExc(thread, std::ptr::null_mut()) };
+        }
+        value
     });
     if let Some(watcher) = watcher {
         watcher.abort();
