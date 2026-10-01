@@ -1,4 +1,5 @@
-//! Optional Linux worker metadata journal. No payloads, commands, or PIDs persist.
+//! Optional worker metadata journal, on Linux and Windows. No payloads,
+//! commands, or PIDs persist.
 use super::{WorkerCleanup, WorkerOutcome, WorkerReport};
 use std::{
     fmt, io,
@@ -41,18 +42,34 @@ pub struct JournalMetadata {
 }
 impl From<&WorkerReport> for JournalMetadata {
     fn from(report: &WorkerReport) -> Self {
-        use std::os::unix::process::ExitStatusExt;
         Self {
             outcome: report.outcome,
             cleanup: report.cleanup,
-            exit_status: report.exit_status.map(|status| status.into_raw()),
+            exit_status: report.exit_status.map(raw_status),
             io_complete: report.io_complete,
             progress_complete: report.progress_complete,
         }
     }
 }
 
+/// The status as the journal records it: a wait status on Linux, an exit code
+/// on Windows.
+fn raw_status(status: std::process::ExitStatus) -> i32 {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        status.into_raw()
+    }
+    #[cfg(windows)]
+    {
+        // Every Windows status has a code.
+        status.code().unwrap_or_default()
+    }
+}
+
 /// A guardian receipt does not establish guardian exit or operation success.
+/// On Windows the pool writes it for the worker's Job Object, so `errno` holds
+/// a Windows error code there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuardianReceipt {
     NotStarted { errno: i32 },
@@ -97,7 +114,7 @@ impl WorkerJournal {
     pub fn open(path: &Path, maximum: NonZeroUsize) -> io::Result<Self> {
         let queue = maximum
             .get()
-            .checked_mul(2)
+            .checked_mul(JOBS_PER_RECORD)
             .ok_or_else(|| invalid("Journal limit is too large"))?;
         let directory = Arc::new(Directory::open(path)?);
         let ids = directory.ids(maximum.get())?;
@@ -122,6 +139,17 @@ impl WorkerJournal {
                     #[cfg(test)]
                     Directory::hook(&owned_directory.write_hook);
                     let result = job.ticket.file().and_then(|file| {
+                        if let Some(receipt) = job.receipt {
+                            format::write(
+                                &file,
+                                Frame {
+                                    id: job.ticket.id,
+                                    role: Role::Guardian,
+                                    host: None,
+                                    guardian: Some(receipt),
+                                },
+                            )?;
+                        }
                         if let Some(metadata) = job.published {
                             format::write(
                                 &file,
@@ -203,6 +231,8 @@ impl WorkerJournal {
             file: OnceLock::new(),
             published: AtomicBool::new(false),
             reconciled: AtomicBool::new(false),
+            #[cfg(windows)]
+            receipted: AtomicBool::new(false),
         }))
     }
 }
@@ -214,6 +244,8 @@ pub(super) struct Ticket {
     file: OnceLock<Result<RecordFile, String>>,
     published: AtomicBool,
     reconciled: AtomicBool,
+    #[cfg(windows)]
+    receipted: AtomicBool,
 }
 impl Ticket {
     /// Only OS owner/writer threads call this. Intent and its directory entry are
@@ -252,30 +284,48 @@ impl Ticket {
         if published.is_none() && reconciled.is_none() {
             return;
         }
+        self.queue(Job {
+            ticket: self.clone(),
+            receipt: None,
+            published,
+            reconciled,
+        });
+    }
+    /// Record what became of the worker's tree. On Windows the pool owns the
+    /// tree through its Job Object, so it writes the receipt that Linux's
+    /// guardian writes; the queue keeps it ahead of the later publications.
+    #[cfg(windows)]
+    pub fn receipt(self: &Arc<Self>, receipt: GuardianReceipt) {
+        if self.receipted.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.queue(Job {
+            ticket: self.clone(),
+            receipt: Some(receipt),
+            published: None,
+            reconciled: None,
+        });
+    }
+    fn queue(&self, job: Job) {
         self.store
             .directory
             .progress
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .pending += 1;
-        // At most two jobs per reserved record, and the queue has twice the record
-        // capacity. Never block the observer, including if the writer has failed.
-        if self
-            .store
-            .sender
-            .try_send(Job {
-                ticket: self.clone(),
-                published,
-                reconciled,
-            })
-            .is_err()
-        {
+        // The queue holds JOBS_PER_RECORD jobs per reserved record, as many as
+        // a record can have. Never block the observer, including if the writer
+        // has failed.
+        if self.store.sender.try_send(job).is_err() {
             self.store.directory.completed(true);
         }
     }
 }
+/// A receipt (on Windows), a publication, and a reconciliation.
+const JOBS_PER_RECORD: usize = 3;
 struct Job {
     ticket: Arc<Ticket>,
+    receipt: Option<GuardianReceipt>,
     published: Option<JournalMetadata>,
     reconciled: Option<JournalMetadata>,
 }
@@ -285,12 +335,14 @@ fn invalid(message: &str) -> io::Error {
 }
 
 /// Guardian owns only this invocation's descriptor, never the journal lock.
+#[cfg(target_os = "linux")]
 pub(super) fn guardian_file(file: &std::fs::File) -> io::Result<JournalId> {
     storage::validate(file, Some(format::FILE_BYTES as u64))?;
     let intent =
         format::read_frame(file, Role::Intent)?.ok_or_else(|| invalid("Missing journal intent"))?;
     Ok(intent.id)
 }
+#[cfg(target_os = "linux")]
 pub(super) fn receipt(
     file: &std::fs::File,
     id: JournalId,

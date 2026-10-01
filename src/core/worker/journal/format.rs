@@ -1,6 +1,7 @@
 //! Versioned fixed slots: intent, publication, guardian receipt, reconciliation.
+use super::storage::{read_exact_at, write_all_at};
 use super::*;
-use std::{fs::File, os::unix::fs::FileExt};
+use std::fs::File;
 
 const SLOT_BYTES: usize = 64;
 pub(super) const FILE_BYTES: usize = SLOT_BYTES * 4;
@@ -81,10 +82,17 @@ fn encode(frame: Frame) -> [u8; SLOT_BYTES] {
     bytes
 }
 
+/// A wait status on Linux.
+#[cfg(target_os = "linux")]
 fn valid_status(raw: i32) -> bool {
     (0..=0xff00).contains(&raw)
         && ((libc::WIFEXITED(raw) && raw & 0xff == 0)
             || (raw <= 0xff && libc::WIFSIGNALED(raw) && libc::WTERMSIG(raw) <= libc::SIGRTMAX()))
+}
+/// An exit code on Windows, where every 32-bit value is one.
+#[cfg(windows)]
+fn valid_status(_: i32) -> bool {
+    true
 }
 fn decode(bytes: &[u8; SLOT_BYTES], role: Role) -> io::Result<Frame> {
     let bad = || invalid("Invalid journal frame");
@@ -171,11 +179,11 @@ fn decode(bytes: &[u8; SLOT_BYTES], role: Role) -> io::Result<Frame> {
     Ok(frame)
 }
 pub(super) fn write(file: &File, frame: Frame) -> io::Result<()> {
-    file.write_all_at(&encode(frame), frame.role as u64 * SLOT_BYTES as u64)
+    write_all_at(file, &encode(frame), frame.role as u64 * SLOT_BYTES as u64)
 }
 pub(super) fn read_frame(file: &File, role: Role) -> io::Result<Option<Frame>> {
     let mut bytes = [0; SLOT_BYTES];
-    file.read_exact_at(&mut bytes, role as u64 * SLOT_BYTES as u64)?;
+    read_exact_at(file, &mut bytes, role as u64 * SLOT_BYTES as u64)?;
     if bytes == [0; SLOT_BYTES] {
         Ok(None)
     } else {

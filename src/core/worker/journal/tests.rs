@@ -1,11 +1,8 @@
 use super::super::{OperationControl, WorkerCommand, WorkerLimits, WorkerPool};
 use super::*;
-use std::{
-    fs,
-    os::unix::fs::{symlink, FileExt, PermissionsExt},
-    path::PathBuf,
-    sync::atomic::AtomicU64,
-};
+#[cfg(unix)]
+use std::os::unix::fs::{symlink, PermissionsExt};
+use std::{fs, path::PathBuf, sync::atomic::AtomicU64};
 
 struct Workspace(PathBuf);
 impl Workspace {
@@ -52,6 +49,41 @@ fn stopped() -> JournalMetadata {
         io_complete: false,
         progress_complete: false,
     }
+}
+/// An absolute guardian path, which these tests never run.
+fn guardian() -> PathBuf {
+    if cfg!(windows) {
+        r"C:\missing-guardian".into()
+    } else {
+        "/missing-guardian".into()
+    }
+}
+/// A worker that cannot start: on Linux its guardian is missing, and on
+/// Windows, where the pool runs no guardian, the executable is.
+fn unstartable() -> PathBuf {
+    if cfg!(windows) {
+        r"C:\missing-worker.exe".into()
+    } else {
+        "/bin/true".into()
+    }
+}
+/// Receipt that the worker's tree settled with status 0, written directly as
+/// Linux's guardian writes it.
+fn tree_settled(file: &std::fs::File, id: JournalId) {
+    format::write(
+        file,
+        Frame {
+            id,
+            role: Role::Guardian,
+            host: None,
+            guardian: Some(GuardianReceipt::TreeSettled {
+                exit_status: 0,
+                errno: 0,
+            }),
+        },
+    )
+    .unwrap();
+    file.sync_data().unwrap();
 }
 fn success() -> JournalMetadata {
     JournalMetadata {
@@ -105,15 +137,7 @@ fn publication_and_cleanup_remain_distinct_under_damage_and_late_reconciliation(
     let journal = workspace.journal(8);
     let ticket = journal.reserve().unwrap();
     let file = ticket.file().unwrap();
-    receipt(
-        &file,
-        ticket.id,
-        GuardianReceipt::TreeSettled {
-            exit_status: 0,
-            errno: 0,
-        },
-    )
-    .unwrap();
+    tree_settled(&file, ticket.id);
     assert_eq!(journal.records().unwrap()[0].outcome, None);
     ticket.submit(Some(stopped()), None);
     settled(&journal);
@@ -140,20 +164,12 @@ fn publication_and_cleanup_remain_distinct_under_damage_and_late_reconciliation(
         journal.records().unwrap()[1].outcome,
         Some(WorkerOutcome::Interrupted)
     );
-    receipt(
-        &file,
-        passed.id,
-        GuardianReceipt::TreeSettled {
-            exit_status: 0,
-            errno: 0,
-        },
-    )
-    .unwrap();
+    tree_settled(&file, passed.id);
     assert_eq!(
         journal.records().unwrap()[1].outcome,
         Some(WorkerOutcome::Succeeded)
     );
-    file.write_all_at(&[42], 200).unwrap();
+    storage::write_all_at(&file, &[42], 200).unwrap();
     file.sync_data().unwrap();
     let record = journal.records().unwrap().remove(1);
     assert!(record.damaged);
@@ -175,6 +191,7 @@ fn publication_and_cleanup_remain_distinct_under_damage_and_late_reconciliation(
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn private_regular_files_and_canonical_names_are_required() {
     let workspace = Workspace::new();
@@ -245,12 +262,12 @@ fn blocked_intent_never_enters_worker_and_observer_preserves_capacity() {
             cleanup_timeout: Duration::from_millis(20),
             ..Default::default()
         },
-        "/missing-guardian".into(),
+        guardian(),
         journal.clone(),
     )
     .unwrap();
     let command = WorkerCommand {
-        executable: "/bin/true".into(),
+        executable: unstartable(),
         arguments: vec![],
         directory: workspace.0.clone(),
         environment: Default::default(),
@@ -340,16 +357,12 @@ fn stalled_journal_writer_does_not_retain_typed_payload_ownership() {
     let workspace = Workspace::new();
     let journal = workspace.journal(1);
     let mut gate = Gate::new(&journal.0.directory.write_hook);
-    let pool = WorkerPool::with_recovery(
-        WorkerLimits::default(),
-        "/missing-guardian".into(),
-        journal.clone(),
-    )
-    .unwrap();
+    let pool =
+        WorkerPool::with_recovery(WorkerLimits::default(), guardian(), journal.clone()).unwrap();
     let marker = Arc::new(());
     let weak = Arc::downgrade(&marker);
     let command = WorkerCommand {
-        executable: "/bin/true".into(),
+        executable: unstartable(),
         arguments: vec![],
         directory: workspace.0.clone(),
         environment: Default::default(),
@@ -382,7 +395,12 @@ fn stalled_journal_writer_does_not_retain_typed_payload_ownership() {
         .is_empty());
     drop(pool);
     until(|| weak.upgrade().is_none());
-    assert_eq!(journal.flush_wait(Duration::ZERO).unwrap().pending, 1);
+    // On Windows the pool also queued the receipt that the worker never ran,
+    // which the stalled writer holds.
+    assert_eq!(
+        journal.flush_wait(Duration::ZERO).unwrap().pending,
+        if cfg!(windows) { 2 } else { 1 }
+    );
     gate.release();
     settled(&journal);
     assert_eq!(
@@ -393,25 +411,15 @@ fn stalled_journal_writer_does_not_retain_typed_payload_ownership() {
 
 #[test]
 fn intent_failure_prevents_process_entry_and_exposes_persistence_failure() {
-    use std::os::unix::fs::OpenOptionsExt;
     let workspace = Workspace::new();
     let journal = workspace.journal(1);
     let id = JournalId {
         session: journal.0.session,
         sequence: 1,
     };
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(workspace.path().join(format!("{id}.bwk")))
-        .unwrap();
-    let pool = WorkerPool::with_recovery(
-        WorkerLimits::default(),
-        "/unused-helper".into(),
-        journal.clone(),
-    )
-    .unwrap();
+    journal.0.directory.plant(id).unwrap();
+    let pool =
+        WorkerPool::with_recovery(WorkerLimits::default(), guardian(), journal.clone()).unwrap();
     let entered = Arc::new(AtomicBool::new(false));
     let marker = entered.clone();
     *pool.0 .0.launcher.lock().unwrap() = Some(Box::new(move |_| {
@@ -419,7 +427,7 @@ fn intent_failure_prevents_process_entry_and_exposes_persistence_failure() {
         Err(io::Error::other("must never enter"))
     }));
     let command = WorkerCommand {
-        executable: "/bin/true".into(),
+        executable: unstartable(),
         arguments: vec![],
         directory: workspace.0.clone(),
         environment: Default::default(),
@@ -452,4 +460,87 @@ fn intent_failure_prevents_process_entry_and_exposes_persistence_failure() {
         }
     );
     assert!(journal.records().unwrap()[0].damaged);
+}
+
+#[test]
+fn records_with_a_second_link_are_refused() {
+    let workspace = Workspace::new();
+    let journal = workspace.journal(1);
+    let ticket = journal.reserve().unwrap();
+    ticket.file().unwrap();
+    assert_eq!(journal.records().unwrap().len(), 1);
+    fs::hard_link(
+        workspace.path().join(format!("{}.bwk", ticket.id)),
+        workspace.0.join("alias"),
+    )
+    .unwrap();
+    assert!(journal.records().is_err());
+}
+
+/// The pool queues a tree's receipt ahead of the publications that follow it,
+/// and only the first.
+#[cfg(windows)]
+#[test]
+fn receipts_queue_ahead_of_publications_and_only_once() {
+    let workspace = Workspace::new();
+    let journal = workspace.journal(1);
+    let ticket = journal.reserve().unwrap();
+    ticket.file().unwrap();
+    let settled_tree = GuardianReceipt::TreeSettled {
+        exit_status: 0,
+        errno: 0,
+    };
+    ticket.receipt(settled_tree);
+    ticket.receipt(GuardianReceipt::NotStarted { errno: 2 });
+    ticket.submit(Some(success()), Some(success()));
+    settled(&journal);
+    let record = journal.records().unwrap().remove(0);
+    assert!(!record.damaged);
+    assert_eq!(record.guardian, Some(settled_tree));
+    assert_eq!(record.outcome, Some(WorkerOutcome::Succeeded));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_journals_are_private_and_refuse_shared_or_linked_directories() {
+    use std::process::Command;
+    let workspace = Workspace::new();
+    // A directory made as usual inherits the temporary directory's access
+    // list, which other accounts share.
+    fs::create_dir(workspace.path()).unwrap();
+    assert!(WorkerJournal::open(&workspace.path(), NonZeroUsize::new(1).unwrap()).is_err());
+    fs::remove_dir(workspace.path()).unwrap();
+    // A junction in its place is refused rather than followed.
+    let target = workspace.0.join("target");
+    fs::create_dir(&target).unwrap();
+    let linked = Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(workspace.path())
+        .arg(&target)
+        .output()
+        .unwrap();
+    assert!(linked.status.success(), "{linked:?}");
+    assert!(WorkerJournal::open(&workspace.path(), NonZeroUsize::new(1).unwrap()).is_err());
+    assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
+    fs::remove_dir(workspace.path()).unwrap();
+    // The journal makes its directory private: one entry, granting this user
+    // everything, inherited by what it holds.
+    let journal = workspace.journal(1);
+    let listing = Command::new("icacls")
+        .arg(workspace.path())
+        .output()
+        .unwrap();
+    let listing = String::from_utf8_lossy(&listing.stdout);
+    let entries: Vec<&str> = listing
+        .lines()
+        .take_while(|line| !line.starts_with("Successfully"))
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert_eq!(entries.len(), 1, "{listing}");
+    let user = std::env::var("USERNAME").unwrap();
+    assert!(
+        entries[0].ends_with(":(OI)(CI)(F)") && entries[0].contains(&user),
+        "{listing}"
+    );
+    drop(journal);
 }

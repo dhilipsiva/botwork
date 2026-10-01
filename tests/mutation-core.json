@@ -1,5 +1,5 @@
 {
-  "version": 48,
+  "version": 49,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3850,6 +3850,27 @@
       "file": "src/core/worker.rs",
       "before": "        if cfg!(target_os = \"macos\") {\n",
       "after": "        if true {\n"
+    },
+    {
+      "id": "journal-second-link-accepted",
+      "area": "worker-journal",
+      "file": "src/core/worker/journal/storage/linux.rs",
+      "before": "        || metadata.nlink() != 1\n        || size.is_some_and(|expected| metadata.len() != expected)",
+      "after": "        || size.is_some_and(|expected| metadata.len() != expected)"
+    },
+    {
+      "id": "journal-lock-skipped",
+      "area": "worker-journal",
+      "file": "src/core/worker/journal/storage.rs",
+      "before": "        platform::lock(&lock)?;\n",
+      "after": "        let _ = platform::lock;\n"
+    },
+    {
+      "id": "journal-success-without-receipt",
+      "area": "worker-journal",
+      "file": "src/core/worker/journal/format.rs",
+      "before": "                && recovered.reconciled == Some(host)\n                && matches!(",
+      "after": "                && recovered.reconciled == Some(host)\n                && true\n                || matches!("
     }
   ]
 }

@@ -47,8 +47,8 @@ jobs:
             os: ubuntu-latest
             timeout: 15
           # macOS refuses the process-tree and namespace worker modes, and
-          # tests/platform_gaps.rs checks that they fail clearly there; the
-          # worker journal is Linux-only (decision D12).
+          # tests/platform_gaps.rs checks that they fail clearly there
+          # (decision D12).
           - profile: debug
             flags: ""
             target: aarch64-apple-darwin

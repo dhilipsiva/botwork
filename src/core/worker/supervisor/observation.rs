@@ -185,9 +185,9 @@ impl Observation {
                 let mut flight = self.lock();
                 self.observe(&mut flight);
                 if flight.finished {
-                    #[cfg(target_os = "linux")]
+                    #[cfg(any(target_os = "linux", windows))]
                     let reconciled = super::super::journal::JournalMetadata::from(&flight.report);
-                    #[cfg(not(target_os = "linux"))]
+                    #[cfg(not(any(target_os = "linux", windows)))]
                     let reconciled = ();
                     self.shared.finish(&flight.report);
                     let cleanup = flight.report.cleanup;
@@ -225,7 +225,7 @@ impl Observation {
                     (false, None, None)
                 }
             };
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             if let Some(ticket) = &self.request.journal {
                 ticket.submit(
                     report
@@ -234,7 +234,7 @@ impl Observation {
                     reconciled,
                 );
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", windows)))]
             let _ = reconciled;
             // Receiver wakeups can run host code; never invoke one under the state lock.
             if let Some(report) = report {

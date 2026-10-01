@@ -56,11 +56,16 @@ futures-util = { version = "0.3.32", default-features = false, features = ["std"
 libc = "0.2.189"
 
 # The Windows worker backend (Job Objects, suspended launch, and pipes read and
-# written without waiting) and console interrupts.
+# written without waiting), its journal (files opened relative to a private
+# directory), and console interrupts.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
     "Win32_System_Console",
     "Win32_System_Diagnostics_ToolHelp",

@@ -22,7 +22,7 @@ use super::{
     operation::OperationControl,
 };
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 pub mod journal;
 pub mod protocol;
 #[cfg(any(unix, windows))]
@@ -141,7 +141,7 @@ struct Request {
     // Read by the Linux supervisor; other platforms refuse entry before it.
     #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
     limits: WorkerLimits,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     journal: Option<Arc<journal::Ticket>>,
 }
 
@@ -173,7 +173,7 @@ struct Shared {
     /// Whether the pool owns each worker's whole process tree.
     #[cfg(windows)]
     tree: bool,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     journal: Option<journal::WorkerJournal>,
     #[cfg(target_os = "linux")]
     namespaced: bool,
@@ -224,7 +224,11 @@ impl WorkerPool {
     /// Add durable invocation metadata to a process-tree pool. Journal IDs are
     /// available on admitted handles. Await a report then flush the journal to
     /// acknowledge persistence; ordinary report delivery never waits for disk.
-    #[cfg(target_os = "linux")]
+    /// On Linux the guardian writes each tree receipt, even after the host is
+    /// lost. On Windows the pool writes it once the worker's Job Object is
+    /// empty; losing the host closes the job, which ends the tree, so no
+    /// receipt follows then.
+    #[cfg(any(target_os = "linux", windows))]
     pub fn with_recovery(
         limits: WorkerLimits,
         guardian: PathBuf,
@@ -277,7 +281,7 @@ impl WorkerPool {
             tree: _guardian.is_some(),
             #[cfg(target_os = "linux")]
             guardian: _guardian,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             journal: None,
             #[cfg(target_os = "linux")]
             namespaced: false,
@@ -384,7 +388,7 @@ impl WorkerPool {
                 control: control.child(None),
                 abandoned: AtomicBool::new(false),
                 limits,
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", windows))]
                 journal: shared
                     .journal
                     .as_ref()
@@ -435,7 +439,7 @@ impl WorkerPool {
                 );
             });
         if let Err(error) = spawn {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             if let Some(ticket) = &request.journal {
                 let metadata = journal::JournalMetadata {
                     outcome: WorkerOutcome::Failed,
@@ -560,7 +564,7 @@ impl WorkerHandle {
     pub fn id(&self) -> u64 {
         self.id
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     pub fn journal_id(&self) -> Option<journal::JournalId> {
         self.request.journal.as_ref().map(|ticket| ticket.id)
     }

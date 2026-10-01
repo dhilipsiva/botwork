@@ -54,7 +54,7 @@ pub(super) fn run(
     input: RetainedInput,
     observation: &Arc<Observation>,
 ) {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     if let Some(ticket) = &observation.request.journal {
         if let Err(error) = ticket.file() {
             observation.error(runtime(format_args!(

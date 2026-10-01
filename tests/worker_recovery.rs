@@ -1,4 +1,7 @@
-#![cfg(target_os = "linux")]
+//! The worker journal across a lost host: on Linux the guardian outlives the
+//! host and writes its receipt late; on Windows the host's Job Object ends the
+//! tree with the host, and recovery reports the worker interrupted.
+#![cfg(any(target_os = "linux", windows))]
 use botwork::core::{
     operation::OperationControl,
     worker::{
@@ -8,6 +11,8 @@ use botwork::core::{
     },
 };
 use std::{
+    collections::BTreeMap,
+    ffi::OsString,
     fs,
     num::NonZeroUsize,
     path::{Path, PathBuf},
@@ -65,6 +70,46 @@ fn command(executable: &str, directory: &Path) -> WorkerCommand {
         environment: Default::default(),
     }
 }
+fn python() -> PathBuf {
+    let names: &[&str] = if cfg!(windows) {
+        &["python.exe", "python3.exe"]
+    } else {
+        &["python3"]
+    };
+    std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .flat_map(|directory| names.iter().map(move |name| directory.join(name)))
+        .find(|path| path.is_absolute() && path.is_file())
+        .expect("Python, which the repository's checks use")
+}
+/// tests/support/worker_tool.py in `mode`, which behaves the same everywhere.
+fn tool(mode: &str, argument: Option<&Path>, directory: &Path) -> WorkerCommand {
+    let mut environment = BTreeMap::new();
+    // Python on Windows needs SystemRoot to start.
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        environment.insert(OsString::from("SystemRoot"), root);
+    }
+    WorkerCommand {
+        executable: python(),
+        arguments: [
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/support/worker_tool.py")
+                .into_os_string(),
+            mode.into(),
+        ]
+        .into_iter()
+        .chain(argument.map(|path| path.as_os_str().to_owned()))
+        .collect(),
+        directory: directory.into(),
+        environment,
+    }
+}
+fn missing_worker() -> &'static str {
+    if cfg!(windows) {
+        r"C:\missing-worker.exe"
+    } else {
+        "/missing-worker"
+    }
+}
 fn wait(handle: WorkerHandle) -> WorkerReport {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
@@ -102,9 +147,11 @@ fn final_transport_records_survive_reopen_without_payloads_and_quota_is_shared()
     let first = pool(&journal);
     let second = pool(&journal);
     let secret = b"payload-and-environment-must-not-persist";
-    let mut cat = command("/bin/cat", &workspace.0);
-    cat.environment
-        .insert("SECRET".into(), std::ffi::OsStr::from_bytes(secret).into());
+    let mut cat = tool("cat", None, &workspace.0);
+    cat.environment.insert(
+        "SECRET".into(),
+        String::from_utf8(secret.to_vec()).unwrap().into(),
+    );
     let handle = first
         .start(cat, secret.to_vec(), OperationControl::default())
         .unwrap();
@@ -115,7 +162,7 @@ fn final_transport_records_survive_reopen_without_payloads_and_quota_is_shared()
     assert_eq!(report.stdout, secret);
     let handle = second
         .start(
-            command("/bin/false", &workspace.0),
+            tool("fail", None, &workspace.0),
             vec![],
             OperationControl::default(),
         )
@@ -125,7 +172,7 @@ fn final_transport_records_survive_reopen_without_payloads_and_quota_is_shared()
     assert_eq!(wait(handle).outcome, WorkerOutcome::Failed);
     let handle = first
         .start(
-            command("/missing-worker", &workspace.0),
+            command(missing_worker(), &workspace.0),
             vec![],
             OperationControl::default(),
         )
@@ -133,7 +180,7 @@ fn final_transport_records_survive_reopen_without_payloads_and_quota_is_shared()
     assert_eq!(wait(handle).cleanup, WorkerCleanup::NotStarted);
     assert!(second
         .start(
-            command("/bin/true", &workspace.0),
+            tool("cat", None, &workspace.0),
             vec![],
             OperationControl::default()
         )
@@ -156,12 +203,16 @@ fn final_transport_records_survive_reopen_without_payloads_and_quota_is_shared()
     assert!(records.iter().all(|record| !record.damaged));
     for entry in fs::read_dir(workspace.0.join("journal")).unwrap() {
         let entry = entry.unwrap();
+        // An empty file, such as the lock that Windows bars others from
+        // reading, holds nothing.
+        if entry.metadata().unwrap().len() == 0 {
+            continue;
+        }
         let bytes = fs::read(entry.path()).unwrap();
-        assert!(bytes.is_empty() || bytes.len() == 256);
+        assert_eq!(bytes.len(), 256);
         assert!(!bytes.windows(secret.len()).any(|window| window == secret));
     }
 }
-use std::os::unix::ffi::OsStrExt;
 
 struct Host(Child);
 impl Drop for Host {
@@ -170,7 +221,9 @@ impl Drop for Host {
         let _ = self.0.wait();
     }
 }
+#[cfg(target_os = "linux")]
 struct Resume(i32);
+#[cfg(target_os = "linux")]
 impl Drop for Resume {
     fn drop(&mut self) {
         if self.0 != 0 {
@@ -181,7 +234,9 @@ impl Drop for Resume {
     }
 }
 
+#[cfg(target_os = "linux")]
 struct Adoption(i32);
+#[cfg(target_os = "linux")]
 impl Adoption {
     fn new() -> Self {
         let mut previous = 0;
@@ -196,6 +251,7 @@ impl Adoption {
         Self(previous)
     }
 }
+#[cfg(target_os = "linux")]
 impl Drop for Adoption {
     fn drop(&mut self) {
         unsafe {
@@ -204,6 +260,7 @@ impl Drop for Adoption {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn host_death_recovers_interruption_or_frozen_stop_and_accepts_late_guardian_receipt() {
     // Adopt the deliberately paused guardian so its process group does not
@@ -301,6 +358,7 @@ fn host_death_recovers_interruption_or_frozen_stop_and_accepts_late_guardian_rec
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn subprocess_journal_host() {
     let Some(directory) = std::env::var_os("BOTWORK_JOURNAL_HOST") else {
@@ -339,4 +397,106 @@ fn subprocess_journal_host() {
     flush(&journal);
     fs::write(directory.join("published"), []).unwrap();
     std::thread::sleep(Duration::from_secs(10));
+}
+
+/// Whether the heartbeat file has stopped growing, so the descendant that
+/// writes it every 20 ms has ended.
+#[cfg(windows)]
+fn stopped(heartbeat: &Path) -> bool {
+    let size = || fs::metadata(heartbeat).map_or(0, |metadata| metadata.len());
+    let before = size();
+    std::thread::sleep(Duration::from_millis(300));
+    size() == before
+}
+
+#[cfg(windows)]
+#[test]
+fn a_lost_windows_host_ends_the_tree_and_recovers_interruption_or_the_reaped_stop() {
+    for published in [false, true] {
+        let workspace = Workspace::new();
+        let mut host = Host(
+            Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "windows_subprocess_journal_host", "--nocapture"])
+                .env("BOTWORK_JOURNAL_HOST", &workspace.0)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .unwrap(),
+        );
+        until(|| workspace.0.join("host-ready").exists());
+        if published {
+            fs::write(workspace.0.join("cancel"), []).unwrap();
+            until(|| workspace.0.join("published").exists());
+        }
+        host.0.kill().unwrap();
+        host.0.wait().unwrap();
+        // Closing the lost host's job ended the worker and its descendant.
+        let heartbeat = workspace.0.join("heartbeat");
+        let begun = Instant::now();
+        while !stopped(&heartbeat) {
+            assert!(
+                begun.elapsed() < Duration::from_secs(10),
+                "the tree outlived its host"
+            );
+        }
+        let journal = reopen(&workspace, 8);
+        let record = journal.records().unwrap().remove(0);
+        assert!(!record.damaged);
+        if published {
+            // The host saw the cancelled tree reaped, and its receipt and
+            // reconciliation persisted, before it was lost.
+            assert_eq!(record.outcome, Some(WorkerOutcome::Cancelled));
+            assert_eq!(
+                record.reconciled.unwrap().cleanup,
+                WorkerCleanup::TreeReaped
+            );
+            assert!(matches!(
+                record.guardian,
+                Some(GuardianReceipt::TreeSettled { errno: 0, .. })
+            ));
+        } else {
+            // No receipt follows a lost host on Windows: its job ended the
+            // tree, and the record says the worker was interrupted.
+            assert_eq!(record.outcome, Some(WorkerOutcome::Interrupted));
+            assert!(record.published.is_none());
+            assert!(record.reconciled.is_none());
+            assert!(record.guardian.is_none());
+        }
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_subprocess_journal_host() {
+    let Some(directory) = std::env::var_os("BOTWORK_JOURNAL_HOST") else {
+        return;
+    };
+    let directory = PathBuf::from(directory);
+    let journal =
+        WorkerJournal::open(&directory.join("journal"), NonZeroUsize::new(8).unwrap()).unwrap();
+    let pool = pool(&journal);
+    let heartbeat = directory.join("heartbeat");
+    let control = OperationControl::default();
+    let handle = pool
+        .start(
+            tool("tree", Some(&heartbeat), &directory),
+            vec![],
+            control.clone(),
+        )
+        .unwrap();
+    until(|| fs::metadata(&heartbeat).is_ok_and(|metadata| metadata.len() > 0));
+    fs::write(directory.join("host-ready"), []).unwrap();
+    // The test kills this host, here or after publishing.
+    while !directory.join("cancel").exists() {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    control.cancel();
+    let report = wait(handle);
+    assert_eq!(report.outcome, WorkerOutcome::Cancelled);
+    // Once the tree is reaped, its receipt and reconciliation are queued.
+    until(|| pool.snapshot().active.is_empty());
+    flush(&journal);
+    fs::write(directory.join("published"), []).unwrap();
+    std::thread::sleep(Duration::from_secs(60));
 }

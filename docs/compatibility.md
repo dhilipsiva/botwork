@@ -41,11 +41,12 @@ no `rust-version`.
 | --- | --- |
 | Linux x86_64, GNU and static musl | Supported and tested in CI: every test for both, in debug and release |
 | macOS arm64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run with Linux's process-group guarantees; the process-tree and PID-namespace worker modes are unavailable, since macOS cannot follow detached descendants ([D12](decisions.md#d12-platform-parity)) |
-| Windows x86_64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run each worker in a Job Object, which ends every descendant with it, and the process-tree mode reports a tree reaped once its job is empty ([D12](decisions.md#d12-platform-parity)) |
+| Windows x86_64 | Built and tested in CI, in debug and release. The process statements and the default worker pool run each worker in a Job Object, which ends every descendant with it, the process-tree mode reports a tree reaped once its job is empty, and `with_recovery` keeps the worker journal ([D12](decisions.md#d12-platform-parity)) |
 
 Process statements and the default worker pool run on every platform above,
 and the process-tree mode on Linux and Windows; macOS refuses it at
-construction. The PID-namespace mode and the worker journal are Linux-only.
+construction. The PID-namespace mode is Linux-only, and the worker journal runs on
+Linux and Windows.
 Cooperative interruption works on all three: SIGINT and SIGTERM on Linux and
 macOS, and Ctrl-C and Ctrl-Break on Windows. See
 [worker platforms](worker-platforms.md) and

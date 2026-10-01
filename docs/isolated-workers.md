@@ -168,8 +168,8 @@ macOS cannot follow a process that leaves the worker's group: it has no child
 subreaper or PID namespace, and kqueue stopped tracking forks in Mac OS X 10.5.
 `with_process_tree` therefore fails there with BW7002 rather than run a weaker
 mode under the same name ([D12](decisions.md#d12-platform-parity)).
-`with_recovery` and `with_pid_namespace` take the Linux worker journal and are
-built only on Linux.
+`with_recovery` keeps the [worker journal](#durable-worker-journal) on Windows
+too, and `with_pid_namespace` is built only on Linux.
 
 ## Bounded Shutdown Wait
 
@@ -217,21 +217,20 @@ Guardian evidence includes three unit checks for status frames, bounded child-li
 
 ## Durable worker journal
 
-On Linux, `worker::journal::WorkerJournal::open(absolute_path, maximum_records)` opens or creates a private directory, and `WorkerPool::with_recovery(limits, absolute_botwork_path, journal.clone())` enables persistence for a guardian pool. Existing constructors keep their original behavior. The matching CLI helper is required. `WorkerHandle::journal_id()` identifies the durable invocation; save it before consuming the handle. IDs combine a random 128-bit opening session with a sequence shared by all pools using the same journal. Pool-local `id()` values remain unchanged.
+On Linux and Windows, `worker::journal::WorkerJournal::open(absolute_path, maximum_records)` opens or creates a private directory, and `WorkerPool::with_recovery(limits, absolute_botwork_path, journal.clone())` enables persistence for a process-tree pool. Existing constructors keep their original behavior. Linux requires the matching CLI helper; Windows checks that the path is absolute but runs no helper. `WorkerHandle::journal_id()` identifies the durable invocation; save it before consuming the handle. IDs combine a random 128-bit opening session with a sequence shared by all pools using the same journal. Pool-local `id()` values remain unchanged.
 
 This executed example configures recovery without launching a worker. Replace the helper path before entry:
 
 ```rust
-# #[cfg(target_os = "linux")]
+# #[cfg(any(target_os = "linux", windows))]
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 use std::{num::NonZeroUsize, time::{Duration, SystemTime, UNIX_EPOCH}};
 use botwork::core::worker::{WorkerLimits, WorkerPool, journal::WorkerJournal};
 let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
 let directory = std::env::temp_dir().join(format!("botwork-journal-doc-{}-{nonce}", std::process::id()));
 let journal = WorkerJournal::open(&directory, NonZeroUsize::new(128).unwrap())?;
-let pool = WorkerPool::with_recovery(
-    WorkerLimits::default(), "/absolute/path/to/botwork".into(), journal.clone(),
-)?;
+let helper = if cfg!(windows) { r"C:\path\to\botwork.exe" } else { "/absolute/path/to/botwork" };
+let pool = WorkerPool::with_recovery(WorkerLimits::default(), helper.into(), journal.clone())?;
 assert!(journal.records()?.is_empty());
 assert_eq!(journal.flush_wait(Duration::ZERO)?.pending, 0);
 drop(pool);
@@ -239,17 +238,19 @@ drop(journal);
 std::fs::remove_dir_all(directory)?;
 # Ok(())
 # }
-# #[cfg(not(target_os = "linux"))]
+# #[cfg(not(any(target_os = "linux", windows)))]
 # fn main() {}
 ```
 
 Every accepted reservation consumes one record of the configured maximum, including old sessions. Exhaustion returns BW8001 before worker entry. There is no eviction or automatic replay. Each file contains exactly 256 logical bytes in four independently checked slots: intent, published host outcome, guardian receipt, and final host reconciliation. Records omit input/output, arguments, environment, executable paths, PIDs, and diagnostic text. Directory entries, filesystem allocation overhead, and the empty lock file add storage beyond the logical record size. Choose the record limit for available disk capacity; disk errors fail intent before entry or are exposed by flush failures. Use a new directory when a retained journal fills. Archiving/deletion is a host responsibility after all owners and old guardians have settled; do not remove live records or the lock file.
 
-The OS owner writes and syncs intent, then syncs the containing directory **before launching the guardian**. A failed intent write prevents entry. Cancellation or timeout during a stalled write can still publish `Pending`, retaining capacity and typed reservations until that write returns. The owner checks the stop again before launching. The observer only queues fixed metadata and never waits for disk. At most two metadata jobs exist per reserved record. Journal jobs do not retain worker payloads or typed reservations. The writer closes each record after final reconciliation, outside observation locks, before acknowledging that flush.
+The OS owner writes and syncs intent, then syncs the containing directory **before launching the guardian** (on Windows, before creating the worker). A failed intent write prevents entry. Cancellation or timeout during a stalled write can still publish `Pending`, retaining capacity and typed reservations until that write returns. The owner checks the stop again before launching. The observer only queues fixed metadata and never waits for disk. At most three metadata jobs exist per reserved record: on Windows a tree receipt, then the publication and the reconciliation. Journal jobs do not retain worker payloads or typed reservations. The writer closes each record after final reconciliation, outside observation locks, before acknowledging that flush.
 
 A report's publication queues its metadata before waking the receiver. After awaiting a report, `journal.flush_wait(timeout)` waits for already accepted host writes, returning `JournalFlush { pending, failed }`. Both must be zero to acknowledge successful persistence. A timeout exposes unfinished writes without cancelling them; failures remain counted for that opening session. This wait has a monotonic bound and does not perform filesystem operations. It does not drain workers or promise that future reconciliation jobs have been queued. `shutdown_wait` and journal flushing are separate operations. Ordinary report delivery alone does not acknowledge disk durability. `open` and `records` perform explicit synchronous filesystem operations and may block; call them outside latency-sensitive worker observation.
 
 The guardian inherits only its own record descriptor. After kernel-confirmed tree settlement, or a verified pre-worker failure, it writes and syncs a separate receipt before acknowledging the host. A `TreeSettled` receipt proves that worker descendants were reaped; it does not prove guardian exit, complete transport I/O, typed validation, or a successful operation. A failed receipt write prevents a verified acknowledgment and quarantines the host slot. Stalled receipt syncing leaves cleanup observable as pending.
+
+Windows has no guardian process, so the pool queues the receipt on the journal's writer, ahead of the publications that follow it: `TreeSettled` with the worker's exit code once its terminated Job Object holds no process, or `NotStarted` with the Windows error code when the worker could not be created. Its `errno` field holds that Windows code. A lost host closes the job, which ends the whole tree, so no late receipt follows: the record recovers as `Interrupted`, or keeps a stop the host had published.
 
 `records()` validates filename/slot identities, version, canonical fields, checksum, fixed file length, and consistency. A concurrent partial write can produce a conservative `damaged` snapshot; rescan after flushing or cleanup. The CRC detects accidental corruption/torn writes and is not authentication. Read/open failures are returned explicitly. For a previous session, a missing host publication recovers as `Interrupted`, even if a guardian later reports exit zero. Valid cancelled, timed-out, failed, or interrupted publications retain their unsuccessful category through missing, late, conflicting, or damaged cleanup evidence; `damaged` still exposes uncertainty. Recovery reports success only when intact, matching host publication/reconciliation records establish full transport completion and agree with a successful guardian receipt. Current-session records without a publication have `outcome: None` unless damaged.
 
@@ -257,9 +258,11 @@ These outcomes describe the worker transport. A typed protocol error can follow 
 
 A journal directory must be owned by the effective user and inaccessible to group/others. Record and lock files must be owned, private, regular, and have one link. Opens are relative to a retained directory descriptor with symlink rejection. Unexpected entries fail scanning. An exclusive nonblocking [flock](https://man7.org/linux/man-pages/man2/flock.2.html) prevents competing host writers; a blocked writer retains that lock even after public handles are dropped. A forked host process can inherit the lock and delay reopening until its descriptor closes. Old guardians inherit no global lock, so a new host can reopen the journal and observe their later receipts through repeated scans. Configure a trusted parent directory and a local filesystem implementing the required lock and [file/directory sync semantics](https://man7.org/linux/man-pages/man2/fsync.2.html); storage devices/filesystems must honor sync for power-loss durability. Remote filesystems are not advertised.
 
+On Windows the journal creates its directory and files with this user as the owner and a protected access list whose one entry grants this user full access, inherited by everything inside. An existing directory or file must be owned by this user and grant access to no one else; a directory made as usual inherits other accounts' access from its parent and is refused. Files open relative to the directory's handle through `NtCreateFile`, and a final junction or symbolic link is opened as itself and refused. `LockFileEx` holds the exclusive lock, and while the journal is open its directory cannot be renamed or removed. `FlushFileBuffers` syncs records, the directory's entries, and a newly created directory's parent. NTFS provides these semantics; other filesystems are not advertised.
+
 Journal recovery records uncertainty when a guardian dies; it does not provide containment of the remaining tree. This includes the Linux [orphaned stopped-group SIGHUP rule](https://man7.org/linux/man-pages/man2/setpgid.2.html). The namespace mode below contains guardian failure. Unsupported facilities/platforms, external effects, and uninterruptible kernel calls remain explicit boundaries.
 
-Evidence includes eight unit tests for schema corruption, incomplete/conflicting publications, exclusive ownership, quota/identity across reopen, private-file enforcement, failed writes, stalled intent, bounded flush, and lock retention. Two subprocess scenarios plus a dedicated host fixture cover successful/failed/pre-entry completion, metadata privacy, shared quota, host SIGKILL before/after a flushed stop, reopening while an old guardian is paused, and later tree receipts without changing the recovered outcome. The delayed-receipt fixture adopts its deliberately stopped guardian to avoid orphan-group SIGHUP and reaps that exact child. Two R30 corpus cases pin exact quota admission and rejection; the configuration example executes as a doctest.
+Evidence includes eight unit tests for schema corruption, incomplete/conflicting publications, exclusive ownership, quota/identity across reopen, private-file enforcement, failed writes, stalled intent, bounded flush, and lock retention. Two subprocess scenarios plus a dedicated host fixture cover successful/failed/pre-entry completion, metadata privacy, shared quota, host SIGKILL before/after a flushed stop, reopening while an old guardian is paused, and later tree receipts without changing the recovered outcome. The delayed-receipt fixture adopts its deliberately stopped guardian to avoid orphan-group SIGHUP and reaps that exact child. Two R30 corpus cases pin exact quota admission and rejection; the configuration example executes as a doctest. The unit tests and the transport scenario run on Windows too, with a portable Python worker, alongside a check that a record with a second link is refused. Windows adds a check that the journal's directory has a single entry for this user and refuses an inherited access list or a junction, a check that the pool's receipt is queued once and ahead of the publications, and a host killed before and after a flushed stop: its job ends the worker and the descendant it started, and the record recovers as `Interrupted` without a receipt, or as the reaped stop with one.
 
 
 ## Kernel containment with PID namespaces

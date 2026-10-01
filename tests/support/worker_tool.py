@@ -9,12 +9,40 @@ Usage: worker_tool.py MODE [ARGUMENT]
   orphan        start a descendant that appends a byte to the file ARGUMENT
                 every 20 ms for a minute, wait until it has, print its process
                 ID, and exit without waiting for it
+  tree          start the same descendant, wait until it has written, print
+                "begun", and sleep for a minute
   env           print the environment variable ARGUMENT, or nothing
 """
 import os
 import subprocess
 import sys
 import time
+
+
+def heartbeat(path):
+    """Start a descendant that appends to `path` every 20 ms for a minute, and
+    return it once it has written."""
+    beat = (
+        "import sys, time\n"
+        "with open(sys.argv[1], 'ab', buffering=0) as f:\n"
+        "    for _ in range(3000):\n"
+        "        f.write(b'.')\n"
+        "        time.sleep(0.02)\n"
+    )
+    descendant = subprocess.Popen(
+        [sys.executable, "-c", beat, path],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    # Return only once the descendant runs, so its stopping proves something.
+    deadline = time.monotonic() + 30
+    while not (os.path.exists(path) and os.path.getsize(path) > 0):
+        if time.monotonic() > deadline:
+            sys.exit("the descendant never started")
+        time.sleep(0.01)
+    return descendant
+
 
 mode = sys.argv[1]
 out = sys.stdout.buffer
@@ -36,27 +64,12 @@ elif mode == "backpressure":
     out.flush()
     sys.stderr.write(str(len(sys.stdin.buffer.read())))
 elif mode == "orphan":
-    heartbeat = sys.argv[2]
-    beat = (
-        "import sys, time\n"
-        "with open(sys.argv[1], 'ab', buffering=0) as f:\n"
-        "    for _ in range(3000):\n"
-        "        f.write(b'.')\n"
-        "        time.sleep(0.02)\n"
-    )
-    descendant = subprocess.Popen(
-        [sys.executable, "-c", beat, heartbeat],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    # Exit only once the descendant runs, so its stopping proves something.
-    deadline = time.monotonic() + 30
-    while not (os.path.exists(heartbeat) and os.path.getsize(heartbeat) > 0):
-        if time.monotonic() > deadline:
-            sys.exit("the descendant never started")
-        time.sleep(0.01)
-    out.write(str(descendant.pid).encode())
+    out.write(str(heartbeat(sys.argv[2]).pid).encode())
+elif mode == "tree":
+    heartbeat(sys.argv[2])
+    out.write(b"begun")
+    out.flush()
+    time.sleep(60)
 elif mode == "env":
     out.write(os.environ.get(sys.argv[2], "").encode())
 else:

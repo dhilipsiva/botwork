@@ -1,6 +1,7 @@
 //! The Windows backend: each worker runs in its own Job Object, assigned while
 //! the worker is still suspended, so termination reaches every descendant and a
 //! lost host closes the job and takes them with it.
+use super::super::journal::{GuardianReceipt, Ticket};
 use super::observation::Observation;
 use super::*;
 use std::{
@@ -267,6 +268,8 @@ pub(in crate::core::worker) struct ChildOwner {
     /// Whether the pool owns the whole tree, so reaping waits for the job to
     /// empty and reports [`WorkerCleanup::TreeReaped`].
     tree: bool,
+    /// The journal record of a recovering pool, which takes the tree's receipt.
+    journal: Option<Arc<Ticket>>,
     pub(super) owned: bool,
     #[cfg(test)]
     pub(super) observer: Option<Arc<Observation>>,
@@ -308,6 +311,13 @@ impl ChildOwner {
             return Ok(None);
         }
         self.owned = false;
+        if let Some(ticket) = &self.journal {
+            ticket.receipt(GuardianReceipt::TreeSettled {
+                // Every Windows status has a code.
+                exit_status: status.code().unwrap_or_default(),
+                errno: 0,
+            });
+        }
         Ok(Some(Completion {
             status: Some(status),
             cleanup: if self.tree {
@@ -338,7 +348,23 @@ pub(super) fn launch_worker(
     specification: WorkerCommand,
     observation: &Observation,
 ) -> io::Result<ChildOwner> {
-    spawn(specification, observation.shared.tree)
+    let journal = observation.request.journal.clone();
+    match spawn(specification, observation.shared.tree) {
+        Ok(mut child) => {
+            child.journal = journal;
+            Ok(child)
+        }
+        Err(error) => {
+            // The worker never ran, as a Linux guardian reports when it cannot
+            // start one.
+            if let (Some(ticket), Some(code)) = (&journal, error.raw_os_error()) {
+                if code > 0 {
+                    ticket.receipt(GuardianReceipt::NotStarted { errno: code });
+                }
+            }
+            Err(error)
+        }
+    }
 }
 
 /// Start the worker suspended, place it in a new job, then let it run, so that
@@ -371,6 +397,7 @@ pub(super) fn spawn(specification: WorkerCommand, tree: bool) -> io::Result<Chil
         stdout: Some(Pipe(output)),
         stderr: Some(Pipe(errors)),
         tree,
+        journal: None,
         child,
         job,
         owned: true,

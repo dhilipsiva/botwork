@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn dropping_a_handle_during_stop_observation_preserves_interruption() {
     let request = Arc::new(Request {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
@@ -25,7 +25,7 @@ fn dropping_a_handle_during_stop_observation_preserves_interruption() {
     assert!(error.error.to_string().contains("abandoned"));
 
     let request = Request {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         journal: None,
         control: OperationControl::default(),
         abandoned: AtomicBool::new(false),
