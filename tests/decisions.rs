@@ -129,8 +129,15 @@ fn registered_budgets_follow_the_accepted_baseline() {
     let decisions = read("docs/decisions.md");
     assert!(decisions.contains(&format!("revision `{}`", &revision[..7])));
     let performance = read("docs/performance.md");
-    // The binary's budget: its size in bytes × 1.25, rounded up.
-    let binary = evidence["binaries"]["botwork"]["bytes"].as_u64().unwrap();
+    // The binary's budget: its size in bytes × 1.25, rounded up, in the
+    // campaign that re-baselined it when WebAssembly support joined the binary.
+    let sized: Value =
+        serde_json::from_str(&read("docs/performance-binary-baseline-evidence.json")).unwrap();
+    assert!(decisions.contains(&format!(
+        "revision `{}`",
+        &sized["base_revision"].as_str().unwrap()[..7]
+    )));
+    let binary = sized["binaries"]["botwork"]["bytes"].as_u64().unwrap();
     let size = format!("{} bytes", grouped((binary * 5).div_ceil(4)));
     for (file, text, heading) in [
         ("decisions", &decisions, "### D4: Budgets and baseline"),

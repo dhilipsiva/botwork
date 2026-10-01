@@ -94,7 +94,9 @@ p95 workload time × 1.25 and its maximum peak heap × 1.25:
 | Sixteen 256 KiB source loads | 8.476 ms | 10.59 ms | 933 KiB | 1,167 KiB |
 | 100 waiting runs | 21.103 ms | 26.38 ms | 4,274 KiB | 5,343 KiB |
 
-The CLI binary's budget is its 10,525,736-byte size × 1.25: 13,157,170 bytes.
+The CLI binary's budget was its 10,525,736-byte size × 1.25, 13,157,170 bytes,
+until WebAssembly support; it is now 33,607,840 bytes (see
+[binary size with WebAssembly](#binary-size-with-webassembly)).
 
 Times are rounded to 0.01 ms, and memory and size are rounded up. The budget
 check computes the same values from the recorded campaign. A later campaign on
@@ -130,6 +132,31 @@ features. The owner chose to:
 - budget peak heap and binary size in place of peak RSS.
 
 [Measurement protocol 2](performance.md) implements both.
+
+#### Binary size with WebAssembly
+
+*Decided by the owner on 2026-10-01, when WebAssembly support (D8) put
+Wasmtime in the binary.*
+
+The CLI binary's budget is its size in the
+[campaign](performance-binary-baseline-evidence.json) at revision `02fdf30`,
+which added WebAssembly support, × 1.25: 26,886,272 × 1.25 = 33,607,840 bytes.
+Every other budget still follows the accepted baseline.
+
+Wasmtime, with its Cranelift compiler and WASI, grew the `dist` binary on
+Linux x86_64 from 10,586,064 to 26,886,272 bytes, 2.5 times the budget's
+baseline. D6 and D8 keep WASM in every binary, and no explanation excuses a
+size over budget, so the two decisions conflicted. Of re-baselining the size
+budget, making WASM an opt-in build feature (revising D6 and D8), or shipping
+a second binary with it (revising D17), the owner chose to re-baseline the
+size budget alone.
+
+The same campaign measured median CLI startup 16.0% above its paired baseline
+runs. In interleaved runs, main before WebAssembly was already 7.3% above the
+baseline revision, and the larger binary added about 9 points: its relocated
+data and code cost each start about 70 more page faults (633, not 561). The
+campaign's check accepts the regression with that explanation, and p95
+startup, 3.646 ms, stays within its 3.95 ms budget.
 
 #### Paired time comparisons
 

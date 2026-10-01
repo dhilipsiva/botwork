@@ -178,10 +178,13 @@ class RegisteredBudgets(unittest.TestCase):
 
     def setUp(self):
         self.baseline = json.loads((ROOT / "docs/performance-baseline-evidence.json").read_text())
+        self.binary = json.loads((ROOT / "docs/performance-binary-baseline-evidence.json").read_text())
         self.budgets = json.loads((ROOT / "benches/runtime/budgets.json").read_text())
         # The baseline as a campaign whose paired runs of the baseline's source
-        # measured exactly what it did.
+        # measured exactly what it did, with a binary the size of the one that
+        # re-baselined the binary's budget.
         self.paired = copy.deepcopy(self.baseline)
+        self.paired["binaries"]["botwork"]["bytes"] = self.binary["binaries"]["botwork"]["bytes"]
         self.paired["paired"] = {"inputs_sha256": RUNNER["inputs_digest"](self.baseline["input_sha256"])}
         for statistics in self.paired["statistics"].values():
             statistics["paired_elapsed_ns"] = dict(statistics["workload_elapsed_ns"])
@@ -200,7 +203,7 @@ class RegisteredBudgets(unittest.TestCase):
         return campaign
 
     def test_budgets_are_the_accepted_baseline_times_a_quarter(self):
-        self.assertEqual(self.budgets, RUNNER["budgets_from"](self.baseline))
+        self.assertEqual(self.budgets, RUNNER["budgets_from"](self.baseline, self.binary))
         self.assertEqual((self.budgets["schema"], self.budgets["protocol"]), (3, 2))
         # Paired runs build the committed source of the baseline's fingerprinted inputs.
         self.assertEqual(self.budgets["baseline"]["source_revision"], "b49116c285408aceb80a811bebd30a63fb15eb58")
@@ -208,12 +211,31 @@ class RegisteredBudgets(unittest.TestCase):
                          RUNNER["inputs_digest"](self.baseline["input_sha256"]))
         self.assertEqual(self.budgets["workloads"]["cli-startup"]["p95_budget_ns"], 3_954_744)
         self.assertEqual(self.budgets["workloads"]["parse"]["heap_budget_kib"], 18_135)
-        self.assertEqual(self.budgets["binary"]["budget_bytes"], 13_157_170)
+        self.assertEqual(self.budgets["binary"]["budget_bytes"], 33_607_840)
         self.assertEqual(set(self.budgets["workloads"]), {case["id"] for case in RUNNER["workloads"]()})
         self.assertEqual(self.budgets["host"], {"cpu": "AMD Ryzen 9 9950X3D 16-Core Processor", "cpus": 8,
                                                 "target": "x86_64-unknown-linux-gnu", "profile": "dist"})
         with self.assertRaises(ValueError):
             RUNNER["budgets_from"](dict(self.baseline, schema=1))
+
+    def test_a_later_campaign_rebaselines_the_binary_alone(self):
+        # D4, revised on 2026-10-01: WebAssembly support (D8) put Wasmtime in
+        # the binary, and a campaign at that revision set the binary's budget.
+        alone = RUNNER["budgets_from"](self.baseline)
+        self.assertEqual(alone["binary"], {"baseline_bytes": 10_525_736, "budget_bytes": 13_157_170})
+        both = RUNNER["budgets_from"](self.baseline, self.binary)
+        self.assertEqual(both["binary"], {
+            "baseline_bytes": self.binary["binaries"]["botwork"]["bytes"],
+            "budget_bytes": 33_607_840,
+            "record": "docs/performance-binary-baseline-evidence.json",
+            "base_revision": self.binary["base_revision"],
+        })
+        # Every other budget still follows the accepted baseline.
+        self.assertEqual({key: value for key, value in both.items() if key != "binary"},
+                         {key: value for key, value in alone.items() if key != "binary"})
+        for broken in (dict(self.binary, complete=False), dict(self.binary, schema=1)):
+            with self.assertRaises(ValueError):
+                RUNNER["budgets_from"](self.baseline, broken)
 
     def test_the_baseline_passes_its_own_budgets(self):
         self.assertEqual(RUNNER["check"](self.paired, self.budgets), [])

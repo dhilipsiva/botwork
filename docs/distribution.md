@@ -102,7 +102,7 @@ summary, and the others still publish.
 | Running scripts and suites, reports, `--check`, `--format`, `--lsp` | Nothing beyond the binary |
 | Process statements and isolated workers | Linux, macOS, or Windows; see [worker platforms](worker-platforms.md) |
 | HTTP statements | Network access to the servers a script calls |
-| [WebAssembly statements](wasm.md) | Nothing: Wasmtime is part of the binary, through the default `wasm` feature |
+| [WebAssembly statements](wasm.md) | Nothing: Wasmtime is part of the binary, through the default `wasm` feature, and makes up about 16 MB of it |
 | [Python statements](python.md) | A build with the `python` feature, and libpython 3.10 or later |
 | [JavaScript statements](javascript.md) | Node.js on `PATH` |
 

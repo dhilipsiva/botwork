@@ -18,8 +18,10 @@
   "budget_factor": 1.25,
   "regression_limit": 0.1,
   "binary": {
-    "baseline_bytes": 10525736,
-    "budget_bytes": 13157170
+    "baseline_bytes": 26886272,
+    "budget_bytes": 33607840,
+    "record": "docs/performance-binary-baseline-evidence.json",
+    "base_revision": "02fdf30f9a17b39b2ea514a9d383020e443236fe"
   },
   "workloads": {
     "cli-startup": {

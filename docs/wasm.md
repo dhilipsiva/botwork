@@ -10,6 +10,9 @@ interrupts it at once.
 
 Nothing beyond the binary. The `wasm` build feature, on by default, compiles
 Wasmtime into Botwork; see [what the binary needs](distribution.md#what-the-binary-needs).
+Wasmtime and its Cranelift compiler are most of the binary: the Linux x86_64
+release build is about 27 MB, against 11 MB without them
+([D4](decisions.md#d4-budgets-and-baseline)).
 A Rust program that embeds Botwork can leave it out with
 `default-features = false`. In such a build, an import of a `.wasm` file fails
 with BW6001 naming the feature.
@@ -154,5 +157,6 @@ busy call, loading failures, limit validation, and the CLI.
 The tests call [`tests/wasm/statements.wasm`](../tests/wasm/statements.wasm),
 built from `tests/wasm/guest`. `python3 scripts/wasm_guest.py check` verifies
 that it matches its recorded sources; after changing them, rebuild it with
-`python3 scripts/wasm_guest.py build`. CI also rebuilds it from source and
-runs the tests against that build.
+`python3 scripts/wasm_guest.py build`. CI also rebuilds it from source, runs
+the tests against that build, and builds and runs the greeter example;
+`python3 tests/wasm_tools.py` tests the script.

@@ -240,7 +240,12 @@ its maximum peak heap × 1.25:
 | Sixteen 256 KiB source loads | 10.59 ms | 1,167 KiB |
 | 100 waiting runs | 26.38 ms | 5,343 KiB |
 
-The CLI binary's budget is 13,157,170 bytes, its baseline size × 1.25.
+The CLI binary's budget is 33,607,840 bytes: its size × 1.25 in the
+[campaign](performance-binary-baseline-evidence.json) at revision `02fdf30`,
+which added [WebAssembly statements](wasm.md) and with them Wasmtime. The owner
+re-baselined the binary's size alone then
+([D4](decisions.md#d4-budgets-and-baseline)); before, its budget was
+13,157,170 bytes.
 
 Times are rounded to 0.01 ms, and memory and size are rounded up.
 `benches/runtime/budgets.json` records the exact values in nanoseconds, KiB,
