@@ -5,12 +5,16 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The release workflow runs every check before building what it publishes.
+  workflow_call:
 
 permissions:
   contents: read
 
+# Called by the release workflow, github.workflow names the caller, so a
+# release's checks neither cancel nor are cancelled by the ref's own CI.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -97,6 +101,9 @@ jobs:
       - name: Check mutation campaign helper
         if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: python3 tests/mutation_tools.py
+      - name: Check release packaging helper
+        if: matrix.profile == 'debug' && matrix.target == 'x86_64-unknown-linux-gnu'
+        run: python3 tests/release_tools.py
       - name: Build all targets
         run: cargo +stable build --locked --all-targets --target ${{ matrix.target }} ${{ matrix.flags }}
       - name: Check performance measurement helper
@@ -116,6 +123,25 @@ jobs:
           fi
       - name: Run tests and examples
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
+
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint 1.7.12
+        run: |
+          cd "$RUNNER_TEMP"
+          curl --silent --show-error --location --fail --output actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz" | sha256sum --check
+          tar --extract --gzip --file actionlint.tar.gz actionlint
+      - name: Check the workflows
+        run: '"$RUNNER_TEMP/actionlint" -color'
 
   tree-sitter:
     name: Tree-sitter grammars

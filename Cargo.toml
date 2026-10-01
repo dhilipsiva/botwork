@@ -5,9 +5,11 @@ edition = "2021"
 license = "MIT"
 description = "botwork is a single-binary, generic and open-source automation framework written in Rust for acceptance testing, acceptance test driven development (ATDD), and robotic process automation (RPA). The syntax is basically plain text (in any human language) with parameters. Easily extendible with Rust, Python & JavaScript. An efficient, fast alternative to Robot Framework."
 documentation = "https://docs.rs/botwork"
-homepage = "https://github.com/nitimis/botwork"
-repository = "https://github.com/nitimis/botwork"
+homepage = "https://github.com/dhilipsiva/botwork"
+repository = "https://github.com/dhilipsiva/botwork"
 readme = "README.md"
+# Evidence records document the repository's checks; the crate needs none of them.
+exclude = ["docs/*-evidence.json"]
 keywords = ["botwork", "robotframework", "testing", "ATDD", "rpa"]
 categories = ["science::robotics", "development-tools", "development-tools::testing"]
 

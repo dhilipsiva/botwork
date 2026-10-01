@@ -46,25 +46,61 @@ GNU and musl builds, each in debug and release.
 The `botwork` crate on crates.io is version 0.2.0, an early prototype published
 in April 2023. It predates this documentation and most of the language. The
 checkout still reports 0.2.0 too, until the next release. Install from source
-for now.
+until the release workflow below publishes one.
 
-The [roadmap decisions](decisions.md#d17-binary-distribution) plan these
-release channels:
+## Releases
 
-- GitHub Releases, with SHA-256 checksums and build provenance;
-- crates.io;
-- a Homebrew tap;
-- winget and Scoop.
+A tag `vX.Y.Z` releases version X.Y.Z through the channels the
+[roadmap decisions](decisions.md#d17-binary-distribution) chose. The tag must
+name the version that both `Cargo.toml` and `editors/vscode/package.json`
+carry. `.github/workflows/release.yml` then:
 
-A tag-triggered release workflow will publish to all of them. None of them is
-available yet.
+1. runs every CI check;
+2. builds the `dist` binary for Linux x86_64 (static musl), macOS arm64, and
+   Windows x86_64, checks that it reports the version, and archives it with
+   `LICENSE` and `README.md` as `botwork-vX.Y.Z-<target>.tar.gz`, or `.zip` on
+   Windows;
+3. packages the VS Code extension as `botwork-vX.Y.Z.vsix`;
+4. writes `SHA256SUMS` and the Homebrew, Scoop, and winget manifests, and runs
+   the packaged Linux binary;
+5. creates the GitHub release with those files and attests their build
+   provenance;
+6. publishes to every other channel whose credentials are configured.
+
+Archives are reproducible: their entries have a fixed order, owner, and mode,
+and the tagged commit's timestamp. `scripts/release.py` makes them and the
+manifests; `tests/release_tools.py` checks it and the workflow.
+
+To check a download against the release:
+
+```sh
+sha256sum --check --ignore-missing SHA256SUMS
+gh attestation verify botwork-vX.Y.Z-x86_64-unknown-linux-musl.tar.gz --repo dhilipsiva/botwork
+```
+
+Run the workflow by hand on a branch for a dry run, such as
+`gh workflow run release.yml --ref main`. It does everything except publish,
+including `cargo publish --dry-run`.
+
+| Channel | Publishes | Needs |
+| --- | --- | --- |
+| GitHub Releases | The archives, the extension, `SHA256SUMS`, and provenance | Nothing beyond the workflow's own token |
+| crates.io | The `botwork` crate, without the evidence records under `docs/` | A `CARGO_REGISTRY_TOKEN` secret |
+| Homebrew | `Formula/botwork.rb` in the tap | A `HOMEBREW_TAP` repository variable naming the tap, and a `HOMEBREW_TAP_TOKEN` secret that can push to it |
+| Scoop | `bucket/botwork.json` in the bucket | A `SCOOP_BUCKET` repository variable naming the bucket, and a `SCOOP_BUCKET_TOKEN` secret that can push to it |
+| winget | A pull request to `microsoft/winget-pkgs` for `dhilipsiva.Botwork`, made with `wingetcreate` | A `WINGET_TOKEN` secret, a classic token with the `public_repo` scope |
+| VS Code Marketplace | The extension | A `VSCE_PAT` secret, and the publisher's ID in `editors/vscode/package.json` |
+| Open VSX | The extension | An `OVSX_PAT` secret, and a namespace matching the publisher |
+
+A channel without its credentials is skipped with a notice in the run's
+summary, and the others still publish.
 
 ## What the binary needs
 
 | Feature | Needs at run time |
 | --- | --- |
 | Running scripts and suites, reports, `--check`, `--format`, `--lsp` | Nothing beyond the binary |
-| Process statements and isolated workers | Linux; see [worker platforms](worker-platforms.md) |
+| Process statements and isolated workers | Linux, macOS, or Windows; see [worker platforms](worker-platforms.md) |
 | HTTP statements | Network access to the servers a script calls |
 | Planned Python and JavaScript adapters | libpython or Node; see [extending Botwork](extending.md#language-adapters) |
 

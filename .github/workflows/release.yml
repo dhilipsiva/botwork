@@ -1,0 +1,390 @@
+name: Release
+
+# Publishes a tagged version through every channel that decisions D17 and D18
+# chose. Run by hand on any other ref, it is a dry run: it tests, builds,
+# packages, and checks everything, and publishes nothing. A channel whose
+# credentials are missing is skipped with a notice.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Check the version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the version, and whether this ref publishes it
+        id: version
+        run: python3 scripts/release.py version "$GITHUB_REF" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: [version, test]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            python: python3
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            python: python3
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            python: python
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --target "$TARGET"
+      - name: Install musl C toolchain
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> "$GITHUB_ENV"
+      - name: Build the distributed binary (decision D19)
+        run: cargo +stable build --locked --profile dist --target "$TARGET" --bin botwork
+      - name: Check and package the binary
+        run: |
+          binary="target/$TARGET/dist/botwork"
+          if [ "$TARGET" = x86_64-pc-windows-msvc ]; then binary="$binary.exe"; fi
+          "$binary" --version | tr -d '\r' | grep --fixed-strings --line-regexp "botwork $VERSION"
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+            ${{ matrix.python }} scripts/release.py package "$VERSION" "$TARGET" "$binary" dist
+      - name: Keep the archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: archive-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  extension:
+    name: Package the VS Code extension
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Package the extension with its locked dependencies
+        working-directory: editors/vscode
+        run: |
+          npm ci --no-audit --no-fund
+          npm run package
+          mkdir -p ../../dist
+          mv botwork.vsix "../../dist/botwork-v$VERSION.vsix"
+      - name: Keep the package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: extension
+          path: dist/
+          if-no-files-found: error
+
+  assets:
+    name: Check sums and write manifests
+    needs: [version, build, extension]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Collect the archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: archive-*
+          path: dist
+          merge-multiple: true
+      - name: Collect the extension
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: extension
+          path: dist
+      - name: Write and verify SHA256SUMS
+        run: |
+          python3 scripts/release.py checksums dist
+          (cd dist && sha256sum --check --strict SHA256SUMS)
+      - name: Write the Homebrew, Scoop, and winget manifests
+        run: |
+          python3 scripts/release.py manifests "$VERSION" dist manifests
+          ruby -c manifests/homebrew/botwork.rb
+          python3 -m json.tool manifests/scoop/botwork.json > /dev/null
+      - name: Run the packaged Linux binary
+        run: |
+          mkdir unpacked
+          tar --extract --gzip --file "dist/botwork-v$VERSION-x86_64-unknown-linux-musl.tar.gz" --directory unpacked
+          unpacked/botwork --version | grep --fixed-strings --line-regexp "botwork $VERSION"
+      - name: Keep the release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release
+          path: dist/
+          if-no-files-found: error
+      - name: Keep the manifests
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manifests
+          path: manifests/
+          if-no-files-found: error
+
+  release:
+    name: Publish the GitHub release
+    needs: [version, assets]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Collect the release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: dist
+      - name: Attest the assets' build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/botwork-*
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh release create "v$VERSION" dist/* --repo "$REPOSITORY" --verify-tag \
+            --title "Botwork $VERSION" --generate-notes
+
+  # Each channel below runs after the GitHub release on a tag, and after the
+  # checks in a dry run. It publishes only on a tag and with its credentials.
+
+  crate:
+    name: Publish the crate
+    needs: [version, assets, release]
+    if: ${{ !cancelled() && needs.assets.result == 'success' && needs.release.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUBLISH: ${{ needs.version.outputs.publish }}
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Check that the crate packages and builds
+        run: cargo +stable publish --locked --dry-run
+      - name: Skip without credentials
+        if: env.CARGO_REGISTRY_TOKEN == ''
+        run: |
+          echo "::notice::crates.io skipped: CARGO_REGISTRY_TOKEN is not set"
+      - name: Publish to crates.io
+        if: env.PUBLISH == 'true' && env.CARGO_REGISTRY_TOKEN != ''
+        run: cargo +stable publish --locked
+
+  homebrew:
+    name: Update the Homebrew tap
+    needs: [version, assets, release]
+    if: ${{ !cancelled() && needs.assets.result == 'success' && needs.release.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PUBLISH: ${{ needs.version.outputs.publish }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      # The tap repository, such as dhilipsiva/homebrew-botwork.
+      TAP: ${{ vars.HOMEBREW_TAP }}
+    steps:
+      - name: Collect the manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: manifests
+          path: manifests
+      - name: Skip without credentials
+        if: env.TOKEN == '' || env.TAP == ''
+        run: |
+          echo "::notice::Homebrew skipped: HOMEBREW_TAP_TOKEN is not set, or the HOMEBREW_TAP variable is not"
+      - name: Check out the tap
+        if: env.PUBLISH == 'true' && env.TOKEN != '' && env.TAP != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ vars.HOMEBREW_TAP }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Push the formula
+        if: env.PUBLISH == 'true' && env.TOKEN != '' && env.TAP != ''
+        working-directory: tap
+        run: |
+          mkdir -p Formula
+          cp ../manifests/homebrew/botwork.rb Formula/botwork.rb
+          git add Formula/botwork.rb
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --message "botwork $VERSION"
+          git push
+
+  scoop:
+    name: Update the Scoop bucket
+    needs: [version, assets, release]
+    if: ${{ !cancelled() && needs.assets.result == 'success' && needs.release.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PUBLISH: ${{ needs.version.outputs.publish }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+      # The bucket repository, such as dhilipsiva/scoop-botwork.
+      BUCKET: ${{ vars.SCOOP_BUCKET }}
+    steps:
+      - name: Collect the manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: manifests
+          path: manifests
+      - name: Skip without credentials
+        if: env.TOKEN == '' || env.BUCKET == ''
+        run: |
+          echo "::notice::Scoop skipped: SCOOP_BUCKET_TOKEN is not set, or the SCOOP_BUCKET variable is not"
+      - name: Check out the bucket
+        if: env.PUBLISH == 'true' && env.TOKEN != '' && env.BUCKET != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ vars.SCOOP_BUCKET }}
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          path: bucket
+      - name: Push the manifest
+        if: env.PUBLISH == 'true' && env.TOKEN != '' && env.BUCKET != ''
+        working-directory: bucket
+        run: |
+          mkdir -p bucket
+          cp ../manifests/scoop/botwork.json bucket/botwork.json
+          git add bucket/botwork.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --message "botwork $VERSION"
+          git push
+
+  winget:
+    name: Submit to winget
+    needs: [version, assets, release]
+    if: ${{ !cancelled() && needs.assets.result == 'success' && needs.release.result != 'failure' }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    env:
+      PUBLISH: ${{ needs.version.outputs.publish }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Collect the manifests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: manifests
+          path: manifests
+      - name: Skip without credentials
+        if: env.TOKEN == ''
+        run: |
+          echo "::notice::winget skipped: WINGET_TOKEN is not set"
+      - name: Open a pull request on winget-pkgs
+        if: env.PUBLISH == 'true' && env.TOKEN != ''
+        run: |
+          curl --silent --show-error --location --fail --output wingetcreate.exe \
+            https://github.com/microsoft/winget-create/releases/download/v1.12.13.0/wingetcreate.exe
+          echo "24042bd37915805615e6cf969ac57c6439124c3fe85823327f5f3fb24bd9ffea  wingetcreate.exe" | sha256sum --check
+          ./wingetcreate.exe submit --token "$TOKEN" "manifests/winget/manifests/d/dhilipsiva/Botwork/$VERSION"
+
+  vscode:
+    name: Publish the VS Code extension
+    needs: [version, assets, release]
+    if: ${{ !cancelled() && needs.assets.result == 'success' && needs.release.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUBLISH: ${{ needs.version.outputs.publish }}
+      VERSION: ${{ needs.version.outputs.version }}
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Install the publishing tools the lockfile pins
+        working-directory: editors/vscode
+        run: npm ci --no-audit --no-fund
+      - name: Collect the extension
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: extension
+          path: dist
+      - name: Skip the Marketplace without credentials
+        if: env.VSCE_PAT == ''
+        run: |
+          echo "::notice::VS Code Marketplace skipped: VSCE_PAT is not set"
+      - name: Publish to the VS Code Marketplace
+        if: env.PUBLISH == 'true' && env.VSCE_PAT != ''
+        working-directory: editors/vscode
+        run: npx vsce publish --packagePath "../../dist/botwork-v$VERSION.vsix"
+      - name: Skip Open VSX without credentials
+        if: env.OVSX_PAT == ''
+        run: |
+          echo "::notice::Open VSX skipped: OVSX_PAT is not set"
+      - name: Publish to Open VSX
+        if: env.PUBLISH == 'true' && env.OVSX_PAT != ''
+        working-directory: editors/vscode
+        run: npx ovsx publish "../../dist/botwork-v$VERSION.vsix"

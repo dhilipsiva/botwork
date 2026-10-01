@@ -361,9 +361,9 @@ Work can proceed before these exist.
 | Channel | Needed |
 | --- | --- |
 | crates.io | A `CARGO_REGISTRY_TOKEN` repository secret |
-| Homebrew | A tap repository and a `HOMEBREW_TAP_TOKEN` secret |
+| Homebrew | A tap repository, named by a `HOMEBREW_TAP` repository variable, and a `HOMEBREW_TAP_TOKEN` secret that can push to it |
 | winget | A `WINGET_TOKEN` secret for winget-pkgs pull requests |
-| Scoop | A bucket repository |
+| Scoop | A bucket repository, named by a `SCOOP_BUCKET` repository variable, and a `SCOOP_BUCKET_TOKEN` secret that can push to it |
 | VS Code Marketplace | A publisher ID, which replaces the placeholder in `editors/vscode/package.json`, and a `VSCE_PAT` secret |
 | Open VSX | A namespace and an `OVSX_PAT` secret |
 | Usability study | At least ten participants (D2) |
