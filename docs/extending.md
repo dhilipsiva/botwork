@@ -77,4 +77,4 @@ installed.
 
 The default binary stays a single file, WebAssembly support included. Python
 support needs a python-enabled build, and JavaScript support needs Node on the
-machine.
+machine. All three pass one [conformance suite](adapter-conformance.md).

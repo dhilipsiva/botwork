@@ -83,6 +83,8 @@ index.
   run in a sandbox with Wasmtime.
 - [Packages](packages.md): sharing modules between projects with a manifest,
   a lockfile, and an offline cache.
+- [Adapter conformance](adapter-conformance.md): the one suite every language
+  adapter passes, and where the languages differ.
 - [Embedded Rust runs](embedded-runs.md)
 - [Interpreter architecture](interpreter-architecture.md)
 - [Asynchronous execution](async-execution.md)

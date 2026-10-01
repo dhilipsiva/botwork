@@ -22,6 +22,7 @@ const HEADERS: &[&str] = &[
     "Env |name|",
     "Connect |address|",
     "Print |text|",
+    "Append |items|",
 ];
 
 static COUNT: AtomicI32 = AtomicI32::new(0);
@@ -192,6 +193,13 @@ impl exports::botwork::statements::statements::Guest for Statements {
                 std::net::TcpStream::connect(text(&arguments[0])).map_err(error)?;
                 Item::Bool(true)
             }
+            "Append |items|" => match decode(&arguments[0], 0) {
+                Item::Array(mut items) => {
+                    items.push(Item::Int(1));
+                    Item::Array(items)
+                }
+                _ => return Err(error("Append takes an array")),
+            },
             "Print |text|" => {
                 let printed = text(&arguments[0]);
                 print!("{printed}");

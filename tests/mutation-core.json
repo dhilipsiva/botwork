@@ -1,5 +1,5 @@
 {
-  "version": 58,
+  "version": 59,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4249,6 +4249,27 @@
       "file": "src/core/eval/imports.rs",
       "before": "        .and_then(|project| project.url_of(&canonical))\n",
       "after": "        .and_then(|project| project.url_of(Path::new(\"\")))\n"
+    },
+    {
+      "id": "js-host-surrogates-coerced",
+      "area": "conformance",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "      checkText(value);\n      writer.byte(4);\n",
+      "after": "      writer.byte(4);\n"
+    },
+    {
+      "id": "js-host-surrogate-keys-coerced",
+      "area": "conformance",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "          checkText(key);\n",
+      "after": "          void key;\n"
+    },
+    {
+      "id": "js-host-whole-numbers-rounded",
+      "area": "conformance",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "      if (Number.isInteger(value) && narrow !== value) {\n",
+      "after": "      if (false) {\n"
     }
   ]
 }

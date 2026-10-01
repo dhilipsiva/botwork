@@ -3,8 +3,8 @@
     "wit/botwork.wit": "2033b38a1efc9b672933e96532b4353180b5ad7de99e8f8383d69ae7621e710b",
     "tests/wasm/guest/Cargo.toml": "5126f3989bafcde7dd3a2ed12092153b09b82295e36082bbb9faf62227c91751",
     "tests/wasm/guest/Cargo.lock": "0d70ac7ab04d3d77b988260ca992cc64fa64f0fe756680f1c624b6db7c24087b",
-    "tests/wasm/guest/src/lib.rs": "21de93bb5328f6d62aa8c97922d0dc9191f4579e72443cb8ee1f84c66d898887"
+    "tests/wasm/guest/src/lib.rs": "189047f729b7ba9c5e0a86654721b92bf0a15e9139c6309d21956a9d6b27238f"
   },
-  "component": "d1f69dfd74ea710904ef00e9f4b9a9abdf463de53156af63a902c6b501d763e7",
+  "component": "827bf558ce079f28da4b41d1c640264d8aff6aa669b0277296f9b49441f5db19",
   "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)"
 }

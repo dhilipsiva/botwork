@@ -150,6 +150,19 @@ function describe(value) {
 
 const F32_MAX = 3.4028234663852886e38;
 
+/** Whether `text` has no unpaired surrogate, which UTF-8 cannot hold. */
+function wellFormed(text) {
+  return typeof text.isWellFormed === "function"
+    ? text.isWellFormed()
+    : !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text);
+}
+
+function checkText(text) {
+  if (!wellFormed(text)) {
+    throw new TypeError("a string with an unpaired surrogate, which UTF-8 cannot hold");
+  }
+}
+
 function encode(writer, value, depth = 0) {
   if (depth > 64) throw new RangeError("a value nested more than 64 levels deep");
   if (value === null || value === undefined) return writer.byte(0);
@@ -158,6 +171,7 @@ function encode(writer, value, depth = 0) {
       writer.byte(3);
       return writer.byte(value ? 1 : 0);
     case "string":
+      checkText(value);
       writer.byte(4);
       return writer.string(value);
     case "number": {
@@ -170,6 +184,11 @@ function encode(writer, value, depth = 0) {
       const narrow = Math.fround(value);
       if (!Number.isFinite(value) || !Number.isFinite(narrow) || Math.abs(value) > F32_MAX) {
         throw new RangeError(`${describe(value)}, which no finite 32-bit float holds`);
+      }
+      // A whole number beyond 32-bit integers becomes a float only if one
+      // holds it exactly; rounding it would change it silently.
+      if (Number.isInteger(value) && narrow !== value) {
+        throw new RangeError(`${describe(value)}, a whole number beyond 32 bits that no 32-bit float holds exactly`);
       }
       writer.byte(2);
       const buffer = Buffer.alloc(4);
@@ -192,6 +211,7 @@ function encode(writer, value, depth = 0) {
         writer.byte(6);
         writer.u64(keys.length);
         for (const key of keys) {
+          checkText(key);
           writer.string(key);
           encode(writer, value[key], depth + 1);
         }

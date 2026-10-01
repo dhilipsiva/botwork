@@ -55,16 +55,19 @@ Import |"pricing.mjs"| As |pricing|
 | --- | --- | --- |
 | None | `null` | `null` or `undefined` |
 | Int, 32 bits | number | An integer number within 32 bits |
-| Float, 32 bits | number | Any other finite number a 32-bit float holds, rounded to the nearest one |
+| Float, 32 bits | number | A fraction, rounded to the nearest 32-bit float; or a whole number beyond 32 bits that a 32-bit float holds exactly |
 | Bool | boolean | boolean |
-| String | string | string |
+| String | string | A string without unpaired surrogates |
 | Array | Array | Array |
 | Map | Object with a `null` prototype | A plain object |
 
-JavaScript has one number type, so a whole number comes back as an Int. Any
-other value, such as a BigInt, a `Map`, a `Date`, a class instance, a
-function, `NaN`, or `Infinity`, fails the call with BW4002 naming it; nothing
-is coerced. Values nest at most 64 levels.
+JavaScript has one number type, so a whole number comes back as an Int. A
+whole number no Int or 32-bit float holds exactly, such as `2 ** 31 + 1`,
+would change if rounded, so it fails the call. So does any other value
+without an exact Botwork equivalent, such as a BigInt, a `Map`, a `Date`, a
+class instance, a function, `NaN`, `Infinity`, or a string, or map key, with
+an unpaired surrogate: each fails with BW4002 naming it, and nothing is
+coerced. Values nest at most 64 levels.
 
 ## Errors
 

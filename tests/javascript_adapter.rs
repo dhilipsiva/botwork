@@ -48,6 +48,10 @@ export const statements = {
         nan: () => NaN,
         infinity: () => Infinity,
         wide: () => 1e39,
+        whole: () => 2 ** 31 + 1,
+        exact: () => 2 ** 31,
+        surrogate: () => "\ud800",
+        "surrogate key": () => ({ "\udc00": 1 }),
         point: () => new Point(1),
         deep: () => nested(100),
     })[kind](),
@@ -175,6 +179,18 @@ fn values_without_an_exact_botwork_equivalent_are_refused() {
         ),
         ("point", "a Point, which has no Botwork equivalent"),
         ("deep", "a value nested more than 64 levels deep"),
+        (
+            "whole",
+            "the number 2147483649, a whole number beyond 32 bits that no 32-bit float holds exactly",
+        ),
+        (
+            "surrogate",
+            "a string with an unpaired surrogate, which UTF-8 cannot hold",
+        ),
+        (
+            "surrogate key",
+            "a string with an unpaired surrogate, which UTF-8 cannot hold",
+        ),
     ] {
         let result = workspace.run(&format!(
             "Import |\"helpers.mjs\"| As |js|\njs::Make |\"{kind}\"|"
@@ -188,6 +204,9 @@ fn values_without_an_exact_botwork_equivalent_are_refused() {
             "{kind}: {error}"
         );
     }
+    // A whole number beyond 32 bits that a 32-bit float holds exactly converts.
+    let result = workspace.run("Import |\"helpers.mjs\"| As |js|\n|n| = js::Make |\"exact\"|");
+    assert!(matches!(value(&result, "n"), Literal::Float(number) if number == 2_147_483_648.0));
 }
 
 #[test]
