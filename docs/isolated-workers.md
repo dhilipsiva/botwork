@@ -2,7 +2,7 @@
 
 `core::worker::WorkerPool` runs trusted external worker executables with independent supervision on Linux, macOS, and Windows. The default pool supervises the direct child and its inherited process group; `with_process_tree` also owns detached descendants and cleans up after the host exits, through a dedicated guardian on Linux and the worker's Job Object on Windows, while macOS refuses it; `with_pid_namespace` adds kernel containment when that guardian fails. It provides the process lifecycle needed when an in-process callback cannot cooperate with cancellation. The existing `NativeOperation::blocking` contract is unchanged: Rust callbacks running inside the host still cannot be forcibly terminated.
 
-This is the byte-oriented execution boundary beneath the [typed worker protocol](worker-protocol.md). `NativeOperation::isolated` supplies bounded typed arguments, results, diagnostics, signatures, and shared ownership across this boundary. Async DSL dispatch, persistent run/report recovery after a host crash, and the complete milestone 6 shutdown coordinator remain separate TODO items. This implementation does not claim those integrations are complete.
+This is the byte-oriented execution boundary beneath the [typed worker protocol](worker-protocol.md). `NativeOperation::isolated` supplies bounded typed arguments, results, diagnostics, signatures, and shared ownership across this boundary. [Process statements](processes.md) and [JavaScript statements](javascript.md) run on it, and each run waits for the workers they started as it ends ([run end](shutdown.md#run-end)). A report a lost host left unfinished is reconciled as interrupted ([terminal outcomes](terminal-outcomes.md#forced-termination-and-reconciliation)), and the optional [journal](#durable-worker-journal) keeps a worker's own transport records. What no mode guarantees is listed under [limits](#limits).
 
 ## Start, Admission, and Isolation
 
@@ -202,7 +202,17 @@ assert_eq!(runtime.block_on(handle.wait()).outcome, WorkerOutcome::Cancelled);
 # fn main() {}
 ```
 
-The allowance bounds the observation wait under ordinary host scheduling, rather than promising that every child or kernel operation will finish within it. Whole-run async task draining, termination during kernel stalls, process-tree containment, and durable host-crash reconciliation remain open.
+The allowance bounds the observation wait under ordinary host scheduling, rather than promising that every child or kernel operation will finish within it. A run waits for its own workers as it ends ([run end](shutdown.md#run-end)); termination during kernel stalls is outside every guarantee here (see [limits](#limits)).
+
+## Limits
+
+These hold in every mode, so they are documented boundaries rather than open work:
+
+- **No real-time bound under kernel stalls or host scheduling.** Allowances bound how long Botwork observes a worker under ordinary scheduling. An uninterruptible kernel operation, a suspended host, or a stalled process-creation or signalling call can outlast them; the worker is then reported pending or unverified, never complete, and a run that ends with it says so.
+- **No rollback.** Ending a worker's processes does not undo what they wrote, sent, or started outside them.
+- **Results are lost with the host.** A host that dies loses results in flight. The journal records that the invocation was interrupted and report reconciliation marks the run interrupted; neither recovers the worker's output.
+- **Not a sandbox.** Workers are trusted executables with the host's filesystem and network access.
+- **Detached descendants.** The default pool ends the worker's process group; a descendant that leaves it is ended only in process-tree mode, which macOS refuses (decision D12).
 
 ## Evidence
 

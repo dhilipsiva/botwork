@@ -46,12 +46,37 @@ After a stop, a run returns within:
 
 - the stop grace, for the blocking job the run was waiting on; plus
 - for each `Finally` that runs after the stop, its cleanup timeout and one more
-  stop grace.
+  stop grace; plus
+- its cleanup timeout once more, when a worker process it started is still
+  active as it ends (see [run end](#run-end)).
 
 Cleanup runs under its own control and deadline (see [cleanup](cleanup.md)), which
 keeps the run's stop grace. A cleanup nested inside cleanup shares its enclosing
 allowance, so nesting cannot extend the bound. Each allowance also includes
 scheduling delays, which are small but not zero.
+
+## Run end
+
+A run ends only once the worker processes its statements started have ended,
+or it says which have not. As it ends, it waits for:
+
+- each [process statement](processes.md)'s worker, from its start until the
+  statement sees its cleanup finish, so including one the statement abandoned
+  at a stop; and
+- every worker of the run's [JavaScript](javascript.md) pool.
+
+It waits at most its cleanup timeout (`CleanupLimits::timeout`,
+`--cleanup-timeout-ms`, 5 seconds by default), and only while such a worker is
+active, so a run whose workers all ended returns at once. A worker still active
+then fails the run with BW5003, which names up to eight of them, each with its
+process ID and state: running, stopping, cleanup pending, or ownership lost. A
+run that failed already keeps its own failure first, with this one as a cause,
+as with a failed cleanup. A worker whose ownership was lost never resolves, so
+the run does not wait for it.
+
+Engine runs, `evaluate_program_async`, and `evaluate_program_detailed` wait
+like this; so does each CLI run and suite case. A worker still active when its
+run returns keeps its capacity until it resolves.
 
 ## Setting the grace
 
@@ -136,6 +161,17 @@ timeout when one is attached.
 Unit tests in `src/core/operation/tests.rs` cover the default grace, its
 inheritance by children and clones, the abandonment cause, zero grace, and
 runtimes without a time driver.
+
+Unit tests cover the run end: in `src/core/worker/supervisor/unix/launch/tests.rs`,
+a worker whose cleanup stalls holds a run's wait for its whole allowance and no
+longer, and the wait ends as soon as it resolves; a run waits for every worker of
+a pool it owns, and not for one its statement saw finish. In
+`src/core/run/tests.rs`, a run that ends with a worker still running fails with
+BW5003 naming it, or keeps its own failure with that as a cause, and a host's
+context evaluated synchronously or not does the same. In `tests/processes.rs`,
+a process statement whose cleanup allowance is zero, so that it returns before
+its timed-out child is reaped, never lets its run end before that child has
+gone; `tests/javascript_adapter.rs` checks the same of a stopped Node call.
 
 [Validation evidence](shutdown-evidence.json) records the measured profiles,
 mutations, and sensitivity probes.

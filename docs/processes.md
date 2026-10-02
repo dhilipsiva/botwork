@@ -86,6 +86,8 @@ then returns an error, never a successful partial result; the supervisor retains
 capacity and budget leases until ownership is resolved. Unverified ownership keeps
 its slot quarantined. The allowance bounds observation, not OS scheduling or all
 wall-clock execution. No process handle or partial capture is returned on errors.
+The run waits for such a process once more as it ends, and fails naming it if it
+is still unresolved then ([run end](shutdown.md#run-end)).
 
 Before copying command data or launching, admission checks:
 

@@ -42,19 +42,24 @@ Global `clone3` refusal with `EPERM` can also stop libc from creating a host thr
 
 Most refused entries report `NotStarted` and the injected OS error. Parent-death setup happens before the namespace mapping gate: early child exit can race the parent's map writes or socket release. The diagnostic can therefore describe that later mapping/socket failure. If the acknowledgment is lost, `NamespaceReaped` is valid only after the owned kernel wait; it still reports failure with no inferred worker exit status. The matrix checks both permitted cleanup outcomes and verifies no surviving child or worker effect.
 
-Three further tests run nine environment combinations, again with two invocation attempts each:
+Four further tests run twelve environment combinations, again with two invocation attempts each:
 
 | Environment | Group | Guardian | Namespace |
 | --- | --- | --- | --- |
 | Empty read-only tmpfs hides `/proc` | Runs | Refuses with `ENOENT` | Refuses with `ENOENT` |
 | Read-only proc bind mount | Runs | Runs | Refuses mapping with `EROFS` |
 | `RLIMIT_NOFILE` soft limit zero | Refuses with `EMFILE` | Refuses with `EMFILE` | Refuses with `EMFILE` |
+| `user.max_user_namespaces` of zero | Runs | Runs | Refuses with `ENOSPC` |
+
+The namespace quota is real, not injected: the fixture is the root of a user namespace of its own, where it may lower the quota for what it starts, as a host sets `user.max_user_namespaces`.
+
+A [worker journal](isolated-workers.md#durable-worker-journal) needs a writable local filesystem. On a read-only bind mount, opening one is refused with `EROFS`, both where its directory is missing and where a private one exists, so no worker starts without the records it was promised.
 
 Proc fixtures execute in fresh user/mount namespaces via `unshare --map-current-user --keep-caps --mount --propagation private`. They check that their mount namespace differs from the parent before changing mounts. [Bind-remount flags](https://man7.org/linux/man-pages/man2/mount.2.html) restrict that mount rather than making the shared proc filesystem read-only. Namespace capabilities are retained only in these fixture processes so they can configure the test mounts after exec. The fixture proves that proc is missing or read-only before launching workers. Descriptor exhaustion changes only the fixture's soft limit and restores it before writing its verification record. These cases report `NotStarted`, create no marker, release their single slot, and leave no child to reap.
 
-Together these are **70 combinations and 140 invocation attempts per build profile**. Ten syscall matrix tests, three environment tests, one enabled-control test, and one subprocess fixture appear in Cargo's 15-test summary.
+Together these are **73 combinations and 146 invocation attempts per build profile**, plus the two journal cases. Ten syscall matrix tests, four environment tests, one enabled-control test, the journal test, and two subprocess fixtures appear in Cargo's 18-test summary.
 
-This matrix tests actual syscall and environment failure paths on the executing kernel. It does not emulate every older kernel, distribution policy, proc visibility restriction, namespace quota, filesystem durability model, lost signal permission, or uninterruptible kernel failure. The existing worker, guardian, namespace, and recovery suites separately exercise live ownership, cancellation, host loss, protocol handoff, and journal behavior. Gated unit tests provide evidence for stalled observation; they do not simulate kernel termination.
+This matrix tests actual syscall and environment failure paths on the executing kernel. It does not emulate every older kernel, distribution policy, proc visibility restriction, filesystem durability model, lost signal permission, or uninterruptible kernel failure. The existing worker, guardian, namespace, and recovery suites separately exercise live ownership, cancellation, host loss, protocol handoff, and journal behavior. Gated unit tests provide evidence for stalled observation; they do not simulate kernel termination.
 
 ## Reproduction and Platform Coverage
 
@@ -87,6 +92,20 @@ cargo build --locked --target x86_64-unknown-linux-musl --release --all-targets
 cargo test --locked --target x86_64-unknown-linux-musl --release
 ```
 
-CI defines separate debug/release jobs for GNU and musl, with Clippy checked for both targets. These jobs require the documented facilities on the runner; local execution does not establish that hosted jobs have run successfully.
+CI defines separate debug/release jobs for GNU and musl, with Clippy checked for both targets. These jobs require the documented facilities on the runner.
 
-Broader kernel/distribution/architecture coverage, hosted CI observation, durable typed/case/run outcomes, and the full shutdown coordinator remain roadmap work.
+## Observed platforms
+
+Each Linux CI job prints, with `scripts/worker_platform.sh`, the kernel, distribution, C library, util-linux, namespace quotas, descriptor limit, and proc and temporary-directory mounts its suites ran on. On 2026-10-02 the worker suites ran on:
+
+| Host | Kernel | Distribution | C library | util-linux | Builds and suites |
+| --- | --- | --- | --- | --- | --- |
+| This workstation (WSL2) | 6.18.33.2 | Ubuntu 26.04 | glibc 2.43 | 2.41.3 | GNU and musl, debug and release: every test |
+| CI `ubuntu-latest` | 6.17.0 (Azure) | Ubuntu 24.04.5 | glibc 2.39 | 2.39.3 | GNU and musl, debug and release: every test |
+| CI `ubuntu-22.04` | 6.8.0 (Azure) | Ubuntu 22.04.5 | glibc 2.35 | 2.37.2 | musl, debug: the worker, process, shutdown, terminal-outcome, and JavaScript suites |
+
+CI's `macos-latest` (arm64) and `windows-latest` (x86_64) jobs run every test built for them, in debug and release: on macOS the default pool and process statements, and on Windows also the process-tree mode and the journal.
+
+Linux is advertised on x86_64 ([D5](decisions.md#d5-platforms)) wherever a mode's facilities are present: each start checks them and refuses rather than weaken ownership, so a kernel or distribution not listed here either runs a mode with its full guarantees or refuses it. Linux 5.3 is the interface minimum for the guardian and namespace modes, not a tested floor. GNU builds made from a checkout need glibc 2.36 ([D19](decisions.md#d19-distribution-build)), which Ubuntu 22.04 lacks, so its job runs the static musl build, the one the release ships. Kernels on hosted runners change with their images, so each job's log, not this table, records what a given run used.
+
+What no platform guarantees, such as a real-time bound under a stuck kernel call or rollback of external effects, is listed under [worker limits](isolated-workers.md#limits).
