@@ -712,3 +712,28 @@ async fn concurrent_process_calls_keep_run_environment_and_directory_separate() 
     assert_eq!(fs::read(a.path().join("value")).unwrap(), b"a");
     assert_eq!(fs::read(b.path().join("value")).unwrap(), b"b");
 }
+
+/// A statement whose worker's cleanup it did not see finish, here because its
+/// cleanup allowance is zero, does not let the run end before the worker has.
+#[test]
+fn a_run_ends_only_after_the_process_its_statement_left_behind() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = format!("{BLOCK} Options |{{\"timeout_ms\": 100, \"cleanup_timeout_ms\": 0}}|");
+    for _ in 0..20 {
+        let started = dir.path().join("started");
+        let _ = fs::remove_file(&started);
+        let result = run(dir.path(), &source);
+        let error = result.result.unwrap_err();
+        // The worker ended as the run did, so its failure names no workers.
+        assert!(
+            !error.to_string().contains("not cleaned up within"),
+            "{error}"
+        );
+        let pid = fs::read_to_string(&started).unwrap();
+        assert!(
+            !Path::new(&format!("/proc/{}", pid.trim())).exists(),
+            "process {} outlived its run: {error}",
+            pid.trim()
+        );
+    }
+}

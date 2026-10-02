@@ -386,6 +386,46 @@ fn a_stop_ends_the_call_and_its_process() {
     assert_eq!(value(&result, "done").to_string(), "done");
 }
 
+/// A stopped run ends only after its JavaScript process has. The call itself
+/// waits for its worker at the stop; the run's wait for its pool covers a
+/// worker whose cleanup stalls, which the ledger's unit tests check.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_stopped_run_ends_only_after_its_node_process_has() {
+    if !node() {
+        return;
+    }
+    let workspace = Workspace::new(&[(
+        "pid.mjs",
+        r#"import { writeFileSync } from "node:fs";
+export const statements = {
+    "Spin Writing |file|": (file) => { writeFileSync(file, String(process.pid)); for (;;) {} },
+};
+"#,
+    )]);
+    let file = workspace.0.path().join("node.pid");
+    for _ in 0..2 {
+        let _ = fs::remove_file(&file);
+        let result = workspace.run_with(
+            &format!(
+                "Import |\"pid.mjs\"| As |js|\njs::Spin Writing |{:?}|",
+                file.display().to_string()
+            ),
+            RunOptions {
+                timeout: Some(Duration::from_millis(1500)),
+                ..RunOptions::default()
+            },
+        );
+        let error = failure(&result);
+        assert_eq!(error.code(), DiagnosticCode::Timeout, "{error}");
+        let pid = fs::read_to_string(&file).unwrap();
+        assert!(
+            !std::path::Path::new(&format!("/proc/{pid}")).exists(),
+            "Node {pid} outlived its run"
+        );
+    }
+}
+
 #[test]
 fn loading_failures_are_import_errors() {
     if !node() {
