@@ -71,7 +71,21 @@ Call stacks are snapshots captured before unwinding. Any call that fails during 
 
 Try/Catch still handles evaluation failures only. A successful handler consumes its error and emits no diagnostic. If the handler fails, its failure is primary and the handled error remains in `causes`. Nested handler failures retain all original spans/stacks in handling order, innermost first. A captured diagnostic includes the current caller even if Catch handles it before that caller unwinds. `Display` renders causes; `std::error::Error::source()` exposes the first handled cause, or the underlying category error when there is none.
 
-Each handled cause retains its own code and guidance; a handler's undefined-variable failure does not recategorize the original arithmetic failure. Local imports retain these codes, ranges, causes, and entered callers while adding related import sites. Adapter-cause compatibility and bounded diagnostic resources remain separate roadmap work. Success output, failure status, argument order, and language scope/completion behavior retain their contracts.
+Each handled cause retains its own code and guidance; a handler's undefined-variable failure does not recategorize the original arithmetic failure. Local imports retain these codes, ranges, causes, and entered callers while adding related import sites. Bounded diagnostic resources remain separate roadmap work. Success output, failure status, argument order, and language scope/completion behavior retain their contracts.
+
+### Adapter failures
+
+A failure in a statement from a [language adapter](adapter-conformance.md) or an integration keeps the same shape as any other:
+
+- Its code: BW9001 for the language's assertion and BW4002 for anything else, unless the adapter documents another.
+- Its callers: the adapter statement's own call site, then every Botwork caller, through any modules between.
+- `imported here`: the `Import` that brought the statement into the file that called it.
+- `raised here`, for [Python](python.md#errors) and [JavaScript](javascript.md#errors): the module's line that raised it.
+- Its causes: a Python exception chain or a JavaScript `cause` chain, each failure with its own code and location.
+- A Playwright `Expect` that does not hold is an assertion with operands: `details.actual` and `details.expected` are typed JSON, as `Assert` reports them.
+- A [WebDriver](webdriver.md) or Appium command the driver refuses is BW4002 whose reason starts with `WebDriver:` and the driver's W3C error code, such as `no such element`, then its message.
+
+[WebAssembly](wasm.md#errors) failures are a kind and a message alone, so they have neither `raised here` nor causes. The shared [conformance suite](adapter-conformance.md) checks each adapter against this.
 
 
 ## DSL Metadata
@@ -84,7 +98,7 @@ Each handled cause retains its own code and guidance; a handler's undefined-vari
 | `details` | Category-specific map described below |
 | `source` | Source map, or None if no source exists |
 | `call_stack` | Innermost-first array of `{signature, call_site, definition_site}`; `signature` is the normalized form, sites are source maps, and native definition sites are None |
-| `related` | Array of `{message, source}` for declarations and rethrow sites |
+| `related` | Array of `{message, source}` for declarations, rethrow sites, import sites, and [where an adapter raised](#adapter-failures) |
 | `causes` | Array of diagnostic maps preserving handled errors |
 
 A source map contains string fields `file`, `text`, `start_byte`, `end_byte`, `line`, `column`, `end_line`, and `end_column`. Coordinates are decimal strings, not i32 values, so metadata never truncates a source offset. Byte and end-position semantics match `Span`. Missing source/definition sites are present with None values; they are not absent keys.

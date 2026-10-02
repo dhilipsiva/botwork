@@ -5,10 +5,18 @@
 //                    call statement INDEX, and write one response on stdout
 // A module declares statements as an object mapping headers to functions:
 //   export const statements = { "Greet |name|": (name) => `Hello, ${name}` };
-import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const [mode, file, index] = process.argv.slice(1);
 const TRACE_BYTES = 2048;
+// The most causes a failure keeps of its chain, and the most of its file a
+// "raised here" location holds, as for Python. A response's locations hold at
+// most RAISED_TOTAL bytes of files, well within a worker frame.
+const CAUSES = 8;
+const RAISED_BYTES = 256 * 1024;
+const RAISED_TOTAL = 512 * 1024;
 
 // Stdout carries the response alone. What a module prints, to process.stdout
 // or through the console, which writes there, goes to stderr instead, which
@@ -222,20 +230,123 @@ function encode(writer, value, depth = 0) {
   throw new TypeError(`${describe(value)}, which has no Botwork equivalent`);
 }
 
-/** A diagnostic response: BW9001 for an assertion, BW4002 for anything else. */
-function failure(code, text) {
+/**
+ * Where `error` was raised: the innermost frame of its stack in a file beside
+ * the module, as that file up to the line and the line's byte range in it.
+ */
+function raised(error) {
+  const stack = typeof error?.stack === "string" ? error.stack : "";
+  const directory = path.dirname(file) + path.sep;
+  for (const frame of stack.split("\n").filter((line) => /^\s+at /.test(line))) {
+    const match = /(file:\/\/[^\s()]+):(\d+):\d+/.exec(frame);
+    if (!match) continue;
+    let source;
+    try {
+      source = fileURLToPath(match[1]);
+    } catch {
+      continue;
+    }
+    // Frames of this host, which Node names `[eval1]`, are not the module's.
+    if (!source.startsWith(directory) || /\[eval\d*\]$/.test(source)) continue;
+    let text;
+    try {
+      text = readFileSync(source, "utf8");
+    } catch {
+      return undefined;
+    }
+    const lines = text.split("\n");
+    const line = Number(match[2]);
+    if (line < 1 || line > lines.length) return undefined;
+    const before = Buffer.byteLength(lines.slice(0, line - 1).map((each) => `${each}\n`).join(""));
+    const shown = lines[line - 1];
+    const end = before + Buffer.byteLength(shown);
+    if (end > RAISED_BYTES) return undefined;
+    const first = before + Buffer.byteLength(shown) - Buffer.byteLength(shown.trimStart());
+    const last = Math.max(first, before + Buffer.byteLength(shown.trimEnd()));
+    return { file: source, text: Buffer.from(text, "utf8").subarray(0, end).toString("utf8"), first, last };
+  }
+  return undefined;
+}
+
+/** One failure: BW9001 for an assertion, BW4002 for anything else. */
+function one(error) {
+  const assertion = error?.name === "AssertionError";
+  return {
+    code: assertion ? 9001 : 4002,
+    text: assertion ? error.message || "a JavaScript assertion failed" : explain(error),
+    raised: raised(error),
+  };
+}
+
+/** `error` and the errors it chains through `cause`, outermost first. */
+function chain(error) {
+  const failures = [one(error)];
+  const seen = new Set([error]);
+  let current = error;
+  while (
+    failures.length <= CAUSES &&
+    current !== null &&
+    typeof current === "object" &&
+    current.cause !== undefined &&
+    !seen.has(current.cause)
+  ) {
+    current = current.cause;
+    seen.add(current);
+    failures.push(one(current));
+  }
+  return failures;
+}
+
+/**
+ * A diagnostic response for `failures`, each the cause of the one before it,
+ * with where each was raised.
+ */
+function failure(failures) {
+  // One source per file, its text up to the furthest line a failure names;
+  // a location that would take the sources past RAISED_TOTAL is left out.
+  const sources = new Map();
+  let total = 0;
+  for (const each of failures) {
+    const { raised } = each;
+    if (!raised) continue;
+    const known = sources.get(raised.file) ?? "";
+    const grows = Math.max(0, Buffer.byteLength(raised.text) - Buffer.byteLength(known));
+    if (total + grows > RAISED_TOTAL) {
+      each.raised = undefined;
+      continue;
+    }
+    total += grows;
+    if (grows > 0) sources.set(raised.file, raised.text);
+  }
+  const files = [...sources.keys()];
   const writer = new Writer();
-  writer.u64(0); // sources
-  writer.u64(1); // errors
-  writer.u16(code);
-  writer.string(text);
-  writer.u64(0); // the root node's error
-  writer.string("source");
-  writer.byte(0); // span
-  writer.u64(0); // call frames
-  writer.u64(0); // related locations
-  writer.byte(0); // omissions
-  writer.u64(0); // causes
+  writer.u64(files.length);
+  for (const name of files) {
+    writer.string(name);
+    writer.string(sources.get(name));
+  }
+  writer.u64(failures.length); // errors
+  for (const { code, text } of failures) {
+    writer.u16(code);
+    writer.string(text);
+  }
+  failures.forEach(({ raised }, index) => {
+    writer.u64(index); // the node's error
+    writer.string("source");
+    writer.byte(0); // span
+    writer.u64(0); // call frames
+    if (raised) {
+      writer.u64(1); // related locations
+      writer.string("raised here");
+      writer.u64(files.indexOf(raised.file));
+      writer.u64(raised.first);
+      writer.u64(raised.last);
+    } else {
+      writer.u64(0);
+    }
+    writer.byte(0); // omissions
+    writer.u64(index + 1 < failures.length ? 1 : 0); // causes
+  });
   return writer.frame(2);
 }
 
@@ -269,12 +380,10 @@ async function call() {
       encode(writer, result);
       response = writer.frame(1);
     } catch (error) {
-      response = failure(4002, `The JavaScript statement returned ${error.message}`);
+      response = failure([{ code: 4002, text: `The JavaScript statement returned ${error.message}` }]);
     }
   } catch (error) {
-    response = error?.name === "AssertionError"
-      ? failure(9001, error.message || "a JavaScript assertion failed")
-      : failure(4002, explain(error));
+    response = failure(chain(error));
   }
   respond(response);
 }

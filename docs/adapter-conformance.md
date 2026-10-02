@@ -11,6 +11,7 @@ module with the same statements, and each scenario runs against all of them.
 | Nested values and None | Return maps, arrays, empty containers, None, and ten levels of nesting unchanged |
 | Async results | Await an asynchronous function's result |
 | Errors | Report a failure as BW4002 with its message, and a failed assertion as BW9001; a script catches both, and its `Finally` runs |
+| Failure context | Through a Botwork module between the script and the adapter, keep the code, both callers, and the module's own import site (`imported here`); where the language says, the line that raised (`raised here`), and a chained failure as a cause with its own code and line |
 | Cancellation | End a busy call at a deadline within the stop grace, abandoning nothing; the next run uses the adapter normally |
 | Ownership | Give the module copies: a module that appends to an array it was passed changes neither the caller's array nor its next call's |
 | Unsupported values | Fail with BW4002 naming the value, and bind nothing, for any value without an exact Botwork equivalent |
@@ -27,6 +28,10 @@ The languages differ, and the suite records how:
 
 - **WebAssembly has no asynchronous calls.** A component returns a value, so
   the async scenario leaves it out.
+- **WebAssembly failures carry a kind and a message.** The WIT `failure`
+  record has nothing more, so a component's failure has no `raised here` and
+  no causes; the suite asserts that it has neither, and that it keeps its code,
+  callers, and import site as the others do.
 - **JavaScript has one number type.** A whole number comes back as an Int, so
   the Float `3.0` returns as the Int `3`; the suite asserts this. A whole
   number beyond 32 bits returns as a Float only when a 32-bit Float holds it

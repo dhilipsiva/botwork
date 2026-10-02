@@ -240,6 +240,61 @@ fn exceptions_become_catchable_diagnostics_with_their_stack() {
     assert_eq!(value(&result, "caught").to_string(), "true");
 }
 
+/// The file of the location a failure says raised it.
+fn raised(error: &Diagnostic) -> Option<String> {
+    error
+        .related
+        .iter()
+        .find(|related| related.message == "raised here")
+        .map(|related| related.span.source().name().to_owned())
+}
+
+/// A failure's locations travel in its response, so each holds at most
+/// 256 KiB of its file and together they hold at most 512 KiB; past either,
+/// a failure has no location, and it and its causes are otherwise whole.
+#[test]
+fn raise_sites_past_their_bounds_are_left_out_and_the_failure_kept() {
+    if !node() {
+        return;
+    }
+    // About 200 KiB of comment before each throw: two such files fit, a
+    // third does not.
+    let padding = "// padding\n".repeat(200 * 1024 / 11);
+    let inner =
+        format!("{padding}export function inner() {{ throw new RangeError(\"innermost\"); }}\n");
+    let middle = format!(
+        "import {{ inner }} from \"./inner.mjs\";\n{padding}export function middle() {{ try {{ inner(); }} catch (error) {{ throw new TypeError(\"middle\", {{ cause: error }}); }} }}\n"
+    );
+    let chain = format!(
+        "import {{ middle }} from \"./middle.mjs\";\n{padding}export const statements = {{ \"Chain\": () => {{ try {{ middle(); }} catch (error) {{ throw new Error(\"outer\", {{ cause: error }}); }} }} }};\n"
+    );
+    let far = format!(
+        "{}export const statements = {{ \"Far\": () => {{ throw new Error(\"far\"); }} }};\n",
+        "// padding\n".repeat(300 * 1024 / 11)
+    );
+    let workspace = Workspace::new(&[
+        ("inner.mjs", &inner),
+        ("middle.mjs", &middle),
+        ("chain.mjs", &chain),
+        ("far.mjs", &far),
+    ]);
+    let result = workspace.run("Import |\"chain.mjs\"| As |js|\njs::Chain");
+    let error = failure(&result);
+    assert!(raised(error).unwrap().ends_with("chain.mjs"), "{error}");
+    let middle = &error.causes[0];
+    assert!(raised(middle).unwrap().ends_with("middle.mjs"), "{middle}");
+    let inner = &middle.causes[0];
+    assert!(inner.to_string().contains("innermost"), "{inner}");
+    assert_eq!(raised(inner), None, "{inner}");
+    let result = workspace.run("Import |\"far.mjs\"| As |js|\njs::Far");
+    let error = failure(&result);
+    assert!(
+        error.to_string().contains("JavaScript Error: far"),
+        "{error}"
+    );
+    assert_eq!(raised(error), None, "{error}");
+}
+
 #[test]
 fn each_call_runs_in_a_process_of_its_own() {
     if !node() {

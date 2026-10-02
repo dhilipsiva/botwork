@@ -57,6 +57,8 @@ const TRACEBACK_BYTES: usize = 2048;
 /// A loaded Python file: its statements, unqualified, with their functions.
 pub(in crate::core::eval) struct Module {
     statements: Vec<(StatementSignature, Arc<Py<PyAny>>)>,
+    /// The file's directory: failures name where they were raised within it.
+    directory: Arc<PathBuf>,
 }
 
 /// A marked function, with its parsed header and whether it accepts the
@@ -102,12 +104,12 @@ pub(super) async fn evaluate_import(
 ) -> EvaluationResult<Literal> {
     let module = load(path, span, import_site, context).await?;
     let statements = module.statements.iter().map(|(signature, function)| {
-        let function = Arc::clone(function);
+        let (function, directory) = (Arc::clone(function), Arc::clone(&module.directory));
         (signature, move |qualified| {
             NativeOperation::blocking(
                 qualified,
                 NonZeroUsize::new(CAPACITY).expect("nonzero capacity"),
-                move |arguments, control| call(&function, arguments, control),
+                move |arguments, control| call(&function, &directory, arguments, control),
             )
         })
     });
@@ -212,7 +214,15 @@ async fn load(
         }
         statements.push((signature, Arc::new(function)));
     }
-    let module = Arc::new(Module { statements });
+    let module = Arc::new(Module {
+        statements,
+        directory: Arc::new(
+            canonical
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_default(),
+        ),
+    });
     context
         .modules
         .python
@@ -300,6 +310,7 @@ fn accepts(py: Python<'_>, function: &Py<PyAny>, count: usize) -> bool {
 /// Call a statement's function on this blocking worker thread.
 fn call(
     function: &Py<PyAny>,
+    directory: &Path,
     arguments: Vec<Literal>,
     control: OperationControl,
 ) -> DiagnosticResult<Literal> {
@@ -308,7 +319,7 @@ fn call(
             .iter()
             .map(|value| into_python(py, value))
             .collect::<PyResult<Vec<_>>>()
-            .map_err(|error| failure(py, &error))?;
+            .map_err(|error| failure(py, &error, directory))?;
         let outcome = PyTuple::new(py, values).and_then(|values| {
             let value = function.bind(py).call1(values)?;
             // An `async def` statement runs its coroutine to completion here.
@@ -332,7 +343,7 @@ fn call(
             // The operation reports the stop that interrupted the call; a
             // value returned now is discarded.
             Err(error) if stopped(py, &error) => Ok(Literal::None),
-            Err(error) => Err(failure(py, &error)),
+            Err(error) => Err(failure(py, &error, directory)),
         }
     })
 }
@@ -397,21 +408,101 @@ fn stopped(py: Python<'_>, error: &PyErr) -> bool {
 
 /// A diagnostic for a Python exception: BW9001 for an `AssertionError`, BW4002
 /// for any other, with the exception's type, message, and traceback's end.
-fn failure(py: Python<'_>, error: &PyErr) -> Diagnostic {
+/// The most causes a failure keeps of its exception chain.
+const MAX_CAUSES: usize = 8;
+
+/// A diagnostic for a Python exception, with where it was raised in the
+/// module's files and the exceptions it chains, each as a cause of its own.
+fn failure(py: Python<'_>, error: &PyErr, directory: &Path) -> Diagnostic {
+    let mut diagnostic = one(py, error, directory);
+    // `raise ... from ...`, or an exception raised while handling another.
+    let mut chained = Vec::new();
+    let mut current = error.clone_ref(py);
+    while chained.len() < MAX_CAUSES {
+        let Some(next) = cause(py, &current) else {
+            break;
+        };
+        chained.push(one(py, &next, directory));
+        current = next;
+    }
+    // Each cause holds the one before it, as the chain does.
+    if let Some(mut inner) = chained.pop() {
+        while let Some(mut outer) = chained.pop() {
+            outer.causes.push(inner);
+            inner = outer;
+        }
+        diagnostic.causes.push(inner);
+    }
+    diagnostic
+}
+
+/// The exception `error` chains, explicitly or while handling it.
+fn cause(py: Python<'_>, error: &PyErr) -> Option<PyErr> {
+    let value = error.value(py);
+    let explicit = value
+        .getattr("__cause__")
+        .ok()
+        .filter(|cause| !cause.is_none());
+    let implicit = || {
+        let suppressed = value
+            .getattr("__suppress_context__")
+            .and_then(|flag| flag.is_truthy())
+            .unwrap_or(false);
+        value
+            .getattr("__context__")
+            .ok()
+            .filter(|context| !suppressed && !context.is_none())
+    };
+    explicit.or_else(implicit).map(PyErr::from_value)
+}
+
+/// One exception: BW9001 for an `AssertionError`, BW4002 otherwise, related
+/// to the line in the module's files that raised it.
+fn one(py: Python<'_>, error: &PyErr, directory: &Path) -> Diagnostic {
     let message = error
         .value(py)
         .str()
         .map(|text| text.to_string())
         .unwrap_or_default();
-    if error.is_instance_of::<PyAssertionError>(py) {
+    let diagnostic = if error.is_instance_of::<PyAssertionError>(py) {
         let reason = if message.is_empty() {
             "a Python assertion failed".to_owned()
         } else {
             message
         };
-        return Diagnostic::new(BWErr::AssertionFailed(reason));
+        Diagnostic::new(BWErr::AssertionFailed(reason))
+    } else {
+        Diagnostic::new(BWErr::NativeError(describe(py, error)))
+    };
+    match raised(py, error, directory) {
+        Some(span) => diagnostic.with_related("raised here", &span),
+        None => diagnostic,
     }
-    Diagnostic::new(BWErr::NativeError(describe(py, error)))
+}
+
+/// Where `error` was raised: its traceback's innermost frame in a file under
+/// `directory`, as a span of that line.
+fn raised(py: Python<'_>, error: &PyErr, directory: &Path) -> Option<Span> {
+    let traceback = error.traceback(py)?;
+    let frames = py
+        .import("traceback")
+        .ok()?
+        .getattr("extract_tb")
+        .ok()?
+        .call1((traceback,))
+        .ok()?;
+    let mut found = None;
+    for frame in frames.try_iter().ok()? {
+        let frame = frame.ok()?;
+        let file: String = frame.getattr("filename").ok()?.extract().ok()?;
+        let line: usize = frame.getattr("lineno").ok()?.extract().ok()?;
+        let file = PathBuf::from(file);
+        if file.starts_with(directory) {
+            found = Some((file, line));
+        }
+    }
+    let (file, line) = found?;
+    source_line(&file, line)
 }
 
 fn describe(py: Python<'_>, error: &PyErr) -> String {
@@ -565,4 +656,34 @@ fn convert(
         .map(|name| name.to_string())
         .unwrap_or_else(|_| "object".into());
     Err(format!("a {kind}, which has no Botwork equivalent"))
+}
+
+/// The most of its file a "raised here" location holds, as in
+/// `javascript_host.mjs`.
+const RAISED_BYTES: usize = 256 * 1024;
+
+/// Line `line` (from 1) of a module's file, without its indentation, for a
+/// failure an adapter raised there. Its source holds the file up to that line,
+/// so the location reads as the file's own, to the byte; a line further in
+/// than [`RAISED_BYTES`] has none.
+fn source_line(file: &Path, line: usize) -> Option<Span> {
+    let text = std::fs::read_to_string(file).ok()?;
+    let start: usize = text
+        .split_inclusive('\n')
+        .take(line.checked_sub(1)?)
+        .map(str::len)
+        .sum();
+    let rest = text.get(start..).filter(|rest| !rest.is_empty())?;
+    let end = start + rest.find('\n').unwrap_or(rest.len());
+    if end > RAISED_BYTES {
+        return None;
+    }
+    let shown = &text[start..end];
+    let first = start + (shown.len() - shown.trim_start().len());
+    let last = start + shown.trim_end().len();
+    let source = crate::core::ast::SourceFile::from_owned_parts(
+        file.display().to_string(),
+        text[..end].to_owned(),
+    );
+    Span::from_source_range(Arc::new(source), first, last.max(first))
 }

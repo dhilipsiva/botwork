@@ -24,6 +24,17 @@ export const statements = {
     "Echo |value|": (value) => value,
     "Fail with |message|": (message) => { throw new RangeError(message); },
     "Insist |condition|": (condition) => { assert.ok(condition, "the condition does not hold"); return true; },
+    "Wrap |message|": (message) => {
+        try {
+            try {
+                assert.fail(message);
+            } catch (error) {
+                throw new TypeError("the value was rejected", { cause: error });
+            }
+        } catch (error) {
+            throw new Error("the wrapped step failed", { cause: error });
+        }
+    },
     "Spin": () => { for (;;) {} },
     "Later |x|": async (x) => { await new Promise((resolve) => setTimeout(resolve, 10)); return x + 1; },
     "Append |items|": (items) => { items.push(1); return items; },
@@ -57,6 +68,16 @@ def insist(condition):
     assert condition, "the condition does not hold"
     return True
 
+@botwork.statement("Wrap |message|")
+def wrap(message):
+    try:
+        try:
+            assert False, message
+        except AssertionError as error:
+            raise TypeError("the value was rejected") from error
+    except TypeError as error:
+        raise RuntimeError("the wrapped step failed") from error
+
 @botwork.statement("Spin")
 def spin():
     while True:
@@ -89,6 +110,10 @@ struct Adapter {
     file: &'static str,
     asynchronous: bool,
     unsupported: &'static [(&'static str, &'static str)],
+    /// The line where `Fail with` raises, without its indentation, for an
+    /// adapter whose failures say where they were raised and what they chain;
+    /// the module also has `Wrap`.
+    raised: Option<&'static str>,
 }
 
 /// The adapters this build and machine advertise, with their modules
@@ -111,6 +136,8 @@ fn adapters(directory: &Path) -> Vec<Adapter> {
                 ("cycle", "names node 0, which is not after it"),
                 ("duplicate", "a map with the key \"a\" twice"),
             ],
+            // A component's failure is a kind and a message alone.
+            raised: None,
         });
     }
     if node() {
@@ -127,6 +154,9 @@ fn adapters(directory: &Path) -> Vec<Adapter> {
                 ("surrogate", "a string with an unpaired surrogate"),
                 ("object", "a Point, which has no Botwork equivalent"),
             ],
+            raised: Some(
+                r#""Fail with |message|": (message) => { throw new RangeError(message); },"#,
+            ),
         });
     }
     #[cfg(feature = "python")]
@@ -144,6 +174,7 @@ fn adapters(directory: &Path) -> Vec<Adapter> {
                 ("surrogate", "a str that is not valid Unicode"),
                 ("object", "a Point, which has no Botwork equivalent"),
             ],
+            raised: Some("raise ValueError(message)"),
         });
     }
     adapters
@@ -299,6 +330,7 @@ fn javascript_returns_whole_floats_as_ints_because_it_has_one_number_type() {
         file: "conformance.mjs",
         asynchronous: true,
         unsupported: &[],
+        raised: None,
     };
     let result = run(
         directory.path(),
@@ -385,6 +417,131 @@ fn failures_are_native_errors_or_assertions_and_cleanup_still_runs() {
             "{}",
             adapter.file
         );
+    });
+}
+
+fn field<'a>(map: &'a Literal, key: &str) -> &'a Literal {
+    match map {
+        Literal::Map(entries) => entries
+            .get(key)
+            .unwrap_or_else(|| panic!("no {key} in {map}")),
+        other => panic!("not a map: {other}"),
+    }
+}
+
+fn text<'a>(map: &'a Literal, key: &str) -> &'a str {
+    match field(map, key) {
+        Literal::String(text) => text,
+        other => panic!("{key} is not a String: {other}"),
+    }
+}
+
+fn items<'a>(map: &'a Literal, key: &str) -> &'a [Literal] {
+    match field(map, key) {
+        Literal::Array(items) => items,
+        other => panic!("{key} is not an Array: {other}"),
+    }
+}
+
+/// The source of the related location with `message`, if there is one.
+fn related<'a>(error: &'a Literal, message: &str) -> Option<&'a Literal> {
+    items(error, "related")
+        .iter()
+        .find(|related| text(related, "message") == message)
+        .map(|related| field(related, "source"))
+}
+
+#[test]
+fn failures_keep_their_codes_locations_callers_and_causes_through_a_module() {
+    each(|directory, adapter| {
+        // A Botwork module between the script and the adapter.
+        fs::write(
+            directory.join("steps.botwork"),
+            format!(
+                "Import |\"{}\"| As |m|\nFail Through |message| {{\n    m::Fail with |message|\n}}\nInsist Through |condition| {{\n    m::Insist |condition|\n}}\nWrap Through |message| {{\n    m::Wrap |message|\n}}\n",
+                adapter.file
+            ),
+        )
+        .unwrap();
+        let mut source = "Import |\"steps.botwork\"| As |s|\nTry {\n    s::Fail Through |\"bad input\"|\n} Catch |error| {\n    |failed| = |error|\n}\nTry {\n    s::Insist Through |false|\n} Catch |error| {\n    |insisted| = |error|\n}".to_owned();
+        if adapter.raised.is_some() {
+            source.push_str("\nTry {\n    s::Wrap Through |\"bad input\"|\n} Catch |error| {\n    |wrapped| = |error|\n}");
+        }
+        let result = run(directory, adapter, &source, RunOptions::default());
+        for (name, code) in [("failed", "BW4002"), ("insisted", "BW9001")] {
+            let error = value(&result, adapter, name);
+            let error = &error;
+            assert_eq!(text(error, "code"), code, "{}: {error}", adapter.file);
+            // The adapter's call inside the module, then the module's inside
+            // the script, which the run names `main.botwork`.
+            let callers: Vec<_> = items(error, "call_stack")
+                .iter()
+                .map(|frame| {
+                    let site = field(frame, "call_site");
+                    (text(site, "file").to_owned(), text(site, "line").to_owned())
+                })
+                .collect();
+            assert_eq!(callers.len(), 2, "{}: {error}", adapter.file);
+            assert!(
+                callers[0].0.ends_with("steps.botwork") && callers[1].0 == "main.botwork",
+                "{}: {callers:?}",
+                adapter.file
+            );
+            // The statement came in through the module's own import.
+            let imported = related(error, "imported here")
+                .unwrap_or_else(|| panic!("{}: no import site in {error}", adapter.file));
+            assert!(
+                text(imported, "file").ends_with("steps.botwork") && text(imported, "line") == "1",
+                "{}: {imported}",
+                adapter.file
+            );
+            match adapter.raised {
+                Some(_) => {
+                    let raised = related(error, "raised here")
+                        .unwrap_or_else(|| panic!("{}: no raise site in {error}", adapter.file));
+                    assert!(
+                        text(raised, "file").ends_with(adapter.file),
+                        "{}: {raised}",
+                        adapter.file
+                    );
+                }
+                None => assert!(related(error, "raised here").is_none(), "{error}"),
+            }
+        }
+        let failed = value(&result, adapter, "failed");
+        if let Some(line) = adapter.raised {
+            let raised = related(&failed, "raised here").unwrap();
+            assert_eq!(text(raised, "text"), line, "{}: {raised}", adapter.file);
+            // Each failure the chain holds is the cause of the one it led to,
+            // with its own code and where it was raised.
+            let mut failure = value(&result, adapter, "wrapped");
+            for (code, message) in [
+                ("BW4002", "the wrapped step failed"),
+                ("BW4002", "the value was rejected"),
+                ("BW9001", "bad input"),
+            ] {
+                assert_eq!(text(&failure, "code"), code, "{}: {failure}", adapter.file);
+                assert!(
+                    text(&failure, "message").contains(message),
+                    "{}: {failure}",
+                    adapter.file
+                );
+                let raised = related(&failure, "raised here")
+                    .unwrap_or_else(|| panic!("{}: no raise site in {failure}", adapter.file));
+                assert!(
+                    text(raised, "file").ends_with(adapter.file),
+                    "{}: {raised}",
+                    adapter.file
+                );
+                let causes = items(&failure, "causes");
+                if code == "BW9001" {
+                    assert!(causes.is_empty(), "{}: {failure}", adapter.file);
+                } else {
+                    assert_eq!(causes.len(), 1, "{}: {failure}", adapter.file);
+                    failure = causes[0].clone();
+                }
+            }
+        }
     });
 }
 

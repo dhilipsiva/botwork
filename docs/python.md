@@ -81,6 +81,12 @@ value must also fit the [value limits](interpreter-architecture.md).
 - An `AssertionError` is an assertion failure, BW9001, with its message.
 - Any other exception is BW4002, `Python ValueError: bad input` for example,
   followed by the end of its traceback, up to 2 KiB.
+- Each failure is related to the line that raised it, `raised here`: the
+  innermost frame of its traceback in a file in the module's directory. A line
+  more than 256 KiB into its file has no location.
+- An exception's chain, `raise … from …` or one raised while handling another,
+  becomes the failure's causes, each with its own code and location, up to
+  eight deep. `__suppress_context__` is honoured.
 - A script catches both with `Try`/`Catch`, as any statement failure.
 - A file that cannot load fails its import with BW6001: a syntax error, an
   exception while it runs, a header that is not a `str`, or a function that

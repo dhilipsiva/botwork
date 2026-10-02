@@ -201,6 +201,76 @@ fn exceptions_become_catchable_diagnostics_with_their_traceback() {
     assert_eq!(value(&result, "caught").to_string(), "true");
 }
 
+const CHAINS: &str = r#"
+import botwork
+
+@botwork.statement("Implicit")
+def implicit():
+    try:
+        {}["missing"]
+    except KeyError:
+        raise ValueError("while handling")
+
+@botwork.statement("Suppressed")
+def suppressed():
+    try:
+        {}["missing"]
+    except KeyError:
+        raise ValueError("on its own") from None
+"#;
+
+/// The file and text of the line a failure says raised it.
+fn raised(error: &Diagnostic) -> Option<(String, String)> {
+    error
+        .related
+        .iter()
+        .find(|related| related.message == "raised here")
+        .map(|related| {
+            (
+                related.span.source().name().to_owned(),
+                related.span.text().to_owned(),
+            )
+        })
+}
+
+#[test]
+fn exceptions_raised_while_handling_others_keep_them_as_causes_unless_suppressed() {
+    // A line more than 256 KiB into its file has no location.
+    let far = format!(
+        "{}import botwork\n\n@botwork.statement(\"Far\")\ndef far():\n    raise ValueError(\"far\")\n",
+        "# padding\n".repeat(300 * 1024 / 10)
+    );
+    let workspace = Workspace::new(&[("chains.py", CHAINS), ("far.py", &far)]);
+    let result = workspace.run("Import |\"chains.py\"| As |py|\npy::Implicit");
+    let error = failure(&result);
+    let (file, text) = raised(error).expect("a raise site");
+    assert!(file.ends_with("chains.py"), "{file}");
+    assert_eq!(text, "raise ValueError(\"while handling\")");
+    assert_eq!(error.causes.len(), 1, "{error}");
+    let cause = &error.causes[0];
+    assert_eq!(cause.code(), DiagnosticCode::Native);
+    assert!(cause.to_string().contains("Python KeyError"), "{cause}");
+    assert_eq!(raised(cause).expect("a raise site").1, "{}[\"missing\"]");
+    let result = workspace.run("Import |\"chains.py\"| As |py|\npy::Suppressed");
+    let error = failure(&result);
+    assert!(error.causes.is_empty(), "{error}");
+    assert!(raised(error).is_some(), "{error}");
+    let result = workspace.run("Import |\"far.py\"| As |py|\npy::Far");
+    let error = failure(&result);
+    assert!(
+        error.to_string().contains("Python ValueError: far"),
+        "{error}"
+    );
+    assert_eq!(raised(error), None, "{error}");
+    assert!(
+        error
+            .related
+            .iter()
+            .any(|related| related.message == "imported here"),
+        "{error}"
+    );
+}
+
 #[test]
 fn module_globals_stay_within_one_run() {
     let workspace = Workspace::new(&[("helpers.py", HELPERS)]);

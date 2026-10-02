@@ -75,6 +75,11 @@ coerced. Values nest at most 64 levels.
   BW9001, with its message.
 - Any other exception is BW4002, `JavaScript RangeError: bad input` for
   example, followed by the end of its stack, up to 2 KiB.
+- Each failure is related to the line that threw it, `raised here`: the
+  innermost frame of its stack in a file in the module's directory. A line
+  more than 256 KiB into its file has no location.
+- An error's `cause` chain becomes the failure's causes, each with its own code
+  and location, up to eight deep.
 - A script catches both with `Try`/`Catch`, as any statement failure.
 - A module that cannot load fails its import with BW6001, with Node's error:
   a syntax error, an exception at its top level, no `statements` object, a

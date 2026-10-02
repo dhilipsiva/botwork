@@ -100,6 +100,9 @@ nothing is coerced.
   then the end of what the module wrote to stderr, where Rust writes a panic's
   message, and the start of its backtrace, each up to 2 KiB.
 - A script catches all of these with `Try`/`Catch`, as any statement failure.
+- A `failure` is a kind and a message alone, so a WASM failure has no
+  location in the module and no causes; it names the import site, as every
+  adapter's does.
 - A module that cannot load fails its import with BW6001: a file that is not a
   component, a component that does not export `statements` or that imports
   more than WASI Preview 2, a trap while listing its headers, or a header that
