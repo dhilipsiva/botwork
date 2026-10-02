@@ -516,25 +516,166 @@ impl WorkerPool {
             .unwrap_or_else(|error| error.into_inner())
             .snapshot()
     }
+
+    /// The workers among `ids`, or every worker of the pool, still active:
+    /// running, or with cleanup unresolved.
+    pub(crate) fn unresolved(&self, ids: Option<&[u64]>) -> Vec<ActiveWorker> {
+        self.0
+             .0
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .unresolved(ids)
+    }
+
+    /// Wait at most `timeout` for the workers among `ids`, or every worker of
+    /// the pool, to end and finish cleanup, and return those still active.
+    /// Unlike [`WorkerPool::shutdown_wait`], admission stays open. A worker
+    /// whose ownership was lost never resolves, so the wait ends once only
+    /// such workers remain.
+    pub(crate) fn settle(&self, ids: Option<&[u64]>, timeout: Duration) -> Vec<ActiveWorker> {
+        let deadline = Instant::now().checked_add(timeout);
+        let shared = &self.0 .0;
+        let mut state = shared
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        loop {
+            let unresolved = state.unresolved(ids);
+            if unresolved
+                .iter()
+                .all(|worker| worker.cleanup == Some(WorkerCleanup::Unverified))
+            {
+                return unresolved;
+            }
+            let remaining = deadline.map_or(Duration::MAX, |deadline| {
+                deadline.saturating_duration_since(Instant::now())
+            });
+            if remaining.is_zero() {
+                return unresolved;
+            }
+            state = shared
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(|error| error.into_inner())
+                .0;
+        }
+    }
+
+    fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 impl State {
     fn snapshot(&self) -> WorkerSnapshot {
         WorkerSnapshot {
             closed: self.closed,
-            active: self
-                .active
-                .iter()
-                .map(|(&id, active)| ActiveWorker {
-                    id,
-                    pid: active.pid,
-                    stopping: active.stopping,
-                    cleanup: active.cleanup,
-                })
-                .collect(),
+            active: self.unresolved(None),
             completed: self.completed.iter().cloned().collect(),
             omitted_records: self.omitted_records,
         }
+    }
+
+    fn unresolved(&self, ids: Option<&[u64]>) -> Vec<ActiveWorker> {
+        self.active
+            .iter()
+            .filter(|(id, _)| ids.is_none_or(|ids| ids.contains(id)))
+            .map(|(&id, active)| ActiveWorker {
+                id,
+                pid: active.pid,
+                stopping: active.stopping,
+                cleanup: active.cleanup,
+            })
+            .collect()
+    }
+}
+
+/// The workers a run started that may outlive their statements: those whose
+/// statement has not yet seen their cleanup finish, and every worker of a pool
+/// the run owns. The run waits for them as it ends.
+#[derive(Default)]
+pub(crate) struct WorkerLedger(Mutex<Ledger>);
+
+#[derive(Default)]
+struct Ledger {
+    workers: Vec<(WorkerPool, u64)>,
+    pools: Vec<WorkerPool>,
+}
+
+impl std::fmt::Debug for WorkerLedger {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ledger = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        output
+            .debug_struct("WorkerLedger")
+            .field("workers", &ledger.workers.len())
+            .field("pools", &ledger.pools.len())
+            .finish()
+    }
+}
+
+impl WorkerLedger {
+    /// Note a worker the run started, until [`WorkerLedger::forget`].
+    pub(crate) fn record(&self, pool: &WorkerPool, id: u64) {
+        self.lock().workers.push((pool.clone(), id));
+    }
+
+    /// The worker's statement saw its cleanup finish.
+    pub(crate) fn forget(&self, pool: &WorkerPool, id: u64) {
+        self.lock()
+            .workers
+            .retain(|(owner, worker)| !(owner.same(pool) && *worker == id));
+    }
+
+    /// Wait for every worker of `pool` as the run ends: the run owns it.
+    pub(crate) fn watch(&self, pool: &WorkerPool) {
+        let mut ledger = self.lock();
+        if !ledger.pools.iter().any(|owned| owned.same(pool)) {
+            ledger.pools.push(pool.clone());
+        }
+    }
+
+    /// Whether any worker the ledger names is still active.
+    pub(crate) fn pending(&self) -> bool {
+        self.groups()
+            .iter()
+            .any(|(pool, ids)| !pool.unresolved(ids.as_deref()).is_empty())
+    }
+
+    /// Wait at most `timeout` in all for the workers the ledger names, and
+    /// return those still active.
+    pub(crate) fn settle(&self, timeout: Duration) -> Vec<ActiveWorker> {
+        let deadline = Instant::now().checked_add(timeout);
+        let mut unresolved = Vec::new();
+        for (pool, ids) in self.groups() {
+            let remaining = deadline.map_or(timeout, |deadline| {
+                deadline.saturating_duration_since(Instant::now())
+            });
+            unresolved.extend(pool.settle(ids.as_deref(), remaining));
+        }
+        unresolved
+    }
+
+    /// Each pool with the IDs to wait for, or None for all of its workers.
+    fn groups(&self) -> Vec<(WorkerPool, Option<Vec<u64>>)> {
+        let ledger = self.lock();
+        let mut groups: Vec<(WorkerPool, Option<Vec<u64>>)> = ledger
+            .pools
+            .iter()
+            .map(|pool| (pool.clone(), None))
+            .collect();
+        for (pool, id) in &ledger.workers {
+            match groups.iter_mut().find(|(owner, _)| owner.same(pool)) {
+                Some((_, Some(ids))) => ids.push(*id),
+                Some((_, None)) => {}
+                None => groups.push((pool.clone(), Some(vec![*id]))),
+            }
+        }
+        groups
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Ledger> {
+        self.0.lock().unwrap_or_else(|error| error.into_inner())
     }
 }
 

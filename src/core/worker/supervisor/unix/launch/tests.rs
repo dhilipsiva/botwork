@@ -405,3 +405,64 @@ fn late_output_overflow_preserves_the_already_published_cancellation() {
     );
     assert_eq!(pool.snapshot().completed[0].cleanup, WorkerCleanup::Reaped);
 }
+
+#[test]
+fn a_run_ledger_waits_within_its_allowance_and_returns_its_unresolved_workers() {
+    let pool = pool();
+    let mut held = Held::new(&pool, Completion::Child);
+    let ledger = crate::core::worker::WorkerLedger::default();
+    assert!(!ledger.pending());
+    let handle = pool
+        .start(command(), vec![], OperationControl::default())
+        .unwrap();
+    ledger.record(&pool, handle.id());
+    let pid = held.entered().unwrap();
+    let delivered = report(handle);
+    assert_eq!(delivered.report.cleanup, WorkerCleanup::Pending);
+    assert!(ledger.pending());
+    // A stalled worker holds the wait for the whole allowance, no longer.
+    let before = Instant::now();
+    let unresolved = ledger.settle(Duration::from_millis(200));
+    let waited = before.elapsed();
+    assert!(waited >= Duration::from_millis(200), "{waited:?}");
+    assert!(waited < Duration::from_secs(2), "{waited:?}");
+    assert_eq!(unresolved.len(), 1);
+    assert_eq!(unresolved[0].cleanup, Some(WorkerCleanup::Pending));
+    // Once it resolves, the wait ends with it rather than at the allowance.
+    let releasing = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        held.release();
+        held
+    });
+    let before = Instant::now();
+    assert!(ledger.settle(Duration::from_secs(5)).is_empty());
+    assert!(before.elapsed() < Duration::from_secs(3));
+    drop(releasing.join().unwrap());
+    assert!(!ledger.pending());
+    assert!(super::super::tests::gone(pid));
+}
+
+#[test]
+fn a_watched_pool_is_settled_whole_and_a_forgotten_worker_is_not_waited_for() {
+    let pool = pool();
+    let mut held = Held::new(&pool, Completion::Failure);
+    let ledger = crate::core::worker::WorkerLedger::default();
+    let handle = pool
+        .start(command(), vec![], OperationControl::default())
+        .unwrap();
+    assert_eq!(held.entered(), None);
+    ledger.record(&pool, handle.id());
+    ledger.forget(&pool, handle.id());
+    assert!(!ledger.pending());
+    assert!(ledger.settle(Duration::from_secs(5)).is_empty());
+    // Watching the pool waits for every worker it has, recorded or not.
+    ledger.watch(&pool);
+    ledger.watch(&pool);
+    assert!(ledger.pending());
+    let unresolved = ledger.settle(Duration::from_millis(50));
+    assert_eq!(unresolved.len(), 1);
+    assert_eq!(unresolved[0].id, handle.id());
+    drop(handle);
+    held.release();
+    assert!(ledger.settle(Duration::from_secs(3)).is_empty());
+}

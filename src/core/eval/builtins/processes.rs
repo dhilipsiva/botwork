@@ -168,7 +168,17 @@ impl ProcessOp {
                 true,
             )
             .map_err(|error| failure(context, error))?;
+        // The run waits as it ends for a worker whose cleanup this call did
+        // not see finish, including one it abandoned at a stop.
+        let id = worker.id();
+        environment.workers.record(pool, id);
         let mut completed = worker.wait_blocking_retained();
+        if matches!(
+            completed.report.cleanup,
+            WorkerCleanup::Reaped | WorkerCleanup::TreeReaped | WorkerCleanup::NotStarted
+        ) {
+            environment.workers.forget(pool, id);
+        }
         let report = &mut completed.report;
         if !complete(report) {
             let error = report.diagnostic.take().unwrap_or_else(|| {

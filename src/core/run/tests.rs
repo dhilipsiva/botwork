@@ -165,3 +165,86 @@ fn environment_overlays_replace_the_variable_their_name_names() {
     overlay(&mut variables, OsStr::new("Path"), None, false);
     assert_eq!(variables, BTreeMap::from([(OsString::from("PATH"), value)]));
 }
+
+/// A run waits as it ends, within its cleanup allowance, for the workers its
+/// statements left unresolved, and fails naming them; a run that failed
+/// already keeps its failure first, with theirs as a cause.
+#[cfg(unix)]
+#[test]
+fn a_run_ends_failing_with_the_workers_it_left_unresolved() {
+    use crate::core::{
+        diagnostic::DiagnosticCode,
+        operation::OperationControl,
+        worker::{WorkerCommand, WorkerLimits, WorkerPool},
+    };
+    let pool = WorkerPool::new(WorkerLimits::default()).unwrap();
+    let sleeper = || WorkerCommand {
+        executable: "/bin/sleep".into(),
+        arguments: vec!["30".into()],
+        directory: std::env::temp_dir(),
+        environment: Default::default(),
+    };
+    let options = || RunOptions {
+        limits: RunLimits {
+            cleanup: CleanupLimits {
+                timeout: Duration::from_millis(150),
+                ..CleanupLimits::default()
+            },
+            ..RunLimits::default()
+        },
+        ..RunOptions::default()
+    };
+    let engine = Engine::default();
+    let failures = [
+        None,
+        Some(Diagnostic::new(BWErr::AssertionFailed(
+            "the check failed".into(),
+        ))),
+    ];
+    for failure in failures {
+        let (active, prepared) =
+            engine.prepare_run(asynchronous::PendingRun::new(options(), "main"), false);
+        prepared.unwrap();
+        let handle = pool
+            .start(sleeper(), Vec::new(), OperationControl::default())
+            .unwrap();
+        let ledger = &active.context.environment.as_ref().unwrap().workers;
+        ledger.record(&pool, handle.id());
+        let before = Instant::now();
+        let unsettled = active.settle_blocking();
+        let waited = before.elapsed();
+        assert!(waited >= Duration::from_millis(150), "{waited:?}");
+        assert!(waited < Duration::from_secs(3), "{waited:?}");
+        let failed = failure.is_some();
+        let result = failure.map_or(Ok(Literal::None), |failure| {
+            Err(RuntimeDiagnostic::constructed(failure, None))
+        });
+        let error = active.finish(result, unsettled).result.unwrap_err();
+        let unresolved = if failed {
+            assert_eq!(error.code(), DiagnosticCode::Assertion, "{error}");
+            assert_eq!(error.causes.len(), 1, "{error}");
+            &error.causes[0]
+        } else {
+            &error
+        };
+        assert_eq!(unresolved.code(), DiagnosticCode::AsyncRuntime, "{error}");
+        let text = unresolved.error.to_string();
+        assert!(
+            text.contains(&format!(
+                "The run ended with 1 worker process not cleaned up within its 150 ms cleanup allowance: worker {} (process ",
+                handle.id()
+            )),
+            "{text}"
+        );
+        assert!(text.ends_with("): running"), "{text}");
+        drop(handle);
+    }
+    // A run whose ledger is quiet ends at once, as it succeeded.
+    let (active, prepared) =
+        engine.prepare_run(asynchronous::PendingRun::new(options(), "main"), false);
+    prepared.unwrap();
+    let before = Instant::now();
+    assert!(active.settle_blocking().is_none());
+    assert!(before.elapsed() < Duration::from_millis(100));
+    assert!(active.finish(Ok(Literal::None), None).result.is_ok());
+}

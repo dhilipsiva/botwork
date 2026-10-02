@@ -1,5 +1,8 @@
 use super::*;
-use crate::core::eval::execution;
+use crate::core::{
+    eval::execution,
+    worker::{ActiveWorker, WorkerCleanup, WorkerLedger},
+};
 use std::future::Future;
 
 // Wrap host-owned trees before constructing a future, including an unpolled one.
@@ -51,11 +54,72 @@ pub(super) struct ActiveRun {
 }
 
 impl ActiveRun {
-    pub(super) fn finish(self, result: EvaluationResult<Literal>) -> RunResult {
+    /// The run's worker ledger and the cleanup allowance it waits within.
+    fn ledger(&self) -> Option<(Arc<WorkerLedger>, Duration)> {
+        let environment = self.context.environment.as_ref()?;
+        let allowance = self
+            .context
+            .budget
+            .as_ref()
+            .map_or(CleanupLimits::default().timeout, |budget| {
+                budget.limits().cleanup.timeout
+            });
+        Some((Arc::clone(&environment.workers), allowance))
+    }
+
+    /// Wait, within the run's cleanup allowance, for the workers its
+    /// statements started and did not see finish cleanup; the failure for
+    /// any that are still active.
+    pub(super) fn settle_blocking(&self) -> Option<Diagnostic> {
+        let (ledger, allowance) = self.ledger()?;
+        if !ledger.pending() {
+            return None;
+        }
+        unsettled(&ledger.settle(allowance), allowance)
+    }
+
+    /// As [`ActiveRun::settle_blocking`], waiting on a blocking thread.
+    pub(super) async fn settle(&self) -> Option<Diagnostic> {
+        let (ledger, allowance) = self.ledger()?;
+        if !ledger.pending() {
+            return None;
+        }
+        let workers = match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => {
+                let waiting = Arc::clone(&ledger);
+                runtime
+                    .spawn_blocking(move || waiting.settle(allowance))
+                    .await
+                    .unwrap_or_else(|_| ledger.settle(Duration::ZERO))
+            }
+            Err(_) => ledger.settle(allowance),
+        };
+        unsettled(&workers, allowance)
+    }
+
+    pub(super) fn finish(
+        self,
+        result: EvaluationResult<Literal>,
+        unsettled: Option<Diagnostic>,
+    ) -> RunResult {
         let result = self
             .context
             .after_evaluation(result)
             .map_err(|error| self.context.runtime_diagnostic(error, None, false));
+        // Workers left unresolved fail a run that otherwise succeeded, and
+        // are a cause of one that failed, as a failed cleanup is.
+        let result = match unsettled {
+            None => result,
+            Some(unsettled) => {
+                let unsettled = RuntimeDiagnostic::constructed(unsettled, None);
+                match result {
+                    Ok(_) => Err(unsettled),
+                    Err(primary) => {
+                        Err(primary.with_cleanup(unsettled, self.context.budget.as_ref()))
+                    }
+                }
+            }
+        };
         let steps = self.context.budget.as_ref().map_or(0, RunBudget::used);
         let (result, variables, snapshot_error) =
             self.context.finish_result(result, &self.result_limits);
@@ -71,6 +135,44 @@ impl ActiveRun {
             record,
         }
     }
+}
+
+/// The most unresolved workers a run's failure names one by one.
+const NAMED_WORKERS: usize = 8;
+
+/// The failure for workers still active when the run ended.
+fn unsettled(workers: &[ActiveWorker], allowance: Duration) -> Option<Diagnostic> {
+    use std::fmt::Write;
+    if workers.is_empty() {
+        return None;
+    }
+    let mut text = format!(
+        "The run ended with {} worker process{} not cleaned up within its {} ms cleanup allowance:",
+        workers.len(),
+        if workers.len() == 1 { "" } else { "es" },
+        allowance.as_millis()
+    );
+    for (index, worker) in workers.iter().take(NAMED_WORKERS).enumerate() {
+        let state = match worker.cleanup {
+            Some(WorkerCleanup::Pending) => "cleanup pending",
+            Some(WorkerCleanup::Unverified) => "ownership lost",
+            _ if worker.stopping => "stopping",
+            _ => "running",
+        };
+        let separator = if index == 0 { " " } else { "; " };
+        let _ = match worker.pid {
+            Some(pid) => write!(
+                text,
+                "{separator}worker {} (process {pid}): {state}",
+                worker.id
+            ),
+            None => write!(text, "{separator}worker {}: {state}", worker.id),
+        };
+    }
+    if workers.len() > NAMED_WORKERS {
+        let _ = write!(text, "; and {} more", workers.len() - NAMED_WORKERS);
+    }
+    Some(Diagnostic::new(BWErr::AsyncRuntime(text)))
 }
 
 enum Input<'a> {
@@ -219,7 +321,8 @@ impl Engine {
                 .await
             }
         };
-        active.finish(result)
+        let unsettled = active.settle().await;
+        active.finish(result, unsettled)
     }
 
     async fn prepare_async(&self, mut pending: PendingRun) -> (ActiveRun, EvaluationResult<()>) {

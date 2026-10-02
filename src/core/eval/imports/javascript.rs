@@ -38,6 +38,10 @@ pub(super) async fn evaluate_import(
 ) -> EvaluationResult<Literal> {
     let module = load(path, span, import_site, context).await?;
     let pool = context.modules.javascript_pool()?;
+    // The pool is the run's, so the run waits for its workers as it ends.
+    if let Some(environment) = &context.environment {
+        environment.workers.watch(&pool);
+    }
     let statements = module.statements.iter().map(|(signature, command)| {
         let (pool, command) = (pool.clone(), command.clone());
         (signature, move |qualified| {

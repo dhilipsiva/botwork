@@ -213,6 +213,9 @@ pub struct RunEnvironment {
     pub(crate) secrets: crate::core::secret::Secrets,
     /// Parsed modules shared with other runs; module state stays per run.
     pub(crate) compiled: Option<crate::core::eval::CompiledModules>,
+    /// The workers the run's statements started that the run waits for as it
+    /// ends, shared by every context of the run.
+    pub(crate) workers: Arc<crate::core::worker::WorkerLedger>,
 }
 
 impl Context {
@@ -344,6 +347,7 @@ impl RunEnvironment {
             recorder: self.recorder.clone(),
             secrets: self.secrets.clone(),
             compiled: self.compiled.clone(),
+            workers: Arc::clone(&self.workers),
         }
     }
     pub fn working_directory(&self) -> &Path {
@@ -441,6 +445,7 @@ impl RunEnvironment {
             recorder: None,
             secrets: options.secrets.clone(),
             compiled: None,
+            workers: Arc::default(),
         })
     }
 }
@@ -613,7 +618,8 @@ impl Engine {
         let (mut active, prepared) =
             self.prepare_run(asynchronous::PendingRun::new(options, name), false);
         let result = prepared.and_then(|()| execute(&mut active.context));
-        active.finish(result)
+        let unsettled = active.settle_blocking();
+        active.finish(result, unsettled)
     }
 }
 
