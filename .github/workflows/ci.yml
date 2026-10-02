@@ -124,6 +124,11 @@ jobs:
         # The measurement harness is Linux-only, like the reference host (D3).
         if: runner.os == 'Linux'
         run: python3 scripts/performance.py --smoke --profile ${{ matrix.profile }} --target ${{ matrix.target }}
+      - name: Record the worker platform
+        # The kernel, distribution, libc, and facility limits the worker
+        # suites ran on; docs/worker-platforms.md lists those observed.
+        if: runner.os == 'Linux'
+        run: bash scripts/worker_platform.sh
       - name: Allow unprivileged user namespaces for isolated workers
         # Ubuntu runners restrict them through AppArmor; PID-namespace worker tests
         # need them, as docs/isolated-workers.md requires of deployments.
@@ -150,6 +155,47 @@ jobs:
           echo "BOTWORK_REQUIRE_WEBDRIVER=1" >> "$GITHUB_ENV"
       - name: Run tests and examples
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
+
+  # The worker boundary on an older Ubuntu release than ubuntu-latest, with its
+  # own kernel, libc, and util-linux (docs/worker-platforms.md).
+  worker-platforms:
+    name: Worker platforms (${{ matrix.os }}, ${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      BOTWORK_REQUIRE_NODE: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04]
+        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }}
+      - name: Install musl C toolchain
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> "$GITHUB_ENV"
+      - name: Record the worker platform
+        run: bash scripts/worker_platform.sh
+      - name: Allow unprivileged user namespaces for isolated workers
+        run: |
+          if sysctl -n kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Run the worker, process, and shutdown suites
+        run: >-
+          cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }}
+          --test isolated_workers --test typed_workers --test worker_trees
+          --test worker_recovery --test worker_namespaces --test worker_facilities
+          --test worker_backends --test processes --test shutdown
+          --test terminal_outcomes --test javascript_adapter
 
   python:
     name: Python adapter (${{ matrix.os }})
