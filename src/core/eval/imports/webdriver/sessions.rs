@@ -27,14 +27,22 @@ pub(super) struct Session {
     pub(super) timeout: Duration,
     /// The driver Botwork started for this session, ended with it.
     driver: Mutex<Option<Driver>>,
+    /// Where the session's failures are captured, if anywhere.
+    pub(super) artifacts: Option<Artifacts>,
 }
 
 impl Session {
-    pub(super) fn new(endpoint: Endpoint, timeout: Duration, driver: Option<Driver>) -> Self {
+    pub(super) fn new(
+        endpoint: Endpoint,
+        timeout: Duration,
+        driver: Option<Driver>,
+        artifacts: Option<Artifacts>,
+    ) -> Self {
         Self {
             endpoint,
             timeout,
             driver: Mutex::new(driver),
+            artifacts,
         }
     }
 
@@ -70,11 +78,17 @@ impl Sessions {
 }
 
 impl Drop for Sessions {
-    /// Close what the run left open: delete each session, so its driver closes
-    /// the browser, then end the drivers Botwork started.
+    /// Close what the run left open, after a failure, a stop, or a forgotten
+    /// Close Browser: capture each session that keeps failure artifacts,
+    /// delete it, so its driver closes the browser, then end the drivers
+    /// Botwork started. The run's record is still open, so the captures are
+    /// its artifacts.
     fn drop(&mut self) {
         let open = std::mem::take(&mut *self.open());
         for (id, session) in open {
+            if let Some(artifacts) = &session.artifacts {
+                artifacts.capture_blocking(&session.endpoint, &id, CLOSE_TIMEOUT);
+            }
             session.endpoint.delete_blocking(&id, CLOSE_TIMEOUT);
             session.end_driver();
         }
@@ -94,11 +108,13 @@ pub(super) struct Driver {
 impl Driver {
     /// Start `executable` on a free loopback port, in the run's directory and
     /// environment, and wait until it answers.
+    /// Its output goes to `log`, or nowhere.
     pub(super) async fn start(
         executable: &Path,
         directory: &Path,
         variables: &BTreeMap<OsString, OsString>,
         timeout: Duration,
+        log: Option<&Path>,
     ) -> Result<(Self, Endpoint), String> {
         let port = std::net::TcpListener::bind("127.0.0.1:0")
             .and_then(|listener| listener.local_addr())
@@ -110,9 +126,23 @@ impl Driver {
             .current_dir(directory)
             .env_clear()
             .envs(variables)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stdin(Stdio::null());
+        match log
+            .map(|log| std::fs::File::create(log).and_then(|file| Ok((file.try_clone()?, file))))
+        {
+            Some(Ok((stdout, stderr))) => {
+                command.stdout(stdout).stderr(stderr);
+            }
+            Some(Err(error)) => {
+                return Err(format!(
+                    "could not create the driver log {}: {error}",
+                    log.expect("a log").display()
+                ))
+            }
+            None => {
+                command.stdout(Stdio::null()).stderr(Stdio::null());
+            }
+        }
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;

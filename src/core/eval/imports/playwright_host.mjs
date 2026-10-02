@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import path from "node:path";
+import { writeFile } from "node:fs/promises";
 
 // Stdout carries answers alone; anything else written there goes to stderr.
 const respond = process.stdout.write.bind(process.stdout);
@@ -40,6 +41,14 @@ function store(kind, value, extra = {}) {
   const id = `${prefix}-${kind[0]}${++counter}`;
   objects.set(id, { kind, value, ...extra });
   return { playwright: kind, id };
+}
+
+// Forget `id` and everything it owns: a browser its contexts, a context its pages.
+function forget(id) {
+  objects.delete(id);
+  for (const [other, entry] of [...objects.entries()]) {
+    if (entry.owner === id) forget(other);
+  }
 }
 
 function find(handle, kind) {
@@ -80,7 +89,15 @@ const commands = {
         "the `playwright` package is not installed where the run is; install it with `npm install playwright` and its browsers with `npx playwright install`",
       );
     }
-    const { browser = "chromium", headless = true, args, executable_path, timeout_ms = 30000 } = options;
+    const {
+      browser = "chromium",
+      headless = true,
+      args,
+      executable_path,
+      timeout_ms = 30000,
+      // An absolute directory Botwork made, where failures in its pages are captured.
+      failure_artifacts,
+    } = options;
     if (!BROWSERS.includes(browser)) {
       throw new Failure("value", `Unknown browser \`${browser}\`; use chromium, firefox, or webkit`);
     }
@@ -90,14 +107,14 @@ const commands = {
       ...(executable_path ? { executablePath: executable_path } : {}),
     });
     return {
-      ...store("browser", launched, { timeout: timeout_ms }),
+      ...store("browser", launched, { timeout: timeout_ms, artifacts: failure_artifacts }),
       browser,
       version: launched.version(),
     };
   },
   async closeBrowser(handle) {
     const entry = find(handle, "browser");
-    objects.delete(handle.id);
+    forget(handle.id);
     await entry.value.close();
     return null;
   },
@@ -109,11 +126,16 @@ const commands = {
     if (trace) {
       await context.tracing.start({ screenshots: true, snapshots: true });
     }
-    return store("context", context, { timeout: browser.timeout, pages: [] });
+    return store("context", context, {
+      timeout: browser.timeout,
+      artifacts: browser.artifacts,
+      owner: handle.id,
+      pages: [],
+    });
   },
   async closeContext(handle) {
     const entry = find(handle, "context");
-    objects.delete(handle.id);
+    forget(handle.id);
     const videos = entry.pages.map((page) => page.video()).filter(Boolean);
     await entry.value.close();
     return Promise.all(videos.map((video) => video.path()));
@@ -122,7 +144,7 @@ const commands = {
     const context = find(handle, "context");
     const page = await context.value.newPage();
     context.pages.push(page);
-    return store("page", page, { timeout: context.timeout });
+    return store("page", page, { timeout: context.timeout, artifacts: context.artifacts, owner: handle.id });
   },
   async closePage(handle) {
     const entry = find(handle, "page");
@@ -241,6 +263,25 @@ const commands = {
   },
 };
 
+// Save what a page shows, when its browser keeps failure artifacts: a
+// screenshot and its HTML, best effort, as the run's artifacts.
+let captures = 0;
+async function capture(id) {
+  const entry = objects.get(id);
+  if (!entry || entry.kind !== "page" || !entry.artifacts || entry.value.isClosed()) return [];
+  const stem = path.join(entry.artifacts, `page-${id}-${++captures}`);
+  const saved = [];
+  try {
+    await entry.value.screenshot({ path: `${stem}.png`, timeout: 5000 });
+    saved.push({ kind: "failure-screenshot", path: `${stem}.png` });
+  } catch {}
+  try {
+    await writeFile(`${stem}.html`, await entry.value.content());
+    saved.push({ kind: "failure-source", path: `${stem}.html` });
+  } catch {}
+  return saved;
+}
+
 function answer(id, outcome) {
   respond(`${JSON.stringify({ id, ...outcome })}\n`);
 }
@@ -263,17 +304,30 @@ lines.on("line", (line) => {
     .then(() => implementation(...args))
     .then(
       (value) => answer(id, { value: value === undefined ? null : value }),
-      (error) =>
+      async (error) => {
+        const kind = error instanceof Failure ? error.kind : error?.name === "TimeoutError" ? "timeout" : "error";
+        // A command on a page captures it, unless the handle was wrong.
+        const page = args[0]?.playwright === "page" && kind !== "handle" ? args[0].id : undefined;
         answer(id, {
           error: {
-            kind: error instanceof Failure ? error.kind : error?.name === "TimeoutError" ? "timeout" : "error",
+            kind,
             // Playwright colours its call logs for terminals.
             message: String(error?.message ?? error).replace(/\x1b\[[0-9;]*m/g, ""),
+            artifacts: page ? await capture(page) : [],
           },
-        }),
+        });
+      },
     );
 });
 lines.on("close", async () => {
+  // The run ended with these pages open: capture the ones that keep failure
+  // artifacts before their browsers close.
+  const pages = [...objects.entries()].filter(([, entry]) => entry.kind === "page" && entry.artifacts);
+  const saved = (await Promise.all(pages.map(([id]) => capture(id)))).flat();
+  if (saved.length) {
+    // Written before the host exits, as pipes on Windows write later.
+    await new Promise((resolve) => respond(`${JSON.stringify({ artifacts: saved })}\n`, resolve));
+  }
   const browsers = [...objects.values()].filter((entry) => entry.kind === "browser");
   await Promise.allSettled(browsers.map((entry) => entry.value.close()));
   process.exit(0);

@@ -137,9 +137,14 @@ impl ModuleCache {
         &mut self,
         directory: &Path,
         variables: std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+        recorder: Option<crate::core::report::Recorder>,
     ) -> Arc<playwright::Host> {
         Arc::clone(self.playwright.get_or_insert_with(|| {
-            Arc::new(playwright::Host::new(directory.to_owned(), variables))
+            Arc::new(playwright::Host::new(
+                directory.to_owned(),
+                variables,
+                recorder,
+            ))
         }))
     }
 

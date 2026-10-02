@@ -289,7 +289,7 @@ jobs:
         env:
           BOTWORK_REQUIRE_NODE: "1"
           BOTWORK_REQUIRE_PLAYWRIGHT: "1"
-        run: BOTWORK_PLAYWRIGHT="$PWD/tests/playwright" cargo +stable test --locked --test playwright --test browser_examples
+        run: BOTWORK_PLAYWRIGHT="$PWD/tests/playwright" cargo +stable test --locked --test playwright --test browser_examples --test browser_failures
 
   appium:
     name: Appium (Android emulator)
@@ -303,7 +303,7 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal
       - name: Build the Appium tests before the emulator starts
-        run: cargo +stable test --locked --test appium --test browser_examples --no-run
+        run: cargo +stable test --locked --test appium --test browser_examples --test browser_failures --no-run
       - name: Install the pinned Appium and its UiAutomator2 driver
         working-directory: tests/appium
         env:
@@ -326,7 +326,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: BOTWORK_APPIUM="$PWD/tests/appium/node_modules/.bin/appium" cargo +stable test --locked --test appium --test browser_examples
+          script: BOTWORK_APPIUM="$PWD/tests/appium/node_modules/.bin/appium" cargo +stable test --locked --test appium --test browser_examples --test browser_failures
 
   tree-sitter:
     name: Tree-sitter grammars

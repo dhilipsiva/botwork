@@ -94,6 +94,7 @@ know these statements, so a misspelled one is an error before the run.
 | `args` | Array | | Extra browser arguments |
 | `executable_path` | String | | A browser binary to launch instead of Playwright's |
 | `timeout_ms` | Int, 1–600000 | 30000 | How long each action and expectation in this browser waits |
+| `failure_artifacts` | String | | A directory, from the run's directory, where this browser's pages save a screenshot and their HTML when they fail; see [failure artifacts](browser-matrix.md#failure-artifacts) |
 
 ## Handles
 

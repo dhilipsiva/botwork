@@ -1,5 +1,5 @@
 {
-  "version": 65,
+  "version": 66,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4478,8 +4478,8 @@
       "id": "webdriver-unknown-options-accepted",
       "area": "webdriver",
       "file": "src/core/eval/imports/webdriver.rs",
-      "before": "        if !matches!(key.as_str(), \"driver\" | \"capabilities\" | \"timeout_ms\") {\n",
-      "after": "        if !matches!(key.as_str(), \"driver\" | \"capabilities\" | \"timeout_ms\" | \"timeout\") {\n"
+      "before": "            \"driver\" | \"capabilities\" | \"timeout_ms\" | \"failure_artifacts\"\n",
+      "after": "            \"driver\" | \"capabilities\" | \"timeout_ms\" | \"failure_artifacts\" | \"timeout\"\n"
     },
     {
       "id": "webdriver-check-unknown",
@@ -4513,8 +4513,8 @@
       "id": "playwright-assertions-reported-as-native",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright.rs",
-      "before": "        \"assertion\" => Diagnostic::new(BWErr::AssertionFailed(failure.message)),\n",
-      "after": "        \"assertion\" => Diagnostic::new(BWErr::NativeError(failure.message)),\n"
+      "before": "        \"assertion\" => Diagnostic::new(BWErr::AssertionFailed(message)),\n",
+      "after": "        \"assertion\" => Diagnostic::new(BWErr::NativeError(message)),\n"
     },
     {
       "id": "playwright-waits-reported-as-native",
@@ -4541,8 +4541,8 @@
       "id": "playwright-artifacts-unrecorded",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright.rs",
-      "before": "                recorder.artifact(kind, &path);\n",
-      "after": "                let _ = (recorder, kind);\n"
+      "before": "                recorder.artifact(kind, &path);\n            }\n            Ok(Literal::String(path))\n",
+      "after": "                let _ = (recorder, kind);\n            }\n            Ok(Literal::String(path))\n"
     },
     {
       "id": "playwright-videos-dropped",
@@ -4562,8 +4562,8 @@
       "id": "playwright-unknown-launch-options-accepted",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright.rs",
-      "before": "                        \"browser\" | \"headless\" | \"args\" | \"executable_path\" | \"timeout_ms\"\n",
-      "after": "                        \"browser\" | \"headless\" | \"args\" | \"executable_path\" | \"timeout_ms\" | \"headed\"\n"
+      "before": "                            | \"failure_artifacts\"\n",
+      "after": "                            | \"failure_artifacts\"\n                            | \"headed\"\n"
     },
     {
       "id": "playwright-node-not-found",
@@ -4641,6 +4641,97 @@
       "file": "src/core/eval/imports/playwright.rs",
       "before": "                    milliseconds(timeout, \"`timeout_ms`\", 1)?;\n",
       "after": "                    milliseconds(timeout, \"`timeout_ms`\", 0)?;\n"
+    },
+    {
+      "id": "matrix-webdriver-failures-uncaptured",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "                if self != Self::Close && error.code() != Code::IncompatibleType =>\n",
+      "after": "                if false && self != Self::Close && error.code() != Code::IncompatibleType =>\n"
+    },
+    {
+      "id": "matrix-webdriver-handle-errors-captured",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "                if self != Self::Close && error.code() != Code::IncompatibleType =>\n",
+      "after": "                if self != Self::Close =>\n"
+    },
+    {
+      "id": "matrix-webdriver-run-end-uncaptured",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver/sessions.rs",
+      "before": "                artifacts.capture_blocking(&session.endpoint, &id, CLOSE_TIMEOUT);\n",
+      "after": "                let _ = artifacts;\n"
+    },
+    {
+      "id": "matrix-webdriver-errors-unnamed",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver/artifacts.rs",
+      "before": "    let note = format!(\"; failure artifacts: {}\", saved.join(\", \"));\n",
+      "after": "    let note = String::new();\n"
+    },
+    {
+      "id": "matrix-webdriver-clean-log-kept",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "                        artifacts.discard_log();\n",
+      "after": "                        let _ = artifacts;\n"
+    },
+    {
+      "id": "matrix-webdriver-driver-log-unrecorded",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver/artifacts.rs",
+      "before": "        Some(self.record(\"driver-log\", log))\n",
+      "after": "        Some(log.display().to_string())\n"
+    },
+    {
+      "id": "matrix-webdriver-driver-output-discarded",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver.rs",
+      "before": "            log.as_deref(),\n",
+      "after": "            None,\n"
+    },
+    {
+      "id": "matrix-webdriver-blocking-reads-to-close",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver/client.rs",
+      "before": "                (Some(length), _) => body.len() >= length,\n",
+      "after": "                (Some(length), _) => false,\n"
+    },
+    {
+      "id": "matrix-webdriver-sources-unsaved",
+      "area": "matrix",
+      "file": "src/core/eval/imports/webdriver/artifacts.rs",
+      "before": "                saved.push(self.record(\"failure-source\", &html));\n",
+      "after": "                let _ = &html;\n"
+    },
+    {
+      "id": "matrix-playwright-failures-uncaptured",
+      "area": "matrix",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "            artifacts: page ? await capture(page) : [],\n",
+      "after": "            artifacts: [],\n"
+    },
+    {
+      "id": "matrix-playwright-run-end-uncaptured",
+      "area": "matrix",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "  const saved = (await Promise.all(pages.map(([id]) => capture(id)))).flat();\n",
+      "after": "  const saved = (await Promise.all([])).flat();\n"
+    },
+    {
+      "id": "matrix-playwright-closed-pages-captured",
+      "area": "matrix",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "    if (entry.owner === id) forget(other);\n",
+      "after": "    if (entry.owner === id) void other;\n"
+    },
+    {
+      "id": "matrix-playwright-artifacts-unrecorded",
+      "area": "matrix",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                recorder.artifact(kind, &path);\n            }\n            saved.push(path);\n",
+      "after": "                let _ = (recorder, kind);\n            }\n            saved.push(path);\n"
     }
   ]
 }

@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::{
     fmt,
     io::{Read, Write},
-    net::{SocketAddr, TcpStream, ToSocketAddrs},
+    net::{TcpStream, ToSocketAddrs},
     time::Duration,
 };
 
@@ -243,39 +243,96 @@ impl Endpoint {
     /// Delete a session without a runtime, as a run's end cleans up: best
     /// effort, each step bounded by `timeout`.
     pub(super) fn delete_blocking(&self, session: &str, timeout: Duration) {
-        let Some(address) = self
-            .authority
-            .to_socket_addrs()
-            .ok()
-            .and_then(|mut addresses| addresses.next())
-        else {
-            return;
+        // The answer is awaited, so the browser has closed when this returns.
+        let _ = self.request_blocking("DELETE", &format!("/session/{}", segment(session)), timeout);
+    }
+
+    /// GET `path` without a runtime and return its `value`, or None when the
+    /// driver does not answer within `timeout` or reports an error.
+    pub(super) fn get_blocking(&self, path: &str, timeout: Duration) -> Option<Value> {
+        self.request_blocking("GET", path, timeout)
+    }
+
+    fn request_blocking(&self, method: &str, path: &str, timeout: Duration) -> Option<Value> {
+        let address = self.authority.to_socket_addrs().ok()?.next()?;
+        let mut stream = TcpStream::connect_timeout(&address, timeout).ok()?;
+        stream.set_write_timeout(Some(timeout)).ok()?;
+        stream.set_read_timeout(Some(timeout)).ok()?;
+        write!(
+            stream,
+            "{method} {}{path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+            self.prefix, self.authority
+        )
+        .ok()?;
+        // Read until the body is complete: a driver may keep the connection
+        // open whatever the request asks.
+        let deadline = std::time::Instant::now() + timeout;
+        let mut response = Vec::new();
+        let mut buffer = [0; 65536];
+        let (head, body_start) = loop {
+            if let Some(split) = response.windows(4).position(|window| window == b"\r\n\r\n") {
+                break (
+                    String::from_utf8_lossy(&response[..split]).to_ascii_lowercase(),
+                    split + 4,
+                );
+            }
+            let count = stream.read(&mut buffer).ok().filter(|count| *count != 0)?;
+            response.extend_from_slice(&buffer[..count]);
+            if response.len() > MAX_RESPONSE || std::time::Instant::now() >= deadline {
+                return None;
+            }
         };
-        let _ = delete(
-            address,
-            &self.authority,
-            &format!("{}/session/{}", self.prefix, segment(session)),
-            timeout,
-        );
+        let status = head.split_whitespace().nth(1)?.parse().ok()?;
+        let chunked = head.contains("transfer-encoding: chunked");
+        let length = head.lines().find_map(|line| {
+            line.strip_prefix("content-length:")
+                .and_then(|value| value.trim().parse::<usize>().ok())
+        });
+        let complete = |response: &[u8]| {
+            let body = &response[body_start..];
+            match (length, chunked) {
+                (Some(length), _) => body.len() >= length,
+                (None, true) => unchunk(body).is_some(),
+                (None, false) => false,
+            }
+        };
+        while !complete(&response) {
+            match stream.read(&mut buffer) {
+                Ok(0) if length.is_none() && !chunked => break,
+                Ok(0) => return None,
+                Ok(count) => response.extend_from_slice(&buffer[..count]),
+                Err(_) => return None,
+            }
+            if response.len() > MAX_RESPONSE || std::time::Instant::now() >= deadline {
+                return None;
+            }
+        }
+        let mut body = response[body_start..].to_vec();
+        if let Some(length) = length {
+            body.truncate(length);
+        } else if chunked {
+            body = unchunk(&body)?;
+        }
+        answer(status, &body).ok()
     }
 }
 
-fn delete(
-    address: SocketAddr,
-    authority: &str,
-    path: &str,
-    timeout: Duration,
-) -> std::io::Result<()> {
-    let mut stream = TcpStream::connect_timeout(&address, timeout)?;
-    stream.set_write_timeout(Some(timeout))?;
-    stream.set_read_timeout(Some(timeout))?;
-    write!(
-        stream,
-        "DELETE {path} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
-    )?;
-    // Wait for the answer, so the browser has closed when this returns.
-    let deadline = std::time::Instant::now() + timeout;
-    let mut answer = [0; 4096];
-    while stream.read(&mut answer)? != 0 && std::time::Instant::now() < deadline {}
-    Ok(())
+/// The body of a chunked HTTP/1.1 message.
+fn unchunk(mut body: &[u8]) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    loop {
+        let line = body.windows(2).position(|window| window == b"\r\n")?;
+        let size = std::str::from_utf8(&body[..line])
+            .ok()?
+            .split(';')
+            .next()?
+            .trim();
+        let size = usize::from_str_radix(size, 16).ok()?;
+        body = &body[line + 2..];
+        if size == 0 {
+            return Some(out);
+        }
+        out.extend_from_slice(body.get(..size)?);
+        body = body.get(size + 2..)?;
+    }
 }

@@ -221,6 +221,7 @@ fn answer(
             None => error("invalid argument", "no script"),
         },
         ("GET", ["session", _, "screenshot"]) => (200, json!(encode(PNG))),
+        ("GET", ["session", _, "source"]) => (200, json!("<html><body>fake</body></html>")),
         _ => error("unknown command", path),
     }
 }

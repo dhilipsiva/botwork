@@ -26,6 +26,8 @@ index.
   through Appium with the WebDriver statements.
 - [Browser and device conventions](browser-conventions.md): the selectors,
   timeouts, waits, retries, and session ownership all three share.
+- [Browser and device matrix](browser-matrix.md): where each integration is
+  verified, its failure paths, and failure artifacts.
 - [Running scripts in parallel](parallel-cli.md)
 - [Input variables](input-variables.md)
 - [Secret inputs](secrets.md)

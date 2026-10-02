@@ -89,6 +89,7 @@ class Page {
   }
   async goto(url) {
     log("goto", url);
+    if (url === "http://hang.test/") await new Promise(() => {});
     if (url === "http://fail.test/") throw new Error("page.goto: net::ERR_NAME_NOT_RESOLVED at http://fail.test/");
     this.address = url;
     this.loaded = Date.now();
@@ -109,8 +110,14 @@ class Page {
     return values;
   }
   async screenshot({ path, fullPage }) {
-    log("screenshot", fullPage);
+    log("screenshot", fullPage ?? false);
     fs.writeFileSync(path, "png");
+  }
+  async content() {
+    return "<html><body>fake</body></html>";
+  }
+  isClosed() {
+    return this.closed === true;
   }
   video() {
     return this.context.settings.recordVideo
@@ -118,6 +125,7 @@ class Page {
       : null;
   }
   async close() {
+    this.closed = true;
     log("closePage");
   }
 }
@@ -173,6 +181,9 @@ function type(name) {
   return {
     async launch(options) {
       log("launch", name, options);
+      if (options.executablePath && !fs.existsSync(options.executablePath)) {
+        throw new Error(`browserType.launch: Failed to launch ${name} because executable doesn't exist at ${options.executablePath}`);
+      }
       return new Browser(options);
     },
   };

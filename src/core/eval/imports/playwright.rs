@@ -239,11 +239,14 @@ pub(super) async fn evaluate_import(
         || std::env::vars_os().collect(),
         |environment| environment.variables().clone(),
     );
+    let recorder = environment
+        .as_ref()
+        .and_then(|environment| environment.recorder.clone());
     let run = Arc::new(Run {
-        host: context.modules.playwright_host(&directory, variables),
-        recorder: environment
-            .as_ref()
-            .and_then(|environment| environment.recorder.clone()),
+        host: context
+            .modules
+            .playwright_host(&directory, variables, recorder.clone()),
+        recorder,
         directory,
     });
     let statements = signatures().iter().map(|(command, signature)| {
@@ -268,18 +271,61 @@ fn value(literal: &Literal) -> DiagnosticResult<Value> {
 }
 
 /// The diagnostic for what the host reported.
-fn failed(failure: host::Failure) -> Diagnostic {
+fn failed(failure: host::Failure, run: &Run) -> Diagnostic {
+    // What the host captured of the page is the run's, and the error names it.
+    let mut message = failure.message;
+    if !failure.artifacts.is_empty() {
+        let mut saved = Vec::new();
+        for (kind, path) in &failure.artifacts {
+            let path = crate::core::paths::canonicalize(Path::new(path))
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|_| path.clone());
+            if let Some(recorder) = &run.recorder {
+                recorder.artifact(kind, &path);
+            }
+            saved.push(path);
+        }
+        message = format!("{message}; failure artifacts: {}", saved.join(", "));
+    }
     match failure.kind.as_str() {
-        "handle" | "value" => incompatible(failure.message),
-        "assertion" => Diagnostic::new(BWErr::AssertionFailed(failure.message)),
+        "handle" | "value" => incompatible(message),
+        "assertion" => Diagnostic::new(BWErr::AssertionFailed(message)),
         "wait" => Diagnostic::new(BWErr::ConditionNotMet {
-            reason: failure.message,
+            reason: message,
             attempts: "1".into(),
             history: "[]".into(),
         }),
-        _ => Diagnostic::new(BWErr::NativeError(format!(
-            "Playwright: {}",
-            failure.message
+        _ => Diagnostic::new(BWErr::NativeError(format!("Playwright: {message}"))),
+    }
+}
+
+fn options_map<'a>(options: &'a Literal, key: &str) -> Option<&'a Literal> {
+    match options {
+        Literal::Map(map) => map.get(key),
+        _ => None,
+    }
+}
+
+/// The directory `failure_artifacts` names, from the run's directory, made if
+/// it is missing.
+fn failure_directory(run: &Path, option: Option<&Literal>) -> DiagnosticResult<Option<PathBuf>> {
+    match option {
+        None => Ok(None),
+        Some(Literal::String(path)) => {
+            let directory = run.join(path);
+            std::fs::create_dir_all(&directory)
+                .and_then(|()| crate::core::paths::canonicalize(&directory))
+                .map(Some)
+                .map_err(|error| {
+                    Diagnostic::new(BWErr::OutputError(format!(
+                        "The failure artifacts directory {} could not be made: {error}",
+                        directory.display()
+                    )))
+                })
+        }
+        Some(other) => Err(incompatible(format_args!(
+            "`failure_artifacts` is a directory's path, not a {}",
+            other.kind().as_str()
         ))),
     }
 }
@@ -395,17 +441,29 @@ impl Command {
                 for key in options.keys() {
                     if !matches!(
                         key.as_str(),
-                        "browser" | "headless" | "args" | "executable_path" | "timeout_ms"
+                        "browser"
+                            | "headless"
+                            | "args"
+                            | "executable_path"
+                            | "timeout_ms"
+                            | "failure_artifacts"
                     ) {
                         return Err(incompatible(format_args!(
-                            "Unknown Launch Browser option `{key}`; use browser, headless, args, executable_path, or timeout_ms"
+                            "Unknown Launch Browser option `{key}`; use browser, headless, args, executable_path, timeout_ms, or failure_artifacts"
                         )));
                     }
                 }
                 if let Some(timeout) = options.get("timeout_ms") {
                     milliseconds(timeout, "`timeout_ms`", 1)?;
                 }
-                vec![v(0)?]
+                let mut options = v(0)?;
+                // The host saves failures where the run's directory says.
+                if let Some(directory) =
+                    failure_directory(&run.directory, options_map(&values[0], "failure_artifacts"))?
+                {
+                    options["failure_artifacts"] = json!(directory.display().to_string());
+                }
+                vec![options]
             }
             Self::CloseBrowser
             | Self::CloseContext
@@ -442,7 +500,7 @@ impl Command {
             .host
             .call(self.name(), args, ANSWER)
             .await
-            .map_err(failed)?;
+            .map_err(|failure| failed(failure, run))?;
         let artifact = |kind: &str, path: &str| -> DiagnosticResult<Literal> {
             let path = crate::core::paths::canonicalize(Path::new(path))
                 .map_err(|error| {

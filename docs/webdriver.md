@@ -65,6 +65,7 @@ misspelled one is an error before the run.
 | `driver` | String | required | An `http` URL of a running WebDriver server, such as `http://127.0.0.1:9515` or a Grid's `http://grid:4444/wd/hub`; or the driver executable to start: a path, relative to the run's directory, or a name on the run's `PATH` |
 | `capabilities` | Map | `{}` | The [W3C capabilities](https://www.w3.org/TR/webdriver2/#capabilities) the session must match, such as `browserName` and `goog:chromeOptions` |
 | `timeout_ms` | Int, 1–600000 | 30000 | Each command's bound, and the started driver's bound to answer |
+| `failure_artifacts` | String | | A directory, from the run's directory, where the session saves a screenshot and the page source when it fails, and a driver Botwork starts writes its log; see [failure artifacts](browser-matrix.md#failure-artifacts) |
 
 Botwork starts a driver on a free loopback port, in the run's directory and
 environment, passing `--port=N` as chromedriver and geckodriver accept. It

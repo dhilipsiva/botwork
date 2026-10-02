@@ -82,3 +82,7 @@ attempts' own failures, each assertion included.
 | BW9004 | A wait found nothing in time, or an `Eventually` ran out |
 | BW4001 | A screenshot or trace could not be written |
 | BW5001, BW5002 | The run was cancelled or reached its deadline |
+
+With `failure_artifacts`, every one of these but BW3003 leaves a screenshot and
+the page source to show it; see the [browser and device matrix](browser-matrix.md),
+which lists the failure paths and where each is verified.

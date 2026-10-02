@@ -28,6 +28,8 @@ const MAX_LINE: usize = 16 * 1024 * 1024;
 pub(super) struct Failure {
     pub(super) kind: String,
     pub(super) message: String,
+    /// What the host captured of the page the command failed in: (kind, path).
+    pub(super) artifacts: Vec<(String, String)>,
 }
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, Failure>>>>>;
@@ -38,6 +40,7 @@ struct Process {
     /// block for long.
     stdin: Mutex<Option<ChildStdin>>,
     pending: Pending,
+    reader: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 /// A run's host, started by its first command.
@@ -45,6 +48,8 @@ pub(in crate::core::eval) struct Host {
     node: Option<PathBuf>,
     directory: PathBuf,
     variables: BTreeMap<OsString, OsString>,
+    /// Records what the host captures as the run ends.
+    recorder: Option<crate::core::report::Recorder>,
     process: tokio::sync::Mutex<Option<Arc<Process>>>,
     next: AtomicU64,
 }
@@ -53,12 +58,14 @@ impl Host {
     pub(in crate::core::eval) fn new(
         directory: PathBuf,
         variables: BTreeMap<OsString, OsString>,
+        recorder: Option<crate::core::report::Recorder>,
     ) -> Self {
         let node = node(&variables);
         Self {
             node,
             directory,
             variables,
+            recorder,
             process: tokio::sync::Mutex::new(None),
             next: AtomicU64::new(1),
         }
@@ -73,6 +80,7 @@ impl Host {
         let node = self.node.as_ref().ok_or_else(|| Failure {
             kind: "setup".into(),
             message: "Playwright needs Node.js on the run's PATH".into(),
+            artifacts: Vec::new(),
         })?;
         let mut command = std::process::Command::new(node);
         command
@@ -91,24 +99,27 @@ impl Host {
         let mut child = command.spawn().map_err(|error| Failure {
             kind: "setup".into(),
             message: format!("could not start Node for Playwright: {error}"),
+            artifacts: Vec::new(),
         })?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
         let pending: Pending = Arc::default();
-        {
-            let pending = Arc::clone(&pending);
+        let reader = {
+            let (pending, recorder) = (Arc::clone(&pending), self.recorder.clone());
             std::thread::Builder::new()
                 .name("botwork-playwright".into())
-                .spawn(move || read(stdout, &pending))
+                .spawn(move || read(stdout, &pending, recorder.as_ref()))
                 .map_err(|error| Failure {
                     kind: "setup".into(),
                     message: format!("could not read the Playwright host: {error}"),
-                })?;
-        }
+                    artifacts: Vec::new(),
+                })?
+        };
         let process = Arc::new(Process {
             child: Mutex::new(child),
             stdin: Mutex::new(Some(stdin)),
             pending,
+            reader: Mutex::new(Some(reader)),
         });
         *slot = Some(Arc::clone(&process));
         Ok(process)
@@ -147,6 +158,7 @@ impl Host {
         let exited = || Failure {
             kind: "error".into(),
             message: "the Playwright host exited".into(),
+            artifacts: Vec::new(),
         };
         process
             .stdin
@@ -165,13 +177,14 @@ impl Host {
                     "the Playwright host did not answer {command} within {} ms",
                     timeout.as_millis()
                 ),
+                artifacts: Vec::new(),
             }),
         }
     }
 }
 
 /// Route each answer to the command waiting for it, until the host exits.
-fn read(stdout: ChildStdout, pending: &Pending) {
+fn read(stdout: ChildStdout, pending: &Pending, recorder: Option<&crate::core::report::Recorder>) {
     let mut lines = BufReader::new(stdout);
     let mut line = String::new();
     loop {
@@ -185,12 +198,19 @@ fn read(stdout: ChildStdout, pending: &Pending) {
             continue;
         };
         let Some(id) = answer["id"].as_u64() else {
+            // What the host captured of the pages left open as the run ended.
+            if let Some(recorder) = recorder {
+                for (kind, path) in saved(&answer["artifacts"]) {
+                    recorder.artifact(&kind, &path);
+                }
+            }
             continue;
         };
         let result = match answer.get("error") {
             Some(error) => Err(Failure {
                 kind: error["kind"].as_str().unwrap_or("error").to_owned(),
                 message: error["message"].as_str().unwrap_or_default().to_owned(),
+                artifacts: saved(&error["artifacts"]),
             }),
             None => Ok(answer.get("value").cloned().unwrap_or(Value::Null)),
         };
@@ -207,6 +227,21 @@ fn read(stdout: ChildStdout, pending: &Pending) {
         .lock()
         .unwrap_or_else(|error| error.into_inner())
         .clear();
+}
+
+/// The (kind, path) pairs of an `artifacts` array the host sent.
+fn saved(artifacts: &Value) -> Vec<(String, String)> {
+    artifacts
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|artifact| {
+            Some((
+                artifact["kind"].as_str()?.to_owned(),
+                artifact["path"].as_str()?.to_owned(),
+            ))
+        })
+        .collect()
 }
 
 impl Drop for Host {
@@ -239,6 +274,23 @@ impl Drop for Host {
         }
         let _ = child.kill();
         let _ = child.wait();
+        drop(child);
+        // The reader records what the host captured as it closed; it ends
+        // once the host's output does, which ending its group ensures.
+        let reader = process
+            .reader
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        if let Some(reader) = reader {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while !reader.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if reader.is_finished() {
+                let _ = reader.join();
+            }
+        }
     }
 }
 

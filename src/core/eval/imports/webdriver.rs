@@ -13,10 +13,12 @@ use serde_json::{json, Value};
 use std::fmt;
 use std::{collections::BTreeMap, ffi::OsString, sync::OnceLock, time::Duration};
 
+mod artifacts;
 mod client;
 mod sessions;
 pub(in crate::core::eval) mod values;
 
+use artifacts::Artifacts;
 use client::{segment, Endpoint, Failure};
 pub(in crate::core::eval) use sessions::Sessions;
 use sessions::{Driver, Session};
@@ -307,6 +309,7 @@ impl Command {
         };
         let (id, element) = values::handle(browser, "The handle").map_err(incompatible)?;
         let session = run.sessions.get(&id).map_err(incompatible)?;
+        let result: DiagnosticResult<Literal> = async {
         let base = format!("/session/{}", segment(&id));
         let element_path = |element: &Option<String>| -> DiagnosticResult<String> {
             element
@@ -332,6 +335,10 @@ impl Command {
                 send(Method::DELETE, base, None).await?;
                 if let Some(session) = run.sessions.remove(&id) {
                     session.end_driver();
+                    // A session that closes without a failure keeps no driver log.
+                    if let Some(artifacts) = &session.artifacts {
+                        artifacts.discard_log();
+                    }
                 }
                 Ok(Literal::None)
             }
@@ -530,6 +537,49 @@ impl Command {
                 Ok(Literal::String(path))
             }
         }
+        }
+        .await;
+        // A failure in a session that keeps artifacts captures what it showed.
+        // A wrong handle or value never reached the browser, and a closed
+        // session has nothing left to show.
+        match (result, &session.artifacts) {
+            (Err(error), Some(artifacts))
+                if self != Self::Close && error.code() != Code::IncompatibleType =>
+            {
+                let saved = artifacts
+                    .capture(&session.endpoint, &id, session.timeout)
+                    .await;
+                Err(artifacts::naming(error, &saved))
+            }
+            (result, _) => result,
+        }
+    }
+}
+
+/// Numbers the driver logs of one process, so parallel runs never share one.
+static DRIVER_LOGS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+
+/// The directory `failure_artifacts` names, from the run's directory, made if
+/// it is missing.
+fn failure_directory(run: &Run, option: Option<&Literal>) -> DiagnosticResult<Option<PathBuf>> {
+    match option {
+        None => Ok(None),
+        Some(Literal::String(path)) => {
+            let directory = run.directory.join(path);
+            std::fs::create_dir_all(&directory)
+                .and_then(|()| crate::core::paths::canonicalize(&directory))
+                .map(Some)
+                .map_err(|error| {
+                    Diagnostic::new(BWErr::OutputError(format!(
+                        "The failure artifacts directory {} could not be made: {error}",
+                        directory.display()
+                    )))
+                })
+        }
+        Some(other) => Err(incompatible(format_args!(
+            "`failure_artifacts` is a directory's path, not a {}",
+            other.kind().as_str()
+        ))),
     }
 }
 
@@ -548,9 +598,12 @@ async fn open(run: &Run, options: &Literal) -> DiagnosticResult<Literal> {
         unreachable!("checked kind")
     };
     for key in options.keys() {
-        if !matches!(key.as_str(), "driver" | "capabilities" | "timeout_ms") {
+        if !matches!(
+            key.as_str(),
+            "driver" | "capabilities" | "timeout_ms" | "failure_artifacts"
+        ) {
             return Err(incompatible(format_args!(
-                "Unknown Open Browser option `{key}`; use driver, capabilities, or timeout_ms"
+                "Unknown Open Browser option `{key}`; use driver, capabilities, timeout_ms, or failure_artifacts"
             )));
         }
     }
@@ -582,15 +635,37 @@ async fn open(run: &Run, options: &Literal) -> DiagnosticResult<Literal> {
             "Open Browser needs `driver`: the http URL of a WebDriver server, or the path of a driver such as chromedriver",
         ));
     };
-    let (driver, endpoint) = if driver.starts_with("http://") || driver.starts_with("https://") {
+    let directory = failure_directory(run, options.get("failure_artifacts"))?;
+    let remote = driver.starts_with("http://") || driver.starts_with("https://");
+    // A driver Botwork starts logs where its session's failures go.
+    let log = directory.as_ref().filter(|_| !remote).map(|directory| {
+        let number = DRIVER_LOGS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        directory.join(format!("driver-{}-{number}.log", std::process::id()))
+    });
+    let artifacts =
+        directory.map(|directory| Artifacts::new(directory, run.recorder.clone(), log.clone()));
+    let failed = |reason: String| -> Diagnostic {
+        let saved: Vec<String> = artifacts
+            .as_ref()
+            .and_then(Artifacts::driver_log)
+            .into_iter()
+            .collect();
+        artifacts::naming(native(reason), &saved)
+    };
+    let (driver, endpoint) = if remote {
         (None, Endpoint::parse(driver).map_err(incompatible)?)
     } else {
         let executable =
             executable(driver, &run.directory, &run.variables).map_err(incompatible)?;
-        let (process, endpoint) =
-            Driver::start(&executable, &run.directory, &run.variables, timeout)
-                .await
-                .map_err(native)?;
+        let (process, endpoint) = Driver::start(
+            &executable,
+            &run.directory,
+            &run.variables,
+            timeout,
+            log.as_deref(),
+        )
+        .await
+        .map_err(failed)?;
         (Some(process), endpoint)
     };
     let created = endpoint
@@ -601,7 +676,7 @@ async fn open(run: &Run, options: &Literal) -> DiagnosticResult<Literal> {
             timeout,
         )
         .await
-        .map_err(|failure| native(format_args!("the session could not start: {failure}")))?;
+        .map_err(|failure| failed(format!("the session could not start: {failure}")))?;
     let id = string(&created["sessionId"], "a session ID")?;
     // An Appium session names its platform rather than a browser.
     let capabilities = &created["capabilities"];
@@ -616,8 +691,10 @@ async fn open(run: &Run, options: &Literal) -> DiagnosticResult<Literal> {
         .unwrap_or_default()
         .to_owned();
     // Registered before any other await, so a stop cannot lose the session.
-    run.sessions
-        .insert(id.clone(), Session::new(endpoint, timeout, driver));
+    run.sessions.insert(
+        id.clone(),
+        Session::new(endpoint, timeout, driver, artifacts),
+    );
     Ok(Literal::Map(HashMap::from([
         ("session".to_owned(), Literal::String(id)),
         ("browser".to_owned(), Literal::String(browser)),
