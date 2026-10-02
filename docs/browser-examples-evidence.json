@@ -1,0 +1,1744 @@
+{
+  "schema": 1,
+  "feature": "Runnable browser and device examples",
+  "todo": "Provide runnable end-to-end examples and integration tests with explicit external prerequisites and teardown.",
+  "complete": true,
+  "created_at": "2026-10-02T07:10:57.308573+00:00",
+  "base_revision": "88d5b44fa7344f917e239d58f607b0216a661b0d",
+  "environment": {
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "node": "v22.22.1",
+    "python": "3.14.4",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "musl_cc": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/http-musl-toolchain/root/usr/bin/musl-gcc",
+    "webdriver": {
+      "chromedriver": "ChromeDriver 153.0.8010.12 (971a7443b0c9b0a9b2860529b33331b76077ec62-refs/branch-heads/8010@{#343})",
+      "browser": "Google Chrome for Testing 153.0.8010.12",
+      "required": "1",
+      "libraries": "The system libraries Chrome lacks here (libnspr4, libnss3, libasound2) are extracted from Ubuntu packages without root and named by LD_LIBRARY_PATH."
+    },
+    "playwright": {
+      "version": "1.63.0",
+      "directory": "/home/dhilipsiva/projects/dhilipsiva/botwork/tests/playwright",
+      "required": "1"
+    }
+  },
+  "validation": {
+    "complete": true,
+    "started": "2026-10-02T06:46:39.899199+00:00",
+    "revision": "88d5b44fa7344f917e239d58f607b0216a661b0d",
+    "input_sha256": {
+      ".cargo/config.toml": "cef5087bd1a673206dc732929646dca9e4d07c8a7953b58c4d4cdeebe53f0786",
+      ".cargo/mutants.toml": "27b987e9c15383ceb2b840dbe46d7d57ad7b37160d5e904e7040c66a10e09194",
+      ".gitattributes": "cb171c1bd6a419a1a5c4577fe46a056b97a49b77bbab2339ab477eeaf615f86a",
+      ".github/workflows/ci.yml": "60a4c508aa326fb3d13330399cac5c57611b5cf68bf119814751961bb8f63a18",
+      ".github/workflows/release.yml": "0d7ad009abb1e7c5cfc2ec82a7a575b5e926d5aeab5beb1bec97a2a6e5ab8158",
+      "AGENTS.md": "2dfb75cca99f5065b148703f6fa8bf0fe4cdca3aaf4d73dca44b7fcf9128b1db",
+      "Cargo.lock": "f09f6783d9720b8a0c6fd12572b266816708994cb697f66ea9b8b8978fa0c915",
+      "Cargo.toml": "07a4e6c66333f5762942942508f7395320a80bc0122b14fe12715bd04692dfba",
+      "LICENSE": "ddffc5009f9f4858351b73927dd160486bcc43e51b7049f90bcfcfb9bf7a7a66",
+      "README.md": "6f2f57a386c6f7b17d477aed83ea28661811e633c7e6a45968b96aa2fc87f5d6",
+      "benches/runtime/budgets.json": "6138cc8c3a9e585e7b89157287085cd1a702e5ebdd300b4533a5bd3cda102556",
+      "benches/runtime/heap.c": "001631cdcbe8d3287ebd41b685da37237c55be8e8e709fdbb078fe898f1fbe5a",
+      "benches/runtime/probe.rs": "de296f33c2dcb9d8fa80b78b82364e3583f3e1e24331d30de41d5c1c16444fc5",
+      "benches/runtime.rs": "000d4866eac92ba019181f269af503ef5739ed02a66d2854cf612497da4ca186",
+      "docs/README.md": "ae95f09c2562a5647475ed5d07294565a49175a8facbe7551f52f2fad31edd5e",
+      "docs/acceptance-policy.md": "c69726c7d76b69df4fcbb2f6dca9ba267e23ba5feef63b2540a0647f5b678313",
+      "docs/adapter-conformance.md": "9b39f80956bb543d5fbf8b13fc845a77de969af2d8b348842f405f4d1e25e685",
+      "docs/alignment.md": "f8aed67f06dddacdc9ebfbc3e6ce55515a43a170464e0604be7e57dc07963b57",
+      "docs/appium.md": "c4c4575d9f0a2ae5484f101496d963c1382271d65a6a89824843d15e750e9ea3",
+      "docs/assertion-diagnostics.md": "216e545b1baa5abfc7c68e27f6153a13abb8f8fa22071ee668ac4f05872e63aa",
+      "docs/ast-limits.md": "d47ab9017d99d0b2bbb2d93a09930988a77f3b674fd5dfe6c43644783e62dc7d",
+      "docs/async-execution.md": "c7266d99d2ae7d9e31a8008a4f65761ab5bda26cf8e0051ed2b41028efced435",
+      "docs/automation-examples.md": "14c5891c801cf891d56a8ccfe5d0e4dd42ed6ad643f5fb0a039b7491eb0ef1d9",
+      "docs/browser-conventions.md": "c407f6cca30bc697742c98e9bcc10aec7d1a6659f7d8106ba2ae1b964cba693c",
+      "docs/builtins.md": "294a7f7b90687518cad488d4e10ed03094ddd6f88ea614286887173e05e07949",
+      "docs/cancellation.md": "270c6ee2df9eecf7885d56207781f5741eb380b206860f19c6e32281188e38ee",
+      "docs/check.md": "381e5df080681f450cf362efbfc428d0f20d0dbb4cb9adf0d64a66c5c555e22b",
+      "docs/cleanup.md": "19024db9017e58d8f060a7fda64c75de4b2c891715453ae2b31bc66bbf4a482c",
+      "docs/cli.md": "e6be054e85331aec8150d5c0925cc7fbb1d261a694e9b13e3022dba4117a76fa",
+      "docs/collections.md": "364a416a95b5be398fd75fffb9e660c582ee0ae49a1b2e38831a01df30b895a8",
+      "docs/compatibility.md": "5983da2732ac788c4d9b888a19f053a3bc22a574583f7d16340dc25ac620895d",
+      "docs/configuration.md": "b3e791e64739ca2a452be725984eb731a7fa3e5514591dadf3c8f6c0b4fe82e1",
+      "docs/conformance-corpus.md": "5a037bc486af241a3d436714ae39311a565e31e8153016c800119aab189f2fb9",
+      "docs/console-report.md": "6cef49a8fc87d860154652d9be37ac617623a8dc34bda346b38d59c51fc6b27a",
+      "docs/datetime.md": "8b59b4d26cc3593ca9cf36cc673c6f077b270980fe37874a2a7198216cda5831",
+      "docs/decisions.md": "cf14871cc1fe8176e3a311cfb65e8488cd5110739e525871156503416d929f0b",
+      "docs/development-log.md": "d58665b456d1f233e4fbb1c3bfbd11c7b64a0a62bc013ac2fadc26e52e3cf172",
+      "docs/diagnostic-construction.md": "5f8ea4a047812e2a58bd397c015e3ea7ac0ee48b942d0016389ead6e10db2826",
+      "docs/diagnostic-ownership.md": "8b4665bbc2ea8c49de8179df5f84483bb9f9e66f73c9ef63a2778f7909ab079e",
+      "docs/diagnostic-rendering.md": "d6aea1fc855cb714c9296fbd5734d0d83c3490d92070050d15dfcc6586353481",
+      "docs/diagnostic-value-limits.md": "8148edadade4aff83e8678ee75b279d62725f1f7a0a1cd954647f64f57233635",
+      "docs/diagnostics.md": "124291292340d55333ebd4ba6410c5c58a6c9299536666bd747e7f1995e5db42",
+      "docs/distribution.md": "4dc018226579d47fc82216ebdfd22609ea7fb9fa8fd987846c65e104fac8d9e4",
+      "docs/editors.md": "b053e9db9519ce727ad3873efb2367baba648df0b00959b30df010b6b4080fd3",
+      "docs/embedded-runs.md": "d0b2658b454c9be9f8c706d69f401572c9b23082c97e178aca9157a11083e48c",
+      "docs/execution-conformance.md": "2b6a2856c1446c2bd8d2c936a7f7275118a11bf09ceff945993d89eabf832c25",
+      "docs/extending.md": "553e7a2bbb8f17962e04b162543e22b346c4fbb40c87cdc8bcdc2cd85f53e9f7",
+      "docs/fixtures.md": "682da3675a2036f2cfd862d3c2e487eb634f636ff22c43cf0548b278c17b33a9",
+      "docs/format.md": "82c2b22d9943220be9e34e629495b7b04c1239d1ab7f29f6c84c679d12ae76c8",
+      "docs/generated-validation.md": "7e9e0df65e00d2821e103a60deaea2b5768ed2a1f9da568c68bf9e3da154167f",
+      "docs/getting-started.md": "e995ad82bfa154ef19617160cf0cab41716c60931c006485cf3f1c145563410f",
+      "docs/html-report.md": "88a4c6c9354904e98f0feb8e1d80171ae754026dd903c1ac0f5616c2dd9871a1",
+      "docs/http.md": "4012ddea00255e456e7db04f7d5ff0dba7b1b2c231fd92376cfde6725b5806c7",
+      "docs/import-limits.md": "ae2709f6bdec8bf81be85d10097ab054b4256a61fde8fe07737c821c9e322900",
+      "docs/input-variables.md": "20317e07c9eaefd03227d97735c19b8048442c0343ab9a327945a3cf16bbc91c",
+      "docs/interpreter-architecture.md": "6c8474988788d8fe14638bbe194399aca1015a421cb5c9a2f2a83e2125329608",
+      "docs/isolated-workers.md": "21461355809a2c6c46c8313ad874738c7e675639e044b5efdfabef024365f401",
+      "docs/javascript.md": "ef097827910bc5a0006beb9a69a1b033888b96cf6ae4132355f85d8ae802e0ac",
+      "docs/json-report.md": "5f0920d518f6374681c7748c7368e11779cf37c49f5c09721678be4bd8400130",
+      "docs/json-report.schema.json": "42641b64c8e346871be8cab1408700c082120daafd98ff0c1e18e4b03ed88509",
+      "docs/language-specification.md": "1faa78fffe6746bb1acd152711b0147024e874d2759ff949a428e57861d62f1f",
+      "docs/language.md": "1a70554d6ea7058074c3af2fc83f4024afc8aa3ca9ff8a6acd33835b8dfc2d15",
+      "docs/listeners.md": "1e19e5d654f95921c730c20faa152477c8369cac8860e2a6865c1b72045a724f",
+      "docs/lsp.md": "9e42c4fb2d436958642bbf7ef0eb889169e15901ab1b58682f2afef8024b058e",
+      "docs/mutation-testing.md": "474ae473612b587848c53f60b0d7a04caaad0bdb2bfd495bb425d02fd898cad6",
+      "docs/nonblocking-io.md": "d09ca5247ed0fe5c1acec6202ce0c4dc30e314aa6dc0ba3d1d8348684671ddee",
+      "docs/operating-system.md": "45786bc081d8fa33c5272f40501cb8503782fd122fc38d9f5928a893a10fef11",
+      "docs/operation-diagnostics.md": "b15986b312eb6b725145e89fc3941576841f07ac61dc33c327f4f2efd67da5f3",
+      "docs/operation-ownership.md": "48128b3c9d68c3d143014af96d9fdf8b825d08d915e539bff1acedd155c61574",
+      "docs/output-limits.md": "ca4c904758f82b1024ee546844630e9586cf52dbe60cedc1222237faaa9fc696",
+      "docs/packages.md": "365e34dcef41a9ea92d94b4eea9da5c4ae0adcc39677ea08093ed2c2e3c2b8c5",
+      "docs/parallel-cli.md": "746c7320da40d561d9ee901f820124a3647c889fce94c38d548cdc277a21378f",
+      "docs/parameterized-cases.md": "6d7eb38c8a48bc35e3de7be5cad17c4d7659e3c8c3364827319733b49a64b4b7",
+      "docs/performance-baseline-evidence.json": "479328385ba491df0ef1df4b985a728807c836c5f459404b1b08ff54614e3300",
+      "docs/performance-binary-baseline-evidence.json": "120c095cdd4cdd10c852c0f1f20bfe4f8690612f22b8be2b3d52f1c4cc2d4dc9",
+      "docs/performance-evidence.json": "65ac1b9c1b8f408c0b4c47348118c84a8f74a5f89a51cf80628dd2f6fdcbec15",
+      "docs/performance.md": "5940858dbe1790e422531c9c6f5185a840ecc8dfcbf87e93cc3de7a02402037c",
+      "docs/playwright.md": "d55462c5932e3d23d1ffaf2b447cf37b8eaa79b6e90ab3c717d7c7885e56030c",
+      "docs/polling.md": "3c47b50db574054ef5991b58dbbc788a1429f61ab482b2a6c8359f1ba69ed365",
+      "docs/processes.md": "15c9d1a6ba98902808f74f3f52dc3126729d5e00946c60df579bb1e8b4a8e50b",
+      "docs/public-api.txt": "3054da78ecb648ffc023f28e1c2d306684cde5e08e5a817bb991f05f46b109b0",
+      "docs/python.md": "61c24707d98152e56cbf5d944bfe2f0ba6f045ec7da1832d811e9d6011df284f",
+      "docs/quality-assessment.md": "7a06a8da4db7ec2b96aeefe260b66094479b717a6381e6ec164bf1d641fcef6e",
+      "docs/regression-reproduction.md": "0a9a522e7a9c4a210f13430dc700f9103d5ed61c94b35f03d1e4777b22d056ba",
+      "docs/report-limits.md": "5f42590bd3692a9f093cef2b26905d5d98b9591a6223bc08c6fc0f2c2ec8e292",
+      "docs/reporting.md": "56ce5e7f871b51729946f576ef7490422baed2f40a085a77c04486dc1c636950",
+      "docs/result-limits.md": "ff9740df57ef0d077acf3eb97eff75959135f82483f9c7e5017b4d76434cc398",
+      "docs/retained-definitions.md": "fa02bdb9e4d4bf8c10ee048ce245cb37f47cf99cf470668fa583092218662baa",
+      "docs/retained-diagnostics.md": "efdf95d07ec3252abfa75c8409e27950ae49868164c725c0c42b4c63e4641cc4",
+      "docs/retained-names.md": "c1b787992305f3264901965918f6474533ff633129a761cb8c6369c5fcc1e47d",
+      "docs/retained-registry.md": "7a0f4499780777ffe5ff3c7ce9416c254c20156f771a5f8e93317131d89200bc",
+      "docs/retained-values.md": "8845620ecb956e0408fd4b42a47765cc616a2d753f3265e81955442c196093ff",
+      "docs/run-isolation.md": "ee16c9b56a5033fdd06dcafa860ca0d79949898dfba6fd30e5924c810e891ce0",
+      "docs/run-records.md": "19500a3e263f0e3a296e0ac722206060b0e67c3fddd808f8641806a4a699fab0",
+      "docs/runtime-diagnostics.md": "9c1fefbea6fe5d344651ad10b2cf1e9fba701f3055897b9233121eae5026a3f4",
+      "docs/rust-api.md": "b8b64bbf078656f4b446393c2a91e33faba7ac848e0e1874ebd18f209556c223",
+      "docs/secrets.md": "618b7a662ea36a70ce0c666eec0585207a584ec3a9f9c891cece02a076141d9d",
+      "docs/setup-failure.md": "2252b1b1f37b7c0466d088391df53c4f646a85211265b6a9b7721bcf376a5783",
+      "docs/shutdown.md": "758900bc2a32bd201e8299fec2185198fbf85fe51450a040656323a62df5c674",
+      "docs/snapshot-limits.md": "ffee561b1f3032a76f4b631bacf444df3c8198e2f90f95e77958bf52b9df75ec",
+      "docs/statements.md": "194c303cff997fbbc3f04bb084380e1206c373833eef8d0478f6505b946196f9",
+      "docs/stress.md": "829bce6b8af038aa00f8e5385089b9c06d2acc3e6ffb5132cdf705b2cbde72c2",
+      "docs/strings.md": "57c58235f7393eff77318bee05492c092936b0bf46d346558f89ade29192d622",
+      "docs/structured-data.md": "d7f0289f19cb941b4c61125a842f4c75be7edff07895a13c56e0945dae867906",
+      "docs/suites.md": "428a5a0a4dad175c80df12beeaaa17dd284d6c9b645d24fa06238966f71f3e96",
+      "docs/syntax-limits.md": "45c88ed9904e35f8807ed8c0bcc4ed83c18e729045f717fecb538df7d94f1b04",
+      "docs/syntax.md": "03e11483648f43980e5829271b9879ff5dcd48bab7af8c1499d5b77aa1bc637b",
+      "docs/temporary-limits.md": "7680ef11a752b30ec5b51bd4ea5fffe90944631c03efeb076cf3310ffd8393fa",
+      "docs/terminal-outcomes.md": "c341efafdb1fdcc15026f4fa3b3fd2c34ca904de55d6d2c3072b18980a9f3950",
+      "docs/testing.md": "e1d740cd81500fca951bfc3f0e6473bacf1dcb56b3712f88d063bcbdd02d66f7",
+      "docs/traceability.md": "e132e6ff85e37f7425f649e5ed2091221f7506de5001eca516d92f5b38da107d",
+      "docs/tree-sitter.md": "dc72f91fd82e7b0c0b36bb15d7496c5ca715a90a934da7d02f3790212108a28d",
+      "docs/trust.md": "44997632a05e40d8f9fad181a36c5939b6ac112f277ae7c37dee62aa96f59c7c",
+      "docs/usability-pilot.md": "03c719570eeaf7b7d95e87179e0940ea5384d97ad547bdfc02e6d64101bbb08a",
+      "docs/usability-study.md": "18e2cc9605332ec76c237293133e3726316a80636151e4a91b4f5eb57361db9b",
+      "docs/value-limits.md": "4d2e87aa6a4bd84849ba5d2c7cea1baf790456cc7938419ed0f762d0aa74f8bb",
+      "docs/wasm.md": "ac4910a74a392c4a95d39a64cb546c7f9bf0e2dacb4aa50c13c913500f89663e",
+      "docs/webdriver.md": "a9b41eb5dee3f204aca8d1f88ba668e0918da281d8f7d6ade80e1bad099e10a5",
+      "docs/worker-platforms.md": "e5ff604cbd67f025bfb9a1ecc5ee993f796d4d17b5aee9917ac8beab5db17dd9",
+      "docs/worker-protocol.md": "dfa8cea005d1f2fa78799b65fe420f38ad6a9c950dba65d259c3ff34497e4491",
+      "editors/helix/languages.toml": "8a9cdf9c519b636a11bc639fa8d75b765a5e01182192ce5f7a618d14f98a1a4b",
+      "editors/helix/queries/botwork/highlights.scm": "798c1ee6ea436e7246aa4ab3942054c3546f84f12b88cb9f5a7e3d9fc9203fba",
+      "editors/helix/queries/botwork-suite/highlights.scm": "472a5b8e08d2183f6990249f12150a17587d999a8e99d6fd4d79282c1aa0e5fc",
+      "editors/test/highlighting.botwork": "d044b2da75f8558e66bcb270716ab6b73cc737bcf9d1b04c32fad01e3ce3e33a",
+      "editors/test/highlighting.json": "b64a7e395340ca189928c42d6f980c7eef6a707d2318aba5e774f425b6570c48",
+      "editors/test/highlighting.suite.botwork": "eedbf0e070c2c6eb961860d43c5d8ad1f164dbe7ed2fa4598fe6583580c31254",
+      "editors/tree-sitter-botwork/botwork/grammar.js": "7872ed7ddb40ce8b6ea8f0135f1b12878a4fea786737883165ced727c562bfc6",
+      "editors/tree-sitter-botwork/botwork/src/grammar.json": "aa8ebbd72c9b383bf98127d141ae78ecfdcc2e6f9c0467c8852d2970309af814",
+      "editors/tree-sitter-botwork/botwork/src/node-types.json": "7e39b8aac72bd46889d5b0a17aed3371b7808d94f421e3ddccabb1287d00f61b",
+      "editors/tree-sitter-botwork/botwork/src/parser.c": "ebdd2bff341ca1b6e0a141b481410c9b9ac48077e953d611ded42b3c274607ee",
+      "editors/tree-sitter-botwork/botwork/src/scanner.c": "9afabbdf3383128598fa3978aff02fcb4ca2f46269476f3878e2bce775d7c5b2",
+      "editors/tree-sitter-botwork/botwork/src/tree_sitter/alloc.h": "b29c1c9fb7cc82f58c84b376df1297d6e2737a1d655fd356db0859e3c29c2fea",
+      "editors/tree-sitter-botwork/botwork/src/tree_sitter/array.h": "5bdf6ed1a78e3409fd443e085ca967a64c188a5d082aaf7f819bccd53a471c94",
+      "editors/tree-sitter-botwork/botwork/src/tree_sitter/parser.h": "180b893c8734778fd32f372dfbc27bd6ad1cd2221f26150b31256ff6716320d2",
+      "editors/tree-sitter-botwork/botwork/test/corpus/scripts.txt": "49f3598a8b0acd2d750f8474047cfaa300bf0af1db4ebf20bb905bb045524d7f",
+      "editors/tree-sitter-botwork/common/define-grammar.js": "bab422d22f1496831050b66f379a59164433f938e55f6991762253fc587a230f",
+      "editors/tree-sitter-botwork/common/scanner.h": "2d0a4b9072c627e9207b2721257eba7fb3da08a618475f3ddd53b8a3903f3d0a",
+      "editors/tree-sitter-botwork/queries/highlights.scm": "798c1ee6ea436e7246aa4ab3942054c3546f84f12b88cb9f5a7e3d9fc9203fba",
+      "editors/tree-sitter-botwork/queries/suite-highlights.scm": "8d64f0b8fde47d86461e95bf219b2b1555539e334ddf5f5ed73ae40fb69e3986",
+      "editors/tree-sitter-botwork/suite/grammar.js": "ce0962a127a4a8aae866dbf1802de21a2abf74346600a189ef13746b2a0f0b66",
+      "editors/tree-sitter-botwork/suite/src/grammar.json": "8c024955db2b3a67a99bb94e5e907113850690c40290b719164cd5de9857a2e0",
+      "editors/tree-sitter-botwork/suite/src/node-types.json": "8f0b6c467d0e0375393640bd52a6892418170e856ec29acd9a8a1263a1daf265",
+      "editors/tree-sitter-botwork/suite/src/parser.c": "1df65f3e21576e1785fa8605969f52808a7e187cb119bcb399e930ce498a3f28",
+      "editors/tree-sitter-botwork/suite/src/scanner.c": "9b3ce86563c106676a3b311c3bfcc550f02d3585c241fbf3bdb2a1c6c8490bfe",
+      "editors/tree-sitter-botwork/suite/src/tree_sitter/alloc.h": "b29c1c9fb7cc82f58c84b376df1297d6e2737a1d655fd356db0859e3c29c2fea",
+      "editors/tree-sitter-botwork/suite/src/tree_sitter/array.h": "5bdf6ed1a78e3409fd443e085ca967a64c188a5d082aaf7f819bccd53a471c94",
+      "editors/tree-sitter-botwork/suite/src/tree_sitter/parser.h": "180b893c8734778fd32f372dfbc27bd6ad1cd2221f26150b31256ff6716320d2",
+      "editors/tree-sitter-botwork/suite/test/corpus/suites.txt": "7c29a041872da3a6de0d41f96f0e1a14ed7b0c6f40e75d5ad6c221bff842ade8",
+      "editors/tree-sitter-botwork/tree-sitter.json": "70c49ff606e08c5045f033a3d71db73da5c0f31fb91bfa793ca4a172f1603a03",
+      "editors/vim/ftdetect/botwork.vim": "18afab0f3caef6a955dc55b459dfd699f6ebba6311bae9e464b58e201fc61b14",
+      "editors/vim/ftplugin/botwork.vim": "3f5e3332a6d3c0367322eeac48793fea40eac8789562636d89105356f4dc19f6",
+      "editors/vim/syntax/botwork.vim": "f4330e3e23bee08b4cf54c86e502404dab1e6e72f268998a7bd1af20bdfe3d98",
+      "editors/vscode/.gitignore": "4f296e333025f1040eb74fc2b58a06828d8ccdf082971baf997ff29f8e0f835f",
+      "editors/vscode/.vscodeignore": "c687d37211483da484f9f70d2b95055c325a4f24f9e34790c49d78f44d9b963e",
+      "editors/vscode/LICENSE": "ddffc5009f9f4858351b73927dd160486bcc43e51b7049f90bcfcfb9bf7a7a66",
+      "editors/vscode/README.md": "1a278cd7425be0ae80f46c8a94517301c444ff59b5e7825ef87f4b6b64606be7",
+      "editors/vscode/extension.js": "2948ccf0f5b54bb7b7daecec3c6b363b2fc3a4f61e54ec583e1f78925e0eb8be",
+      "editors/vscode/language-configuration.json": "302e7e65009e4573f725a3c986c4d0f299665657adec83456ec4c6b9321e6131",
+      "editors/vscode/package-lock.json": "2762323da03bf72d44c1db769f0c343ae5e6f9014173328e6ebfc3dd3eea8baa",
+      "editors/vscode/package.json": "84ad26511508c1810b4252009046dc4ec15832fa09b034c5e708bb8455847fdc",
+      "editors/vscode/syntaxes/botwork-suite.tmLanguage.json": "e8c26df8a24d546c352f24e635e69c98ec0c38df23b9143b85a018c6a342143a",
+      "editors/vscode/syntaxes/botwork.tmLanguage.json": "45e5a160ce40f5121f5fbb6ea1d9dc38a7e85ce98ef3f95e26ab4d1b03ad0668",
+      "editors/vscode/test/extension.test.js": "3e5c9577416a443a78f3b90c930ff95f14713f488cd9ed0175a09f677bc5b50e",
+      "editors/vscode/test/grammar.test.js": "427157180fb06334f00a025653cf3d24c21394913993ceafc20a4898c808aa83",
+      "editors/vscode/test/scopes.js": "da8ced1bee8d85cdfe51f2acbac6efdecd146589b55745b86b06247e7031ec08",
+      "examples/01-expressions.botwork": "3f6f8bd724b055d75b4b421629856010c26ac6961e1ba15856db84d26613e5c2",
+      "examples/02-syntaxes.botwork": "875aec9702c33faa51c500f68cde4c66feb2f19fd45d38b87bb3f7693acd2705",
+      "examples/03-precedence.botwork": "b0b2870854a7e297e9b5eea2f9019db936dcd3024c22611819e67c508d6b366c",
+      "examples/04-arithmetic-errors.botwork": "e49fafd48ce85ffa0c5f75ea773bfd4b9ed04553e3a8d33a7292b61e627acced",
+      "examples/05-powers.botwork": "c5e333354f69b513dec839e8b7f90ff70d9ed95ffe5a038c01d926a52dc110e8",
+      "examples/06-keywords.botwork": "5bc86e45961de2b8684cfeec78d3555f87b1a8581b23b3d3e80e3ff571206829",
+      "examples/07-short-circuit.botwork": "42de641449bac882f2b669c497cf3cb6812b76cbf03cd7470d24f540e8bf547e",
+      "examples/08-control-flow.botwork": "00dbd6baafdb4e217ec4aa3b6a70d3d68f7514f3ef7ac92a8790a0affae7bd0f",
+      "examples/09-scopes.botwork": "44673afd72701a83d5d9c1c382eec52e478ece034aa9dcc485ef55246a006e51",
+      "examples/10-signed-integers.botwork": "0d859958cd5ba0374dbd80fe5a7e09d2005e31a2309789835dae70f00299cfc2",
+      "examples/11-collection-access.botwork": "e888f6afb19e2fb25ae7c88ae588cc132791eb320531a526d5db1d9b10ef0ed6",
+      "examples/12-computed-access.botwork": "2cab76f7bf6d3f0adb0b5da4fc1d9ecf36dd3bce02c43ed81f30b0f6c9558f5d",
+      "examples/13-value-comparisons.botwork": "3111201d74056bf43102e1894194ed204b278742fea040e36bbda0cbcf784f79",
+      "examples/14-multiline-layout.botwork": "90179beae0923dca065037c56b9793b7b7f83730a0a468cb91b13be0c21862aa",
+      "examples/15-statement-names.botwork": "b2e8fe3e692443a7fe70ff3933700f07562d1f27af5b45ffe9f320fc98511d3f",
+      "examples/16-multilingual.botwork": "470c3d966600085c963da576debf743d078eaa28e6d7be51e30d70f42129ce69",
+      "examples/17-catch-details.botwork": "82c8eed035818f555c8801a4f30f0aa2a4feb15bdc4d077bccec0ae056b0e176",
+      "examples/18-call-composition.botwork": "3958a146b90b1745890fd29415f1017f3f187118bd0eeb4c356d5ae481266e18",
+      "examples/19-local-imports.botwork": "c33207d1b20e97efa8dc3b2f851b22268d65f7c4204a2012d964b3b6879684af",
+      "examples/20-input-variables.botwork": "d1320c9d767a1647304db0ca8c83347b8d139e252d02b52e166e879e51467b57",
+      "examples/21-parallel-first.botwork": "4df26c0ab7ee365686ed586f6fc851ef007662703b928d0190ffa31f99a31c70",
+      "examples/22-parallel-second.botwork": "2399e19c2dd07472d86cff9004b10e31da8ba4e1ca1276b302eb0371ac86d26c",
+      "examples/23-named-cases.suite.botwork": "9111bf32b9affb43d8e1ead4adc45945df05f19c43a19e4ad8807238b568e127",
+      "examples/24-parameterized-cases.suite.botwork": "1bad89afe73087564200f0618e2b6ff1014001f37b30722e1f2a1e862f4cf404",
+      "examples/25-cleanup.botwork": "ea4274c53b8ece637a591ab5077044dfe04ce1089963fae1f44fafbc0fba51e9",
+      "examples/26-fixtures.suite.botwork": "5cfe043cf404610dbacc42bf2f88c203cdbcdcef240363d31d0f1a117dd424ce",
+      "examples/27-setup-failure.suite.botwork": "8d15f026134344819d1116ba571ef0c37371a854db45ea3d616ff4f7fcfba1b4",
+      "examples/28-builtins.botwork": "cb1c59f44547f8c8f3a3c5a3923f7951df7977fa502c853a27c30f5fdd0c5293",
+      "examples/29-collections.botwork": "5f0921280db95e064b9033b0bee44e56ebc72462ef162fc534cec21a13b8b8bc",
+      "examples/30-strings.botwork": "9670dadcac10aae9e3298f58ea778a79bee875a0656ddb06471f70b39a9991e0",
+      "examples/31-datetime.botwork": "875fc6f36d4ae73f523cef33ffa9233bc1e9f5e8ea399c0dcc117482dba23545",
+      "examples/32-operating-system.botwork": "fd3467037627e72c27a458d8d3646c7e99f39dfb53ede87ac6df74543eef5952",
+      "examples/33-processes.botwork": "57846c73ee5b4344e07e4704cd38856139c1605afe9fa2b32de2cfad069671b9",
+      "examples/34-http.botwork": "d781ae76df2cbc017ddfc2d982c5a49362845bbe7da47a1f3b25fb1350c1fbb4",
+      "examples/35-build-catalogue.botwork": "fa33460e15a89dd29dcdde612a10207152a7a92fa20926c750a394e11d0d2861",
+      "examples/36-http-contract.botwork": "a8af03a386e0c286065f2dabb62e407210ff0c00fdd0e74be4f496bfd74e7b07",
+      "examples/37-assertion-diagnostics.suite.botwork": "801ce6831ad4935fb2e41be603369e96164537eb5c8febcc3032686ccc8a1bf3",
+      "examples/38-polling.botwork": "f2e928eea220a54516ea19365ca5b4304d5823bb06797957e7c44bdf57a032b1",
+      "examples/39-dataset-http.suite.botwork": "44f8099ba2b6ce2fae645ccc20b9e7d6048a98a5f366ec96b3ffa941da202e52",
+      "examples/browser/README.md": "76490517714329c56d9288376aed001e9cad39b0bdea4f0c2c930e5c4f30d985",
+      "examples/browser/appium.botwork": "c31245863feb5ea0718c523b6f67b3eaf569ebd4fa4120bcefea7af292674ee2",
+      "examples/browser/inputs.json": "107849701c0c222a799ac76bb9878c34c17699095cebdf58dff4f460034f5996",
+      "examples/browser/page.botwork": "1c34d23b79ef7fd64afc18040b0206523d88057c8f728009071152e6f4d3e0ca",
+      "examples/browser/playwright.botwork": "30bf890287692b884ace37e955fa7246780efafa8c000b009da219201a178142",
+      "examples/browser/webdriver.botwork": "9a0147564f2a2e49d7b08e3d20e804647d11f9d877a9ea0f9fb7af7b684b8f9b",
+      "examples/datasets/numbers.dataset.botwork": "8210d5a4407c27ce1752b890066e7fc16277df3321c0339e96e8a1532003c75c",
+      "examples/datasets/users.json": "fda0a3032350f4917893dad8513ca8414a1745c32a91b9c7814312b020303614",
+      "examples/fixtures/http-contract/hello.json": "9b2d43affbf49a367028df2e1414f84c0e099ac98c3d54a8a80157fd7771af25",
+      "examples/fixtures/users/alice.json": "69f664375e6e4448a37b30602298833e0a9e633a24195b9aa5b754388f9ee736",
+      "examples/fixtures/users/bob.json": "3d9b559fce5fcc0b7f1ce36fe260e3c138dcf666e90245233674d7215feb84b0",
+      "examples/inputs/catalogue.json": "dfaada32d9cea5e45d35ed76cdec3dc4f4d4d8fb69c9ccfe8d3188c8f2ec9685",
+      "examples/inputs/catalogue.txt": "9bd986b7c4ec179ebcaa40fc058de775add31e9dcd8187010ad5b25d3d24ecf0",
+      "examples/inputs/defaults.json": "d8a3036d30aaf323cc03e8ff3940fb5b3839195e564eb5429a0d37e1ea92f81f",
+      "examples/inputs/http-contract.json": "a10d4a032e222382bff7357be9568895b74dc4b074d87cd22ce8da7bb22e97e3",
+      "examples/modules/arithmetic.botwork": "a2ad1b3b14b4b92b8f69c36113c13eda1aa85788783827efb71e8b836dcc8626",
+      "examples/modules/catalogue.botwork": "b4af92de8bff97e3a2162ca61c61bb67fcbb6edcc2014e707dcb5d29a24b72ef",
+      "examples/modules/http-contract.botwork": "953e4c5c565af682d43ee8e05446f843c23b22172f9a3d2a554dcf9cc288a1fb",
+      "examples/wasm/greeter/Cargo.lock": "02304d910875706659273d4da3506c7e08c57c0de54a61e0512b4244e6ad7cf4",
+      "examples/wasm/greeter/Cargo.toml": "88491c9f348e27e90b6f0e63883a7d1cdbb2ae027265656725e9203b20d6d966",
+      "examples/wasm/greeter/greet.botwork": "7a5f4c09779eb2dfceef9c8d5ed55d96deb0c1144213910fb292fb0d0f59d5b7",
+      "examples/wasm/greeter/src/lib.rs": "2ca1c6f80f7236864a65912729ea787c7c827707312fceb6697b08e91e03eb15",
+      "fuzz/Cargo.lock": "a12f1a53c9ba7fc5809d2f3a0582e96f7511223c4dd7a73c794cc94e3d0e2129",
+      "fuzz/Cargo.toml": "4d28a7d0275463eb8effd68727da1d083a7ca71dcbf76b1b11c2617d92d21f95",
+      "scripts/coverage.py": "b396612125ce62eb53d058a445f6b3269b767261aae842ffc54a936abee08499",
+      "scripts/mutation_core.py": "f1343785fc44083a8dc59b52bf158002fe097b674ccf2e3b9784329a2e779e51",
+      "scripts/performance.py": "348dc899491ae63bd8c79da915ad6b8b727d8f29e2fc8d459bfba8bdd1b1666f",
+      "scripts/public_api.py": "635c8b96057588091b0f95622a95a6e73b007587e95a2aeb8b168556bd774f93",
+      "scripts/release.py": "e95ce9b49de2164217509afabf84e0e4d08d7051db801fe46d8b9a0ceeee0793",
+      "scripts/wasm_guest.py": "28826fdf81c38a92624fa020030744c186d100f9973af943688c18231b400dbe",
+      "src/assertion_artifacts.rs": "5c5e222391ae708867c0e047c2cf0b35b5c76c82e5ce1c9713b21e2bc23029e8",
+      "src/atomic_file.rs": "483e34dd1aeee2f2da17028768054694a493c3cd90fd23be1f3867327c44d7b6",
+      "src/batch/tests.rs": "171b3125e152946ae84eb713e9e30cdb5ecc1650f4d2f3920784bb89db5838f6",
+      "src/batch.rs": "eaf18dbea78749829f2a3e5c5cf7cd8f17e8fceec865e1b374d3f2ed34b4a89a",
+      "src/check.rs": "02b5417f9b71c17b7a8b91b9fac4819e712c7043b3bdde77ea904819fc81bf7b",
+      "src/core/acceptance/tests.rs": "b7d7e10aef6357cdc26df040f1000431d4479cf79b9d7586fbbfed7467323304",
+      "src/core/acceptance/totals.rs": "05bfcec550551e10790d85d38d9efe498648e3a2ac0c0798193d2271d361535f",
+      "src/core/acceptance/view.rs": "9b79baef3b011a09269fbb6d1e2a6f5c2abbd14481341ac389101a9e1fc2b1ab",
+      "src/core/acceptance.rs": "fb9e79950ec77e0b4a2c8103e3ecf4b37a272f98c2602f61df37a74c61a89928",
+      "src/core/analysis/tests.rs": "4596a5e304e372b2dd43099118dfabcaec8416631a27986307e55b9de9eeba6c",
+      "src/core/analysis.rs": "b9e8272f78855ab527a442917f82c8f05fe6377249798daff62057a02deb9f63",
+      "src/core/ast/parse_diagnostic/tests.rs": "7c8be5135dcc5408d7b49ea95766c5e6dcd9354a39f01523661606c3559862d5",
+      "src/core/ast/parse_diagnostic.rs": "51533c035d772cf971fdc08b880b3f8d542d676ec10fc9d88097990e1febf477",
+      "src/core/ast/tests.rs": "7bb80bd80f0d1dad7085ca15872400ef5d00608edc9bd8abffc09dba2419ce65",
+      "src/core/ast.rs": "2f6999a16026b4e965e5f24800560bbd2ff50f940dddf441ac306964c31e7c3e",
+      "src/core/ast_limits/tests.rs": "71cb2c0d124c2c4790ef9af9dee559f3b6230b2e9aa17db318eaaba5a12c7272",
+      "src/core/ast_limits.rs": "afe8241e6c8dc8cae7d7a3d14928267b27d7762f28e56ffc60c19e77ac392390",
+      "src/core/csv.rs": "4f10d376dc25bbb98876c37e368c5c64afa598807f2bc5134f977970712e567f",
+      "src/core/diagnostic/construction/tests.rs": "0b56ecf7261f79d585d58012ca6769953a4e2789c4ea92e68624caeb4ee25613",
+      "src/core/diagnostic/construction.rs": "47ccf7575b5cdb9d45a38ecb7de822daacf198b7e519e1edc4a3c65168887b16",
+      "src/core/diagnostic/ownership/tests.rs": "7084182f2f684ef1f0eba90f4536dc0eae99bf088c00591b99aee1c290751009",
+      "src/core/diagnostic/ownership.rs": "6782fdfd50ac8ac245fafa15f6f0be8c4e799e6bb00e1cd052d7fb1b2391ffba",
+      "src/core/diagnostic/rejection/tests.rs": "6181bc928184b3c21ca8fe893efedf8dce760ad1e799331987496f92b356c6e0",
+      "src/core/diagnostic/rejection.rs": "bf1dcd68069610842039e7a7777d8dc6f080233949ba490368940e660aba3272",
+      "src/core/diagnostic/render/tests.rs": "ec0fa4b877c09bf8f850b62708ddaeba3d95896c9f6d20bb5ec2379b328667a0",
+      "src/core/diagnostic/render.rs": "fad38d82ca60bb95218a68cfc1c743386c25fa583406b9abb17c7ca0773b9803",
+      "src/core/diagnostic/value/tests.rs": "4dfc44ebc162a541cc8460a281a5def9e3097d33a9df1d7fc82eac9652006538",
+      "src/core/diagnostic/value.rs": "449936cbfb0d5a9d3043d24e7b5e33766af683ae65845d2d4197893e0d878b2b",
+      "src/core/diagnostic.rs": "b5f2bf40a546dcbea56af26d742895fe3475b7a5d7799689ef5d26941c7fd9e2",
+      "src/core/eval/blocking/tests.rs": "c42a0716d6f750382b3ebf5ad0a45ee5bd57e6a6343046a6768c8de7aac718c2",
+      "src/core/eval/blocking.rs": "0821b9482b8817588eccd8abe9cdcf6dce3a10fa05f41a6e43504475a8ce5111",
+      "src/core/eval/builtins/assertions.rs": "0175324742a7a6e264d241688756fa8d07c3cb42cab33c100389726e891c0a29",
+      "src/core/eval/builtins/collections/build.rs": "4c7658ef3f00e97d9197b49699148386c47e38805d72ae2214a65da9beb89c07",
+      "src/core/eval/builtins/collections/tests.rs": "257859d77bb2149a8a7a5891ee65b0a18f5e82c56f2da8dd9a791014527384d6",
+      "src/core/eval/builtins/collections.rs": "f70e32e82fe8f7ffa667b084b920168c851314ac58cc7287044143ba1f3193e9",
+      "src/core/eval/builtins/data/csv.rs": "566e03ce08ad2c36c33c0aaa95e44d8abff26b712ec181804970a0d7122ab196",
+      "src/core/eval/builtins/data/tests.rs": "d31f34cd7785f6b6f3ffdf959376bbef7dc0f279571b36b759b5c3ff0101a12c",
+      "src/core/eval/builtins/data.rs": "6940b638d1c1b896d9c300e547cd60b67d94f06766a19a085b24d8fbf4e7b04d",
+      "src/core/eval/builtins/datetime/duration/tests.rs": "c99613600044c9285b525a9220e91b97f491450da1745d7c400afe6cf291c1a9",
+      "src/core/eval/builtins/datetime/duration.rs": "fb59a63b1fef736cb5c2d438223b574d54b77089c918c6fc4c5ddab72cadf688",
+      "src/core/eval/builtins/datetime/moment/tests.rs": "a1addcc58629f61a0ff98b2e7868a4ab9747edc40e3e5166fa943c51af8afa47",
+      "src/core/eval/builtins/datetime/moment.rs": "e90eeb30e69c4d6198f56b142a773d487f38996e1ad1fee7823dba0672db774f",
+      "src/core/eval/builtins/datetime.rs": "f97a77d4344a46a0ebd3dfa4fb6975a05b67ebd576932f265089715ece2a3de3",
+      "src/core/eval/builtins/http/config.rs": "fc1edded440ea398383e71a15fc21921c531abaf95e92e55e203b5aedc5a62f0",
+      "src/core/eval/builtins/http/output.rs": "09da7fc4984137c741174192e2d5fbdd30f3c5eb952980cca8a2cb574a5db85c",
+      "src/core/eval/builtins/http/tests.rs": "aaff5e4c6561e1476ba569e53afcb15308e86c6db572596e991cb2b76ef834cb",
+      "src/core/eval/builtins/http/transport.rs": "cdbdb8dbc5a5e592eec21fc49c2c4ec7358d2684edf2bf1ccddc39227814901c",
+      "src/core/eval/builtins/http.rs": "31e102c12a1e1964855a7a5d86ce28307b8318bac7df8a53f048a2916cefcfa2",
+      "src/core/eval/builtins/operating_system/environment.rs": "a97f67e510daac6517f7ada743c1b771f121442def804ec581c690e2565d71b6",
+      "src/core/eval/builtins/operating_system/files/read/tests.rs": "32907d6c5c60f84dedb5a887ca53c771263005b070043e056930377f27dd81d2",
+      "src/core/eval/builtins/operating_system/files/read.rs": "46ae253e8f6f7add88f035fd1084949b5131e0f25235c70b3a0309d33d64871d",
+      "src/core/eval/builtins/operating_system/files/tests.rs": "47a0582bbd935b96ccfffbf443443cdc0549a87b7270677e3fc1a407a4ae4594",
+      "src/core/eval/builtins/operating_system/files.rs": "3062fc68454c1695bb32d3c7482970bdeac45295c186441f101438fb46f9c93b",
+      "src/core/eval/builtins/operating_system/paths/tests.rs": "03e6b70dae232ece187b58aadcbd8ef1b97017e6a7f119c9a3893b76b202e07e",
+      "src/core/eval/builtins/operating_system/paths.rs": "a918f89ce88f10874b1e5f5b69c6120a4b0dcba2cabd2f01cb3e98fa9bae3f48",
+      "src/core/eval/builtins/operating_system/values/tests.rs": "0a67f9401682f431e4410565551805b89d038dcf25b166b9cee9a8f86a611810",
+      "src/core/eval/builtins/operating_system/values.rs": "99fbb3e6959780107d901b9a19c9d989d893c7ba40b0eb1e345899a6b5594cd6",
+      "src/core/eval/builtins/operating_system.rs": "aa6d89ed069560acfe8726e80ef99cf07741dd0a7e47c8926803dc5e9e24ba13",
+      "src/core/eval/builtins/processes/config.rs": "8c06dcca98e2abe3730a36decfd6f762196fb2a3c04bad24d9d8fd96380280d1",
+      "src/core/eval/builtins/processes/output.rs": "4c907cb5bdfdb1742fe55f8b11514734702d9650040eafe6825cfbd338a2caf6",
+      "src/core/eval/builtins/processes/tests.rs": "fc904c0566388a570f8b8d97c8f118a45796ec5b11d0390c8f74fee37134d7b4",
+      "src/core/eval/builtins/processes.rs": "8b7cdd42d049fb5fe2f2343183014a4827efa3abe36433a1576372e31861de9e",
+      "src/core/eval/builtins/strings/build/tests.rs": "2011a192538096e577c6034ca9ef84d42188c4631cf9b886efd394dda253923f",
+      "src/core/eval/builtins/strings/build.rs": "4b28010492b9f07f111d1c090300552392e43ddeb7d281c337703866a64dca79",
+      "src/core/eval/builtins/strings/patterns/tests.rs": "3aa2668d878a4d526cec5d20f6e460be8dfd679c47070fdb9856b92808edfea8",
+      "src/core/eval/builtins/strings/patterns.rs": "bb67e3d660c6cbb6c372b23d0dd8df62c95451790b8567c0dc558694ea073a44",
+      "src/core/eval/builtins/strings/template.rs": "9b0670b40d82973240b1791f6e2620eea902d401252dfd83d46cfca4ac28b0db",
+      "src/core/eval/builtins/strings/tests.rs": "ef67548d688c553eec848b5fe98aa4c3dc084ab150d4449b63bc23ff705d8f1d",
+      "src/core/eval/builtins/strings.rs": "a869c46d767c0969c3925853248d6af89ba56a842f7053187b6786445af673f9",
+      "src/core/eval/builtins.rs": "a70a81b9678b092224871d7ca9341696068e4ac1e47137a1121849d71dd4fc55",
+      "src/core/eval/cleanup.rs": "f759d721d3654678fc62f36f2a401dd5049037784a1bc75728c3868b13d85e47",
+      "src/core/eval/compiled/tests.rs": "f3a433c416a1c7d598467b24e024463617838e0473f0f1ccc60f09a5a7350969",
+      "src/core/eval/compiled.rs": "a5926411b5378bc9bfc9047d4710bf26c1acd50d7e2b79f307ef654d9585445d",
+      "src/core/eval/diagnostics/tests.rs": "831a435e1affac403187e1e6fb1c4d89d52384a5c502fd82209bb0b307c02cc3",
+      "src/core/eval/diagnostics.rs": "6c09a4fa34fd17ed5843f63812042a7ac8734ae751a577fa0a110a64cc574399",
+      "src/core/eval/execution.rs": "3aa8b50e2721db4053f0f3fd9f4b6cd7c00cc1bd7a6f5e7ea14ba723370f80ff",
+      "src/core/eval/execution_contract.rs": "fe2b0a496775b6013aa0c6c9049c8ebe818880a600ad3454486f2314199ac18d",
+      "src/core/eval/filesystem.rs": "62449ffa60f0dbde112d91633a9ec25c2a569023bb56fe59723323af7ed911d3",
+      "src/core/eval/fixtures.rs": "3de7b2aced48a5f361a65e32942de683ed813b5ce623d91f59d55918b3ff3d07",
+      "src/core/eval/imports/javascript.rs": "ab7c489d041cb6d9b239ea25002164025301675c4714703bf8a1a7c2497eaf88",
+      "src/core/eval/imports/javascript_host.mjs": "760bbe634eaf047c471c155355b91a8e82c540dc16f3a4512f34d24e9f030d61",
+      "src/core/eval/imports/playwright/host.rs": "c2e0aa8a6ac9f785e6a876b62110af8ab360433711613cb14e1dd29d63fd4b67",
+      "src/core/eval/imports/playwright.rs": "e91b69373a50fa5cfd0f6ef65e3a30fa71b3430b38d4c35c0882ef88b2059e08",
+      "src/core/eval/imports/playwright_host.mjs": "03b4d86c37fa1a31e5bfd2b59aeff56e5d87ff4d38549d5b0cd37bd879127998",
+      "src/core/eval/imports/python.rs": "1afce4eb08dd79c935ae16bf274623984d5b43c240174a0e6244bc69465513b6",
+      "src/core/eval/imports/tests.rs": "5e5cdde10e3304923a1cf46ff57cf43ceb12ee089bbb17b8bb2c5d499b705892",
+      "src/core/eval/imports/wasm.rs": "7e75ba92678fe2355394fd7b33d989d7fc95d5c3c3bdc442b8adae4a72e654a3",
+      "src/core/eval/imports/webdriver/client.rs": "d51b30806219afde9caa2bac17c38dfacf138d90296c034ced9e4ddb489b094f",
+      "src/core/eval/imports/webdriver/sessions.rs": "db9daa7815450b39843f14f8acdd0d18ebadfbf81bef7da8754616c5b8515454",
+      "src/core/eval/imports/webdriver/values.rs": "c44541c08b74c0428a71dd75afb179c87262420d4c7358612f3d4e09517ca8d4",
+      "src/core/eval/imports/webdriver.rs": "3ee4aa0fc8a53698fdd752e8019402c3213118a1a73314ca2b53854749cfc290",
+      "src/core/eval/imports.rs": "53397ddfc8b85e108adc9d1b3428748653e7a4b67788bb8f60f74b2ac407d67e",
+      "src/core/eval/native_contract.rs": "3afba6ecd98fd74ab7ec90b0679131ccab6c427e2ecf6c316b26bd80d1f2e0ec",
+      "src/core/eval/output/tests.rs": "6251c99bdadcad1d3b6576d56163f01bd52c7fbd2d0f6d7bb6308aaba4c95764",
+      "src/core/eval/output.rs": "5726457078ca24ad95c245461819cc96da937c985c4c7810cf6800414ed69086",
+      "src/core/eval/polling/tests.rs": "874fdc81808c8300676a6150c89d79c8f5a44f6a18675e5bc8aef37b549045e0",
+      "src/core/eval/polling.rs": "1e0c94874d286b33032725b08538c6fca2d0224401dff7574321f2c56b08f6ce",
+      "src/core/eval/results/tests.rs": "0e0f0bfd864be9215efdc434d6e18c641f31deaa8a9cd09206dbd00866f776a4",
+      "src/core/eval/results.rs": "64950001963898b3f5b16bff8bf750ebb5e852ce4ab1d7626f2bd99ebb191bc7",
+      "src/core/eval/snapshots/tests.rs": "402f0166ca651825795e4da913487ee3f920e6396bee0b7f35f61aa317e8d0ac",
+      "src/core/eval/snapshots.rs": "06cca2348dc541db3e41a772d2bf863240775ef6efa27871adb669c2d8cafab5",
+      "src/core/eval/temporaries.rs": "3c1c9b2047f4bde309a49de1e2e269809f3ea6b559b164747969c4815bd11677",
+      "src/core/eval/tests/guards.rs": "4143d446461397ab148fa87e11b690cd756806d4e86aaa6f3793e697d21a7e2f",
+      "src/core/eval/tests/log_output.rs": "d54cb9f004fb40aeaec829718e3d751551382ac130e091473758c684d9ca331f",
+      "src/core/eval/tests.rs": "5624e07cc1fe9f5d997cd0eebf6fa0cf5ddfcda8fbec53c26dde47cba06443fe",
+      "src/core/eval.rs": "21c5af9affdfa0384d31c43c7c592b359ab02ce735f3a47a58b03f66d5fdadba",
+      "src/core/format/tests.rs": "29b239517c52241f40f056ff1cb2a54775c28b697d0bdd6dd8185bbaeee18b41",
+      "src/core/format.rs": "136bff200d152e28002d4beb6a5a05268ec5da2cc000cbf7a89d5514650ffad3",
+      "src/core/grammar/tests.rs": "86870fef30731fc62cea4df13589698ff7966edb4c2bfe576b75e752d0cd703d",
+      "src/core/grammar.pest": "d269773ace704b8c238f460e89c6245318e4f690419814b016d85359fdd6fa86",
+      "src/core/grammar.rs": "a53c0229e78d8c122ab0c2b44536cfdf0b9f8b803819c7278d5a4c8161e8007c",
+      "src/core/input/limits/tests.rs": "7b4b0c3ddd8eb1485c7a0aa7b45a8a1a09d030431a1bf4ae89e56d8b469d2045",
+      "src/core/input/limits.rs": "2818443672e65f6204166c94d93b1040fab5199537dbe3a6e6aea49e5ac7f87d",
+      "src/core/input/raw.rs": "5140ae528e534c19f5db8f3bb1f7a9ba818d8d61f199d79df731501957dee08a",
+      "src/core/input/tests.rs": "8e03089c608291a106027d3e90b09cd0bb05c8ab090fbc407ae95d084d6ba6ca",
+      "src/core/input.rs": "fd51f715676edf325d7930ba4ac8aec8444cae10b09e5c0cfdf399883cb911ad",
+      "src/core/language/rename/tests.rs": "8de573676c25a61585b2c12db9daa9a5c54cec14cef6903be967c2482d32e893",
+      "src/core/language/rename.rs": "1e5745f2c4ff4fce982382d10d28152d623547a0dff1533dc06a7fdc38bb7c70",
+      "src/core/language/signature_help/tests.rs": "f93a374053d8797893fbea1fa0dc71992eb22cfe74395534435cc58c66212d3a",
+      "src/core/language/signature_help.rs": "4bb9ec326713d65b69e7c4b620b02e6d22b8269e1329608046efbf17904681f6",
+      "src/core/language/tests.rs": "e04efe98e80cc13ec3698cf7250c71e7fd821dbb6e45a217854ba08d0fab4be6",
+      "src/core/language.rs": "6022bdd88911213b6bddcc017936308a5007e47bf6a5acbe6a747e357eef8d72",
+      "src/core/listener/tests.rs": "0dd9de939fefb64d992af1ae2b8b36711a57de15fc705b5cb0a831891b981c69",
+      "src/core/listener.rs": "8d713479573b633189d00bb3dfc4bcdf920b9350771564d526b3a4c2b0c73c5f",
+      "src/core/mod.rs": "12a9026a03cd53463a4e3b2bc8962285c9db0222a04d0a81b3a541d5b108529d",
+      "src/core/operation/diagnostics/tests.rs": "c583ee261ee1da3b60c6a166febb158c56e0f57d2b79ee8b30a156a7dbe42989",
+      "src/core/operation/diagnostics.rs": "64bf9c019fcb7ca88285ea9bbf5b786b8af53db4d680eaff931b5578757623d7",
+      "src/core/operation/isolated.rs": "1954dbf5b26e24de64edcf6e6a45d947af509cd424896b6c8332667745046bb3",
+      "src/core/operation/ownership/tests.rs": "bb7d68e140f3aef642072bfe9a83cab3dc951b244441c2d47015e19708fc2238",
+      "src/core/operation/ownership.rs": "3cfff8c0ca094e2e7d1eba98e40509ff12ddab3bd8e7da9b40141f21457867c1",
+      "src/core/operation/tests.rs": "9df7564d0bf3ad29967dbd8ff015ced5e7ca0190c91c0b03029b5cecd04ac8ca",
+      "src/core/operation.rs": "b474d9eb019066d269d758cb4ed3d66abfeb2271d6aea474c322bc60529d6841",
+      "src/core/packages/cache.rs": "1a7cf9e5e2cbda1389f8968c293ed3538137414245b622a0f1f2ec5e5ae5c204",
+      "src/core/packages/download.rs": "61751b856afaf85036cd3302ff8014f658a62441d2de49ea85d6d1b13ad207e8",
+      "src/core/packages/lock.rs": "f68a701e469819e1eaacd782f29bd18c19ff018019a16dad624172b671a9a383",
+      "src/core/packages/manifest.rs": "9481ce04f806b3261aed8a9fd20f04f5f6bf7bc859dbea836387b782e22f87f7",
+      "src/core/packages/project.rs": "9bb15b00d5eb1369afd2ae4c004dd8e81cf31c02e455731a283e8662af4b85ef",
+      "src/core/packages/resolve.rs": "4ce393c6dbf7f481ccf3fe9c41a7bd66c18cddb80c649c98d6fa22afa80d6a13",
+      "src/core/packages/source.rs": "2eb4334be5d033f91e31c36376cac8ae439ff05d3e515e7b56db0eff9f1e86f2",
+      "src/core/packages/tests.rs": "4db85d16406607620cc4803a8dd5bd834b5c0031db30c96a02b2f09bd847a4a2",
+      "src/core/packages/tree.rs": "367dc478b40f15b28425360c661553982f4097887f3a1c6f205c4ab61814aaa5",
+      "src/core/packages.rs": "02895f37e5cf94701467e46f4077ce4df0f4b389924a945d5f99ed645aa17859",
+      "src/core/parser.rs": "a3cedaef0d733a66f59213c81b85a17f03f2ed63f74340987685ac1decc0dec1",
+      "src/core/paths.rs": "82d403b9800ed1b69bd6b3b2bd3faa3e01c85b250320f4fe6343a124bab89c0d",
+      "src/core/report/tests.rs": "ed8895c8c05af1e5465e7581a0a32c269ebb277244be7180928d462b42bb8939",
+      "src/core/report.rs": "b012d2af4faf0bb825cb6afd0d44a7cea91de281103230631eb41bfa947ecedd",
+      "src/core/run/asynchronous.rs": "d5e0aa7bf1263209392d36d8469743bab9aad2cfbf04df2cde039628709d0440",
+      "src/core/run/attempt/tests.rs": "78965a8e5d16c4b060856cfb117e4afad58d6c18aa9a5d9a3c2db91801ef2564",
+      "src/core/run/attempt.rs": "ff4a496e0dc9c8ea541ef6090464f282d85a327f4305f8089eb933e95044f43b",
+      "src/core/run/blocking_io/tests.rs": "98b9132100a0e584bcb934e4761e577801e1689d4aabd3449012abf3f0a33631",
+      "src/core/run/blocking_io.rs": "6fc8585d524f0893ff0180b6ed37b8000e7a87180510fea0c5d395eac1ce2ba9",
+      "src/core/run/cleanup/tests.rs": "1b74de1515c761b9dc22f2a62042ca5bfbde2037e8efd42d4dc1bffd3c6e28ab",
+      "src/core/run/cleanup.rs": "33f0cc28092c4d908b3187a4d5b46b832541382ade1580e7aeded8c10c505380",
+      "src/core/run/import_limits/tests.rs": "1afb0d9caf2392c872eb2147ed0871be303ebe01ce5a9fa27c82b3de33dbca35",
+      "src/core/run/import_limits.rs": "c5539b63a9a1e692dc7613be862fad7e1852ec80b1ec7ef4277a6284f1ed4d2b",
+      "src/core/run/output_limits/tests.rs": "38ce993931ad6eadfe6902cff7224624001c6f69d3073d8e9fb9dfd89e7fce96",
+      "src/core/run/output_limits.rs": "4aa75ea966a0d2a3ef8ce65fc60195864d30cef573260549adbb692ae085ab06",
+      "src/core/run/result_limits/tests.rs": "c7d871f219c0efd0f16d0ae4afd10ae8031e4b47517f95e2b18c5f64fcfc1c44",
+      "src/core/run/result_limits.rs": "f142871ff05823f61d823d2888074713eeaea1598e488da69c65c21a32c21a9a",
+      "src/core/run/retained_definitions/tests.rs": "05fa88fde73c69edf6cdf25fd217c42e925e368b4725a8702f69568ea7f6a53c",
+      "src/core/run/retained_definitions.rs": "72059becef0825e7d70f6031932b4f688c820eae10b28132e4f689a4130184a9",
+      "src/core/run/retained_diagnostics/tests.rs": "e5a3ba6b115b94a00bbd637a04b161cc17de7e93ea83d6b0b1c617e1e1def39e",
+      "src/core/run/retained_diagnostics.rs": "32b65b51b6da0b4b90240737db6d6cb30ddc3e0e30499f25f4338b96d8047abe",
+      "src/core/run/retained_names/tests.rs": "89936d242ad9ed60a6df977faacde61da9d2a136f220ed3b06d1a853e4100264",
+      "src/core/run/retained_names.rs": "a9d0d85aa4454e128ac753d4e01fc4217ebe3e2a9ad4c79d61dcfe94f30c9f46",
+      "src/core/run/retained_registry/tests.rs": "8064b7318da131628ee2138dc21eeaceb20a608ba70352a5dbdb512b86e36eea",
+      "src/core/run/retained_registry.rs": "6cae6906e92043ce9fcdf34cb9e0ef2c0533edb31fd35a7eb8b8b5062d95c9ed",
+      "src/core/run/retained_values/tests.rs": "29ecfb24917c140ae509db0b4d097bfe68b9d6a956f82da0ba62fb4ac5557560",
+      "src/core/run/retained_values.rs": "809a0eff1a110fc70e00781fdf7cecb3ec2a0cf719c76271928ffeaf27691a02",
+      "src/core/run/snapshot_limits/tests.rs": "b869a64b06ef1f7eb968efcc968c7f708a375633fc63bfe7fafd9a49afc7f635",
+      "src/core/run/snapshot_limits.rs": "648a4499e3f1ec64c9c51f9b8d28b569c2e350bd3916101542d6ecb2e03d54e5",
+      "src/core/run/temporary_values/tests.rs": "7fd524fda8f6885601fc1d68a3ecf545d0dd7dab868670da3519f74698ac408d",
+      "src/core/run/temporary_values.rs": "bcb7e6b0a824b7675b09bbbb237d0c24e0d9928bfca52379055d81388015710f",
+      "src/core/run/tests.rs": "0d4843e1de525dcb70ede08ed1538454399a5551deeafc0106451fd3469f48d5",
+      "src/core/run/wasm_limits.rs": "c37fc499b20acf94911efab091f39b7c7f568feaac31ac9b63ee5d2eb1a72b1e",
+      "src/core/run.rs": "f503a1ed6494d70c2a51897a8b8b5d1a251d0858ef2a824d46b9d9ca7471fc7e",
+      "src/core/secret/tests.rs": "5550e30366ca3eefe42499f0f0a200aa0701de160c32cd01e4becd8933eba491",
+      "src/core/secret.rs": "25580a56a84ed65986d1488ffac2824489ca9452d22efdefed9686831d2daf18",
+      "src/core/signature/tests.rs": "812039d751d7506bd072fcc2b4168de2252137a3c1f07138d6184624143a0fc2",
+      "src/core/signature.rs": "425eb78ff8f5c79ef31b70133da7973935546509ce4d1d2caf71955ad71e57d9",
+      "src/core/stack.rs": "c227536b14a7a7aef8666f5721468886a84a66647c5df104088bfa7cde8fb68f",
+      "src/core/suggest.rs": "982b0edf839c3968b34f3c929874d9e2755155c9a26e9b153543021aa710c649",
+      "src/core/suite/dataset/tests/bounds.rs": "5bdbbb85c1af0f4cfa48c4dbf342108d61c2043d4563d67e67c2af58df1cfebd",
+      "src/core/suite/dataset/tests.rs": "104094d266fc00cd00085dc0183b468d9d341e6f2cf3f98f821d5a00fb527591",
+      "src/core/suite/dataset.rs": "83a5f6e683a18f7b0c731483cc6f1d0895c354af26e192a034245a749149ee1d",
+      "src/core/suite/fixtures.rs": "f0416691765a3e3ec485a246266941ece8085662a6cca0a99a180e4a6ab21efe",
+      "src/core/suite/tests.rs": "04ab0035585ab1ec686ef6c3eb15fb25e399cc70486df81cc2e4908619b2fcb7",
+      "src/core/suite.rs": "f47854c25bd34c21a89652881d006eb9915af200c5b9e219ea3fe5b19bfcdcf7",
+      "src/core/syntax_limits.rs": "c3874b878896ebba0b80a1daa96112e598d95f06832df3892f69fbc25d94046e",
+      "src/core/value_limits/tests.rs": "4c4d01813fab233958432b3727a2aa554959d2e6fa78e4c2aac4c34ffcd1c745",
+      "src/core/value_limits.rs": "12fee4860ac3b872adfbe4c36c1196895a82cc656bf554938430494d78ed4fc6",
+      "src/core/worker/journal/format.rs": "277c4710c51b46f32d27b8778bfd98db8f49b02233f9065038cc75edb9a36856",
+      "src/core/worker/journal/storage/linux.rs": "061abb30fc4991f43f7fb77cc2e936c06373fd7596bec6223a744f9171fb0add",
+      "src/core/worker/journal/storage/windows.rs": "7d4307d35c98a913941c280474837575f6033453e77114c0e07560c4ef5ab239",
+      "src/core/worker/journal/storage.rs": "90573ee65a6b4763cc4a13e0ad71bdfa9fea9b83880b8af4cf55d4f15618ff95",
+      "src/core/worker/journal/tests.rs": "7818a0fed83e36cbaa3f37fe38b136fd7420ae30063cea22deb404ef0d27378f",
+      "src/core/worker/journal.rs": "54cdf1debe8243de9c3057b645c81dc8c3dc4f071637122d64d4c398b511ca71",
+      "src/core/worker/protocol/catalog.rs": "3e6a139b923fc172085d51ae798432e363e0c20b5c6c52f7893c9942529f0736",
+      "src/core/worker/protocol/diagnostics/errors.rs": "794cc77d1e1dc2a77a47ce65da4b4bed4feee3ba46fe84f13ec068875e6a4dbf",
+      "src/core/worker/protocol/diagnostics.rs": "510160a9c9d2432dc35925f1d73d948f51413e2275c775a97b8cd29e958c038f",
+      "src/core/worker/protocol/tests.rs": "eff425f9ec81ba9fd119f774d22ef14851812092f85f4c1bcc91f7f5b65e1370",
+      "src/core/worker/protocol/values.rs": "25d47e2e241ecaca3d92bf6b8e3b9898238e74824f4a2bf9f34c0a4900081642",
+      "src/core/worker/protocol.rs": "a46fc369ed77c1c342b1f06912a42d7ea5710c0fab992ec6774369822f171d50",
+      "src/core/worker/supervisor/observation/tests.rs": "a1556d648fa3e6eb2917c8db7fc6575ec6a969e838d8cf60dafee198c3419efc",
+      "src/core/worker/supervisor/observation.rs": "dcff9def1a9dce02730d83b45061de34f915d59f33baafc5850e5db6dd1e3151",
+      "src/core/worker/supervisor/owner.rs": "c902e21c00cd11c2df93a9cab2d9bd53c4eb1d8d25c5e68c7e038f81548ff293",
+      "src/core/worker/supervisor/tests.rs": "a1edf38f8296c1a34ade6656ac677006963e4890e5326b9f69fc5ed56d82fb7d",
+      "src/core/worker/supervisor/unix/guardian/tests.rs": "f74bc4c2006f747cd77c30344741c0be98bda474fb0386a95ec5d5bb05033e5f",
+      "src/core/worker/supervisor/unix/guardian.rs": "94fba99fe4d2884d5cce57f1a1f7876f12bb1a0ce19e0069ccbfdb821fdccc19",
+      "src/core/worker/supervisor/unix/launch/tests.rs": "417528f409f59b0e501d7237bb7a5d64cf27bc8ffd12b326c4ad6ce1cc49678f",
+      "src/core/worker/supervisor/unix/launch.rs": "f6fbb9f66fc3c8e5e73af056e5e3deb397ad323d3ca12a9ef9b97c5c3d76267e",
+      "src/core/worker/supervisor/unix/namespace.rs": "da62bb280a962e2e7902a17e20df6b5360ee831a65ff225ef4830d5784b3b620",
+      "src/core/worker/supervisor/unix/process.rs": "0630418dbe0e91bc0544aefa1d941d3bc94487a47e2fee99d4792d12c9d1201b",
+      "src/core/worker/supervisor/unix.rs": "2f2a367d2ebefb3018e91226fd2ce6e90be94ebd87d32e2b8eafa9ed80bc301c",
+      "src/core/worker/supervisor/windows.rs": "ba5a6f1a9f43ffca33954620d87fd5b8eb7042b09ecadc02e55ddba9c35fab79",
+      "src/core/worker/supervisor.rs": "121fca1b9e7a5ea90a39108f8a87437f53f97fa0a9f672c27a17494463b5b5d7",
+      "src/core/worker/tests.rs": "8f0e42ea8197aba5f593e9ff6e729be8622fbd1715ff5a76f02f260459983251",
+      "src/core/worker/waiting.rs": "e02de1f8fec16e5a1b344cf3660e263bfed18e011534e23c240b445df374d71e",
+      "src/core/worker.rs": "dae6cf0fe5fe16ea38194bf158fb09390f399611efdf36d3be0f7e1fa7933ad5",
+      "src/formatting.rs": "a9327a27c737c4d0a96409d3f77177a696394ead6bde6271933da5377c618df4",
+      "src/interrupt.rs": "e6b29de986e5cea01ac81be2e74c1016569bff563f12dc940acd269ca8dfcb69",
+      "src/lib.rs": "5701aa8c8221ef62672e2c5dbd340bfc773acdaf645c84cd59de24b350207acd",
+      "src/listener.rs": "5890cc3bbbf4476b82d24705c3633d203126b32bb885880a96be7c3232bf7ffd",
+      "src/lsp.rs": "8e4eff34fe88c0c7cd9c27ab238e615679730d1d68a529decd4c69cd0eee1b48",
+      "src/main.rs": "b6971462253ed1d4ae01fa2d4cc9333566a6ef6a2ba3f25edcd8b18f11021ffb",
+      "src/report_json/html.rs": "c55416e5b2755d1f62459f66cc1e92357595ef9443bbef983615656569f7368e",
+      "src/report_json/journal.rs": "baa7b8560f9f510d258055e61afbe44301c1cceb818374404c0ba8fba29c7139",
+      "src/report_json.rs": "646f4b8edb57c89d65cd2ee461b413febf8456184395fae5cba0a8373afac1e1",
+      "src/secrets.rs": "f1bb69bff95eef0f9920ee7e2ea8a3c17ba3ceaa9c2d89adb87751dffb94de48",
+      "src/suites/datasets.rs": "c35a2b383527e60cf6335ad45564aa0348a7f903a307f4bd1a8bbefbfbd7b952",
+      "src/suites/execution.rs": "ce6b70a71cd0361ae2dc106e4b941dc2af1f1a75302e22d1c9294366a8e86b92",
+      "src/suites/history/tests.rs": "f01488b05e5aa0f05674e0b30871e08b47317bae6c1f6c115b22379e3ad5a6e6",
+      "src/suites/history.rs": "8c62fc6a333d76ccf243054e32a06e6561ddd74ac1adbb24a3eab07ba52d2b86",
+      "src/suites.rs": "637af9c9c66480e92b8d65bdcb895e8ac4fe40ce11034b33cf00c742f5abe021",
+      "tests/acceptance_policy.rs": "85fa744f0dc19d02c6838a712c39ede016eea69b1e6bdd3637782d7243b0d780",
+      "tests/adapter_conformance.rs": "be02f42571398aeebd9f20d8c2afb8c2a08a3f3f6cfa38b44b00931f8ea4dcc2",
+      "tests/adapter_distribution.rs": "48cc084cfb1d102c071405a72db6658e091a0d365c7a6c035485161384b2862d",
+      "tests/alignment.rs": "b64da47b71b537db55e6e73cf8aca4ee527d4f5736058a54f0bbca95d800a272",
+      "tests/api_tools.py": "96eb9a7c67237264c017037254a14419fd5868657bdca779b3164f96d9cd8fab",
+      "tests/appium/.gitignore": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97",
+      "tests/appium/package-lock.json": "95b072aa7c84a79be40d77f298ae472537fca5f0334e96c0c329fb467c50440a",
+      "tests/appium/package.json": "636ece6bca753b0bfbf9452135de14c8b63c53cf3aada56807fb8da1411dfd87",
+      "tests/appium.rs": "c0b65bfa37d03aed6af8551a3c1baa4d90159685200c4819e7b971bac7c8bc02",
+      "tests/assertion_artifacts.rs": "564dad3cbcf65c26e65f5a8c775c6777837437a84da47f9e0cceaa11b36ad7e2",
+      "tests/assertion_diagnostics.rs": "64a6f3e017e8e5aeb94db2176dbf94b062085110e5a59921a8933eeb1e9741c2",
+      "tests/ast_execution.rs": "07ddef9fc7bd64b062354d0a7ecc1ff3eb34f2fca5b36f54af70f8b8daac338d",
+      "tests/ast_limits.rs": "7313d809fbad558dacd4ea718641a4b6412b6d2c4ecf26ae7efdf0ccd94f84b4",
+      "tests/async_blocking.rs": "8c77da5d6d9cd035909eb6d98f611c8a27c7fb92d117d85ef96aa81a6f21135e",
+      "tests/async_execution.rs": "b65564337f7e2328f7109a8943e2bdc2e591799b7161205625d784565ff656d1",
+      "tests/async_filesystem.rs": "3ad8a7644c12df02e0f0d3e54679b6d7922e730234b42e85cd3049ea85b595fb",
+      "tests/async_operations.rs": "36e13dd4e7b8f3c1abc73f19a5760533adcbb965f5d0104907efa0def749b605",
+      "tests/automation_examples.rs": "45f8e263989d20865acc9b76096e08ac8d84158a634a29df8e3fba5b0b6b4949",
+      "tests/browser_conventions.rs": "3ac87f4c10afb6254ca13564623c953a76530865732a966e5dc90e3177de22df",
+      "tests/browser_examples.rs": "9c6b7f11898dccb48236ce9777cf2da9c2e99feed505b99b386cf547ec51c22a",
+      "tests/builtins.rs": "fc7a99a15069ca353c4c887bf4f8f843d1b162e1fcbccab98d12731632c6fe50",
+      "tests/call_composition.rs": "1a44287583ac3c88cef49cd7895cf84a3944df711a06af9dc3228bdf39c888ac",
+      "tests/cancellation.rs": "eeb15d0bd83ed1f65a9e7d879d21d68fb45c3b2492dfe7590b54bc00e8713d8f",
+      "tests/catch_contract.rs": "91306aed8bd9f0becfc4b4c21478f7bf6aab832690fa3aa35d592455417a2ba5",
+      "tests/check.rs": "159981ae1d7a6a7cd1b3fc155b6f9bd10ec0d8fcbbf5faf4b4d090ca12de11bc",
+      "tests/cleanup.rs": "b84430c6de279ae59b75c01d4cb743f55a24854b4300392d2caf75176027fa6c",
+      "tests/cli.rs": "573b688cc63fad5cf42484778ad51ff2e4e4feb1c2419e1b21a75b9200818a54",
+      "tests/cli_harness.rs": "602bdd7b25ba7335f8198b000dd052beab3baad0761a433fe6374fa37f4664d2",
+      "tests/collections.rs": "d66f18867b2d4c2ff953142c0943784e4675a7d378970c8cf46a656b1ba500d9",
+      "tests/compatibility/README.md": "238e2d1dd2809ae2b4f028286657b57b3ba54d518845bf478a5fb13984d3e525",
+      "tests/compatibility/failed-cases/v1.json": "de511e66d45e8aca6c39607f4fc6472025f182f8e64aeffdb385c872cd1c8510",
+      "tests/compatibility/failed-cases/v2.json": "9200a780d377c1260189e97fd85e227c44b809e7cb35665ec0e15945304ff16f",
+      "tests/compatibility/failed-cases/v3.json": "dd82105cd60fc5ea7b191908e5c4599f078ee6a065a417c8663426a6029b5548",
+      "tests/compatibility/journals/interrupted.suite.botwork": "f97a59d7cc1c4f4e1327e1050706beb0b47dbba048fdbe7587d1135a0c9b0f21",
+      "tests/compatibility/journals/v1/report.json": "7b76cba981261722963375ade90288043d9f329867e8f5e229472b227d069ec3",
+      "tests/compatibility/journals/v1/report.json.journal": "9d0c7afd7d32da8c3a5fbcfa87af0e55897450aa1d192ff34e0362aa877278f7",
+      "tests/compatibility/journals/v2/report.json": "7b76cba981261722963375ade90288043d9f329867e8f5e229472b227d069ec3",
+      "tests/compatibility/journals/v2/report.json.journal": "d2c2e8da19c1141b66e6e5e97438e06ddc66b7b93b59edcc6612ab932e5a6fc6",
+      "tests/compatibility/outputs/compat.suite.botwork": "affbb236fcaef04e354c3485f7627ac04946da2998617511896df35630c9f0a6",
+      "tests/compatibility/outputs/events-v1.jsonl": "79cce04f63a48760ee368c597b5612f43a48731712127c8a0d5d980b80f6f523",
+      "tests/compatibility/outputs/report-v1.json": "bbf3f3f12ba2498efe68425879f4e7e9f0651499c4088a05d60301792729b8b2",
+      "tests/compatibility/packages/dependency-needs-newer/botwork.lock": "9544af756537f3937d3cd2b199d1ee110bdd0dcd83fba83a8c61e0ee29b8f7f1",
+      "tests/compatibility/packages/dependency-needs-newer/botwork.toml": "bfb74fa0775464fef565c486042df6f7f251e023f3e0892398b598d5f055926d",
+      "tests/compatibility/packages/dependency-needs-newer/helpers/botwork.toml": "2cb7cf28b4a2e4cd2635699610c27cc3364285100546c58becf82eb7befcc64a",
+      "tests/compatibility/packages/dependency-needs-newer/helpers/greet.botwork": "56407f3c890264f9085d9a8d4a99172bad1b1941d24e4cbd16781df4adfd62b5",
+      "tests/compatibility/packages/dependency-needs-newer/main.botwork": "c0eda9fbec0245cc046fb4cb6c24b30f6a86a5aee1f9b2678602fbe54ddbde6e",
+      "tests/compatibility/packages/locked/botwork.lock": "9544af756537f3937d3cd2b199d1ee110bdd0dcd83fba83a8c61e0ee29b8f7f1",
+      "tests/compatibility/packages/locked/botwork.toml": "bfb74fa0775464fef565c486042df6f7f251e023f3e0892398b598d5f055926d",
+      "tests/compatibility/packages/locked/helpers/botwork.toml": "cab64cf26c2995e18ad3ce9a04d6e322fd9dff0a5cbd7438e28cd7e77fe82398",
+      "tests/compatibility/packages/locked/helpers/greet.botwork": "56407f3c890264f9085d9a8d4a99172bad1b1941d24e4cbd16781df4adfd62b5",
+      "tests/compatibility/packages/locked/main.botwork": "c0eda9fbec0245cc046fb4cb6c24b30f6a86a5aee1f9b2678602fbe54ddbde6e",
+      "tests/compatibility/packages/newer-keys/botwork.toml": "eea5352a95053458e9bb238d7540aa253244888146aa8a3e48716e06ce39e83e",
+      "tests/compatibility/packages/newer-keys/main.botwork": "c0eda9fbec0245cc046fb4cb6c24b30f6a86a5aee1f9b2678602fbe54ddbde6e",
+      "tests/compatibility/packages/newer.lock": "683f555ad9e0e60fbf7e34ec8950df569896237f0a06a91b860d5ee831f63802",
+      "tests/compatibility/packages/project-needs-newer/botwork.toml": "be95acc23616f9c5d6900528ae1fd6adcb4b6259f2fc67b554da19b3f184b7e2",
+      "tests/compatibility/packages/project-needs-newer/main.botwork": "c0eda9fbec0245cc046fb4cb6c24b30f6a86a5aee1f9b2678602fbe54ddbde6e",
+      "tests/compatibility/run-records/v1.json": "dfc5b094156049ba6722f3210859940610e7c49f920b92a4f55f000e6df4339b",
+      "tests/compatibility/run-records/v2.json": "1eb85c40c29219f2479fe8ef6fc5c9d02e126e7d011471b44d1135c0ae7209a9",
+      "tests/compatibility/wasm/statements-0.2.0.wasm": "b73c703f94aff62cadbae6de3b4b76d432630e9ae112a31807f82911b03c973b",
+      "tests/compatibility/worker/response-v1.bin": "8b4313ee4728794e8e3e129fd49f828071e41519a2dc7578f87b70af0c58beca",
+      "tests/compatibility/worker/response-v2.bin": "1beeaab0fde11ded18f5b9bb9c312efaada23a381ff81c9b478231fc0cdae8e6",
+      "tests/compatibility.rs": "f85b5b0694b72465a70832c67192efb2a44073be2e5712dfa3e3e2414b9491d0",
+      "tests/conformance/cases.rs": "e7eb947aacf1a58cdfadd67320b199bcf5dae6b1fdceeee96e75103c74072c71",
+      "tests/conformance/collections.botwork": "5bdb07179adb6fb513a2a148757ee6f5fa0738c0584abf4dd595752cefcde550",
+      "tests/conformance/control.botwork": "047a293b4fb53197bc4d9cf05f1e7307efcbc677d8f9a60459cce4171590e68c",
+      "tests/conformance/names.botwork": "08a0e61c5cc312b6fa5c83699f52d5aff51d2be95c3ec1187dda961e873c0dae",
+      "tests/conformance/numeric.botwork": "e6ea9388c3f41fa0593888590d85cf597a1636153b2d4f1070b0693ba12869f0",
+      "tests/conformance/recovery.botwork": "cc36988e0c37548064aa3690a472218fd54d04d260ac9dde7978e2b23f754035",
+      "tests/conformance/runtime-recursion.botwork": "7b3ba0987bd730f05f7fbf5ee93687bf2e806b7b018e884aafc40529cff9b240",
+      "tests/conformance/scope.botwork": "ecb88c1a6a1cf619ac2a9533eafc8d84ed22b650a8d0fd57a4f02872b915bbe9",
+      "tests/conformance/syntax-boundary.botwork": "c3d357dd102bb2ea83373d416cc809f5733a6f43d715cf729625fb032b060a29",
+      "tests/conformance/syntax-limit.botwork": "d854781aebd5d613b2f62e2cfad3201b5d3da7ab63810a5145fa60ef0a232aee",
+      "tests/conformance/values.botwork": "429d930b7f67cf99c62d7ff3f9baeae3f608a024af1787ecf407bb3422362435",
+      "tests/conformance.rs": "b35bc9238a2c5a76ba0c864e1a2edde3c748879ce12b38296a35830e29315386",
+      "tests/console_interrupts.rs": "1934de0f0dc860e28c7a2e15e8732b764cd68377a6da07105786e303254d2756",
+      "tests/console_report.rs": "31462a08c44a01b1b5c3dd4e371e5c2a9fa1a03c9fc4328ada651a72b7ab4a62",
+      "tests/coverage_tools.py": "fba53a94628730b8fc0b568581f829f83a568bd94d1b2925cbdbc681314c2df2",
+      "tests/datetime.rs": "e23acfb515c3b64f897c0c50f000effb5f4912a9cd4de36cea036ffe4ab035e1",
+      "tests/decisions.rs": "5eb3c2618add362fb31ddb6da473c7b91228e29bbfe51394eec85dcd1d662898",
+      "tests/diagnostic_codes.rs": "d5db81e14870041ba545f6e9db6bd17cd8bac71c36d88f11c4bf8c4ea50be480",
+      "tests/diagnostic_construction.rs": "b7ec881d7bf3b349f6ce04ae2bc3a30c2a29237c9170f5d35c8ff95b8722ee94",
+      "tests/diagnostic_ownership.rs": "2b83b90ee9d646ab682dcfaa7767f5909668c6d9e192d95a8167e013c6a3cea6",
+      "tests/diagnostic_rejection.rs": "d547cf9cba2e56c793fe637ca916cc855718ff59783bb89abef6b72793962ae1",
+      "tests/diagnostic_rendering.rs": "5087762c8d5611d85a3de1e192d52d322077152feac660eba7202673ef10b5be",
+      "tests/diagnostic_value_limits.rs": "89bb5b5a1a14a6db7675c1e054d74dbb6ba1b3c2965b4d32b7b408895f1c7cd6",
+      "tests/diagnostics.rs": "02b6dc0debd56cbb7547f3f61ae590c3c903109e946129d7c5f4f4730742f239",
+      "tests/doc-examples/assertion-details.stdout": "8c896eb339126f7777e9f968292290c48da5ebabed6a167ce32f99e3a01b98ea",
+      "tests/doc-examples/builtins.stdout": "7432beb8a4b8d249ce33314d5dc5c9b6c4ba057fb21e2acbae4658ac0bf3e10a",
+      "tests/doc-examples/call-composition.stdout": "331ad4b6f2c27f754b287054da03b26aad56f68cfbcf7e0b698252ed141360d7",
+      "tests/doc-examples/catch-inspection.stdout": "fc13e6935a3fb50a8a3ed388337d586d46f5ea54401b90763ed1afe79ff18420",
+      "tests/doc-examples/catch-recovery.stdout": "e209f13d112294680541219a291f2607710e7a2f61768cca9496b23a17e2201e",
+      "tests/doc-examples/cleanup-example.stdout": "6791f71e1795d6cf56ec9f8d608ef71d73ccd2982e3665e8b1d7a81f8fd14743",
+      "tests/doc-examples/collection-statements.stdout": "7092f5e6b5e275b8bde5ba9e52f18feae111bd64f2b46e36a4bdf25188d783e5",
+      "tests/doc-examples/collection-variants.stdout": "c2ef314c4ccb2c649969e42acdbb5dd71e6a130a415f698d56520a1ca13cb72d",
+      "tests/doc-examples/datetime-statements.stdout": "1efe05481a39d4397a08791f67770410faba6441ecf559315604337d7cba1006",
+      "tests/doc-examples/datetime-variants.stdout": "1a6f061459322505b4ea3a42ecb5a5334c0f36a1a9bb962713a56aec2792702a",
+      "tests/doc-examples/html-report-example.stdout": "bebde5eac733b14e727c4021d5f62f58c9e1209e3158203e652a426211c1eb4d",
+      "tests/doc-examples/http-statements.stdout": "44bec55d822fbd067e2cd9197aadd39f064abcd54155c5f434f9f5ffb67bc6a9",
+      "tests/doc-examples/http-variants.stdout": "0297dc7a1d383ce84ac96663f8d7751b99e16190762e6187cc2a163b9458a83e",
+      "tests/doc-examples/listener-stream.stdout": "8fb06ba3d55632a2dc0c48d8cadf0e1147cb586e48b03a0ebffcdc6737123e20",
+      "tests/doc-examples/multiline-call.stdout": "1fb3ffcf3df89e31f56932d4a64a23eede8a2f6707898bf14d1fc42a78286868",
+      "tests/doc-examples/multilingual-call.stdout": "f0b5c2c2211c8d67ed15e75e656c7862d086e9245420892a7de62cd9ec582a06",
+      "tests/doc-examples/operating-system-statements.stdout": "d249510096fd51b1a8eb88acad9824acd99538183a49426ea52987272bf9a224",
+      "tests/doc-examples/operating-system-variants.stdout": "eaa63d099a903ea36684f6408b149e8f0f21d16d47a32c80c05470c8bf59f4bc",
+      "tests/doc-examples/polling-statements.stdout": "4c751ecf2122c40c37feaa46b2bc4a814f24f2dcf8580c55cb2182cbd4d018e8",
+      "tests/doc-examples/process-statements.stdout": "50d4aac5202ca0e6b090c987a24f1c9ea50f674993403d6627b90e7c7fa56a1e",
+      "tests/doc-examples/process-variants.stdout": "23df0b5982d0bb3bba21ee0f4e54b869fa14742ba15a519d6cd9e5ce25dd2380",
+      "tests/doc-examples/readme-sample.stdout": "65501d89a22600a15cdff8ce955e1da53f5c437697d472ff76884cb9a1f45542",
+      "tests/doc-examples/string-statements.stdout": "1031367df3eb2fe5c4bb1db63510e265bb1bc03af138d49db41fe5069b7a6f0c",
+      "tests/doc-examples/string-variants.stdout": "798e3aa46ab4d0b67344d162be7e70047d26e22132ab122c91b94eaef1c657e1",
+      "tests/doc-examples/structured-data.stdout": "c8ff30211f501866fc0afceffb9cc74617f4cde54e44f100cc33e97e4d5169d3",
+      "tests/doc-examples/syntax-statements.stdout": "417232efce631f2be5d00071ffcd27c364261f3e68c00c556a95d2863ed13b1c",
+      "tests/doc-examples/syntax-values.stdout": "c7bbf3cf3340c488c05749ab548076e5879c0439310b1690d4c96e2881a2cc1e",
+      "tests/documentation.rs": "4cecb47f0c7c59328cee2f5e9083a44bf7c73d96085fc774fdcca743a0746f76",
+      "tests/editors.rs": "6c808daeb289564af0eebccba33d75cbdd4f0df6cb71b4b2d5cf3c6bec0ed5b6",
+      "tests/embedded_runs.rs": "3e503af4e6f7fcfb6b237ee8fbc60abd5202011fb62e3ffde929cbf6c8f71e1b",
+      "tests/examples.rs": "2f548995a9c88aec1f0357dcc29b9ec201750fedb71aaf1c60664bd0d7d78ca4",
+      "tests/fixture_ownership.rs": "8ab5d425d97691c30c15383d5b97a95f3a386ca3e0c6b43866445babfcd981dc",
+      "tests/fixtures/access-out-of-bounds.botwork": "839d6a7ead04d80d6233cf2512d324d81cf784efb510e29f434848014880781b",
+      "tests/fixtures/arithmetic-failure.botwork": "6b4a40345efebdd71b87c8c2ffc45ba41435f341b27fbfe6b5135064c43b9077",
+      "tests/fixtures/assignment.botwork": "0f82f7a5d559a643353bc5d4c808e8d009a0548e7e88364be6587ee46d79b1b9",
+      "tests/fixtures/boolean-left-type-error.botwork": "e7a2b87d9d1bc6f36c9697035a294079fa5e28264cb82efaba1e659ebf107605",
+      "tests/fixtures/boolean-skipped-syntax-error.botwork": "9679d70b8a358cfe1deea397de31fb6db2640ce18a0aa2139c14a90ddfd62897",
+      "tests/fixtures/call-composition-error.botwork": "a1add7a4810f6c489fe320f8a377e3d79d5a9fc5c98095e994b55048d20d62c7",
+      "tests/fixtures/catch-failure.botwork": "ba1dec4665f7020e86a0f3f2e0a22c87708ae3dc07cfb0bddfc487e85c08f7a8",
+      "tests/fixtures/catch-output.botwork": "b2b296eed731fd235bc612b08f8afd6f9072a162625ffd04e7c51b26eecad468",
+      "tests/fixtures/caught-access.botwork": "78722d5d7c381e27d1700bd4b444742a4bd88f33e86f98d5374c6f8ea27a80cc",
+      "tests/fixtures/caught-error.botwork": "57e4eb4ee974920d605a526ac3597ea059d54af4014d67835e7594e507c6092b",
+      "tests/fixtures/computed-access-out-of-bounds.botwork": "775f160bf7bcad3e0345f942dfec680e3dd1c47bb6468a0e6983462ada06c3c0",
+      "tests/fixtures/diagnostic-handler.botwork": "a0658f917795df9fca89429ab5f13ec8dabac0cc67a521d18a9c662650687309",
+      "tests/fixtures/diagnostic-stack.botwork": "8bb155c7593e01c271cefefb750c7d6a2ea880288bd7f33e019c8da86a855654",
+      "tests/fixtures/duplicate-parameter.botwork": "aea767898009ba1481666f94a8127541b5836ac27fec896579519cde035e8263",
+      "tests/fixtures/duplicate-statement.botwork": "efae66f162578c506bd18905c370433fac19fe7f0080036c36c0d7d89c167e9d",
+      "tests/fixtures/execution-order-error.botwork": "2229d21c4441a1f9dabaea37f846a8eb98f79f111e66ebd27dc81eb097cf597c",
+      "tests/fixtures/execution-order.botwork": "268023f76ae708ce2fbb2225629a22439f6e99d3873f0737fe2ef27d9cc64656",
+      "tests/fixtures/invalid-call-composition.botwork": "c5bebacb586c6c0cbcfcfb5dd2f0500885004a5c75cfb532bda57cf25c6b17f1",
+      "tests/fixtures/invalid-collection-ordering.botwork": "fcc179bda24c35d1bd7b3976ee4aff442d4d76632056c33fcccb1188c301b548",
+      "tests/fixtures/invalid-computed-access.botwork": "b346dfd015e8f8ca06990662f3763239fc52ba1eb7a2da5857e3a1743a735771",
+      "tests/fixtures/invalid-continuation.botwork": "2cc76caeefc2fffc8e6b85187ee886ccb1125316e44ef903a14df04e40489ad7",
+      "tests/fixtures/invalid-control-definition-in-for.botwork": "cbde27dd097f8c877323cfc8c07f640264bea0f67f34836e30f55148f819658b",
+      "tests/fixtures/invalid-control-definition-in-while.botwork": "66ce16e020e3f4eac61e480ee2384dbb28302cc9f13b584e0bceb67ae7ffbc83",
+      "tests/fixtures/invalid-control-false-branch.botwork": "ec9bee75cfcf89689338bebc97a62b7495d65da3da081960f024433dbd370a81",
+      "tests/fixtures/invalid-control-nested-catch.botwork": "c3768cbf5859a003a68646166ca2e2151d17e3d1300f0e42a5faba076d8a030d",
+      "tests/fixtures/invalid-control-unicode.botwork": "c4c038b21fffb77cf6c6d909d7f4a2f0d54de81bce8b4eda5ad185cca212693c",
+      "tests/fixtures/invalid-control-unused-break.botwork": "dfc5926614fa2cfccd5c9800da790db0750bc1923502f870ba2e99c88570e1ad",
+      "tests/fixtures/invalid-control-unused-continue.botwork": "e059d5aa485e5ac4fcdb399f0b44521dd0fc3027742c49add2571b9b5fde7d97",
+      "tests/fixtures/invalid-control.botwork": "1ebd68fa2aa4310e10a183093c650f4e4bea9d834f2257f7529824bea15c6589",
+      "tests/fixtures/invalid-unicode-identifier.botwork": "458a5dd72694985ed15d2aff24663bad0982ace2ed65dad7c50c9ef0efdb2e0a",
+      "tests/fixtures/keyword-prefix-error.botwork": "fa2a5de53791cab3dbd1bc54e439c4001bdb26b516da263074136ce391502f8d",
+      "tests/fixtures/log-values.botwork": "9506609187b59bccbfff7d7bfb0e7a0b5710f098e939a61171d9e3822fc9446c",
+      "tests/fixtures/missing-catch.botwork": "63164d2cdded8e9a8732a1da2c1917cc6be8a84dd1812df740d8ca6b458097bb",
+      "tests/fixtures/rethrow-original.botwork": "108fdd7ecacaf443feb6a9dc1ed2968de85d3c3408d9cb86bdb5424514d51f90",
+      "tests/fixtures/rethrow-outside-catch.botwork": "2de02393cc1109266339b9aab19c3d27bc4a6f0d3432174266c51ca8a98bb8a7",
+      "tests/fixtures/runtime-after-output.botwork": "0c2f0ef91e2559d1fca0487a6d5f60e3d563b46e084ccd876042c9e5587ba7af",
+      "tests/fixtures/runtime-error.botwork": "72895c2d67ba7f42ee7f0ad4a1fa77ece573990f09aa3066e8fd2f8ac27c7b7b",
+      "tests/fixtures/signed-integer-overflow.botwork": "717aa27f4dc89c24f164a3e776e78b18551a5d40b3383e314f6b27330b5b35c5",
+      "tests/fixtures/syntax-after-output.botwork": "0f80a3e0fa3efc354ee6d6318dfc7c3377a695d100c97889cc2ad69f082f4f9a",
+      "tests/fixtures/syntax-error.botwork": "9e02d96150cb830fa32b0f1b9057233e053764d9e9216381c402e80add37bf39",
+      "tests/fixtures/unclosed-block-comment.botwork": "e1d5a81ca4219511961582608e873f0a09199faa4e49de4b8b7969aec21b62af",
+      "tests/format.rs": "b5513fc0150b6433dfb7d50a7e131e5116e96f6af6ccb8fdacb6da75eff54bb8",
+      "tests/fuzz_tools.py": "d04288b252c739ac999d57ff03f999cd04099b845e82486408d5a25b93e4ccf5",
+      "tests/generated_properties.rs": "77b9445dc1b18f906d7380e3682939251de2f19281790f4639636ffbfc8e8b92",
+      "tests/getting_started.rs": "6560598707d8b8ba418fd9f512c1fa5c6580de259d4a8819208f6aa104f597d2",
+      "tests/guard_construction.rs": "96a23570be542e8a793b36fbbdf1642eba5dd361ca7132d44acfb68af33575a7",
+      "tests/html_report.rs": "fbac6f6165a47ab5c89cf97d38d1c4dc8ac5f9b7b8b6b2aa3549e6c7bc4b9b40",
+      "tests/http-fixtures/ca.pem": "fbb0f7439faec46abf12af0396640ee028b75baeb8e91d8e8d288100b58d7e03",
+      "tests/http-fixtures/server.key": "2da1a8e6836b282156b2380799e4b3012ea2dc0de8a4a9e1326a80f60ebed9a8",
+      "tests/http-fixtures/server.pem": "63e812f44711793df6ffd2f2db1891b790c0194a3678d2825f04f344188acc50",
+      "tests/http.rs": "81f589301b2bafd1928c19a8efd1d3d990b724031892dee0f2b4bdd176a1cb89",
+      "tests/import_limits.rs": "1240dcdc0fb70002b2fb3a47ab830a94b1c9d114fdc100c49f7c6228231871f0",
+      "tests/input_diagnostics.rs": "9a4ee9b941ba4e0f23bba49f5bd0b57c359efa07f9caf5d9572c331f34150d06",
+      "tests/input_limits.rs": "cb9647d09a96e4781a93336647a7f95b90f4e99158dc3f418544a36426a50450",
+      "tests/input_variables.rs": "75534d2bca54293dafb3f60bfa230b62022d7a8129cd49043e4ad295901a3f4a",
+      "tests/isolated_workers.rs": "fd00cf64c83fe4617a1637ecdfa49f1ccecf3b3b929c52d74f216ad7d1426fc1",
+      "tests/javascript_adapter.rs": "50ff694bfc3f4fadca1536bdea7b30b9c34d498281181d50e86931aa4d13a330",
+      "tests/json_report.rs": "4a917c6864977d943428968ecb46b658459a45bfc042b7221f2beb810b4fffdc",
+      "tests/language_contract.rs": "2e4a6830189861899dacef5a06cb76934e0fa6f690afe1fca0a39d174393f840",
+      "tests/layout_contract.rs": "11163815966203376f50fa237d096c153d3c5f99336a8fe951afb5c7e2872f50",
+      "tests/listeners.rs": "f03f82938503c3ef7e1cf5bde5b71760b0280ed32a8fd2d3e93bf139c7668d22",
+      "tests/local_imports.rs": "4b5feff075e9aaff1f19a3494c7f49cf2c8ba7eb0d3d8d29819bde51d7227dfa",
+      "tests/lsp.rs": "407622de56bdf46f2f6c89a36acaeace816fc613ba3b668fce2683d13ed37b49",
+      "tests/main_thread_stack.rs": "4b4ff4b7895c93468ffb0c106023a9f54b202600ea6f2cb87a73457a9cfa9ebd",
+      "tests/mutation-core.json": "ae831ad0ba300d5826505fba136c300f1e2dbb337bc963a6bc3e36e7944f3a0d",
+      "tests/mutation_tools.py": "5ccd95326fa7e9a0a9d6e8969e400ad436dfc2b4a79e1e4d97760cfb443e2600",
+      "tests/naming_contract.rs": "2bda6a61fb06ad5c555f432b89b7558ae2744ff5d8b9e2e778ea2be591428348",
+      "tests/native_registration.rs": "74884db7a8b5a758f9c2a59733ab4bb91e10da14262386c24bc608996fec96ac",
+      "tests/numeric_diagnostics.rs": "4ad98f4a85fcaf0a8eed5ec32a2072d3cd3332d0fc6bcd55dad8ccc7e3d13618",
+      "tests/operating_system.rs": "1f51d48a8e67b4191e66ef57992906ba7ab2c430d450d91c09364faf4417cc11",
+      "tests/operation_diagnostics.rs": "11bfdc63b07f11c28db7c0aa0680a42422643f6767ca68d5cd60b78c5b0f31d1",
+      "tests/operation_ownership.rs": "5a07d33a2d6e7456fbd0c1e6c27a3b88903fbb1bfa93362ba558cffb38406a13",
+      "tests/output_limits.rs": "05a9be673d186bfe60df2c8ca4bb0ab113d2c0f167155db190d01b9196029538",
+      "tests/packages.rs": "45c250d2f61943a874b08c51e2944d110815989486a94a19ca4a116266a295f4",
+      "tests/parallel_cli/linux.rs": "c26b5ec2addaecd9fa2d830994c6b2d22745d126f83da28353e53ada0084dae8",
+      "tests/parallel_cli.rs": "e0e4afde7e8683c0a7379fac3dc7db432943fdef7e884492582a20506a4e7a9e",
+      "tests/parameterized_cases.rs": "eb531a5025db736f3358d6747357eef74fe4a6900cda24f978f8b58214004f60",
+      "tests/performance_tools.py": "04ca840d7d8783b6706edc00e24b8bf07cc1f314faeaff54645a057808d6e261",
+      "tests/platform_gaps.rs": "7f8424e522b0ede4a71239c1cfb0e0846110e9d554ef11bf69eefe8bbb3003bd",
+      "tests/playwright/.gitignore": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97",
+      "tests/playwright/package-lock.json": "ea6dbf0213aea28f27b3fa106e4a624f274ee9172fa72ab0cb4ebc9b5d5ab417",
+      "tests/playwright/package.json": "6fb309b9fafac54701dc25e3d76b3f9492c6e4eb9aac2ec51d2891992b8ce19c",
+      "tests/playwright.rs": "167c5a7343733426019091a3cfd503067ef53096b840cdb83f844544855c8c1b",
+      "tests/polling.rs": "526ed3d7550f675291ddbf0491a1fdbe66de9991cd06a75f00f74294d7aa50ef",
+      "tests/processes.rs": "dfe7c99cefcd9e363a49a638b7f5c0a1eb8149a4dfb5de6af6e7c2025b7df76e",
+      "tests/python_adapter.rs": "cfd61ecaf9c178e632023e489aea227fc4af466335a23f492870d271661e2632",
+      "tests/reference_docs.rs": "2bb125ae32181b55e8da2418208e3a9d0d43c0093340ba6f4ef5c95f435142dc",
+      "tests/regressions.rs": "069d94bd19d5c2376a3d61152b0427be96c09a7d183e19936bb2f21ad36ac6b5",
+      "tests/release_tools.py": "a3b961783ddb359758140e44d883a9b8653e05549c7b2215b00bd1be7ac1ebae",
+      "tests/rename.rs": "2007d89c8683f6febbd3d8e878bd0e42b15c1e26abbac37c5f4e9c0773569599",
+      "tests/report_limits.rs": "32681ed052c9d22cce166b3037396eb07c92452da0933544281276171bcd45db",
+      "tests/resource_release.rs": "bf65b6f84a3d8bf393bfd1da8de18f28dab867516e0f873114fd854cde07edb7",
+      "tests/result_limits.rs": "987e2f3ded2c0dfc95c36b09f148f748d0d0e975637b19b91138012b06a7ad79",
+      "tests/retained_definitions.rs": "291408ab001fdb9e51718e8c9699a616ce216e44bdade505828a4af3059f9645",
+      "tests/retained_diagnostics.rs": "c932d67f5f11c5e2f7ab8f957bb77338bd444c0c7ee12c36e2f96186c8f8c726",
+      "tests/retained_names.rs": "1be629c8316fbc5afa5ee7c8be72d24f0b9f83bcbc1dd5935b88d01d41e37994",
+      "tests/retained_registry.rs": "7ee8df4089faaf71bea32954a7c0e1640019f0aed3b9e2ed2d1a2d1587f6633c",
+      "tests/retained_values.rs": "cb4429ef356ef970cc3b281c0ad66ac9454d18b218cdaafcf2f36f22b2c5988d",
+      "tests/run_isolation.rs": "fd765511c9bdb539ce557ed1f1d3f3ffd0150980a4182939253ee6e5755560f1",
+      "tests/run_records.rs": "5d72648b73accb7793f4607e409709bd75e887a00cac7d42b26b4f9a2265a40d",
+      "tests/runtime_diagnostics.rs": "fb6bc6fd2d900d52a9d6e49d956c0e3eb85c619e0614a41a3a2912cb0d1845b9",
+      "tests/runtime_limits.rs": "a79b922fc92b9b43f612c8a34ecdd60f70726f2abd51ccecb909b08d21f6035e",
+      "tests/secrets.rs": "0bcd13d304f2106139ae6bebea21c038300cacb1b6998ea7ff43305aca19cc72",
+      "tests/setup_failure.rs": "e5b4b08df7e1bc03f5888557aef6d698ec6d58c1d54e053ebb3d0a993765220a",
+      "tests/shared_analysis.rs": "61306eb5083c5ed71248e6fe03da53c34e79dc347d3dbef8afefed7fb78f28dd",
+      "tests/shutdown.rs": "05ca04f9928961fbd7cf245fdfb8f03f62584ed7e038e4aa19ff31134d9cc5d4",
+      "tests/signature_metadata.rs": "9758739d64f1148ab9b797bbcc7cdf1ef05a4bccc4048bfd6cb87c3b604f5b63",
+      "tests/snapshot_limits.rs": "e6c1bfc21f70d7941b8418b393de1038ba84079c17f3c0a98685d78b8477a8c8",
+      "tests/stack_headroom.rs": "4497d12d400db2d76b943f6f88f4af89c4961c1f741a24fbbf1e1f7a7256cfd3",
+      "tests/statement_reference.rs": "6e6c42af9b8682a89671ff26d50afc6b41a406e36ad71134fbd4cf3f974b09fc",
+      "tests/stress.rs": "a303828b780d8812bbe48be98209af0bb980d22a4292bfc9dae1df664acee849",
+      "tests/strings.rs": "e41c24511ba131cdcd4cfde8364215d0dbebff1f5ba60754225cb1d75adb419b",
+      "tests/structured_data.rs": "7d662511cce33d2e01ed6ede9c828fce6f80e4c932cee2f97be05dbd00fcd034",
+      "tests/suite_cli/linux.rs": "33fbd1ac8cd3f915df2974cfde87b69cf205b2124e4a1b75ab7deb700fdc66d7",
+      "tests/suite_cli.rs": "34a81700c957a9012a454036fe5db3622ca486c9a6cedd59bcfb3541d5df2dab",
+      "tests/suite_fixtures/failures.rs": "08c3265ad0b89e764ce9bc840e65333bdb59b4d7ed3d462f30a85cf95ed3fee7",
+      "tests/suite_fixtures/linux.rs": "8cb5cfe510d3ed202f73d27b0d94a4550ea988f88aa5a603b8819cb69fccb3bc",
+      "tests/suite_fixtures.rs": "ccf5ec1c2799eb10f25d26b418579316b3baac7dee9e3170e798409d1fd6889d",
+      "tests/support/cli_harness.rs": "1b7f28a21a456aab36ee34bc739b271d5f912c9f05e6a5080bba2c4ee074a0fd",
+      "tests/support/generated.rs": "e16dca2b3952127f9705c62b6da798300c76b41c6022bdb8bb61ad3eaf939605",
+      "tests/support/http_fixture.rs": "0dc9f0b91cec7464119b7671f0b92e5529b433aa10c1595f2ecde56b455366ff",
+      "tests/support/lsp_client.rs": "41ea78ace2fb1bf85e94bb0fcc2048a5bb92e389835d0bb582a2335b855fbb15",
+      "tests/support/markdown.rs": "44a309d53358478f5400d98ca472db75dd2f924f441565fe288cf745ce6d0258",
+      "tests/support/playwright_fake.js": "ea745091d6354a2b7cbcd79aa5b53792dad33ef96ce3e31fd15957b828c387ef",
+      "tests/support/sources.rs": "3b0bd1cefa7cc31aa819d9c0684d2e761579e0c48ce6d7b1e05c7e776ce2bce8",
+      "tests/support/tree_worker.py": "02479e457a3548dc25189583f0b43e2f8a3720e26f186e7711b0bb9e0a03636c",
+      "tests/support/typed_worker.py": "a7c2b490ce59946c51c7d5df87177207e0dd225e4455f31aaabeedee719cdd2a",
+      "tests/support/webdriver_fake.rs": "e230cd961ef6b055a826b311c3eda980230464f00957a07a6611bd612928b7fc",
+      "tests/support/worker_panic.rs": "455ad3fe0032c61fbf6c05f4eae9cf3367ed3371c41ea4aa6052191f258df923",
+      "tests/support/worker_tool.py": "91af2c0a872fb38e8b6c6289c4b3b83b3cfb51a3d7fe5b08aa2884a8f020db0e",
+      "tests/syntax_construction.rs": "cbc9c00c41b2cffca06a9ae11d4f049f94b714ba8e26088d45cb963b3965fb2e",
+      "tests/syntax_limits.rs": "4612a21177a999ab33da8c5dee20e300f70349ea2237d4ca7b045e6c1e46047c",
+      "tests/temporary_limits.rs": "1df934e893dca3f5b565c013535f66632781c75a61762d3af342d0e969af8ffc",
+      "tests/terminal_outcomes.rs": "3c1073944a0a329c6279c07e529ed9ab2a458142085cb104e7e3efdd87736e7d",
+      "tests/traceability.rs": "0d71d0e2219a6d679b272b8c15c56cc064b25837709934b725333347dac2d6d8",
+      "tests/tree_sitter.rs": "6f7596c1fd7d73121e4ce8b1cf04d4d6862fb63aacc3972141c99000609a9496",
+      "tests/typed_workers.rs": "9580e7da0e4c12cd00ee2c8c4958472e3c9025d98527f7783b9394a39dedc1f7",
+      "tests/unicode_contract.rs": "802043ddf29a136e30c046fdb232b6f10dd41e391a4177e62fedc841dc440151",
+      "tests/usability/solutions/U1/answer.txt": "933229e69ae99fd24fbef695fda966591f76a0d1a63010dfce7c101052df35c0",
+      "tests/usability/solutions/U2/first.botwork": "11098ccfbb3f0422a8092f7d9587d56322ff854fa5444e8d6bb82a0258b35032",
+      "tests/usability/solutions/U3/reuse.botwork": "fa2d088013a7b1d8c0b75d4da9faa9dafbf36628ad42eb8fb226fdc93a141e26",
+      "tests/usability/solutions/U4/compose.botwork": "8738b5fbac5f8639b27384b02c647caffc68122fd8a98ac079b066cddce034a6",
+      "tests/usability/solutions/U5/rerun.args": "4d08431a9174e914be4bb8e881e9ed58fe135e60630161980a50dfcbc0738d8a",
+      "tests/usability/solutions/U5/totals.suite.botwork": "3b4d333687fffa80f3fb221d90e252ff2ed3c15f986a57df2acd1d74841574f0",
+      "tests/usability/solutions/U6/pricing.botwork": "5236e60f73048f3fb9eeb1204a950d124b8db16b128d4dd80c2189c6f67bc8c1",
+      "tests/usability.rs": "fabbef1ac6b1ad3a6a6cc6138b04c23f9da3f2663563663549155dc3fa5a9734",
+      "tests/validation_construction.rs": "8fadc0e3379e4f11f18c47eb84b033bd2870ec05ee2d7ddd89a62d89eb5f835c",
+      "tests/value_contract.rs": "c307d3c2acd594d525ee3bc2bb77e536f8f1a981f3f55594eca93f6eb814e5d0",
+      "tests/value_limits.rs": "59f26b6f162c6e50ef37800660af42b7adaa96e67749bf9d34c21dc16ff3ac37",
+      "tests/value_preallocation.rs": "811cf3bef8352346e4ca48b674aef1c7e9d86935d158f7fe45ef2d5db5ee4078",
+      "tests/wasm/guest/Cargo.lock": "0d70ac7ab04d3d77b988260ca992cc64fa64f0fe756680f1c624b6db7c24087b",
+      "tests/wasm/guest/Cargo.toml": "5126f3989bafcde7dd3a2ed12092153b09b82295e36082bbb9faf62227c91751",
+      "tests/wasm/guest/src/lib.rs": "189047f729b7ba9c5e0a86654721b92bf0a15e9139c6309d21956a9d6b27238f",
+      "tests/wasm/statements.json": "04c33a24727cb601c1886b4885ced84a95ca505ee995035932ed2899a6e903d1",
+      "tests/wasm/statements.wasm": "827bf558ce079f28da4b41d1c640264d8aff6aa669b0277296f9b49441f5db19",
+      "tests/wasm_adapter.rs": "1abf4974372c431fc130ed24d6620ef7a85de0b2d5cd48e48aa83757c6f2a9d2",
+      "tests/wasm_tools.py": "e79957887c4270870c62e2f687a6afa11bd1db39f3c12f5d331d6f5a50567c27",
+      "tests/webdriver.rs": "128407849c3517299cbb74cf5e39140fa12fef0c4dadcd1670e6f6b3aa07eb3f",
+      "tests/worker_backends.rs": "fa13984069aa89d930c0e8a71294cd96da94ee51158ba487ace2c9cefbf95aa8",
+      "tests/worker_facilities.rs": "92e9293a59e09ff1388f821f8a496c5ae034cf8bd2f69911f114a21682d220dc",
+      "tests/worker_namespaces.rs": "3a41d3872eb1432177a062d0ba43138dc59dfbdcd2c3dd36059f0895fd31b555",
+      "tests/worker_recovery.rs": "6ecf0bf2d6ed17fbcca4f5d02c6816bca829093b024f1b5b441e16d53e4ba6d4",
+      "tests/worker_trees.rs": "c6e2e09d2fdd07f6b55d70dca9d251aa0ae787fc0ff13fbc8c83550c201acee3",
+      "usability/README.md": "426cbb7c67b55d6969d4e90f2d8d3b04b7a106db3b3da747529023066be5e502",
+      "usability/check.py": "03e0363411f590c06c86ba3ab127cdb6b967ddf82f95a39d2848d535a11ef2c3",
+      "usability/consent.md": "277d3b5987ab09d1990af4bd96abee49104f14cc02dbee9d98bff7dbcb9c3fd6",
+      "usability/prepare.py": "0b20cfe8c64684f613d2097df2813a95e0df28954e77714d27f66202d28371eb",
+      "usability/results.md": "e22c94f01fcbc7ac4398f450f6f243597877727ba1490e2dc5b28f6cfea35985",
+      "usability/score.py": "36140163374494c99552604a4bcd813f9ebecad89e1d8fe400ec977c5866a7ba",
+      "usability/sheet.csv": "dc1fbd09ab9995ae9c3a7f72e73455e1a1cd962274188c3b1f8d203dbe1c0bb2",
+      "usability/tasks/U1/order.botwork": "41b31437e149c40474e0469aabbde1497b453ea0dc358ce884aa324420d139e0",
+      "usability/tasks/U1/prompt.md": "38feac830a6d3592237df103e93d2d51e8c65a97063df6ba16132bcbd73df20b",
+      "usability/tasks/U2/prompt.md": "cfc7e168ed5d5c40661e3210126b1e8384d9acef917b15800a2cf1169f62dc5c",
+      "usability/tasks/U3/prompt.md": "9fbcddfc4b1a83365b2ae0524bf16e7411beba27d8e69cefb2bd07a88b0f5978",
+      "usability/tasks/U3/reuse.botwork": "7cf1f1491731eee7f33260b220e1061a946e50b84c6b74343a4fa94e4a05f1c4",
+      "usability/tasks/U4/compose.botwork": "51959bde213156214d6736bfbee2454b65e65982ba9c43b96ec162897762dc3f",
+      "usability/tasks/U4/pricing.botwork": "a99a20e90b873664337bc042f8c4e1e867a40f417b8aeb92038461b85e9caf00",
+      "usability/tasks/U4/prompt.md": "3592d63b340c78a5cc8d061c9d922e6fb59a36d75e898237dcdfa601ac80edf6",
+      "usability/tasks/U5/prompt.md": "da6809647927701673e00ac57851a32d3c5c038b49caddc1d6040a73052dc89c",
+      "usability/tasks/U5/totals.suite.botwork": "33bde426123bf5ab021b68a0b5f0f6ff61af73ca6dd87f42c4a2b72f31861b31",
+      "usability/tasks/U6/main.botwork": "b4a2825d0f3147be1c983d21ec58ec2a0e5170ac7c34af8ca01f3ca5cc57bc06",
+      "usability/tasks/U6/pricing.botwork": "d69aebab35e848487300a54d024494dfe92737752cb061505bbf256fe58bd245",
+      "usability/tasks/U6/prompt.md": "025c1b02d18398c45d50e3b65310691d094fda84e7fa623665a8ebc0d9a1cdc9",
+      "wit/botwork.wit": "2033b38a1efc9b672933e96532b4353180b5ad7de99e8f8383d69ae7621e710b"
+    },
+    "musl_compiler": "/home/dhilipsiva/projects/dhilipsiva/botwork/target/http-musl-toolchain/root/usr/bin/musl-gcc",
+    "checks": [
+      {
+        "label": "gnu-debug-full",
+        "command": [
+          "cargo",
+          "test",
+          "--locked"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/gnu-debug-full.log",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "94bbc9e55ca890cca3e367cf1a09edc151965b7acd714518be28c5b01f87c1f6"
+      },
+      {
+        "label": "gnu-release-full",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--release"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/gnu-release-full.log",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "11f75f8de6569c43b371a3cbd4b3253802cc7e7706d7076b67330abe03090373"
+      },
+      {
+        "label": "musl-debug-full",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--target",
+          "x86_64-unknown-linux-musl"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/musl-debug-full.log",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "596aad186a64f60cb15361ffe8c6c62aed3c8b8a13f8c3a02e21820d11547208"
+      },
+      {
+        "label": "musl-release-full",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--release",
+          "--target",
+          "x86_64-unknown-linux-musl"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/musl-release-full.log",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "c3fd89eceb12b13dfea2320622c29636000d9486ff1ff9340d16062ec73ad67b"
+      },
+      {
+        "label": "clippy-gnu",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/clippy-gnu.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "ff6b24891427e4e8f578ce9ff7b959db1a1593970d8a2cbd2f41a601e88c4353"
+      },
+      {
+        "label": "clippy-musl",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--target",
+          "x86_64-unknown-linux-musl",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/clippy-musl.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "ae7565e931738cfe8649a014a843dc3f5d5a30f70aaf0f676d7bdadbe31d5e68"
+      },
+      {
+        "label": "format",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/format.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "coverage-helper",
+        "command": [
+          "python3",
+          "tests/coverage_tools.py"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/coverage-helper.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "f1d3cbb20f163ae5e2fff4defbe5e5555b64befbe115d13f5522afb4216ccf1a"
+      },
+      {
+        "label": "mutation-helper",
+        "command": [
+          "python3",
+          "tests/mutation_tools.py"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/mutation-helper.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "807ceb9cc316a639342aa252051025a0d2eef491777561abf699722e2cff14fa"
+      },
+      {
+        "label": "performance-helper",
+        "command": [
+          "python3",
+          "tests/performance_tools.py"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/performance-helper.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "283e9a158ac7bf34da12f0f6fabc9cc0da28ab7c00a3b757eb9fc9dc41d7e8a4"
+      },
+      {
+        "label": "vscode-package",
+        "command": [
+          "sh",
+          "-c",
+          "cd editors/vscode && npm run package"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/vscode-package.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "ca91346c371828e28c9e8f42b9d57dbc86c18abe6912522c9e7a19eb82312fe8"
+      },
+      {
+        "label": "release-helper",
+        "command": [
+          "python3",
+          "tests/release_tools.py"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/release-helper.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "57256a13cfbd13539b3f6c3a9bd6c4cd9c1a8f25a390d6295b563a1d8a31853d"
+      },
+      {
+        "label": "workflow-lint",
+        "command": [
+          "/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/actionlint/actionlint",
+          "-shellcheck=/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/shellcheck-v0.11.0/shellcheck"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/workflow-lint.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "crate-package",
+        "command": [
+          "cargo",
+          "publish",
+          "--locked",
+          "--dry-run"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/crate-package.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "0ab418cdbb0657546686454e6a39af950b1bd862f79b7ac494024845d91ff778"
+      },
+      {
+        "label": "api-helper",
+        "command": [
+          "python3",
+          "tests/api_tools.py"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/api-helper.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "c6b9b1f09add0403cc07e90bfdf272129b1ddfa2f8f7675ea8218862f2516371"
+      },
+      {
+        "label": "public-api",
+        "command": [
+          "sh",
+          "-c",
+          "cargo +nightly-2026-08-14 rustdoc --lib --locked --target-dir target/api-check -- -Z unstable-options --output-format json && python3 scripts/public_api.py --leaks target/api-check/doc/botwork.json && python3 scripts/public_api.py target/api-check/doc/botwork.json | diff -u docs/public-api.txt -"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/public-api.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "0812a002af1524b5128b56bbd5c63f2a0fc60894eade8f36efdfa9ab012bee44"
+      },
+      {
+        "label": "python-full",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--no-fail-fast",
+          "--features",
+          "python"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/python-full.log",
+        "tests": {
+          "passed": 2206,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "094bf503f823a7b1ca975dc35d2737f3a26692d9a855061a96d70eede33d6532"
+      },
+      {
+        "label": "clippy-python",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--features",
+          "python",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/clippy-python.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "2fe121b81dd5bf60c040e4a46c384adb5869ef5c7414531fd5623e679b9aec9b"
+      },
+      {
+        "label": "clippy-macos",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--target",
+          "aarch64-apple-darwin",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/clippy-macos.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "299f16a2c523be18fef769975d2df00e0505521db047540feea3a74b94666887"
+      },
+      {
+        "label": "clippy-windows",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--target",
+          "x86_64-pc-windows-msvc",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/clippy-windows.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "732186322402325172940531d8d6d7cfac85dc902585b2bef6715ad6839dacfd"
+      },
+      {
+        "label": "clippy-no-wasm",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--no-default-features",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/clippy-no-wasm.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "dbdf54ddcf63ce52025f983231f9dce3dd10023b5a7feaeec1a29971c7b4e359"
+      },
+      {
+        "label": "wasm-helper",
+        "command": [
+          "python3",
+          "tests/wasm_tools.py"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/wasm-helper.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "bb699ef2243b7499947b90c80d234ad50c88c0676cb361e4f84cddc814546641"
+      },
+      {
+        "label": "wasm-guest-record",
+        "command": [
+          "python3",
+          "scripts/wasm_guest.py",
+          "check"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/wasm-guest-record.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "wasm-guest-fresh",
+        "command": [
+          "sh",
+          "-c",
+          "python3 scripts/wasm_guest.py build target/wasm-guest/fresh.wasm && BOTWORK_WASM_GUEST=target/wasm-guest/fresh.wasm cargo test --locked --test wasm_adapter"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/wasm-guest-fresh.log",
+        "tests": {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "9ba6744991146a47ada32e1861fb95bfe63c7abcaa6b150a742a66c9913ae0a5"
+      },
+      {
+        "label": "wasm-example",
+        "command": [
+          "sh",
+          "-c",
+          "cargo build --locked --bin botwork && python3 scripts/wasm_guest.py example target/debug/botwork"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/wasm-example.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "e200bdd87970aba010cde1c0143ff8423354f4ad3ed1b3f73f673fa93a87cafc"
+      },
+      {
+        "label": "fuzz-fetch",
+        "command": [
+          "cargo",
+          "fetch",
+          "--locked",
+          "--manifest-path",
+          "fuzz/Cargo.toml"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/fuzz-fetch.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "performance-budgets",
+        "command": [
+          "python3",
+          "scripts/performance.py",
+          "--check",
+          "docs/performance-binary-baseline-evidence.json",
+          "--explain",
+          "cli-startup=Wasmtime (D8): +9 points from the larger binary, whose relocated data and code cost about 70 more page faults a start (633, not 561); the other 7 come from changes already on main; p95 stays within budget"
+        ],
+        "status": 0,
+        "log": "target/examples-validation-86qcwc30/performance-budgets.log",
+        "tests": {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        "log_sha256": "9a992975f085a42686ccd2c0ccc66039b50db3c1144b193a7cd80443fc00a5ea"
+      }
+    ],
+    "node": "v22.22.1",
+    "webdriver": {
+      "chromedriver": "ChromeDriver 153.0.8010.12 (971a7443b0c9b0a9b2860529b33331b76077ec62-refs/branch-heads/8010@{#343})",
+      "browser": "Google Chrome for Testing 153.0.8010.12",
+      "required": "1",
+      "libraries": "The system libraries Chrome lacks here (libnspr4, libnss3, libasound2) are extracted from Ubuntu packages without root and named by LD_LIBRARY_PATH."
+    },
+    "playwright": {
+      "version": "1.63.0",
+      "directory": "/home/dhilipsiva/projects/dhilipsiva/botwork/tests/playwright",
+      "required": "1"
+    },
+    "python": {
+      "config": "implementation=CPython\nversion=3.14\nshared=true\nabi3=true\nlib_name=python3.14\nlib_dir=/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/pylib\nexecutable=/usr/bin/python3\npointer_width=64\nbuild_flags=\nsuppress_build_script_link_lines=false\n",
+      "version": "Python 3.14.4"
+    },
+    "type_check_stubs": {
+      "note": "No C cross compilers here: ring's build script gets stand-ins, so these checks type-check and lint without linking.",
+      "CC": "/bin/true",
+      "AR": "#!/bin/sh\n# Type-checking stand-in for an archiver: creates whatever archive it is asked for.\nfor a in \"$@\"; do\n  case \"$a\" in\n    /OUT:*|-out:*) : > \"${a#*:}\" ;;\n    *.lib|*.a) : > \"$a\" ;;\n  esac\ndone\nexit 0\n"
+    },
+    "inputs_unchanged": true,
+    "finished": "2026-10-02T07:04:04.822591+00:00"
+  },
+  "validation_record_sha256": "fdc63efa3a115c5fce02cc9ee40cb3fc13333c7006ec22ebd99b9d4668a03168",
+  "ci": {
+    "record_sha256": "239f10f6b20940624ecb9e8ef977278a398b0a1753dc7684aeaf55fa87ad2dc2",
+    "note": "The branch run of the item's commit; the TODO line and this record were added after it. The four Linux Rust jobs required and ran the WebDriver example with the runner's chromedriver, the Playwright job the Playwright example with the pinned Playwright and Chromium, and the Appium job the Appium example on its Android 14 emulator; every job checked every example.",
+    "run": "36975089034",
+    "url": "https://github.com/dhilipsiva/botwork/actions/runs/36975089034",
+    "head_sha": "88d5b44fa7344f917e239d58f607b0216a661b0d",
+    "branch": "browser-examples",
+    "conclusion": "success",
+    "attempt": 1,
+    "jobs": {
+      "Workflows": {
+        "conclusion": "success",
+        "log_sha256": "5005a801e8d7ea0aafe95a1a9cb350b4383c38b07c11fa0fd8a76af4ce291ee2",
+        "required": [],
+        "named": {}
+      },
+      "Public API": {
+        "conclusion": "success",
+        "log_sha256": "f23b427a87f85f3e13b0f731a792d4dfadfecbc46d8a5a0d66dae846d3b56b6d",
+        "required": [],
+        "named": {}
+      },
+      "Python adapter (windows-latest)": {
+        "conclusion": "success",
+        "log_sha256": "1f6f066219c85d2e7a219d45d124a9060d8f7f76b78d333f29a3be113852fa27",
+        "tests": {
+          "passed": 2007,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      },
+      "Python adapter (macos-latest)": {
+        "conclusion": "success",
+        "log_sha256": "0014d5796ac320509ab45f6f465d2d030687a73c941b656dec795dc9b932d8f7",
+        "tests": {
+          "passed": 2102,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      },
+      "Appium (Android emulator)": {
+        "conclusion": "success",
+        "log_sha256": "72afcee16d64b42d4b4fbd6932a61765640cf536ec4384327f4ba86bab54e829",
+        "tests": {
+          "passed": 6,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [
+          "APPIUM"
+        ],
+        "named": {
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok",
+          "the_appium_example_opens_settings_on_android": "ok"
+        }
+      },
+      "WebAssembly guest": {
+        "conclusion": "success",
+        "log_sha256": "262815306841b6ca829501a0615d58457b71fe571b365dc390aa3aff619913ff",
+        "tests": {
+          "passed": 11,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {}
+      },
+      "Seeded fuzz smoke (AddressSanitizer)": {
+        "conclusion": "success",
+        "log_sha256": "40e69c485d9d15fe8819980fdcfa5e0f35c65c2cecb9bfbb127ccb53393cd791",
+        "required": [],
+        "named": {}
+      },
+      "Python adapter (ubuntu-latest)": {
+        "conclusion": "success",
+        "log_sha256": "537675c8b70082f52379b9c0500ca98b0b053affd905a13eca224d95840574e5",
+        "tests": {
+          "passed": 2206,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      },
+      "Editor packages": {
+        "conclusion": "success",
+        "log_sha256": "89a859dcfb63c13fa4449bac076a0b157628dc0836eeccc539b01de552578d39",
+        "tests": {
+          "passed": 15,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {}
+      },
+      "Playwright (Chromium)": {
+        "conclusion": "success",
+        "log_sha256": "f2b521338942f2a731d08a99af1053c47a1185b0d4d65acd10f70467ae2b7556",
+        "tests": {
+          "passed": 14,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [
+          "PLAYWRIGHT"
+        ],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok"
+        }
+      },
+      "Rust (debug, x86_64-unknown-linux-gnu)": {
+        "conclusion": "success",
+        "log_sha256": "62ad07612234ac4a92943fe80b7d734fac9e111d730d488f5a1df434443c559a",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [
+          "WEBDRIVER"
+        ],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok"
+        }
+      },
+      "Rust (release, x86_64-unknown-linux-gnu)": {
+        "conclusion": "success",
+        "log_sha256": "801ac3def82c4767170b500ccb4dab85ddb5deaff20bcf4fae088f4a02b8175c",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [
+          "WEBDRIVER"
+        ],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok"
+        }
+      },
+      "Tree-sitter grammars": {
+        "conclusion": "success",
+        "log_sha256": "21f651891a3530fbee541b647754fbf216df287a9090e857340567ece9add230",
+        "tests": {
+          "passed": 8,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {}
+      },
+      "Rust (release, x86_64-unknown-linux-musl)": {
+        "conclusion": "success",
+        "log_sha256": "224a313c089a5eda4b11339bac61b9ab6f4c4f277463fa542985632d3a132c81",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [
+          "WEBDRIVER"
+        ],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok"
+        }
+      },
+      "Rust (debug, x86_64-unknown-linux-musl)": {
+        "conclusion": "success",
+        "log_sha256": "6feda6fc8e0808794f48833e1fd33f528105dc370c32fb1ce14fcaff671cb2f3",
+        "tests": {
+          "passed": 2196,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [
+          "WEBDRIVER"
+        ],
+        "named": {
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "the_appium_example_opens_settings_on_android": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok"
+        }
+      },
+      "Rust (debug, x86_64-pc-windows-msvc)": {
+        "conclusion": "success",
+        "log_sha256": "0af108e02c34db021ea5e70fc49a39dafce0c6569c6b8a728996992b5663bb98",
+        "tests": {
+          "passed": 1997,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      },
+      "Rust (debug, aarch64-apple-darwin)": {
+        "conclusion": "success",
+        "log_sha256": "a4c0f4cd76c6b7261f85bbc69e91b160fdee4793cca37cc8ade05b6647229421",
+        "tests": {
+          "passed": 2092,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      },
+      "Rust (release, x86_64-pc-windows-msvc)": {
+        "conclusion": "success",
+        "log_sha256": "3345fc91733b0630e39ace6173dc2b428abb079f797545e5914181d05069fc72",
+        "tests": {
+          "passed": 1997,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      },
+      "Rust (release, aarch64-apple-darwin)": {
+        "conclusion": "success",
+        "log_sha256": "76ef9b20ffaa39c05cc863cbfd9b95ff89702e1dbc03b08feb308605e59409d0",
+        "tests": {
+          "passed": 2092,
+          "failed": 0,
+          "ignored": 0
+        },
+        "required": [],
+        "named": {
+          "the_appium_example_opens_settings_on_android": "ok",
+          "the_playwright_example_signs_in_with_chromium": "ok",
+          "the_webdriver_example_signs_in_with_chrome": "ok",
+          "every_example_checks_clean_and_reads_only_its_documented_inputs": "ok"
+        }
+      }
+    }
+  },
+  "sensitivity_probes": [
+    {
+      "fault": "The run's end leaks its WebDriver sessions and drivers (Sessions::drop forgets them), and the example skips Close Browser.",
+      "test": "the_webdriver_example_signs_in_with_chrome",
+      "outcome": "caught",
+      "log_sha256": "5aaab0824dceea4436ddaf89da2440aecd87a73ca3aa2f7957d95020c7cff18f",
+      "excerpt": [
+        "webdriver.botwork left processes running: [",
+        "    \"chromedriver /tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/chromedriver/chromedriver-linux64/chromedriver --port=56970\",",
+        "    \"chrome /home/dhilipsiva/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome --allow-pre-commit-input --botwork-example=210050 --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-client-side-phishing-detection --disable-default-apps --disable-dev-shm-usage --disable-features=IgnoreDuplicateNavs,Prewarm --disable-hang-monitor --disable-popup-blocking --disable-prompt-on-repost --disable-sync --enable-automation --enable-logging --headless=new --log-level=0 --no-first-run --no-sandbox --no-service-autorun --password-store=basic --remote-debugging-port=0 --test-type=webdriver --use-mock-keychain --user-data-dir=/tmp/org.chromium.Chromium.scoped_dir.Bt7ndi --noerrdialogs --ozone-platform=headless --ozone-override-screen-size=800,600 --use-angle=swiftshader-webgl data:,\",",
+        "    \"chrome_crashpad /home/dhilipsiva/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome_crashpad_handler --monitor-self --monitor-self-annotation=ptype=crashpad-handler --database=/home/dhilipsiva/.config/google-chrome-for-testing/Crash Reports --annotation=lsb-release=Ubuntu 26.04 LTS --annotation=plat=Linux --annotation=prod=Chrome_Linux --annotation=ver=153.0.8010.12 --initial-client-fd=6 --shared-client-connection\",",
+        "    \"chrome_crashpad /home/dhilipsiva/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome_crashpad_handler --no-periodic-tasks --monitor-self-annotation=ptype=crashpad-handler --database=/home/dhilipsiva/.config/google-chrome-for-testing/Crash Reports --annotation=lsb-release=Ubuntu 26.04 LTS --annotation=plat=Linux --annotation=prod=Chrome_Linux --annotation=ver=153.0.8010.12 --initial-client-fd=4 --shared-client-connection\","
+      ],
+      "note": "Run in a scratch worktree; its build was cleaned from the shared target directory afterwards, and the processes it leaked were ended."
+    }
+  ],
+  "related_evidence": {
+    "docs/webdriver-evidence.json": {
+      "sha256": "fcb313d15a3f0b5ea480dd5ab67b2fcee4832c28e8dca14d127fadff0e413636",
+      "mutation_outcomes": {
+        "webdriver-closed-session-kept": "caught",
+        "webdriver-run-end-leaves-sessions": "caught",
+        "webdriver-driver-group-survives": "caught",
+        "webdriver-foreign-handles-accepted": "caught",
+        "webdriver-path-segments-unencoded": "caught",
+        "webdriver-wait-gives-up-at-once": "caught",
+        "webdriver-command-timeout-ignored": "caught",
+        "webdriver-screenshot-unrecorded": "caught",
+        "webdriver-result-elements-unrecognized": "caught",
+        "webdriver-argument-elements-unrecognized": "caught",
+        "webdriver-whole-numbers-rounded": "caught",
+        "webdriver-driver-errors-unreported": "caught",
+        "webdriver-unknown-options-accepted": "caught",
+        "webdriver-check-unknown": "caught",
+        "webdriver-https-accepted": "caught"
+      }
+    },
+    "docs/playwright-evidence.json": {
+      "sha256": "4c69ec94e247c872682771ba00082c2e4200141914949f85d954c59e7a212408",
+      "mutation_outcomes": {
+        "playwright-handle-kind-unchecked": "caught",
+        "playwright-expectations-do-not-retry": "caught",
+        "playwright-assertions-reported-as-native": "caught",
+        "playwright-waits-reported-as-native": "caught",
+        "playwright-run-end-leaves-browsers-open": "caught",
+        "playwright-host-group-survives": "caught",
+        "playwright-artifacts-unrecorded": "caught",
+        "playwright-videos-dropped": "caught",
+        "playwright-check-unknown": "caught",
+        "playwright-unknown-launch-options-accepted": "caught",
+        "playwright-node-not-found": "caught",
+        "playwright-missing-package-unexplained": "caught",
+        "playwright-arguments-swapped": "caught",
+        "playwright-uncheck-checks": "caught"
+      }
+    },
+    "docs/appium-evidence.json": {
+      "sha256": "ae4806f1c4c619e5911a0a7438e8807d42e923365980046d4cdb28e311a222f8",
+      "mutation_outcomes": {
+        "appium-accessibility-strategy-missing": "caught",
+        "appium-uiautomator-strategy-misnamed": "caught",
+        "appium-platform-name-ignored": "caught"
+      }
+    }
+  },
+  "requirements": [
+    {
+      "requirement": "A runnable end-to-end example for each browser and device integration",
+      "contract": "examples/browser/README.md",
+      "tests": [
+        "the_webdriver_example_signs_in_with_chrome",
+        "the_playwright_example_signs_in_with_chromium",
+        "the_appium_example_opens_settings_on_android"
+      ],
+      "details": "Each signs in on the sample page, or opens Android's Settings, asserts what it sees, and saves a screenshot; each run logs what its example promises."
+    },
+    {
+      "requirement": "Prerequisites and inputs are explicit, and examples need nothing else",
+      "contract": "examples/browser/README.md",
+      "tests": [
+        "every_example_checks_clean_and_reads_only_its_documented_inputs"
+      ],
+      "details": "Every example passes --check; its only warnings are input variables, each defaulted in inputs.json and described in the README, which names each example's prerequisites and command; the sample page is a data: URL, so no server is needed."
+    },
+    {
+      "requirement": "Teardown leaves nothing running",
+      "contract": "examples/browser/README.md#teardown",
+      "tests": [
+        "the_webdriver_example_signs_in_with_chrome",
+        "the_playwright_example_signs_in_with_chromium",
+        "the_appium_example_opens_settings_on_android"
+      ],
+      "details": "On Linux, after each run no process has the run's directory as its working directory or the run's marker argument in its command line: drivers, the Node host, Appium, and browsers have all ended. A probe that leaked the driver failed the test, naming chromedriver and Chrome."
+    }
+  ],
+  "documentation_updates": [
+    {
+      "file": "examples/browser/README.md",
+      "change": "A new page: each example, its prerequisites, inputs, and teardown."
+    },
+    {
+      "file": "docs/automation-examples.md",
+      "change": "A section on the browser and device examples."
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "change": "The Playwright and Appium jobs run the examples too."
+    },
+    {
+      "file": "TODO.md",
+      "before_sha256": "831d119b56be70dedc62bccd2c28cefc26b6ee1e874c9e87a15929a5e2a9c8dc",
+      "after_sha256": "6028c7266a49152ff413e02330dace1c5f2b059b66813edbf7e22c8f7b15b8a2",
+      "executable_fences_unchanged": true,
+      "change": "Check the examples item."
+    },
+    {
+      "file": "docs/browser-examples-evidence.json",
+      "change": "This record."
+    },
+    {
+      "file": "docs/traceability.md",
+      "change": "Regenerated after this record added requirements."
+    }
+  ],
+  "validation_scope": "Full GNU/musl debug/release suites: 2,196 tests each, each running the WebDriver and Playwright examples with Chrome and Chromium, and 2,206 with the python feature; strict Clippy for GNU, musl, the python feature, no default features, macOS, and Windows; the WebAssembly guest checks; helper checks, the editor packages, workflow lint, cargo publish --dry-run, the fuzz lock, the public API, and the performance budget check; a sensitivity probe of the leak check; every test on Linux, macOS, and Windows in CI, with each real example in the job that has its prerequisites.",
+  "review_notes": [
+    "The examples live in examples/browser rather than as numbered top-level examples: those run without prerequisites in the statement reference, rename, and format tests, and these need browsers and devices.",
+    "This item adds no production code, so it has no mutation campaign; the statements it drives were mutated by the WebDriver, Playwright, and Appium items (related_evidence), and the leak check was probed directly.",
+    "The leak check looks at every process on Linux, by working directory and by a marker argument passed to the browser, so it sees a driver, host, server, or browser however it was started."
+  ],
+  "limits": [
+    "The leak check runs only on Linux, where /proc shows every process's working directory and command line; macOS and Windows run the examples' --check alone, having no browser in CI.",
+    "adb's server is not counted: it outlives its clients by design and is not the run's."
+  ],
+  "drivers": {
+    "examples-validation.py": {
+      "sha256": "c777d3af9d74e80a0b9de84828907dd1234c5207f19e92eb61ac822f567a05b0",
+      "source": "from pathlib import Path\nfrom datetime import datetime, timezone\nimport subprocess, json, hashlib, re, tempfile, os, sys\nroot=Path.cwd()\n\nout=Path(tempfile.mkdtemp(prefix=\"examples-validation-\",dir=root/\"target\"))\nprint(f\"validation record: {out / 'summary.json'}\",flush=True)\ndef measured():\n inputs=[p for d in ('src','tests','examples','editors','benches','usability','wit') for p in (root/d).rglob('*') if p.is_file() and '__pycache__' not in p.parts and 'node_modules' not in p.parts and p.suffix != '.vsix']\n inputs += sorted((root/'docs').rglob('*.md')) + sorted((root/'docs').rglob('*.schema.json')) + [root/'README.md']\n inputs += [root/'docs/performance-baseline-evidence.json', root/'docs/performance-evidence.json', root/'docs/performance-binary-baseline-evidence.json']\n inputs += [root/p for p in ('Cargo.toml','Cargo.lock','fuzz/Cargo.lock','fuzz/Cargo.toml','scripts/wasm_guest.py','.cargo/mutants.toml','scripts/coverage.py','scripts/mutation_core.py','scripts/performance.py','scripts/release.py','scripts/public_api.py','docs/public-api.txt','.github/workflows/ci.yml','.github/workflows/release.yml','.gitattributes','AGENTS.md','.cargo/config.toml','LICENSE')]\n return {str(p.resolve().relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(inputs)}\nmusl_cc=str(root/'target/http-musl-toolchain/root/usr/bin/musl-gcc')\nCLI_STARTUP='cli-startup=Wasmtime (D8): +9 points from the larger binary, whose relocated data and code cost about 70 more page faults a start (633, not 561); the other 7 come from changes already on main; p95 stays within budget'\nrecord={'complete':False,'started':datetime.now(timezone.utc).isoformat(),'revision':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'input_sha256':measured(),'musl_compiler':musl_cc,'checks':[]}\nmusl=['--target','x86_64-unknown-linux-musl']\nstub_ar=str(Path(__file__).with_name('fake-ar.sh'))\nstubs={'CC_aarch64_apple_darwin':'/bin/true','AR_aarch64_apple_darwin':stub_ar,'CC_x86_64_pc_windows_msvc':'/bin/true','AR_x86_64_pc_windows_msvc':stub_ar,'CARGO_TARGET_DIR':str(root/'target/cross-check')}\nrecord['node']=subprocess.check_output(['node','--version'],text=True).strip()\nrecord['webdriver']={'chromedriver':subprocess.check_output([os.environ['BOTWORK_WEBDRIVER'],'--version'],text=True).strip(),'browser':subprocess.check_output([os.environ['BOTWORK_CHROME'],'--version'],text=True).strip(),'required':os.environ.get('BOTWORK_REQUIRE_WEBDRIVER'),'libraries':'The system libraries Chrome lacks here (libnspr4, libnss3, libasound2) are extracted from Ubuntu packages without root and named by LD_LIBRARY_PATH.'}\nrecord['playwright']={'version':json.loads((root/'tests/playwright/node_modules/playwright/package.json').read_text())['version'],'directory':os.environ['BOTWORK_PLAYWRIGHT'],'required':os.environ.get('BOTWORK_REQUIRE_PLAYWRIGHT')}\nrecord['python']={'config':Path(os.environ['PYO3_CONFIG_FILE']).read_text(),'version':subprocess.check_output(['python3','--version'],text=True).strip()}\nrecord['type_check_stubs']={'note':'No C cross compilers here: ring\\'s build script gets stand-ins, so these checks type-check and lint without linking.','CC':'/bin/true','AR':Path(stub_ar).read_text()}\ncommands=[('gnu-debug-full',['cargo','test','--locked']),('gnu-release-full',['cargo','test','--locked','--release']),('musl-debug-full',['cargo','test','--locked',*musl]),('musl-release-full',['cargo','test','--locked','--release',*musl]),('clippy-gnu',['cargo','clippy','--locked','--all-targets','--','-D','warnings']),('clippy-musl',['cargo','clippy','--locked',*musl,'--all-targets','--','-D','warnings']),('format',['cargo','fmt','--all','--','--check']),('coverage-helper',['python3','tests/coverage_tools.py']),('mutation-helper',['python3','tests/mutation_tools.py']),('performance-helper',['python3','tests/performance_tools.py']),('vscode-package',['sh','-c','cd editors/vscode && npm run package']),('release-helper',['python3','tests/release_tools.py']),('workflow-lint',['/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/actionlint/actionlint','-shellcheck=/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/shellcheck-v0.11.0/shellcheck']),('crate-package',['cargo','publish','--locked','--dry-run']),('api-helper',['python3','tests/api_tools.py']),('public-api',['sh','-c','cargo +nightly-2026-08-14 rustdoc --lib --locked --target-dir target/api-check -- -Z unstable-options --output-format json && python3 scripts/public_api.py --leaks target/api-check/doc/botwork.json && python3 scripts/public_api.py target/api-check/doc/botwork.json | diff -u docs/public-api.txt -']),('python-full',['cargo','test','--locked','--no-fail-fast','--features','python']),('clippy-python',['cargo','clippy','--locked','--features','python','--all-targets','--','-D','warnings']),('clippy-macos',['cargo','clippy','--locked','--target','aarch64-apple-darwin','--all-targets','--','-D','warnings']),('clippy-windows',['cargo','clippy','--locked','--target','x86_64-pc-windows-msvc','--all-targets','--','-D','warnings']),('clippy-no-wasm',['cargo','clippy','--locked','--no-default-features','--all-targets','--','-D','warnings']),('wasm-helper',['python3','tests/wasm_tools.py']),('wasm-guest-record',['python3','scripts/wasm_guest.py','check']),('wasm-guest-fresh',['sh','-c','python3 scripts/wasm_guest.py build target/wasm-guest/fresh.wasm && BOTWORK_WASM_GUEST=target/wasm-guest/fresh.wasm cargo test --locked --test wasm_adapter']),('wasm-example',['sh','-c','cargo build --locked --bin botwork && python3 scripts/wasm_guest.py example target/debug/botwork']),('fuzz-fetch',['cargo','fetch','--locked','--manifest-path','fuzz/Cargo.toml']),('performance-budgets',['python3','scripts/performance.py','--check','docs/performance-binary-baseline-evidence.json','--explain',CLI_STARTUP])]\nprevious=json.loads(Path(sys.argv[1]).read_text()) if len(sys.argv)>1 else None\nif previous:\n assert previous['input_sha256']==record['input_sha256'], 'inputs changed since the resumed record'\n record['resumed_from']={'record':sys.argv[1],'sha256':hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest(),'started':previous['started']}\n labels=[label for label,_ in commands]\n kept=[check for check in previous['checks'] if check['status']==0 and check['label'] in labels and [c for l,c in commands if l==check['label']][0]==check['command']]\n for check in kept:\n  assert hashlib.sha256((root/check['log']).read_bytes()).hexdigest()==check['log_sha256']\n record['checks']=kept\n print('resumed', [check['label'] for check in kept], flush=True)\ntry:\n for label,command in commands:\n  if any(check['label']==label for check in record['checks']):\n   continue\n  print('running '+label,flush=True)\n  log=out/(label+'.log')\n  with log.open('w') as stream:\n   result=subprocess.run(command,stdout=stream,stderr=subprocess.STDOUT,timeout=2400,env=dict(os.environ,CARGO_BUILD_JOBS='4',CC_x86_64_unknown_linux_musl=musl_cc,BOTWORK_REQUIRE_EDITORS='all',**(stubs if label in ('clippy-macos','clippy-windows') else {}),**({'CARGO_TARGET_DIR':str(root/'target/package-check')} if label=='crate-package' else {})))\n  content=log.read_text()\n  rows=re.findall(r'test result: (?:ok|FAILED)\\. (\\d+) passed; (\\d+) failed; (\\d+) ignored;',content)\n  check={'label':label,'command':command,'status':result.returncode,'log':str(log.relative_to(root)),'tests':dict(zip(('passed','failed','ignored'),[sum(int(row[i]) for row in rows) for i in range(3)])),'log_sha256':hashlib.sha256(log.read_bytes()).hexdigest()}\n  record['checks'].append(check)\n  (out/'summary.json').write_text(json.dumps(record,indent=2)+'\\n')\n  print(json.dumps(check),flush=True)\n  if result.returncode:\n   print(content[-12000:],flush=True)\n   raise SystemExit(result.returncode)\n record['inputs_unchanged']=measured()==record['input_sha256']\n record['complete']=record['inputs_unchanged']\nfinally:\n record['finished']=datetime.now(timezone.utc).isoformat()\n (out/'summary.json').write_text(json.dumps(record,indent=2)+'\\n')\nprint('complete' if record['complete'] else 'INPUTS CHANGED', flush=True)\n"
+    },
+    "examples-chain.sh": {
+      "sha256": "c5f853820a3e1831ff3919f6f5ae6f8383dd1eac2ae85130b8eedd757d4af896",
+      "source": "#!/bin/bash\ncd /home/dhilipsiva/projects/dhilipsiva/botwork\nexport BOTWORK_REQUIRE_NODE=1 BOTWORK_REQUIRE_GIT=1 BOTWORK_REQUIRE_WEBDRIVER=1 BOTWORK_REQUIRE_PLAYWRIGHT=1\nexport BOTWORK_PLAYWRIGHT=$PWD/tests/playwright\nexport BOTWORK_WEBDRIVER=/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/chromedriver/chromedriver-linux64/chromedriver\nexport BOTWORK_CHROME=$HOME/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome\nexport LD_LIBRARY_PATH=/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/chrome-libs/root/usr/lib/x86_64-linux-gnu\nexport PYO3_CONFIG_FILE=/tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/pyo3-config.txt\npython3 /tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/examples-validation.py > /tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/examples-validation.out 2>&1\nstatus=$?\necho \"validation exit $status\" > /tmp/claude-1000/-home-dhilipsiva-projects-dhilipsiva-botwork/932e33e8-ece7-4035-96fd-7bc6c0fba3c1/scratchpad/examples-chain.status\nexit $status\n"
+    },
+    "examples-ci.py": {
+      "sha256": "32d0b44e926a400fa633f9996daf7c6bb3a52679817d4a6969b7242ed4a0cc74",
+      "source": "\"\"\"Record a CI run's jobs: conclusions, test totals, and the\nbrowser example tests each job ran, and which\nreal examples each job required.\"\"\"\nimport hashlib, json, re, subprocess, sys\nfrom pathlib import Path\nrun, out = sys.argv[1], Path(sys.argv[2])\nTESTS = ['every_example_checks_clean_and_reads_only_its_documented_inputs', 'the_webdriver_example_signs_in_with_chrome', 'the_playwright_example_signs_in_with_chromium', 'the_appium_example_opens_settings_on_android']\nview = json.loads(subprocess.check_output([\"gh\", \"run\", \"view\", run, \"--json\", \"jobs,headSha,headBranch,conclusion,attempt\"], text=True))\nrecord = {\"run\": run, \"url\": f\"https://github.com/dhilipsiva/botwork/actions/runs/{run}\", \"head_sha\": view[\"headSha\"], \"branch\": view[\"headBranch\"], \"conclusion\": view[\"conclusion\"], \"attempt\": view[\"attempt\"], \"jobs\": {}}\nfor job in view[\"jobs\"]:\n    log = subprocess.check_output([\"gh\", \"api\", f\"repos/dhilipsiva/botwork/actions/jobs/{job['databaseId']}/logs\"], text=True)\n    log = re.sub(r\"\\x1b\\[[0-9;]*m\", \"\", re.sub(r\"^\\S+Z \", \"\", log, flags=re.M))\n    rows = re.findall(r\"test result: (?:ok|FAILED)\\. (\\d+) passed; (\\d+) failed; (\\d+) ignored;\", log)\n    entry = {\"conclusion\": job[\"conclusion\"], \"log_sha256\": hashlib.sha256(log.encode()).hexdigest()}\n    if rows:\n        entry[\"tests\"] = dict(zip((\"passed\", \"failed\", \"ignored\"), [sum(int(row[i]) for row in rows) for i in range(3)]))\n    entry[\"required\"] = sorted(name for name in (\"WEBDRIVER\", \"PLAYWRIGHT\", \"APPIUM\") if f\"BOTWORK_REQUIRE_{name}: 1\" in log)\n    entry[\"named\"] = dict(re.findall(r\"^test (?:\\S+::)?(\" + \"|\".join(TESTS) + r\") \\.\\.\\. (\\w+)\", log, re.M))\n    record[\"jobs\"][job[\"name\"]] = entry\nout.write_text(json.dumps(record, indent=2) + \"\\n\")\nprint(json.dumps({name: {k: v for k, v in job.items() if k != \"log_sha256\"} for name, job in record[\"jobs\"].items()}, indent=1))\n"
+    },
+    "examples-evidence.py": {
+      "sha256": "7e0a89aa7b36a23089fdee9202e9b9176ebbd8687380895ef8c04988fb5970b2",
+      "source": "\"\"\"Assemble docs/browser-examples-evidence.json from recorded results only.\"\"\"\nfrom pathlib import Path\nfrom datetime import datetime, timezone\nimport hashlib, json, platform, subprocess, sys\nroot = Path(\"/home/dhilipsiva/projects/dhilipsiva/botwork\")\nscratch = Path(__file__).resolve().parent\nvalidation_path, todo_before, ci_path = (Path(arg).resolve() for arg in sys.argv[1:4])\nvalidation = json.loads(validation_path.read_text())\nassert validation[\"complete\"] and validation[\"inputs_unchanged\"], \"validation incomplete or inputs changed\"\nchecks = {check[\"label\"]: check for check in validation[\"checks\"]}\nassert all(check[\"status\"] == 0 for check in checks.values())\nfor label in (\"python-full\", \"clippy-python\", \"crate-package\", \"clippy-no-wasm\", \"wasm-guest-record\",\n              \"wasm-guest-fresh\", \"wasm-example\", \"fuzz-fetch\", \"performance-budgets\", \"clippy-macos\", \"clippy-windows\", \"public-api\"):\n    assert label in checks, label\nfull = [check for label, check in checks.items() if label.endswith(\"-full\") and label != \"python-full\"]\ntotals = {check[\"tests\"][\"passed\"] for check in full}\nassert len(full) == 4 and len(totals) == 1\ndef sha(path):\n    return hashlib.sha256(Path(path).read_bytes()).hexdigest()\nci = json.loads(ci_path.read_text())\nassert ci[\"conclusion\"] == \"success\", ci[\"conclusion\"]\nassert all(job[\"conclusion\"] == \"success\" for job in ci[\"jobs\"].values())\nrust = {name: job for name, job in ci[\"jobs\"].items() if name.startswith((\"Rust (\", \"Python adapter (\"))}\nassert len(rust) == 11, sorted(rust)\nfor name, job in rust.items():\n    assert job[\"tests\"][\"failed\"] == 0, name\n    assert len(job[\"named\"]) == 4 and set(job[\"named\"].values()) == {\"ok\"}, (name, job[\"named\"])\nlinux = [name for name in rust if name.startswith(\"Rust (\") and \"linux\" in name]\nassert len(linux) == 4 and all(rust[name][\"required\"] == [\"WEBDRIVER\"] for name in linux), linux\nfor name, required in ((\"Playwright (Chromium)\", \"PLAYWRIGHT\"), (\"Appium (Android emulator)\", \"APPIUM\")):\n    job = ci[\"jobs\"][name]\n    assert required in job[\"required\"] and job[\"tests\"][\"failed\"] == 0 and len(job[\"named\"]) == 4 and set(job[\"named\"].values()) == {\"ok\"}, (name, job)\nassert (scratch / \"examples-chain.status\").read_text().split() == [\"validation\", \"exit\", \"0\"]\nfor label in (\"gnu-debug-full\", \"gnu-release-full\", \"musl-debug-full\", \"musl-release-full\", \"python-full\"):\n    log = (root / checks[label][\"log\"]).read_text()\n    for test in (\"the_webdriver_example_signs_in_with_chrome\", \"the_playwright_example_signs_in_with_chromium\"):\n        assert f\"test {test} ... ok\" in log, (label, test)\nprobe = (scratch / \"examples-leak-probe.log\").read_text()\nassert \"webdriver.botwork left processes running\" in probe and \"chromedriver\" in probe and \"test result: FAILED\" in probe\nrelated = {}\nfor name in (\"webdriver\", \"playwright\", \"appium\"):\n    record = json.loads((root / f\"docs/{name}-evidence.json\").read_text())\n    related[f\"docs/{name}-evidence.json\"] = {\"sha256\": sha(root / f\"docs/{name}-evidence.json\"), \"mutation_outcomes\": record[\"mutation_campaign\"][\"outcomes\"]}\ndrivers = {}\nfor name in (\"examples-validation.py\", \"examples-chain.sh\", \"examples-ci.py\", \"examples-evidence.py\", \"examples-todo.py\"):\n    source = (scratch / name).read_text()\n    drivers[name] = {\"sha256\": hashlib.sha256(source.encode()).hexdigest(), \"source\": source}\nrecord = {\n    \"schema\": 1,\n    \"feature\": \"Runnable browser and device examples\",\n    \"todo\": \"Provide runnable end-to-end examples and integration tests with explicit external prerequisites and teardown.\",\n    \"complete\": True,\n    \"created_at\": datetime.now(timezone.utc).isoformat(),\n    \"base_revision\": validation[\"revision\"],\n    \"environment\": {\n        \"rustc\": subprocess.check_output([\"rustc\", \"--version\"], text=True).strip(),\n        \"node\": subprocess.check_output([\"node\", \"--version\"], text=True).strip(),\n        \"python\": platform.python_version(),\n        \"platform\": platform.platform(),\n        \"musl_cc\": validation[\"musl_compiler\"],\n        \"webdriver\": validation[\"webdriver\"],\n        \"playwright\": validation[\"playwright\"],\n    },\n    \"validation\": validation,\n    \"validation_record_sha256\": sha(validation_path),\n    \"ci\": {\"record_sha256\": sha(ci_path), \"note\": \"The branch run of the item's commit; the TODO line and this record were added after it. The four Linux Rust jobs required and ran the WebDriver example with the runner's chromedriver, the Playwright job the Playwright example with the pinned Playwright and Chromium, and the Appium job the Appium example on its Android 14 emulator; every job checked every example.\", **ci},\n    \"sensitivity_probes\": [\n        {\"fault\": \"The run's end leaks its WebDriver sessions and drivers (Sessions::drop forgets them), and the example skips Close Browser.\",\n         \"test\": \"the_webdriver_example_signs_in_with_chrome\", \"outcome\": \"caught\",\n         \"log_sha256\": hashlib.sha256(probe.encode()).hexdigest(),\n         \"excerpt\": [line for line in probe.splitlines() if \"left processes running\" in line or line.strip().startswith('\"chrome') or \"test result\" in line][:5],\n         \"note\": \"Run in a scratch worktree; its build was cleaned from the shared target directory afterwards, and the processes it leaked were ended.\"},\n    ],\n    \"related_evidence\": related,\n    \"requirements\": [\n        {\"requirement\": \"A runnable end-to-end example for each browser and device integration\", \"contract\": \"examples/browser/README.md\",\n         \"tests\": [\"the_webdriver_example_signs_in_with_chrome\", \"the_playwright_example_signs_in_with_chromium\", \"the_appium_example_opens_settings_on_android\"],\n         \"details\": \"Each signs in on the sample page, or opens Android's Settings, asserts what it sees, and saves a screenshot; each run logs what its example promises.\"},\n        {\"requirement\": \"Prerequisites and inputs are explicit, and examples need nothing else\", \"contract\": \"examples/browser/README.md\",\n         \"tests\": [\"every_example_checks_clean_and_reads_only_its_documented_inputs\"],\n         \"details\": \"Every example passes --check; its only warnings are input variables, each defaulted in inputs.json and described in the README, which names each example's prerequisites and command; the sample page is a data: URL, so no server is needed.\"},\n        {\"requirement\": \"Teardown leaves nothing running\", \"contract\": \"examples/browser/README.md#teardown\",\n         \"tests\": [\"the_webdriver_example_signs_in_with_chrome\", \"the_playwright_example_signs_in_with_chromium\", \"the_appium_example_opens_settings_on_android\"],\n         \"details\": \"On Linux, after each run no process has the run's directory as its working directory or the run's marker argument in its command line: drivers, the Node host, Appium, and browsers have all ended. A probe that leaked the driver failed the test, naming chromedriver and Chrome.\"},\n    ],\n    \"documentation_updates\": [\n        {\"file\": \"examples/browser/README.md\", \"change\": \"A new page: each example, its prerequisites, inputs, and teardown.\"},\n        {\"file\": \"docs/automation-examples.md\", \"change\": \"A section on the browser and device examples.\"},\n        {\"file\": \".github/workflows/ci.yml\", \"change\": \"The Playwright and Appium jobs run the examples too.\"},\n        {\"file\": \"TODO.md\", \"before_sha256\": todo_before.read_text().strip(), \"after_sha256\": sha(root / \"TODO.md\"), \"executable_fences_unchanged\": True, \"change\": \"Check the examples item.\"},\n        {\"file\": \"docs/browser-examples-evidence.json\", \"change\": \"This record.\"},\n        {\"file\": \"docs/traceability.md\", \"change\": \"Regenerated after this record added requirements.\"},\n    ],\n    \"validation_scope\": f\"Full GNU/musl debug/release suites: {totals.pop():,} tests each, each running the WebDriver and Playwright examples with Chrome and Chromium, and {checks['python-full']['tests']['passed']:,} with the python feature; strict Clippy for GNU, musl, the python feature, no default features, macOS, and Windows; the WebAssembly guest checks; helper checks, the editor packages, workflow lint, cargo publish --dry-run, the fuzz lock, the public API, and the performance budget check; a sensitivity probe of the leak check; every test on Linux, macOS, and Windows in CI, with each real example in the job that has its prerequisites.\",\n    \"review_notes\": [\n        \"The examples live in examples/browser rather than as numbered top-level examples: those run without prerequisites in the statement reference, rename, and format tests, and these need browsers and devices.\",\n        \"This item adds no production code, so it has no mutation campaign; the statements it drives were mutated by the WebDriver, Playwright, and Appium items (related_evidence), and the leak check was probed directly.\",\n        \"The leak check looks at every process on Linux, by working directory and by a marker argument passed to the browser, so it sees a driver, host, server, or browser however it was started.\",\n    ],\n    \"limits\": [\n        \"The leak check runs only on Linux, where /proc shows every process's working directory and command line; macOS and Windows run the examples' --check alone, having no browser in CI.\",\n        \"adb's server is not counted: it outlives its clients by design and is not the run's.\",\n    ],\n    \"drivers\": drivers,\n}\nout = root / \"docs/browser-examples-evidence.json\"\nassert not out.exists()\nout.write_text(json.dumps(record, indent=2) + \"\\n\")\nprint(record[\"validation_scope\"])\n"
+    },
+    "examples-todo.py": {
+      "sha256": "c488c28348ce0a015591eba9e1b10fb6d454136b0d66fb16baedd389bb8dc76b",
+      "source": "from pathlib import Path\nf = Path(\"/home/dhilipsiva/projects/dhilipsiva/botwork/TODO.md\"); s = f.read_text()\nold = \"- [ ] Provide runnable end-to-end examples and integration tests with explicit external prerequisites and teardown.\\n\"\nnew = old[:-1].replace(\"- [ ]\", \"- [x]\", 1) + \" [`examples/browser`](examples/browser/README.md) holds a runnable example for each integration: it signs in on a sample page with Chrome through WebDriver or with Chromium through Playwright, or opens Android's Settings through Appium, asserts what it sees, saves a screenshot, and closes what it opened in `Finally`; its README lists each one's prerequisites, inputs, and teardown. `tests/browser_examples.rs` checks every example and runs each where its prerequisites are configured, as CI's Linux, Playwright, and Appium jobs require; a run must log what it promises, write its screenshot, and leave no process behind, which a probe that leaked the driver showed the test catches. [Evidence](docs/browser-examples-evidence.json).\\n\"\nassert s.count(old) == 1\nf.write_text(s.replace(old, new))\n"
+    }
+  }
+}
