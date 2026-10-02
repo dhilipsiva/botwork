@@ -982,8 +982,13 @@ pub fn evaluate_program(program: &Program, context: &mut Context) -> LiteralResu
 }
 
 /// Validate and execute a program while preserving structured diagnostic causes.
+/// It then waits for the worker processes the program's statements left
+/// unresolved; see `docs/shutdown.md#run-end`.
 pub fn evaluate_program_detailed(program: &Program, context: &mut Context) -> RuntimeResult {
-    evaluate_program_runtime(program, context).map_err(RuntimeDiagnostic::into_diagnostic)
+    let result = evaluate_program_runtime(program, context);
+    let unsettled = context.settle_workers_blocking();
+    crate::core::run::workers::with_unsettled(result, unsettled, context.budget.as_ref())
+        .map_err(RuntimeDiagnostic::into_diagnostic)
 }
 
 /// Execute using an owned context so dropping the future drops all suspended DSL state.
@@ -996,11 +1001,13 @@ pub fn evaluate_program_async(
     context.asynchronous = true;
     async move {
         let result = execution::evaluate_program_runtime(program, &mut context).await;
-        context.after_evaluation(result).map_err(|error| {
-            context
-                .runtime_diagnostic(error, None, false)
-                .into_diagnostic()
-        })
+        let result = context
+            .after_evaluation(result)
+            .map_err(|error| context.runtime_diagnostic(error, None, false));
+        // As a run ends, it waits for the workers it left unresolved.
+        let unsettled = context.settle_workers().await;
+        crate::core::run::workers::with_unsettled(result, unsettled, context.budget.as_ref())
+            .map_err(RuntimeDiagnostic::into_diagnostic)
     }
 }
 

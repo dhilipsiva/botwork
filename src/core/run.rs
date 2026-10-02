@@ -35,6 +35,7 @@ mod tests;
 mod asynchronous;
 mod attempt;
 mod cleanup;
+pub(crate) mod workers;
 pub use cleanup::CleanupLimits;
 pub(crate) mod blocking_io;
 mod import_limits;

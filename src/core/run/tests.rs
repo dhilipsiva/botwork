@@ -248,3 +248,66 @@ fn a_run_ends_failing_with_the_workers_it_left_unresolved() {
     assert!(before.elapsed() < Duration::from_millis(100));
     assert!(active.finish(Ok(Literal::None), None).result.is_ok());
 }
+
+/// A host's own context, as the CLI evaluates each run, settles its workers
+/// as an Engine run does, synchronously or not.
+#[cfg(unix)]
+#[test]
+fn evaluating_a_context_settles_the_workers_it_left_unresolved() {
+    use crate::core::{
+        ast::Program,
+        diagnostic::DiagnosticCode,
+        eval::{evaluate_program_async, evaluate_program_detailed},
+        operation::OperationControl,
+        worker::{WorkerCommand, WorkerLimits, WorkerPool},
+    };
+    let pool = WorkerPool::new(WorkerLimits::default()).unwrap();
+    let limits = RunLimits {
+        cleanup: CleanupLimits {
+            timeout: Duration::from_millis(100),
+            ..CleanupLimits::default()
+        },
+        ..RunLimits::default()
+    };
+    let program = Program::parse("main", "|x| = |1|").unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    for asynchronous in [false, true] {
+        let mut context =
+            Context::with_host_environment(limits.clone(), OperationControl::default()).unwrap();
+        let handle = pool
+            .start(
+                WorkerCommand {
+                    executable: "/bin/sleep".into(),
+                    arguments: vec!["30".into()],
+                    directory: std::env::temp_dir(),
+                    environment: Default::default(),
+                },
+                Vec::new(),
+                OperationControl::default(),
+            )
+            .unwrap();
+        let ledger = Arc::clone(&context.environment.as_ref().unwrap().workers);
+        ledger.record(&pool, handle.id());
+        let error = if asynchronous {
+            runtime.block_on(evaluate_program_async(&program, context))
+        } else {
+            evaluate_program_detailed(&program, &mut context)
+        }
+        .unwrap_err();
+        assert_eq!(error.code(), DiagnosticCode::AsyncRuntime, "{error}");
+        assert!(
+            error
+                .to_string()
+                .contains("not cleaned up within its 100 ms cleanup allowance"),
+            "{error}"
+        );
+        // Dropping the handle stops the worker, and the ledger quiets.
+        drop(handle);
+        assert!(pool.settle(None, Duration::from_secs(5)).is_empty());
+        assert!(!ledger.pending());
+    }
+    runtime.shutdown_background();
+}
