@@ -69,7 +69,9 @@ misspelled one is an error before the run.
 Botwork starts a driver on a free loopback port, in the run's directory and
 environment, passing `--port=N` as chromedriver and geckodriver accept. It
 returns once the driver answers, or fails when the driver exits first or does
-not answer within `timeout_ms`.
+not answer within `timeout_ms`. Starting the browser is the session's first
+command, and the slowest: on a busy machine, such as a shared CI runner, it
+has taken over 30 seconds, so give `timeout_ms` room there.
 
 ## Handles
 

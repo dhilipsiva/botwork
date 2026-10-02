@@ -700,7 +700,7 @@ fn a_real_browser_fills_a_form_waits_and_takes_a_screenshot() {
         "main.botwork",
         &format!(
             r##"Import |"botwork:webdriver"| As |web|
-|browser| = web::Open Browser |{{driver: {driver}, capabilities: {{browserName: "chrome", "goog:chromeOptions": {options}}}}}|
+|browser| = web::Open Browser |{{driver: {driver}, capabilities: {{browserName: "chrome", "goog:chromeOptions": {options}}}, timeout_ms: 120000}}|
 web::Navigate |browser| To |"{page}"|
 Log |@{{ web::Title Of |browser| }}|
 |name| = web::Find Element |"#name"| In |browser|

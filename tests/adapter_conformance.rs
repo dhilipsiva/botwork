@@ -169,17 +169,33 @@ fn run(directory: &Path, adapter: &Adapter, source: &str, options: RunOptions) -
         .enable_all()
         .build()
         .unwrap();
-    let result = runtime.block_on(Engine::default().run_source_async(
-        "main.botwork",
-        &format!("Import |\"{}\"| As |m|\n{source}", adapter.file),
-        RunOptions {
-            working_directory: Some(directory.into()),
-            ..options
-        },
-    ));
+    // A run that hangs fails here, naming its adapter, rather than holding the
+    // test binary until CI's job limit.
+    let result = runtime.block_on(async {
+        tokio::time::timeout(
+            HANG,
+            Engine::default().run_source_async(
+                "main.botwork",
+                &format!("Import |\"{}\"| As |m|\n{source}", adapter.file),
+                RunOptions {
+                    working_directory: Some(directory.into()),
+                    ..options
+                },
+            ),
+        )
+        .await
+    });
     runtime.shutdown_background();
-    result
+    result.unwrap_or_else(|_| {
+        panic!(
+            "{}: the run did not finish within {HANG:?}:\n{source}",
+            adapter.file
+        )
+    })
 }
+
+/// Far longer than any scenario takes, even with Node starting cold.
+const HANG: Duration = Duration::from_secs(180);
 
 fn value(result: &RunResult, adapter: &Adapter, name: &str) -> Literal {
     assert!(
