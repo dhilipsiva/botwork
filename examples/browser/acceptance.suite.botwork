@@ -1,0 +1,21 @@
+# W5: sign in on the sample page once per person, each in a Chrome of its own.
+# The browser is left to the run's end, so a failed assertion keeps a
+# screenshot and the page source in artifacts/. See README.md.
+Suite |"sign-in"| Named |"Sign-in acceptance"| Tags |["browser"]| {
+    Dataset |"people"| {
+        Row |"ada"| Values |{name: "Ada"}|
+        Row |"grace"| Values |{name: "Grace"}|
+    }
+    Library {
+        Import |"botwork:webdriver"| As |web|
+        Import |"sign-in.botwork"| As |pages|
+    }
+    Case |"greets"| Named |"Greets the person who signs in"| Using |"people"| As |person| {
+        |browser| = web::Open Browser |{driver: driver, capabilities: @{ pages::Chrome Capabilities For |chrome| With |browser_args| }, timeout_ms: 120000, failure_artifacts: "artifacts"}|
+        pages::Open Sign In Page In |browser|
+        |greeting| = pages::Sign In As |person.name| In |browser|
+        Assert |greeting| Equals |@{ Format String |"{greeting}, {name}"| With |{greeting: expected_greeting, name: person.name}| }|
+        Log |greeting|
+        web::Close Browser |browser|
+    }
+}

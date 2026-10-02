@@ -16,7 +16,13 @@ fn examples() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/browser")
 }
 
-const RUNNABLE: [&str; 3] = ["webdriver.botwork", "playwright.botwork", "appium.botwork"];
+/// Each runnable example, and the option that runs it.
+const RUNNABLE: [(&str, &str); 4] = [
+    ("webdriver.botwork", "--file"),
+    ("playwright.botwork", "--file"),
+    ("appium.botwork", "--file"),
+    ("acceptance.suite.botwork", "--suite"),
+];
 
 fn copy_examples(to: &Path) {
     for entry in fs::read_dir(examples()).unwrap() {
@@ -69,20 +75,22 @@ fn every_example_checks_clean_and_reads_only_its_documented_inputs() {
     assert_eq!(
         scripts,
         [
+            "acceptance.suite.botwork",
             "appium.botwork",
             "page.botwork",
             "playwright.botwork",
+            "sign-in.botwork",
             "webdriver.botwork"
         ]
     );
-    for name in RUNNABLE {
+    for (name, option) in RUNNABLE {
         assert!(
             readme.contains(&format!("| `{name}` |"))
-                && readme.contains(&format!("botwork --file {name} --vars-file inputs.json")),
+                && readme.contains(&format!("botwork {option} {name} --vars-file inputs.json")),
             "README.md must state {name}'s prerequisites and how to run it"
         );
         let output = Command::new(env!("CARGO_BIN_EXE_botwork"))
-            .args(["--check", "--file", name])
+            .args(["--check", option, name])
             .current_dir(examples())
             .output()
             .unwrap();
@@ -251,4 +259,135 @@ fn the_appium_example_opens_settings_on_android() {
         "Settings shows network settings\n",
         "settings.png",
     );
+}
+
+/// The acceptance suite (W5) with Chrome: every row signs in and passes.
+#[test]
+fn the_acceptance_suite_signs_in_each_person() {
+    let Some(driver) = configured("BOTWORK_WEBDRIVER", "BOTWORK_REQUIRE_WEBDRIVER") else {
+        return;
+    };
+    let directory = tempfile::tempdir().unwrap();
+    copy_examples(directory.path());
+    let output = acceptance(directory.path(), &driver, &[]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut greetings: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    greetings.sort();
+    assert_eq!(greetings, ["Hello, Ada", "Hello, Grace"]);
+    // Rows that pass keep no failure artifacts.
+    let left: Vec<_> = fs::read_dir(directory.path().join("artifacts"))
+        .unwrap()
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
+}
+
+/// The acceptance suite's failure diagnosis (W5): a wrong expectation fails
+/// each row with BW9001, the run's end captures each row's browser, the
+/// failed-case record names the rows, and rerunning them after the repair
+/// passes.
+#[test]
+fn a_failing_acceptance_row_is_captured_recorded_and_rerun() {
+    let Some(driver) = configured("BOTWORK_WEBDRIVER", "BOTWORK_REQUIRE_WEBDRIVER") else {
+        return;
+    };
+    let directory = tempfile::tempdir().unwrap();
+    copy_examples(directory.path());
+    let output = acceptance(
+        directory.path(),
+        &driver,
+        &[
+            "--var",
+            "expected_greeting=\"Hi\"",
+            "--failures",
+            "failed.json",
+            "--report-json",
+            "report.json",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        text.contains("[BW9001]") && text.contains("Expected \"Hi, Ada\""),
+        "{text}"
+    );
+    let failed: serde_json::Value =
+        serde_json::from_slice(&fs::read(directory.path().join("failed.json")).unwrap()).unwrap();
+    assert_eq!(
+        failed["failed"],
+        serde_json::json!(["sign-in/greets/ada", "sign-in/greets/grace"])
+    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&fs::read(directory.path().join("report.json")).unwrap()).unwrap();
+    for run in report["runs"].as_array().unwrap() {
+        let kinds: Vec<&str> = run["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|artifact| artifact["kind"].as_str().unwrap())
+            .collect();
+        for kind in ["failure-screenshot", "failure-source", "driver-log"] {
+            assert!(
+                kinds.contains(&kind),
+                "{}: {kinds:?}",
+                run["identity"]["id"]
+            );
+        }
+        for artifact in run["artifacts"].as_array().unwrap() {
+            assert!(
+                Path::new(artifact["path"].as_str().unwrap()).is_file(),
+                "{artifact}"
+            );
+        }
+    }
+    // The repair is the right expectation; the rerun selects only the failed rows.
+    let output = acceptance(
+        directory.path(),
+        &driver,
+        &["--rerun-failed", "failed.json"],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("[cases] 2 selected: 2 succeeded"));
+    #[cfg(target_os = "linux")]
+    {
+        let directory = botwork::core::paths::canonicalize(directory.path()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut remaining = left_behind(&directory, "--botwork-example-never");
+        while !remaining.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+            remaining = left_behind(&directory, "--botwork-example-never");
+        }
+        assert!(remaining.is_empty(), "left running: {remaining:#?}");
+    }
+}
+
+/// Run the acceptance suite in `directory` with Chrome through `driver`.
+fn acceptance(directory: &Path, driver: &str, more: &[&str]) -> Output {
+    let chrome = std::env::var("BOTWORK_CHROME").unwrap_or_default();
+    let driver = format!("driver={}", serde_json::json!(driver));
+    let chrome = format!("chrome={}", serde_json::json!(chrome));
+    let mut arguments = vec![
+        "--suite",
+        "acceptance.suite.botwork",
+        "--vars-file",
+        "inputs.json",
+        "--var",
+        &driver,
+        "--var",
+        &chrome,
+        "--jobs",
+        "2",
+    ];
+    arguments.extend(more);
+    botwork(directory, &arguments, Duration::from_secs(600))
 }

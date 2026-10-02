@@ -44,7 +44,7 @@ These thresholds are project goals for a small formative study. Report cohort si
 
 ## Representative Automation Workflows
 
-Assess these complete workflows as their roadmap dependencies arrive. Each must include runnable source, setup/teardown instructions, expected results, and automated checks for both success and failure.
+Assess these complete workflows as their roadmap dependencies arrive. Each must include runnable source, setup/teardown instructions, expected results, and automated checks for both success and failure. [Reference workflows](reference-workflows.md) names each one's sources and checks.
 
 | ID | Workflow | Required evidence |
 | --- | --- | --- |

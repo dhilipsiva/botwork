@@ -1,0 +1,24 @@
+# Statements for the sample sign-in page, which the acceptance suite imports:
+# how to reach Chrome, how to open the page, and how to sign in on it.
+Import |"botwork:webdriver"| As |web|
+Import |"page.botwork"| As |sample|
+
+Chrome Capabilities For |chrome| With |arguments| {
+    |options| = |{args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage"] + arguments}|
+    If |chrome != ""| {
+        |options| = Set In |options| At |"binary"| To |chrome|
+    }
+    Return |{browserName: "chrome", "goog:chromeOptions": options}|
+}
+
+Open Sign In Page In |browser| {
+    web::Navigate |browser| To |@{ sample::Sign In Page }|
+}
+
+Sign In As |name| In |browser| {
+    web::Clear |@{ web::Find Element |"#name"| In |browser| }|
+    web::Type |name| Into |@{ web::Find Element |"#name"| In |browser| }|
+    web::Click |@{ web::Find Element |{xpath: "//button"}| In |browser| }|
+    |greeting| = web::Wait For Element |"#greeting"| In |browser| Within |10000|
+    Return |@{ web::Text Of |greeting| }|
+}

@@ -1,7 +1,8 @@
 # Complete automation examples
 
 These tasks combine input variables, imported custom statements, assertions, and
-standard statements. Run commands from the repository root. The scripts and
+standard statements. [Reference workflows](reference-workflows.md) lists them
+with the other workflows the quality assessment uses. Run commands from the repository root. The scripts and
 helper modules linked below are the complete executable sources; the CLI tests
 run those same files with their bundled JSON configuration.
 

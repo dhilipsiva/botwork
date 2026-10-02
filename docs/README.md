@@ -18,6 +18,8 @@ index.
 - [The Rust API](rust-api.md): what the crate's stable API is, and how it can
   change in a minor release.
 - [Complete automation examples](automation-examples.md)
+- [Reference workflows](reference-workflows.md): the six workflows the quality
+  assessment uses, each with its sources and checks.
 - [Browser automation with WebDriver](webdriver.md): drive Chrome, Firefox, or
   a Selenium Grid through a W3C WebDriver server.
 - [Browser automation with Playwright](playwright.md): drive Chromium, Firefox,

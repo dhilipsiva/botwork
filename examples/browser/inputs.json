@@ -2,5 +2,6 @@
   "driver": "chromedriver",
   "chrome": "",
   "browser_args": [],
-  "appium": "appium"
+  "appium": "appium",
+  "expected_greeting": "Hello"
 }
