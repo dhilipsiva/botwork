@@ -1,0 +1,23 @@
+# Sign in on the sample page in headless Chrome, through chromedriver.
+# Needs Chrome and the chromedriver of its major version: see README.md. From
+# this directory:
+#   botwork --file webdriver.botwork --vars-file inputs.json
+# It writes signed-in.png here, and closes the browser however the run ends.
+Import |"botwork:webdriver"| As |web|
+Import |"page.botwork"| As |sample|
+|options| = |{args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage"] + browser_args}|
+If |chrome != ""| {
+    |options| = Set In |options| At |"binary"| To |chrome|
+}
+|browser| = web::Open Browser |{driver: driver, capabilities: {browserName: "chrome", "goog:chromeOptions": options}, timeout_ms: 120000}|
+Try {
+    web::Navigate |browser| To |@{ sample::Sign In Page }|
+    web::Type |"Ada"| Into |@{ web::Find Element |"#name"| In |browser| }|
+    web::Click |@{ web::Find Element |{xpath: "//button"}| In |browser| }|
+    |greeting| = web::Wait For Element |"#greeting"| In |browser| Within |10000|
+    Assert |@{ web::Text Of |greeting| }| Equals |"Hello, Ada"|
+    web::Take Screenshot Of |browser| To |"signed-in.png"|
+    Log |@{ web::Text Of |greeting| }|
+} Finally {
+    web::Close Browser |browser|
+}

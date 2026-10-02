@@ -1,0 +1,16 @@
+# Open Android's Settings app on a device or emulator, through Appium.
+# Needs Appium, its UiAutomator2 driver, and an Android device that adb sees:
+# see README.md. From this directory:
+#   botwork --file appium.botwork --vars-file inputs.json
+# It writes settings.png here, and ends the session however the run ends.
+Import |"botwork:webdriver"| As |web|
+|settings| = |{platformName: "Android", "appium:automationName": "UiAutomator2", "appium:appPackage": "com.android.settings", "appium:appActivity": ".Settings"}|
+|device| = web::Open Browser |{driver: appium, capabilities: settings, timeout_ms: 300000}|
+Try {
+    |network| = web::Wait For Element |{android_uiautomator: "new UiSelector().textContains(\"Network\")"}| In |device| Within |120000|
+    Assert |@{ web::Is Displayed |network| }|
+    web::Take Screenshot Of |device| To |"settings.png"|
+    Log |"Settings shows network settings"|
+} Finally {
+    web::Close Browser |device|
+}

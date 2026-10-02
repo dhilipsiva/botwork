@@ -1,0 +1,6 @@
+# The page the browser examples sign in on. It is a data: URL, so the examples
+# need no web server or file path: a name field, and a button that greets the
+# name 300 ms after it is clicked, as a page that loads its answer would.
+Sign In Page {
+    Return |"data:text/html,<title>Sign in</title><label>Name <input id=name></label><button onclick=\"setTimeout(() => { const p = document.createElement('p'); p.id = 'greeting'; p.textContent = 'Hello, ' + document.getElementById('name').value; document.body.append(p) }, 300)\">Sign in</button>"|
+}

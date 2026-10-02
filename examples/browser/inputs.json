@@ -1,0 +1,6 @@
+{
+  "driver": "chromedriver",
+  "chrome": "",
+  "browser_args": [],
+  "appium": "appium"
+}

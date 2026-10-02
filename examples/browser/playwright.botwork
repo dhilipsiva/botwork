@@ -1,0 +1,19 @@
+# Sign in on the sample page in Chromium, with Playwright.
+# Needs Node.js, and Playwright with its Chromium installed here: see
+# README.md. From this directory:
+#   botwork --file playwright.botwork --vars-file inputs.json
+# It writes signed-in.png here, and closes the browser however the run ends.
+Import |"botwork:playwright"| As |pw|
+Import |"page.botwork"| As |sample|
+|browser| = pw::Launch Browser |{args: browser_args, timeout_ms: 120000}|
+Try {
+    |page| = pw::New Page In |@{ pw::New Context In |browser| With |{}| }|
+    pw::Go To |@{ sample::Sign In Page }| In |page|
+    pw::Fill |"#name"| With |"Ada"| In |page|
+    pw::Click |{xpath: "//button"}| In |page|
+    pw::Expect |"#greeting"| In |page| To Have Text |"Hello, Ada"|
+    pw::Screenshot Of |page| To |"signed-in.png"|
+    Log |@{ pw::Text Of |"#greeting"| In |page| }|
+} Finally {
+    pw::Close Browser |browser|
+}

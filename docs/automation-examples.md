@@ -130,6 +130,28 @@ For a failing demonstration, change the URL path to `/missing.json`. The local
 server responds with 404; the imported status assertion emits BW9001 with its
 module source location, the CLI exits nonzero, and no success message is printed.
 
+## Drive a browser or a device
+
+[`examples/browser`](../examples/browser/README.md) holds one runnable example
+for each browser and device integration: it signs in on a sample page with
+Chrome through [WebDriver](webdriver.md) or with Chromium through
+[Playwright](playwright.md), or opens Android's Settings through
+[Appium](appium.md). Each needs its browser, driver, or device, which its
+README lists with how to install them, and each closes what it opened in
+`Finally`, as the run itself would. Run them from that directory:
+
+```sh
+cd examples/browser
+botwork --file webdriver.botwork --vars-file inputs.json
+```
+
+`cargo test --locked --test browser_examples` checks every example, and runs
+each one where its prerequisites are configured: `BOTWORK_WEBDRIVER`
+(chromedriver), `BOTWORK_PLAYWRIGHT` (a directory with Playwright), or
+`BOTWORK_APPIUM` (Appium, with a device). CI sets each in the job that has it.
+A run must log what the example promises, write its screenshot, and leave no
+process behind.
+
 ## Paths and verification
 
 Imports resolve relative to the `.botwork` source file. Filesystem inputs and
