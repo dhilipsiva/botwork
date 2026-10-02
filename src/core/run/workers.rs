@@ -101,3 +101,53 @@ fn unsettled(workers: &[ActiveWorker], allowance: Duration) -> Option<Diagnostic
     }
     Some(Diagnostic::new(BWErr::AsyncRuntime(text)))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn worker(
+        id: u64,
+        pid: Option<u32>,
+        stopping: bool,
+        cleanup: Option<WorkerCleanup>,
+    ) -> ActiveWorker {
+        ActiveWorker {
+            id,
+            pid,
+            stopping,
+            cleanup,
+        }
+    }
+
+    #[test]
+    fn the_failure_names_each_state_and_at_most_eight_workers() {
+        assert!(unsettled(&[], Duration::from_secs(5)).is_none());
+        let mut workers = vec![
+            worker(1, Some(10), false, None),
+            worker(2, Some(20), true, None),
+            worker(3, None, true, Some(WorkerCleanup::Pending)),
+            worker(4, Some(40), true, Some(WorkerCleanup::Unverified)),
+        ];
+        let error = unsettled(&workers, Duration::from_millis(1500)).unwrap();
+        assert_eq!(
+            error.code(),
+            crate::core::diagnostic::DiagnosticCode::AsyncRuntime
+        );
+        assert_eq!(
+            error.error.to_string(),
+            "Async runtime failure: The run ended with 4 worker processes not cleaned up within its 1500 ms cleanup allowance: worker 1 (process 10): running; worker 2 (process 20): stopping; worker 3: cleanup pending; worker 4 (process 40): ownership lost"
+        );
+        workers.extend((5..=10).map(|id| worker(id, None, false, None)));
+        let text = unsettled(&workers, Duration::ZERO)
+            .unwrap()
+            .error
+            .to_string();
+        assert!(
+            text.contains("The run ended with 10 worker processes"),
+            "{text}"
+        );
+        assert!(text.contains("worker 8: running; and 2 more"), "{text}");
+        assert!(!text.contains("worker 9"), "{text}");
+    }
+}

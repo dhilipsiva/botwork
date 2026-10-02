@@ -719,10 +719,23 @@ async fn concurrent_process_calls_keep_run_environment_and_directory_separate() 
 fn a_run_ends_only_after_the_process_its_statement_left_behind() {
     let dir = tempfile::tempdir().unwrap();
     let source = format!("{BLOCK} Options |{{\"timeout_ms\": 100, \"cleanup_timeout_ms\": 0}}|");
-    for _ in 0..20 {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    for attempt in 0..20 {
         let started = dir.path().join("started");
         let _ = fs::remove_file(&started);
-        let result = run(dir.path(), &source);
+        // Synchronous and asynchronous runs alike.
+        let result = if attempt % 2 == 0 {
+            run(dir.path(), &source)
+        } else {
+            runtime.block_on(Engine::default().run_source_async(
+                "process.botwork",
+                &source,
+                options(dir.path()),
+            ))
+        };
         let error = result.result.unwrap_err();
         // The worker ended as the run did, so its failure names no workers.
         assert!(
