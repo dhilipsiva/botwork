@@ -30,6 +30,8 @@ pub(super) struct Failure {
     pub(super) message: String,
     /// What the host captured of the page the command failed in: (kind, path).
     pub(super) artifacts: Vec<(String, String)>,
+    /// What an expectation saw and wanted: (actual, expected).
+    pub(super) operands: Option<Box<(Value, Value)>>,
 }
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, Failure>>>>>;
@@ -81,6 +83,7 @@ impl Host {
             kind: "setup".into(),
             message: "Playwright needs Node.js on the run's PATH".into(),
             artifacts: Vec::new(),
+            operands: None,
         })?;
         let mut command = std::process::Command::new(node);
         command
@@ -100,6 +103,7 @@ impl Host {
             kind: "setup".into(),
             message: format!("could not start Node for Playwright: {error}"),
             artifacts: Vec::new(),
+            operands: None,
         })?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
@@ -113,6 +117,7 @@ impl Host {
                     kind: "setup".into(),
                     message: format!("could not read the Playwright host: {error}"),
                     artifacts: Vec::new(),
+                    operands: None,
                 })?
         };
         let process = Arc::new(Process {
@@ -159,6 +164,7 @@ impl Host {
             kind: "error".into(),
             message: "the Playwright host exited".into(),
             artifacts: Vec::new(),
+            operands: None,
         };
         process
             .stdin
@@ -178,6 +184,7 @@ impl Host {
                     timeout.as_millis()
                 ),
                 artifacts: Vec::new(),
+                operands: None,
             }),
         }
     }
@@ -211,6 +218,9 @@ fn read(stdout: ChildStdout, pending: &Pending, recorder: Option<&crate::core::r
                 kind: error["kind"].as_str().unwrap_or("error").to_owned(),
                 message: error["message"].as_str().unwrap_or_default().to_owned(),
                 artifacts: saved(&error["artifacts"]),
+                operands: error.get("operands").map(|operands| {
+                    Box::new((operands["actual"].clone(), operands["expected"].clone()))
+                }),
             }),
             None => Ok(answer.get("value").cloned().unwrap_or(Value::Null)),
         };

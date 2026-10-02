@@ -2,7 +2,7 @@
 use super::*;
 use crate::core::{diagnostic::DiagnosticCode as Code, signature::ValueKind as Kind};
 use std::time::Duration;
-mod assertions;
+pub(in crate::core::eval) mod assertions;
 mod collections;
 mod data;
 mod datetime;

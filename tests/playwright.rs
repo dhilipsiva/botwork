@@ -185,16 +185,19 @@ Try {
     pw::Expect |"#status"| In |page| To Have Text |"Lost"|
 } Catch |error| {
     Log |[error.code, error.message]|
+    Log |[error.details.actual, error.details.expected]|
 }
 Try {
     pw::Expect |"#never"| In |page| To Have Text |"x"|
 } Catch |error| {
     Log |error.message|
+    Log |[error.details.actual, error.details.expected]|
 }
 Try {
     pw::Expect Title Of |page| To Be |"Other"|
 } Catch |error| {
     Log |error.message|
+    Log |[error.details.actual, error.details.expected]|
 }
 Try {
     pw::Wait For |"#never"| In |page| Within |200|
@@ -208,8 +211,11 @@ Try {
     assert_eq!(
         stdout(&output),
         r##"["BW9001", "Assertion failed: `#status` should have the text \"Lost\", but it has \"Saved\""]
+["{\"kind\":\"String\",\"value\":\"Saved\"}", "{\"kind\":\"String\",\"value\":\"Lost\"}"]
 Assertion failed: `#never` should have the text "x", but no element matched
+["{\"kind\":\"None\",\"value\":null}", "{\"kind\":\"String\",\"value\":\"x\"}"]
 Assertion failed: the page should have the title "Other", but it has "Fake page"
+["{\"kind\":\"String\",\"value\":\"Fake page\"}", "{\"kind\":\"String\",\"value\":\"Other\"}"]
 ["BW9004", "Condition not met: no element matched `#never` within 200 ms"]
 "##
     );

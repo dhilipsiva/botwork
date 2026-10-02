@@ -121,6 +121,12 @@ value:
 Assertion failed: `#status` should have the text "Saved", but it has "Saving"
 ```
 
+A `Catch` sees the values themselves too, typed as `Assert` reports them:
+`error.details.actual` is `{"kind":"String","value":"Saving"}` and
+`error.details.expected` is `{"kind":"String","value":"Saved"}`. A text
+expectation that matched no element has the actual value None, and a visibility
+expectation has the Bools `false` and `true`.
+
 For other checks, Botwork's own `Assert` compares what the statements return,
 and [`Eventually`](polling.md) retries any of them.
 

@@ -52,6 +52,12 @@ pub(super) fn failure(
     )
 }
 
+/// A value as an assertion's typed operand, for adapters whose own
+/// assertions compare values.
+pub(in crate::core::eval) fn typed(value: &Literal) -> String {
+    Typed(value).to_string()
+}
+
 /// No width-sized sorting buffers are allocated while measuring or rendering.
 struct Human<'a>(&'a Literal);
 impl fmt::Display for Human<'_> {

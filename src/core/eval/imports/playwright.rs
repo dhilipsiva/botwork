@@ -289,7 +289,20 @@ fn failed(failure: host::Failure, run: &Run) -> Diagnostic {
     }
     match failure.kind.as_str() {
         "handle" | "value" => incompatible(message),
-        "assertion" => Diagnostic::new(BWErr::AssertionFailed(message)),
+        // An expectation's operands, typed as `Assert`'s are.
+        "assertion" => match failure.operands.as_deref().and_then(|(actual, expected)| {
+            Some((
+                webdriver::values::from_json(actual, "").ok()?,
+                webdriver::values::from_json(expected, "").ok()?,
+            ))
+        }) {
+            Some((actual, expected)) => Diagnostic::new(BWErr::AssertionMismatch {
+                reason: message,
+                actual: builtins::assertions::typed(&actual),
+                expected: builtins::assertions::typed(&expected),
+            }),
+            None => Diagnostic::new(BWErr::AssertionFailed(message)),
+        },
         "wait" => Diagnostic::new(BWErr::ConditionNotMet {
             reason: message,
             attempts: "1".into(),

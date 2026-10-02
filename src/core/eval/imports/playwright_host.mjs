@@ -31,9 +31,11 @@ let counter = 0;
 const objects = new Map();
 
 class Failure extends Error {
-  constructor(kind, message) {
+  // An expectation's failure also carries what it saw and wanted.
+  constructor(kind, message, operands) {
     super(message);
     this.kind = kind;
+    this.operands = operands;
   }
 }
 
@@ -218,6 +220,7 @@ const commands = {
       throw new Failure(
         "assertion",
         `\`${selector}\` should have the text ${JSON.stringify(expected)}, but ${result.actual === null ? "no element matched" : `it has ${JSON.stringify(result.actual)}`}`,
+        { actual: result.actual, expected },
       );
     }
     return null;
@@ -226,7 +229,10 @@ const commands = {
     const target = locator(handle, selector);
     const result = await until(timeoutOf(handle), async () => ({ ok: await target.isVisible() }));
     if (!result.ok) {
-      throw new Failure("assertion", `\`${selector}\` should be visible, but it is not`);
+      throw new Failure("assertion", `\`${selector}\` should be visible, but it is not`, {
+        actual: false,
+        expected: true,
+      });
     }
     return null;
   },
@@ -237,7 +243,11 @@ const commands = {
       return { ok: actual === expected, actual };
     });
     if (!result.ok) {
-      throw new Failure("assertion", `the page should have the title ${JSON.stringify(expected)}, but it has ${JSON.stringify(result.actual)}`);
+      throw new Failure(
+        "assertion",
+        `the page should have the title ${JSON.stringify(expected)}, but it has ${JSON.stringify(result.actual)}`,
+        { actual: result.actual, expected },
+      );
     }
     return null;
   },
@@ -314,6 +324,7 @@ lines.on("line", (line) => {
             // Playwright colours its call logs for terminals.
             message: String(error?.message ?? error).replace(/\x1b\[[0-9;]*m/g, ""),
             artifacts: page ? await capture(page) : [],
+            ...(error instanceof Failure && error.operands ? { operands: error.operands } : {}),
           },
         });
       },
