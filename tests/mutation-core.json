@@ -1,5 +1,5 @@
 {
-  "version": 68,
+  "version": 69,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4872,6 +4872,118 @@
       "file": "src/core/eval/imports/javascript_host.mjs",
       "before": "    if (total + grows > RAISED_TOTAL) {\n",
       "after": "    if (false) {\n"
+    },
+    {
+      "id": "settlement-wait-skipped",
+      "area": "worker-settlement",
+      "file": "src/core/worker.rs",
+      "before": "            if remaining.is_zero() {\n                return unresolved;\n            }\n",
+      "after": "            if true {\n                return unresolved;\n            }\n"
+    },
+    {
+      "id": "settlement-waits-for-lost-ownership",
+      "area": "worker-settlement",
+      "file": "src/core/worker.rs",
+      "before": "                .all(|worker| worker.cleanup == Some(WorkerCleanup::Unverified))\n",
+      "after": "                .any(|worker| worker.cleanup == Some(WorkerCleanup::Unverified))\n"
+    },
+    {
+      "id": "settlement-never-forgets",
+      "area": "worker-settlement",
+      "file": "src/core/worker.rs",
+      "before": "            .retain(|(owner, worker)| !(owner.same(pool) && *worker == id));\n",
+      "after": "            .retain(|_| true);\n"
+    },
+    {
+      "id": "settlement-never-pending",
+      "area": "worker-settlement",
+      "file": "src/core/worker.rs",
+      "before": "            .any(|(pool, ids)| !pool.unresolved(ids.as_deref()).is_empty())\n",
+      "after": "            .any(|_| false)\n"
+    },
+    {
+      "id": "settlement-does-not-wait",
+      "area": "worker-settlement",
+      "file": "src/core/worker.rs",
+      "before": "            unresolved.extend(pool.settle(ids.as_deref(), remaining));\n",
+      "after": "            unresolved.extend(pool.unresolved(ids.as_deref()));\n"
+    },
+    {
+      "id": "settlement-drops-recorded-workers",
+      "area": "worker-settlement",
+      "file": "src/core/worker.rs",
+      "before": "                None => groups.push((pool.clone(), Some(vec![*id]))),\n",
+      "after": "                None => {}\n"
+    },
+    {
+      "id": "settlement-allowance-ignored",
+      "area": "worker-settlement",
+      "file": "src/core/run/workers.rs",
+      "before": "                budget.limits().cleanup.timeout\n",
+      "after": "                Duration::ZERO + budget.limits().cleanup.timeout * 0\n"
+    },
+    {
+      "id": "settlement-keeps-success",
+      "area": "worker-settlement",
+      "file": "src/core/run/workers.rs",
+      "before": "        Ok(_) => Err(unsettled),\n",
+      "after": "        Ok(value) => Ok(value),\n"
+    },
+    {
+      "id": "settlement-drops-cause",
+      "area": "worker-settlement",
+      "file": "src/core/run/workers.rs",
+      "before": "        Err(primary) => Err(primary.with_cleanup(unsettled, budget)),\n",
+      "after": "        Err(primary) => Err(primary),\n"
+    },
+    {
+      "id": "settlement-pending-misnamed",
+      "area": "worker-settlement",
+      "file": "src/core/run/workers.rs",
+      "before": "            Some(WorkerCleanup::Pending) => \"cleanup pending\",\n",
+      "after": "            Some(WorkerCleanup::Pending) => \"running\",\n"
+    },
+    {
+      "id": "settlement-names-every-worker",
+      "area": "worker-settlement",
+      "file": "src/core/run/workers.rs",
+      "before": "    if workers.len() > NAMED_WORKERS {\n",
+      "after": "    if false {\n"
+    },
+    {
+      "id": "settlement-sync-engine-skipped",
+      "area": "worker-settlement",
+      "file": "src/core/run.rs",
+      "before": "        let unsettled = active.settle_blocking();\n",
+      "after": "        let unsettled = None;\n"
+    },
+    {
+      "id": "settlement-async-engine-skipped",
+      "area": "worker-settlement",
+      "file": "src/core/run/asynchronous.rs",
+      "before": "        let unsettled = active.settle().await;\n",
+      "after": "        let unsettled = None;\n"
+    },
+    {
+      "id": "settlement-sync-context-skipped",
+      "area": "worker-settlement",
+      "file": "src/core/eval.rs",
+      "before": "    let unsettled = context.settle_workers_blocking();\n",
+      "after": "    let unsettled = None;\n"
+    },
+    {
+      "id": "settlement-async-context-skipped",
+      "area": "worker-settlement",
+      "file": "src/core/eval.rs",
+      "before": "        let unsettled = context.settle_workers().await;\n",
+      "after": "        let unsettled = None;\n"
+    },
+    {
+      "id": "settlement-process-unrecorded",
+      "area": "worker-settlement",
+      "file": "src/core/eval/builtins/processes.rs",
+      "before": "        environment.workers.record(pool, id);\n",
+      "after": "        let _ = (pool, id);\n"
     }
   ]
 }
