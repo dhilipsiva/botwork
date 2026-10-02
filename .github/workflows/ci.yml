@@ -157,7 +157,10 @@ jobs:
         run: cargo +stable test --locked --no-fail-fast --target ${{ matrix.target }} ${{ matrix.flags }}
 
   # The worker boundary on an older Ubuntu release than ubuntu-latest, with its
-  # own kernel, libc, and util-linux (docs/worker-platforms.md).
+  # own kernel and util-linux (docs/worker-platforms.md). Its glibc 2.35 cannot
+  # load GNU builds made from a checkout, which pack relative relocations and
+  # need glibc 2.36 (decision D19), so the static musl build, the one the
+  # release ships, is the one that runs there.
   worker-platforms:
     name: Worker platforms (${{ matrix.os }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -168,7 +171,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04]
-        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl]
+        target: [x86_64-unknown-linux-musl]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
