@@ -22,7 +22,10 @@ Log |@{ math::Double |2| }|
 
 Imports resolve relative to the importing file. A module initializes once per
 run, in its own scope, and exports its root definitions and the qualified
-statements it imports. Modules shared between projects travel as
+statements it imports. It sees the built-in statements and the host's
+operations, but not its importer's variables, definitions, or imports: it
+imports what it uses, under names of its own, even names its importer also
+uses. Modules shared between projects travel as
 [packages](packages.md), which scripts import as `@name/path`. See
 [local modules](language.md#local-modules) and [import limits](import-limits.md).
 `--check` checks the modules a script imports, and the
