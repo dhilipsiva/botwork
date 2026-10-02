@@ -1,5 +1,5 @@
 {
-  "version": 67,
+  "version": 68,
   "mutations": [
     {
       "id": "precedence-products",
@@ -3911,8 +3911,8 @@
       "id": "python-assertion-not-mapped",
       "area": "python",
       "file": "src/core/eval/imports/python.rs",
-      "before": "    if error.is_instance_of::<PyAssertionError>(py) {",
-      "after": "    if false && error.is_instance_of::<PyAssertionError>(py) {"
+      "before": "    let diagnostic = if error.is_instance_of::<PyAssertionError>(py) {",
+      "after": "    let diagnostic = if false && error.is_instance_of::<PyAssertionError>(py) {"
     },
     {
       "id": "python-stop-not-raised",
@@ -3981,8 +3981,8 @@
       "id": "js-host-assertion-not-mapped",
       "area": "javascript",
       "file": "src/core/eval/imports/javascript_host.mjs",
-      "before": "    response = error?.name === \"AssertionError\"\n",
-      "after": "    response = false\n"
+      "before": "  const assertion = error?.name === \"AssertionError\";\n",
+      "after": "  const assertion = false;\n"
     },
     {
       "id": "js-host-any-object-is-a-map",
@@ -4513,8 +4513,8 @@
       "id": "playwright-assertions-reported-as-native",
       "area": "playwright",
       "file": "src/core/eval/imports/playwright.rs",
-      "before": "        \"assertion\" => Diagnostic::new(BWErr::AssertionFailed(message)),\n",
-      "after": "        \"assertion\" => Diagnostic::new(BWErr::NativeError(message)),\n"
+      "before": "        \"assertion\" => match failure.operands.as_deref().and_then(|(actual, expected)| {\n",
+      "after": "        \"assertion-never\" => match failure.operands.as_deref().and_then(|(actual, expected)| {\n"
     },
     {
       "id": "playwright-waits-reported-as-native",
@@ -4739,6 +4739,139 @@
       "file": "src/core/eval/imports.rs",
       "before": "                    ) && !statement.metadata().is_qualified()\n",
       "after": "                    )\n"
+    },
+    {
+      "id": "adapter-diagnostics-import-site-dropped",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/execution.rs",
+      "before": "                        Some(site) => {\n                            error.with_related(\"imported here\", site, context.budget.as_ref())\n                        }\n",
+      "after": "                        Some(_) => error,\n"
+    },
+    {
+      "id": "adapter-diagnostics-import-site-unrecorded",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports.rs",
+      "before": "                import_site: Some(import_site.clone()),\n",
+      "after": "                import_site: None,\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-causes-dropped",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "        diagnostic.causes.push(inner);\n",
+      "after": "        drop(inner);\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-chain-flattened",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "            outer.causes.push(inner);\n",
+      "after": "            drop(inner);\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-cause-bound",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    while chained.len() < MAX_CAUSES {\n",
+      "after": "    while chained.len() < 1 {\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-explicit-cause-ignored",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    explicit.or_else(implicit).map(PyErr::from_value)\n",
+      "after": "    explicit.and(None).or_else(implicit).map(PyErr::from_value)\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-raised-outside-module",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "        if file.starts_with(directory) {\n",
+      "after": "        if !file.starts_with(directory) {\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-raised-unrelated",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "        Some(span) => diagnostic.with_related(\"raised here\", &span),\n",
+      "after": "        Some(_) => diagnostic,\n"
+    },
+    {
+      "id": "adapter-diagnostics-js-causes-dropped",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "    failures.push(one(current));\n",
+      "after": "    one(current);\n"
+    },
+    {
+      "id": "adapter-diagnostics-js-cause-bound",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "    failures.length <= CAUSES &&\n",
+      "after": "    failures.length < 2 &&\n"
+    },
+    {
+      "id": "adapter-diagnostics-js-raised-outside-module",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "    if (!source.startsWith(directory) || /\\[eval\\d*\\]$/.test(source)) continue;\n",
+      "after": "    if (source.startsWith(directory)) continue;\n"
+    },
+    {
+      "id": "adapter-diagnostics-js-raised-unrelated",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "      writer.string(\"raised here\");\n",
+      "after": "      writer.string(\"raised\");\n"
+    },
+    {
+      "id": "adapter-diagnostics-playwright-operands-unsent",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/playwright_host.mjs",
+      "before": "            ...(error instanceof Failure && error.operands ? { operands: error.operands } : {}),\n",
+      "after": ""
+    },
+    {
+      "id": "adapter-diagnostics-playwright-operands-swapped",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/playwright.rs",
+      "before": "                actual: builtins::assertions::typed(&actual),\n",
+      "after": "                actual: builtins::assertions::typed(&expected),\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-raised-unbounded",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    if end > RAISED_BYTES {\n",
+      "after": "    if false && end > RAISED_BYTES {\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-suppression-ignored",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "            .filter(|context| !suppressed && !context.is_none())\n",
+      "after": "            .filter(|context| !context.is_none())\n"
+    },
+    {
+      "id": "adapter-diagnostics-python-implicit-cause-ignored",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/python.rs",
+      "before": "    explicit.or_else(implicit).map(PyErr::from_value)\n",
+      "after": "    explicit.or_else(|| implicit().and(None)).map(PyErr::from_value)\n"
+    },
+    {
+      "id": "adapter-diagnostics-js-raised-unbounded",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "    if (end > RAISED_BYTES) return undefined;\n",
+      "after": ""
+    },
+    {
+      "id": "adapter-diagnostics-js-raised-total-unbounded",
+      "area": "adapter-diagnostics",
+      "file": "src/core/eval/imports/javascript_host.mjs",
+      "before": "    if (total + grows > RAISED_TOTAL) {\n",
+      "after": "    if (false) {\n"
     }
   ]
 }
