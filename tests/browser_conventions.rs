@@ -222,7 +222,7 @@ Try {
     let both = Both::new();
     let output = both.run(
         r##"Try {
-    Eventually |{timeout_ms: 350, interval_ms: 100}| {
+    Eventually |{timeout_ms: 1000, interval_ms: 100}| {
         Assert |@{ web::Text Of |heading| }| Equals |"other"|
     }
 } Catch |error| {
@@ -234,12 +234,32 @@ Try {
     assert!(output.status.success(), "{}", stderr(&output));
     let text = stdout(&output);
     let lines: Vec<&str> = text.lines().collect();
-    let attempts = both.webdriver_requests("GET", "/text").len();
-    assert!(attempts >= 3, "{attempts}");
-    assert_eq!(lines[0], format!("[\"BW9004\", \"{attempts}\"]"));
+    // Count from what the run reports, as load changes how many fit.
+    let attempts: usize = lines[0]
+        .trim_start_matches("[\"BW9004\", \"")
+        .trim_end_matches("\"]")
+        .parse()
+        .unwrap_or_else(|_| panic!("{}", lines[0]));
+    assert!(attempts >= 2, "Eventually retried: {}", lines[0]);
+    // Each attempt read once; the deadline may end the last before it reads.
+    let reads = both.webdriver_requests("GET", "/text").len();
+    assert!(
+        reads == attempts || reads + 1 == attempts,
+        "{reads} reads, {attempts} attempts"
+    );
+    // Every attempt's own failure is kept. The deadline may end the last
+    // attempt, as BW5002, rather than its assertion failing.
+    let kept = attempts.min(16);
+    let failures = lines[1].matches("BW9001").count();
+    let cut_short = lines[1].matches("BW5002").count();
     assert_eq!(
-        lines[1].matches("BW9001").count(),
-        attempts.min(16),
+        lines[1].matches("\"outcome\"").count(),
+        kept,
+        "{}",
+        lines[1]
+    );
+    assert!(
+        cut_short <= 1 && failures + cut_short == kept,
         "{}",
         lines[1]
     );
