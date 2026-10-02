@@ -252,6 +252,11 @@ impl StatementSignature {
         &self.header
     }
 
+    /// Whether this statement was published under an import's namespace.
+    pub(crate) fn is_qualified(&self) -> bool {
+        self.namespace.is_some()
+    }
+
     /// Qualified display name while retaining the original definition's header span.
     pub fn display_header(&self) -> String {
         match &self.namespace {

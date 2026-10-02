@@ -817,11 +817,13 @@ fn prepare_module_context(context: &Context, canonical: &Path) -> DiagnosticResu
             context
                 .get_statement_ref(metadata.normalized())
                 .map(|(statement, _)| statement)
+                // A module sees the host's operations, but not the statements its
+                // importer imported: it imports what it uses, under names of its own.
                 .filter(|statement| {
                     matches!(
                         statement,
                         StmtType::Native { .. } | StmtType::Operation { .. }
-                    )
+                    ) && !statement.metadata().is_qualified()
                 })
         })
         .collect();

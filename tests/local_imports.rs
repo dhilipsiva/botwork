@@ -866,6 +866,52 @@ fn module_globals_and_helpers_are_isolated_from_the_importing_caller() {
 }
 
 #[test]
+fn modules_import_what_they_use_and_never_see_their_importers_imports() {
+    use botwork::core::run::{Engine, RunOptions};
+    let project = Project::new();
+    project.write(
+        "pages.botwork",
+        "Import |\"botwork:webdriver\"| As |web|\nReady { Return |\"ready\"| }",
+    );
+    project.write(
+        "leaky.botwork",
+        "Leak |browser| { Return |@{ web::Title Of |browser| }| }",
+    );
+    let run = |source: &str| {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(Engine::default().run_source_async(
+            "main.botwork",
+            source,
+            RunOptions {
+                working_directory: Some(project.0.workspace.clone()),
+                ..RunOptions::default()
+            },
+        ))
+    };
+    // A module may import a module its importer imported, under the same name.
+    let result = run("Import |\"botwork:webdriver\"| As |web|\nImport |\"pages.botwork\"| As |pages|\n|answer| = pages::Ready");
+    assert!(result.result.is_ok(), "{:?}", result.result);
+    assert_eq!(result.variables["answer"].to_string(), "ready");
+    // A module that does not import it cannot reach its importer's.
+    let result = run("Import |\"botwork:webdriver\"| As |web|\nImport |\"leaky.botwork\"| As |leaky|\nleaky::Leak |{session: \"s\"}|");
+    let error = result.result.unwrap_err();
+    assert_eq!(error.code(), DiagnosticCode::UndefinedStatement, "{error}");
+    assert!(
+        error
+            .span
+            .as_ref()
+            .unwrap()
+            .source()
+            .name()
+            .ends_with("leaky.botwork"),
+        "{error}"
+    );
+}
+
+#[test]
 fn canonical_cache_initializes_once_across_aliases_and_retains_successful_snapshots() {
     let project = Project::new();
     let path = project.write("module.botwork", "Initialize\nValue { Return |7| }");

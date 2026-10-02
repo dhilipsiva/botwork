@@ -1,5 +1,5 @@
 {
-  "version": 66,
+  "version": 67,
   "mutations": [
     {
       "id": "precedence-products",
@@ -4732,6 +4732,13 @@
       "file": "src/core/eval/imports/playwright.rs",
       "before": "                recorder.artifact(kind, &path);\n            }\n            saved.push(path);\n",
       "after": "                let _ = (recorder, kind);\n            }\n            saved.push(path);\n"
+    },
+    {
+      "id": "workflows-modules-inherit-importer-imports",
+      "area": "workflows",
+      "file": "src/core/eval/imports.rs",
+      "before": "                    ) && !statement.metadata().is_qualified()\n",
+      "after": "                    )\n"
     }
   ]
 }
