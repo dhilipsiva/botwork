@@ -3,7 +3,10 @@
 use botwork::core::{
     diagnostic::DiagnosticCode,
     operation::OperationControl,
-    worker::{WorkerCleanup, WorkerCommand, WorkerLimits, WorkerOutcome, WorkerPool},
+    worker::{
+        journal::WorkerJournal, WorkerCleanup, WorkerCommand, WorkerLimits, WorkerOutcome,
+        WorkerPool,
+    },
 };
 use std::{
     fs, io,
@@ -45,7 +48,7 @@ impl Drop for Fixture {
 fn check(facility: &str, mode: &str, errno: i32) {
     let workspace = Workspace::new();
     let executable = std::env::current_exe().unwrap();
-    let mut command = if facility.starts_with("proc-") {
+    let mut command = if facility.starts_with("proc-") || facility == "namespace-quota" {
         // unshare configures the user namespace while still single-threaded,
         // before the Rust test harness starts its fixture thread.
         let mut command = Command::new("/usr/bin/unshare");
@@ -63,6 +66,10 @@ fn check(facility: &str, mode: &str, errno: i32) {
         command.env(
             "BOTWORK_PARENT_MOUNT",
             fs::read_link("/proc/self/ns/mnt").unwrap(),
+        );
+        command.env(
+            "BOTWORK_PARENT_USER",
+            fs::read_link("/proc/self/ns/user").unwrap(),
         );
         command
     } else {
@@ -148,6 +155,13 @@ fn read_only_procfs_refuses_namespace_mapping_before_entry() {
 }
 
 #[test]
+fn an_exhausted_namespace_quota_refuses_the_namespace_mode_before_entry() {
+    for mode in MODES {
+        check("namespace-quota", mode, libc::ENOSPC);
+    }
+}
+
+#[test]
 fn exhausted_descriptors_refuse_all_modes_without_leaking_ownership() {
     for mode in MODES {
         check("descriptors", mode, libc::EMFILE);
@@ -187,6 +201,17 @@ impl Drop for DescriptorLimit {
         // Restore this process's soft limit before writing its verification file.
         assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &self.0) }, 0);
     }
+}
+
+/// Allow this process's descendants no user namespaces: a real quota, as a
+/// host sets with `user.max_user_namespaces`. The process is the root of a user
+/// namespace unshare made, so the limit binds only what it starts.
+fn exhaust_namespace_quota() {
+    let parent = PathBuf::from(std::env::var_os("BOTWORK_PARENT_USER").unwrap());
+    assert_ne!(fs::read_link("/proc/self/ns/user").unwrap(), parent);
+    let quota = "/proc/sys/user/max_user_namespaces";
+    fs::write(quota, "0").unwrap();
+    assert_eq!(fs::read_to_string(quota).unwrap().trim(), "0");
 }
 
 fn restrict_proc(facility: &str) {
@@ -391,6 +416,8 @@ fn subprocess_facility() {
     } else {
         if facility.starts_with("proc-") {
             restrict_proc(&facility);
+        } else if facility == "namespace-quota" {
+            exhaust_namespace_quota();
         } else if facility != "none" {
             deny(&facility, errno);
         }
@@ -489,4 +516,110 @@ fn subprocess_facility() {
         .is_empty());
     drop(descriptor_limit);
     fs::write(directory.join("verified"), b"2").unwrap();
+}
+
+/// A journal needs a writable local filesystem: on a read-only one it is
+/// refused when opened, whether its directory exists or not, so no worker
+/// starts without the records it was promised.
+#[test]
+fn a_journal_on_a_read_only_filesystem_is_refused_when_opened() {
+    let workspace = Workspace::new();
+    // A journal directory as the journal makes one: private to its owner.
+    std::os::unix::fs::DirBuilderExt::mode(&mut fs::DirBuilder::new(), 0o700)
+        .create(workspace.0.join("existing"))
+        .unwrap();
+    let status = Command::new("/usr/bin/unshare")
+        .args([
+            "--user",
+            "--map-current-user",
+            "--keep-caps",
+            "--mount",
+            "--propagation",
+            "private",
+            "--",
+        ])
+        .arg(std::env::current_exe().unwrap())
+        .args(["--exact", "subprocess_read_only_journal", "--nocapture"])
+        .env("BOTWORK_JOURNAL_DIRECTORY", &workspace.0)
+        .env(
+            "BOTWORK_PARENT_MOUNT",
+            fs::read_link("/proc/self/ns/mnt").unwrap(),
+        )
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .status()
+        .unwrap();
+    assert!(status.success(), "{status}");
+    assert_eq!(fs::read(workspace.0.join("verified")).unwrap(), b"2");
+}
+
+#[test]
+fn subprocess_read_only_journal() {
+    let Some(directory) = std::env::var_os("BOTWORK_JOURNAL_DIRECTORY") else {
+        return;
+    };
+    let directory = PathBuf::from(directory);
+    let parent_mount = PathBuf::from(std::env::var_os("BOTWORK_PARENT_MOUNT").unwrap());
+    assert_ne!(fs::read_link("/proc/self/ns/mnt").unwrap(), parent_mount);
+    let target = std::ffi::CString::new(directory.as_os_str().as_encoded_bytes()).unwrap();
+    // A read-only bind of the workspace, in this process's private mounts only.
+    unsafe {
+        assert_eq!(
+            libc::mount(
+                target.as_ptr(),
+                target.as_ptr(),
+                std::ptr::null(),
+                libc::MS_BIND,
+                std::ptr::null(),
+            ),
+            0,
+            "{}",
+            io::Error::last_os_error()
+        );
+        // A user namespace may not clear the flags its mount inherited
+        // locked, so the remount keeps them.
+        let mut status: libc::statvfs = std::mem::zeroed();
+        assert_eq!(libc::statvfs(target.as_ptr(), &mut status), 0);
+        let mut flags = libc::MS_BIND | libc::MS_REMOUNT | libc::MS_RDONLY;
+        for (kept, flag) in [
+            (libc::ST_NOSUID, libc::MS_NOSUID),
+            (libc::ST_NODEV, libc::MS_NODEV),
+            (libc::ST_NOEXEC, libc::MS_NOEXEC),
+            (libc::ST_NOATIME, libc::MS_NOATIME),
+            (libc::ST_NODIRATIME, libc::MS_NODIRATIME),
+            (libc::ST_RELATIME, libc::MS_RELATIME),
+        ] {
+            if status.f_flag & kept != 0 {
+                flags |= flag;
+            }
+        }
+        assert_eq!(
+            libc::mount(
+                std::ptr::null(),
+                target.as_ptr(),
+                std::ptr::null(),
+                flags,
+                std::ptr::null(),
+            ),
+            0,
+            "{}",
+            io::Error::last_os_error()
+        );
+    }
+    let mut refused = 0;
+    for name in ["missing", "existing"] {
+        match WorkerJournal::open(&directory.join(name), NonZeroUsize::new(4).unwrap()) {
+            Ok(_) => panic!("a journal opened on a read-only filesystem at {name}"),
+            Err(error) => {
+                assert_eq!(error.raw_os_error(), Some(libc::EROFS), "{name}: {error}");
+                refused += 1;
+            }
+        }
+    }
+    // Written beside the read-only bind, through the parent's view of it.
+    unsafe {
+        assert_eq!(libc::umount2(target.as_ptr(), 0), 0);
+    }
+    fs::write(directory.join("verified"), refused.to_string()).unwrap();
 }
