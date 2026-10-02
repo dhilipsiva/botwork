@@ -71,6 +71,8 @@ enum StmtType {
     Operation {
         operation: NativeOperation,
         builtin: bool,
+        /// Where an adapter's import published it; None for the host's own.
+        import_site: Option<Span>,
         _registry: Option<Arc<RegistryReservation>>,
     },
     Native {
@@ -238,6 +240,7 @@ impl Context {
             StmtType::Operation {
                 operation,
                 builtin: false,
+                import_site: None,
                 _registry: registry,
             },
         )

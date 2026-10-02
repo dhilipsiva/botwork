@@ -104,7 +104,11 @@ pub(super) fn invoke_resolved<'a>(
             .enter_evaluation()
             .map_err(|error| context.runtime_diagnostic(error.into(), Some(&call.span), false))?;
         match definition {
-            StmtType::Operation { operation, .. } => {
+            StmtType::Operation {
+                operation,
+                import_site,
+                ..
+            } => {
                 let control = context
                     .environment
                     .as_ref()
@@ -135,7 +139,15 @@ pub(super) fn invoke_resolved<'a>(
                 let result = context
                     .after_evaluation(result)
                     .and_then(|value| context.temporary(value.into_inner()))
-                    .map_err(|error| context.runtime_diagnostic(error, Some(&call.span), false));
+                    .map_err(|error| context.runtime_diagnostic(error, Some(&call.span), false))
+                    // An adapter's statement names the import that published
+                    // it, as a Botwork module's does.
+                    .map_err(|error| match &import_site {
+                        Some(site) => {
+                            error.with_related("imported here", site, context.budget.as_ref())
+                        }
+                        None => error,
+                    });
                 context.calls.pop();
                 result
             }

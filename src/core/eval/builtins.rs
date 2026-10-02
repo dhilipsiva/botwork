@@ -239,6 +239,7 @@ pub(super) fn initialize(context: &mut Context) {
                 StmtType::Operation {
                     operation,
                     builtin: true,
+                    import_site: None,
                     _registry: None,
                 },
             )

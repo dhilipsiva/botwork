@@ -416,6 +416,7 @@ where
             StmtType::Operation {
                 operation,
                 builtin: false,
+                import_site: Some(import_site.clone()),
                 _registry: registry,
             },
         );
