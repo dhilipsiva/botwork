@@ -578,7 +578,9 @@ fn subprocess_read_only_journal() {
             io::Error::last_os_error()
         );
         // A user namespace may not clear the flags its mount inherited
-        // locked, so the remount keeps them.
+        // locked, so the remount keeps them. musl's bindings lack
+        // ST_RELATIME, which Linux defines as 0x1000.
+        const ST_RELATIME: libc::c_ulong = 0x1000;
         let mut status: libc::statvfs = std::mem::zeroed();
         assert_eq!(libc::statvfs(target.as_ptr(), &mut status), 0);
         let mut flags = libc::MS_BIND | libc::MS_REMOUNT | libc::MS_RDONLY;
@@ -588,7 +590,7 @@ fn subprocess_read_only_journal() {
             (libc::ST_NOEXEC, libc::MS_NOEXEC),
             (libc::ST_NOATIME, libc::MS_NOATIME),
             (libc::ST_NODIRATIME, libc::MS_NODIRATIME),
-            (libc::ST_RELATIME, libc::MS_RELATIME),
+            (ST_RELATIME, libc::MS_RELATIME),
         ] {
             if status.f_flag & kept != 0 {
                 flags |= flag;
