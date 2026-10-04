@@ -405,3 +405,6 @@ pub(super) fn spawn(specification: WorkerCommand, tree: bool) -> io::Result<Chil
         observer: None,
     })
 }
+
+#[cfg(test)]
+mod tests;
