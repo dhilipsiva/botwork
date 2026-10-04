@@ -88,6 +88,13 @@ each line is written with a single write as the event happens:
 The journal is removed once the final report is published. An invocation that
 stops before any run started removes it too.
 
+The journal survives an operating-system crash as well as a killed process. Its
+header is synced to disk as it is created, with, on Unix, its name in its
+directory, and each `started` line is synced before its run goes on, so every
+run that began is still known to have. Other lines are not synced: a crash can
+lose a run's record, and reconciliation then reports that run as interrupted,
+never as passing. A journal that cannot be synced is a write failure, below.
+
 If the process is killed or crashes, the reports stay incomplete markers and the
 journal remains. Botwork then refuses to start another invocation with the same
 report, so the evidence is never overwritten, and suggests reconciliation:

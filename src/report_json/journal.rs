@@ -144,10 +144,25 @@ impl Journal {
             }),
         };
         journal.append(header);
+        journal.sync_created();
         if let Some(error) = journal.failure() {
             return Err(failure(&journal.path, error));
         }
         Ok(journal)
+    }
+
+    /// Make the new journal survive an operating-system crash: its header and,
+    /// on Unix, its name in its directory.
+    fn sync_created(&self) {
+        let mut state = self.state();
+        let Some(file) = state.file.as_ref() else {
+            return;
+        };
+        let synced = sync(file, File::sync_all).and_then(|()| sync_directory(&self.path));
+        if let Err(error) = synced {
+            state.error = Some(error.to_string());
+            state.file = None;
+        }
     }
 
     fn state(&self) -> MutexGuard<'_, State> {
@@ -171,7 +186,16 @@ impl Journal {
         let Some(file) = state.file.as_mut() else {
             return;
         };
-        if let Err(error) = file.write_all(&bytes) {
+        // A started line is synced before its run goes on, so after an
+        // operating-system crash every run that began is still known to have.
+        let written = file.write_all(&bytes).and_then(|()| {
+            if matches!(line, Line::Started { .. }) {
+                sync(file, File::sync_data)
+            } else {
+                Ok(())
+            }
+        });
+        if let Err(error) = written {
             state.error = Some(error.to_string());
             state.file = None;
         }
@@ -188,6 +212,38 @@ impl Journal {
         state.file = None;
         fs::remove_file(&self.path).map_err(|error| failure(&self.path, error))
     }
+}
+
+/// Sync the directory holding `path`, so its entry for the file survives an
+/// operating-system crash. Windows has no such call; NTFS journals the entry.
+fn sync_directory(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    if let Some(directory) = path.parent() {
+        let directory = if directory.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            directory
+        };
+        // Some filesystems cannot sync a directory and say so with EINVAL;
+        // the journal's own data is synced either way.
+        return File::open(directory)
+            .and_then(|directory| directory.sync_all())
+            .or_else(|error| match error.raw_os_error() {
+                Some(libc::EINVAL) => Ok(()),
+                _ => Err(error),
+            });
+    }
+    let _ = path;
+    Ok(())
+}
+
+/// Sync `file` with `how`; tests can make it fail.
+fn sync(file: &File, how: fn(&File) -> io::Result<()>) -> io::Result<()> {
+    #[cfg(test)]
+    if tests::FAIL_SYNC.with(std::cell::Cell::get) {
+        return Err(io::Error::other("injected sync failure"));
+    }
+    how(file)
 }
 
 impl Drop for Journal {
@@ -288,6 +344,39 @@ pub(super) fn read(path: &Path) -> Result<Contents, CliError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        pub(super) static FAIL_SYNC: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    #[test]
+    fn a_started_line_that_cannot_be_synced_stops_journaling() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("report.json.journal");
+        let journal = Journal::create(path.clone(), &Line::Selected { count: 1 }).unwrap();
+        let identity = RunIdentity::new("one", "one");
+        let started = Line::Started {
+            number: 1,
+            identity: &identity,
+            started_at: "2026-10-02T00:00:00Z",
+        };
+        // Other lines are not synced, so they go on while syncing fails.
+        FAIL_SYNC.with(|fail| fail.set(true));
+        journal.append(&Line::Selected { count: 2 });
+        assert_eq!(journal.failure(), None);
+        journal.append(&started);
+        FAIL_SYNC.with(|fail| fail.set(false));
+        assert_eq!(journal.failure().as_deref(), Some("injected sync failure"));
+        assert!(journal.state().file.is_none(), "journaling stops");
+        // A journal whose creation cannot be made durable is refused.
+        FAIL_SYNC.with(|fail| fail.set(true));
+        let refused = Journal::create(
+            directory.path().join("other.json.journal"),
+            &Line::Selected { count: 1 },
+        );
+        FAIL_SYNC.with(|fail| fail.set(false));
+        assert!(refused.is_err());
+    }
 
     #[test]
     fn write_failures_are_kept_and_stop_journaling() {
