@@ -333,6 +333,74 @@ fn a_second_interrupt_exits_at_once_and_reconciliation_marks_runs_interrupted() 
     assert!(!harness.workspace.join("report.json.journal").exists());
 }
 
+/// Whether a process is gone: reaped, or on Linux a zombie its new parent
+/// has yet to reap.
+fn gone(pid: &str) -> bool {
+    let pid: i32 = pid.parse().unwrap();
+    // SAFETY: signal 0 only checks that the process exists.
+    if unsafe { libc::kill(pid, 0) } == -1 {
+        return std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+    }
+    fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+        stat.rsplit_once(')')
+            .is_some_and(|(_, rest)| rest.trim_start().starts_with('Z'))
+    })
+}
+
+/// A forced exit ends the processes its runs started, with their process
+/// groups, rather than leaving them running after the invocation.
+#[test]
+fn a_second_interrupt_ends_the_processes_runs_started() {
+    let harness = Harness::new();
+    // The process starts in Finally, which runs on after the first interrupt
+    // under its own cleanup allowance. It and its child share its group.
+    write(
+        &harness,
+        "processes.botwork",
+        "Try {\n    Log |\"inside\"|\n    Sleep |30000|\n} Finally {\n    Run Process |\"/bin/sh\"| With Arguments |[\"-c\", \"sleep 30 & echo $$ $! > pids; wait\"]|\n}",
+    );
+    let mut running = spawn(
+        &harness,
+        "processes",
+        &[
+            "--file",
+            "processes.botwork",
+            "--cleanup-timeout-ms",
+            "30000",
+        ],
+    );
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !running.stdout().contains("inside") {
+        assert!(Instant::now() < deadline, "{}", running.stderr());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    running.signal(libc::SIGINT);
+    running.wait_for(&["[interrupted] stopping runs"]);
+    let file = harness.workspace.join("pids");
+    let pids = loop {
+        if let Ok(text) = fs::read_to_string(&file) {
+            if text.ends_with('\n') {
+                break text;
+            }
+        }
+        assert!(Instant::now() < deadline, "{}", running.stderr());
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let pids: Vec<&str> = pids.split_whitespace().collect();
+    assert_eq!(pids.len(), 2, "{pids:?}");
+    assert!(!pids.iter().any(|pid| gone(pid)), "{pids:?}");
+    running.signal(libc::SIGINT);
+    assert_eq!(running.finish(), 130);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !pids.iter().all(|pid| gone(pid)) {
+        assert!(
+            Instant::now() < deadline,
+            "{pids:?} outlived the invocation"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[test]
 fn forced_termination_blocks_new_reports_until_reconciled() {
     let harness = Harness::new();

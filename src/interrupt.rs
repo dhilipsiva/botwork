@@ -50,6 +50,8 @@ mod signals {
     /// Async-signal-safe: count, then wake the watcher or exit on the second signal.
     extern "C" fn handle(_: libc::c_int) {
         if RECEIVED.fetch_add(1, Ordering::SeqCst) != 0 {
+            // The processes runs started go with the invocation.
+            botwork::core::worker::kill_groups_for_exit();
             unsafe { libc::_exit(super::FORCED) };
         }
         let descriptor = NOTIFY.load(Ordering::SeqCst);

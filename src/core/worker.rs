@@ -591,6 +591,17 @@ impl State {
     }
 }
 
+/// End at once the process group of every worker a default pool is running,
+/// for a host about to exit without waiting for them, as the CLI does on a
+/// second interrupt. It only reads atomics and sends signals, so a signal
+/// handler may call it. Process-tree and namespace workers need nothing: their
+/// guardians end them when the host goes, as each worker's Job Object does on
+/// Windows.
+#[cfg(unix)]
+pub fn kill_groups_for_exit() {
+    supervisor::unix::kill_groups();
+}
+
 /// The workers a run started that may outlive their statements: those whose
 /// statement has not yet seen their cleanup finish, and every worker of a pool
 /// the run owns. The run waits for them as it ends.

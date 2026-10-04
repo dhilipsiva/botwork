@@ -79,7 +79,10 @@ and normal leader exit trigger group termination and direct-child reaping. A pro
 which deliberately escapes that group is outside this guarantee. For stronger tree
 or host-death isolation, hosts can use the separate
 [guardian/namespace worker APIs](isolated-workers.md). The statements do not expose
-background handles or guarantee successful cleanup after host termination.
+background handles. A CLI that exits on a second interrupt ends every running
+statement's process group first, and on Windows each Job Object ends with the CLI;
+a host killed outright or crashing on Linux or macOS leaves them running, unless
+it used those APIs.
 
 Cleanup can outlive its observation allowance when an OS operation stalls. The call
 then returns an error, never a successful partial result; the supervisor retains its

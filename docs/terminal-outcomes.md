@@ -46,7 +46,10 @@ is SIGINT (Ctrl-C) or SIGTERM; on Windows, Ctrl-C or Ctrl-Break:
   partial results.
 
 A second interrupt exits at once with status 130 and leaves the reports as
-incomplete markers with their journal for reconciliation.
+incomplete markers with their journal for reconciliation. On Linux and macOS it
+first ends the process group of every process and JavaScript worker the runs
+started, so none outlives the invocation; on Windows each worker's Job Object
+ends it as the CLI exits.
 
 Every platform behaves the same way ([D12](decisions.md#d12-platform-parity)).
 On Windows, other console events, such as closing the console window or logging

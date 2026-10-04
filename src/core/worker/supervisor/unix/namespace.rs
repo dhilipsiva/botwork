@@ -116,6 +116,8 @@ pub(super) fn spawn(
     }
     // Establish a kill/reap guard before any mapping I/O can fail or unwind.
     let child = ChildOwner {
+        // Its guardian ends the tree when the host goes.
+        group: None,
         child: process::Process::namespace(
             pid as u32,
             File::from(input_writer),

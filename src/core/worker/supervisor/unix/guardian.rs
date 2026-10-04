@@ -85,6 +85,8 @@ pub(super) fn spawn(
     }
     let child = command.spawn()?;
     Ok(ChildOwner {
+        // Its guardian ends the tree when the host goes.
+        group: None,
         child: child.into(),
         owned: true,
         guardian: Some(control),

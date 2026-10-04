@@ -2,7 +2,10 @@
 //! namespace when the pool asks for one.
 use super::observation::Observation;
 use super::*;
-use std::os::{fd::AsRawFd, unix::process::CommandExt};
+use std::{
+    os::{fd::AsRawFd, unix::process::CommandExt},
+    sync::atomic::{AtomicI32, Ordering},
+};
 
 // Process-tree guardians and PID namespaces need Linux (decision D12).
 #[cfg(target_os = "linux")]
@@ -14,6 +17,35 @@ mod process;
 
 pub(super) type Stdin = std::fs::File;
 pub(super) type Output = std::fs::File;
+
+/// Slots for the process groups of the default pools' live workers, which a
+/// host exiting without waiting can end at once; zero marks a free slot. A
+/// worker that finds every slot taken goes unlisted, and only it outlives a
+/// forced exit.
+const GROUP_SLOTS: usize = 1024;
+static GROUPS: [AtomicI32; GROUP_SLOTS] = [const { AtomicI32::new(0) }; GROUP_SLOTS];
+
+/// List a new worker's process group, whose leader it is.
+fn register_group(leader: u32) -> Option<usize> {
+    let leader = i32::try_from(leader).ok().filter(|leader| *leader > 0)?;
+    GROUPS.iter().position(|slot| {
+        slot.compare_exchange(0, leader, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    })
+}
+
+/// Send SIGKILL to every listed process group. It only loads atomics and
+/// calls kill(2), so a signal handler may call it.
+pub(in crate::core::worker) fn kill_groups() {
+    for slot in &GROUPS {
+        let group = slot.load(Ordering::SeqCst);
+        if group > 0 {
+            // SAFETY: kill has no memory effects. A listed group's leader is
+            // not yet reaped, so its ID names no other process group.
+            unsafe { libc::kill(-group, libc::SIGKILL) };
+        }
+    }
+}
 
 pub(super) fn nonblocking(pipe: &impl AsRawFd) -> io::Result<()> {
     // SAFETY: the borrowed pipe owns a live descriptor throughout both calls.
@@ -30,6 +62,8 @@ pub(super) fn nonblocking(pipe: &impl AsRawFd) -> io::Result<()> {
 pub(in crate::core::worker) struct ChildOwner {
     child: process::Process,
     pub(super) owned: bool,
+    /// The slot listing this worker's process group, for a forced exit.
+    group: Option<usize>,
     pub(super) guardian: Option<std::os::unix::net::UnixStream>,
     #[cfg(test)]
     pub(super) observer: Option<Arc<observation::Observation>>,
@@ -37,6 +71,14 @@ pub(in crate::core::worker) struct ChildOwner {
 impl ChildOwner {
     pub(super) fn id(&self) -> u32 {
         self.child.id()
+    }
+
+    /// Unlist the worker's process group. Callers do so while its exited
+    /// leader still reserves the ID, before reaping it.
+    fn release_group(&mut self) {
+        if let Some(slot) = self.group.take() {
+            GROUPS[slot].store(0, Ordering::SeqCst);
+        }
     }
 
     pub(super) fn take_pipes(&mut self) -> (Option<Stdin>, Option<Output>, Option<Output>) {
@@ -133,6 +175,14 @@ impl ChildOwner {
     }
 
     pub(super) fn reap(&mut self) -> io::Result<Option<Completion>> {
+        // Unlist the group while its exited leader still reserves the ID, so a
+        // forced exit never signals an ID reused since.
+        if self.group.is_some() {
+            if !self.exited()? {
+                return Ok(None);
+            }
+            self.release_group();
+        }
         let Some(status) = self.child.try_wait()? else {
             return Ok(None);
         };
@@ -167,10 +217,12 @@ impl Drop for ChildOwner {
                 observer.hook(Point::Drop, self.child.id());
             }
             let _ = self.terminate();
+            self.release_group();
             // Only the owned OS thread reaches this fallback.
             // Its capacity stays retained if the kernel cannot finish reaping.
             let _ = self.child.wait();
         }
+        self.release_group();
     }
 }
 

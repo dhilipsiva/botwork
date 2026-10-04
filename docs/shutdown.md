@@ -110,7 +110,8 @@ assert_eq!(options.control.child(None).stop_grace(), Duration::from_millis(500))
   destructors can crash racing the process's own exit-time cleanup, as
   OpenSSL's did on macOS after Python's `asyncio` loaded it.
 - **Interrupts.** One interrupt stops every run within these bounds. A second
-  interrupt exits at once; see [terminal outcomes](terminal-outcomes.md#interruption).
+  interrupt exits at once, ending the process groups of the processes the runs
+  started; see [terminal outcomes](terminal-outcomes.md#interruption).
 - **Listeners.** A listener has its own close timeout; see [listeners](listeners.md).
 
 A stopped single-file CLI run therefore exits within its timeout or interrupt,

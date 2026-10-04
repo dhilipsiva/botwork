@@ -89,9 +89,12 @@ The CLI tests in `tests/cancellation.rs` cover three cases on Linux and macOS:
 - **Idle pool threads.** Idle worker-pool threads persist until their keep-alive
   expires; they are reused, not leaked.
 - **Forced termination.** A SIGKILL or a crash releases nothing gracefully. The
-  operating system reclaims the process's resources, and
+  operating system reclaims the CLI's own memory, threads, and descriptors, and
   [reconciliation](terminal-outcomes.md#forced-termination-and-reconciliation)
-  finishes its reports.
+  finishes its reports. Processes its statements started are separate processes:
+  on Linux and macOS they keep running, as do their groups, unless a
+  [guardian](isolated-workers.md#process-tree-guardians) owns them; a second
+  interrupt, unlike a SIGKILL, ends them before the CLI exits.
 
 [Validation evidence](cancellation-evidence.json) records the measured profiles,
 mutations, and sensitivity probes.
