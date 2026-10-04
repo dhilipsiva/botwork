@@ -177,3 +177,78 @@ fn a_second_ctrl_break_exits_at_once() {
     // The report stays an incomplete marker with its journal to reconcile.
     assert!(harness.workspace.join("report.json.journal").exists());
 }
+
+/// A forced exit ends the processes its runs started: each worker's Job
+/// Object closes with the CLI, and its descendants with it. Reconciliation
+/// then marks the run interrupted.
+#[test]
+fn a_second_ctrl_break_ends_the_processes_runs_started() {
+    let harness = Harness::new();
+    let python = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .flat_map(|directory| ["python.exe", "python3.exe"].map(|name| directory.join(name)))
+        .find(|path| path.is_absolute() && path.is_file())
+        .expect("Python, which the repository's checks use");
+    let tool =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/worker_tool.py");
+    let heartbeat = harness.workspace.join("heartbeat");
+    // The process starts in Finally, which runs on after the first interrupt
+    // under its own cleanup allowance; its descendant writes the heartbeat.
+    fs::write(
+        harness.workspace.join("processes.botwork"),
+        format!(
+            "Try {{\n    Log |\"inside\"|\n    Sleep |30000|\n}} Finally {{\n    Run Process |{:?}| With Arguments |[{:?}, \"tree\", {:?}]|\n}}",
+            python.to_str().unwrap(),
+            tool.to_str().unwrap(),
+            heartbeat.to_str().unwrap(),
+        ),
+    )
+    .unwrap();
+    let mut running = spawn(
+        &harness,
+        "processes",
+        &[
+            "--file",
+            "processes.botwork",
+            "--cleanup-timeout-ms",
+            "30000",
+            "--report-json",
+            "report.json",
+        ],
+    );
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !running.stdout().contains("inside") {
+        assert!(Instant::now() < deadline, "{}", running.stderr());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    running.interrupt();
+    running.wait_for("[interrupted] stopping runs");
+    let size = || fs::metadata(&heartbeat).map_or(0, |metadata| metadata.len());
+    while size() == 0 {
+        assert!(Instant::now() < deadline, "{}", running.stderr());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    running.interrupt();
+    assert_eq!(running.finish(), 130);
+    // The heartbeat stops once the job has ended the descendant.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let before = size();
+        std::thread::sleep(Duration::from_millis(300));
+        if size() == before {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the descendant outlived the CLI");
+    }
+    let output = harness
+        .command(
+            "reconcile",
+            &["--reconcile-report", "report.json"],
+            Duration::from_secs(30),
+        )
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "Reconciled report.json: 1 of 1 selected runs have records, 1 of them interrupted\n"
+    );
+}
