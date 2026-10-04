@@ -8,6 +8,15 @@ use botwork::core::{
 };
 use std::{collections::BTreeMap, fs, path::Path, time::Duration};
 
+/// Process statements share one host-wide budget of in-flight bytes, which
+/// rejects at once when exhausted (docs/processes.md), so tests that each
+/// reserve a large share of it take turns rather than depend on how many the
+/// harness runs at once.
+fn serial() -> &'static tokio::sync::Mutex<()> {
+    static SERIAL: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+    SERIAL.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
 fn options(directory: &Path) -> RunOptions {
     RunOptions {
         working_directory: Some(directory.into()),
@@ -44,6 +53,7 @@ Assert |p.success| Equals |false|
 
 #[test]
 fn cli_parallel_scripts_and_suite_fixture_phases_receive_host_snapshots() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let check = r#"
 |p| = Run Process |"/bin/sh"| With Arguments |["-c", "printf '%s' \"$BOTWORK_PROCESS_TEST\"; printf '%s' \"$PWD\" >&2"]|
@@ -86,6 +96,7 @@ Log |"checked"|
 
 #[test]
 fn metadata_is_typed_idempotent_and_preserves_host_overrides() {
+    let _serial = serial().blocking_lock();
     use botwork::core::{
         ast::Program,
         eval::{evaluate_program_detailed, Context},
@@ -138,6 +149,7 @@ fn metadata_is_typed_idempotent_and_preserves_host_overrides() {
 
 #[test]
 fn command_entries_and_stdin_have_independent_prelaunch_limits() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     for count in [16_383, 16_384] {
         let result = Engine::default().run_source(
@@ -190,6 +202,7 @@ fn command_entries_and_stdin_have_independent_prelaunch_limits() {
 
 #[test]
 fn command_workspace_and_result_overlap_are_admitted_at_the_exact_boundary() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     // The run directory is canonical, and the temporary directory may be
     // reached through a link, as on macOS.
@@ -221,6 +234,7 @@ fn command_workspace_and_result_overlap_are_admitted_at_the_exact_boundary() {
 
 #[test]
 fn imported_process_statements_keep_the_run_directory() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     fs::create_dir(dir.path().join("library")).unwrap();
     fs::write(
@@ -254,6 +268,7 @@ Assert |p.stdout| Equals |expected|
 
 #[tokio::test]
 async fn synchronous_call_inside_a_runtime_and_async_local_timeout_are_supported() {
+    let _serial = serial().lock().await;
     let dir = tempfile::tempdir().unwrap();
     ok(
         dir.path(),
@@ -283,6 +298,7 @@ Finally { Write File |"finally"| Text |"yes"| }
 
 #[test]
 fn inherited_run_deadline_stops_a_longer_process_allowance() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let result = Engine::default().run_source(
         "inherited-deadline",
@@ -305,6 +321,7 @@ fn inherited_run_deadline_stops_a_longer_process_allowance() {
 
 #[test]
 fn literal_arguments_and_exit_or_signal_results_work_synchronously() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     ok(dir.path(), BASIC);
     assert!(!dir.path().join("injected").exists());
@@ -312,6 +329,7 @@ fn literal_arguments_and_exit_or_signal_results_work_synchronously() {
 
 #[tokio::test]
 async fn literal_arguments_and_exit_or_signal_results_work_asynchronously() {
+    let _serial = serial().lock().await;
     let dir = tempfile::tempdir().unwrap();
     let result = Engine::default()
         .run_source_async("async-process", BASIC, options(dir.path()))
@@ -322,6 +340,7 @@ async fn literal_arguments_and_exit_or_signal_results_work_asynchronously() {
 
 #[test]
 fn text_and_binary_stdin_preserve_nul_bytes_and_empty_streams() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let result = Engine::default().run_source("input", r#"
 |p| = Run Process |"/bin/cat"| With Arguments |[]| Options |{"stdin": input}|
@@ -340,6 +359,7 @@ Assert |p.stdout| Equals |""|
 
 #[test]
 fn invalid_utf8_is_rejected_on_either_stream_but_binary_capture_is_exact() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     for redirect in ["", " >&2"] {
         let source = format!(
@@ -365,6 +385,7 @@ Assert |p.stderr| Equals |[128]|
 
 #[test]
 fn option_and_argument_validation_precedes_process_creation() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     for invalid in [
         r#"{"unknown": true}"#,
@@ -416,6 +437,7 @@ fn option_and_argument_validation_precedes_process_creation() {
 
 #[test]
 fn nul_in_native_command_fields_is_rejected_before_launch() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     for source in [
         "Run Process |bad| With Arguments |[]|",
@@ -433,6 +455,7 @@ fn nul_in_native_command_fields_is_rejected_before_launch() {
 
 #[test]
 fn directories_and_environment_are_per_call_with_explicit_path_search() {
+    let _serial = serial().blocking_lock();
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     // The run directory is canonical; see above.
@@ -472,6 +495,7 @@ Assert |@{ Working Directory }| Equals |root|
 
 #[test]
 fn non_utf8_environment_snapshot_is_passed_without_lossy_conversion() {
+    let _serial = serial().blocking_lock();
     use std::os::unix::ffi::OsStringExt;
     let dir = tempfile::tempdir().unwrap();
     let result = Engine::default().run_source(
@@ -493,6 +517,7 @@ Assert |p.stdout| Equals |[255, 61, 128, 10]|
 
 #[test]
 fn capture_limits_are_exact_and_overflow_bypasses_catch() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     for stream in ["stdout", "stderr"] {
         for count in [0, 1, 7] {
@@ -525,6 +550,7 @@ Finally {{ Write File |"finally"| Text |"yes"| }}
 
 #[test]
 fn output_admission_precedes_launch_even_if_program_would_print_nothing() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     for binary in [false, true] {
         for too_small in [true, false] {
@@ -557,6 +583,7 @@ fn output_admission_precedes_launch_even_if_program_would_print_nothing() {
 
 #[test]
 fn launch_and_decoding_errors_preserve_destination_and_call_frames() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     ok(
         dir.path(),
@@ -589,6 +616,7 @@ Assert |kept| Equals |42|
 
 #[test]
 fn closed_stdin_is_an_error_even_when_child_exits_successfully() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let result = Engine::default().run_source(
         "incomplete",
@@ -630,6 +658,7 @@ const BLOCK: &str =
 
 #[tokio::test]
 async fn cancellation_reaps_child_and_does_not_block_current_thread_runtime() {
+    let _serial = serial().lock().await;
     let dir = tempfile::tempdir().unwrap();
     let control = OperationControl::default();
     let engine = Engine::default();
@@ -660,6 +689,7 @@ async fn cancellation_reaps_child_and_does_not_block_current_thread_runtime() {
 
 #[tokio::test]
 async fn dropping_suspended_run_cancels_and_reaps_its_child() {
+    let _serial = serial().lock().await;
     let dir = tempfile::tempdir().unwrap();
     let engine = Engine::default();
     let mut pending = Box::pin(engine.run_source_async("drop", BLOCK, options(dir.path())));
@@ -674,6 +704,7 @@ async fn dropping_suspended_run_cancels_and_reaps_its_child() {
 
 #[test]
 fn local_timeouts_are_noncatchable_and_cleanup_still_runs() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let source = format!("Try {{ {BLOCK} Options |{{\"timeout_ms\": 100}}| }} Catch |error| {{ Write File |\"caught\"| Text |\"bad\"| }} Finally {{ Write File |\"finally\"| Text |\"yes\"| }}");
     let result = run(dir.path(), &source);
@@ -684,6 +715,7 @@ fn local_timeouts_are_noncatchable_and_cleanup_still_runs() {
 
 #[tokio::test]
 async fn concurrent_process_calls_keep_run_environment_and_directory_separate() {
+    let _serial = serial().lock().await;
     let a = tempfile::tempdir().unwrap();
     let b = tempfile::tempdir().unwrap();
     let engine = Engine::default();
@@ -717,6 +749,7 @@ async fn concurrent_process_calls_keep_run_environment_and_directory_separate() 
 /// cleanup allowance is zero, does not let the run end before the worker has.
 #[test]
 fn a_run_ends_only_after_the_process_its_statement_left_behind() {
+    let _serial = serial().blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     let source = format!("{BLOCK} Options |{{\"timeout_ms\": 100, \"cleanup_timeout_ms\": 0}}|");
     let runtime = tokio::runtime::Builder::new_multi_thread()
