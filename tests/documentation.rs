@@ -339,6 +339,10 @@ fn every_documented_suite_matches_its_cli_output() {
             summary: "[cases] 2 selected: 1 succeeded, 1 failed\n", lines: None,
             diagnostics: &["[case checkout/total/pair] failed:", "BW9001"],
         }),
+        ("readme-suite", Expected {
+            document: "README.md", stdout: "Hello, Grace!\n", status: 0,
+            summary: "[cases] 2 selected: 2 succeeded, 0 failed\n", lines: Some(5), diagnostics: &[],
+        }),
         ("checkout", Expected {
             document: "docs/getting-started.md", stdout: "EUR\nEUR\n", status: 0,
             summary: "[cases] 3 selected: 3 succeeded, 0 failed\n", lines: Some(10), diagnostics: &[],

@@ -47,7 +47,7 @@ Errors:
 
 - BW9001: Actual and expected values differ.
 
-Example: [assertion-diagnostics.md](assertion-diagnostics.md) (`assertion-details`).
+Example: [README](../README.md) (`readme-suite`).
 
 ### `Assert |condition|`
 
@@ -111,7 +111,7 @@ Errors:
 
 - BW4001: The destination rejected output; some bytes may already be written.
 
-Example: [README](../README.md) (`readme-sample`).
+Example: [README](../README.md) (`readme-suite`).
 
 ### `No Operation`
 

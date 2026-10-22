@@ -1,29 +1,124 @@
 # botwork
 
-botwork is a single-binary, generic and open-source automation framework written in Rust for acceptance testing, acceptance test driven development (ATDD), and robotic process automation (RPA). The syntax uses sentence names with parameters. Custom names, identifiers, and text support Unicode; control keywords, operators, and numeric syntax remain fixed. See [multilingual authoring](docs/language.md#multilingual-authoring) and the [Tamil/accented-text example](examples/16-multilingual.botwork). Easily extendible with Rust, Python & JavaScript. An efficient, fast alternative to Robot Framework.
+botwork is a single-binary automation framework, written in Rust, for acceptance
+testing, acceptance test-driven development (ATDD), and robotic process
+automation (RPA). A script is a list of sentence-like statements with their
+parameters between pipes, so a test reads like the behavior it checks. Names,
+identifiers, and text can be written in any language (see
+[multilingual authoring](docs/language.md#multilingual-authoring) and the
+[Tamil and accented-text example](examples/16-multilingual.botwork)); control
+keywords, operators, and numbers keep one fixed syntax. Statements can be
+written in botwork itself, Rust, Python, JavaScript, or WebAssembly. It is a
+fast, lightweight alternative to Robot Framework.
 
-# Why botwork?
+## Why botwork?
 
-I have been using RobotFramework for a couple of years now. While it is a super-awesome framework, there are a couple of things that I am not very fond of:
+I have used Robot Framework for a few years. It is a great framework, but a few
+things about it bother me:
 
-1. It basically requires Python (and virtualenv) to run. This means, it needs more space (when building container images, for instance) and consumes a lot of memory (Python is the love of my life, but it is slow and resource-heavy).
-2. The syntax could have been even more simpler. For instance, two (or more) space token seperator, `${}`, `@{}`, etc. variable usage confuses people who are new to the framework.
-3. It is mostly extendible only with Python.
+1. It needs Python (and a virtualenv) to run. That takes more space, in
+   container images for instance, and more memory. Python is the love of my
+   life, but it is slow and resource-heavy.
+2. The syntax could be simpler. Its separator of two or more spaces and its
+   `${}` and `@{}` variables confuse people who are new to it.
+3. It is mostly extensible only with Python.
 
 I wanted:
 
 1. An efficient, fast, single-binary tool.
-1. An even more simpler syntax than RobotFramework.
-1. Extendible with Rust, Python (via PyO3), JavaScript (via a Node worker), and WASM (via WASI)
-1. Proper language defnition with PEG parser.
-1. LSP & TreeSitter Support. 
+1. A simpler syntax than Robot Framework's.
+1. Extensions in Rust, Python (via PyO3), JavaScript (via a Node worker), and
+   WebAssembly (via WASI).
+1. A proper language definition, with a PEG parser.
+1. LSP and Tree-sitter support.
 1. Most of all, to have fun building something that I can introduce to my kids.
 
+## Install
 
-# Getting Started
+From 0.3.0, each [GitHub release](https://github.com/dhilipsiva/botwork/releases)
+carries the `botwork` binary for Linux x86_64 (static, with no dependencies),
+macOS arm64, and Windows x86_64, and a `SHA256SUMS` file. On Linux:
 
-The [getting-started guide](docs/getting-started.md) covers installation, a first
-script, reading failures, and a complete acceptance-test workflow with reports.
+```sh
+version=0.3.0
+base=https://github.com/dhilipsiva/botwork/releases/download/v$version
+archive=botwork-v$version-x86_64-unknown-linux-musl.tar.gz
+curl -fL --remote-name-all "$base/$archive" "$base/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS
+tar -xzf "$archive" botwork
+./botwork --version
+```
+
+Move `botwork` to a directory on your `PATH`, such as `~/.local/bin`.
+[Installation and distribution](docs/distribution.md#releases) covers the other
+platforms, the package managers, and verifying a download's build provenance.
+0.3.0 is the first release of this implementation. Until it is published, or
+to build the latest code, install from source with a stable Rust toolchain:
+
+```sh
+git clone https://github.com/dhilipsiva/botwork.git
+cd botwork
+cargo install --path . --locked
+```
+
+## A 30-second example
+
+Save this as `greetings.suite.botwork`:
+
+<!-- botwork-test: readme-suite -->
+```botwork-suite
+Suite |"greetings"| Named |"Greetings"| {
+    Library {
+        Greeting for |name| {
+            Return |"Hello, " + name + "!"|
+        }
+    }
+    Case |"ada"| Named |"Greets Ada"| {
+        Assert |@{ Greeting for |"Ada"| }| Equals |"Hello, Ada!"|
+    }
+    Case |"grace"| Named |"Greets Grace"| {
+        |greeting| = |@{ Greeting for |"Grace"| }|
+        Log |greeting|
+        Assert |greeting| Equals |"Hello, Grace!"|
+    }
+}
+```
+
+The `Library` defines a statement, `Greeting for |name|`, and each `Case` is a
+named test that calls it. Run the suite and write an HTML report:
+
+```sh
+botwork --suite greetings.suite.botwork --report-html report.html
+```
+
+Progress and the summary go to stderr and `Log` goes to stdout. Cases run in
+parallel, so the order of the lines can vary:
+
+```text
+[case greetings/ada] started: "Greets Ada"
+[case greetings/ada] succeeded: "Greets Ada"
+[case greetings/grace] started: "Greets Grace"
+Hello, Grace!
+[case greetings/grace] succeeded: "Greets Grace"
+[cases] 2 selected: 2 succeeded, 0 failed
+```
+
+Change Grace's expected greeting to `"Hi, Grace!"` and run it again. The run
+now exits with status 1, the console names the failing statement and the
+difference, and `report.html` opens on the failure, with its source, statements,
+and timings:
+
+<!-- Made from this suite with the change above: botwork --suite
+greetings.suite.botwork --report-html report.html, then a headless Chrome
+screenshot of report.html at 1200x1082. -->
+![The HTML report of the failed run: one case succeeded, Greets Grace failed with BW9001, and its statements and timings](docs/images/html-report.png)
+
+[Getting started](docs/getting-started.md) goes further: a first script, reading
+a failure, and a complete acceptance-test workflow with datasets, setup, and CI
+reports.
+
+## Documentation
+
 The [documentation index](docs/README.md) lists every page, including the
 [command-line reference](docs/cli.md), [configuration](docs/configuration.md),
 [reports and outputs](docs/reporting.md), [extending Botwork](docs/extending.md),
@@ -31,14 +126,16 @@ The [documentation index](docs/README.md) lists every page, including the
 [compatibility](docs/compatibility.md).
 The [syntax reference](docs/syntax.md) lists every form a script or suite can use,
 and the [statement reference](docs/statements.md) lists every built-in statement.
-`--check` [finds mistakes without running](docs/check.md) a file or suite, and
+`--check` [finds mistakes without running](docs/check.md) a file or suite,
 `--format` rewrites files in [canonical layout](docs/format.md), and `--lsp`
 runs a [language server](docs/lsp.md), packaged with highlighting for
 [Helix, Vim, and VS Code](docs/editors.md).
-To look around quickly:
+[CONTRIBUTING.md](CONTRIBUTING.md) explains how to build, test, and send a change.
 
-1. Clone the repo
-2. run `cargo run -- --file examples/02-syntaxes.botwork`
+## What botwork does
+
+In a checkout, `cargo run -- --file examples/02-syntaxes.botwork` runs the
+syntax tour, and [examples/](examples) has many more scripts and suites.
 
 `Log` writes readable values to stdout. Diagnostics go to stderr, and uncaught
 script errors return a nonzero exit status. Add `--debug` after `cargo run --`
@@ -144,12 +241,10 @@ unique payloads, and report omitted snapshots explicitly.
 [Temporary budgets](docs/temporary-limits.md) cover live expressions, arguments,
 collection construction, and operand/output overlap across calls and modules.
 
-Or you can create a file from below sample and pass the path to cargo run
+## Sample code
 
-
-# Sample Code
-
-Here is what a botwork script might look like right now
+This script defines a statement and calls it. Save it as `sample.botwork` and
+run it with `botwork --file sample.botwork`:
 
 <!-- botwork-test: readme-sample -->
 ```botwork
@@ -166,17 +261,19 @@ Log |"Here is your answer:"|
 Log |answer|
 ```
 
-# Roadmap to version 1.0
+## Roadmap to version 1.0
 
-botwork is just taking its baby steps. There are so many things that are still missing and it goes without saying the the syntax & apis will change any time. Not to mention the hacy code that I managed to get working over the weekend. The Idea is to let it out in the wild and see if people are interested in a tool like this. 
+Version 0.3.0 implements everything checked below. Until 1.0, a release may
+still change the language, the statements, the output formats, the CLI, and the
+Rust API ([before 1.0](docs/compatibility.md#before-10)). [TODO.md](TODO.md) has
+the detailed plan, and the [roadmap decisions](docs/decisions.md) record the
+choices that shape it.
 
-If there is interest out there for a tool like botwork, I plan to dedicate more time to make v1.0 happen. So here is a bunch of things that needs to be done before botwork can be tagged v1.0. [TODO.md](TODO.md) has the detailed plan, and [roadmap decisions](docs/decisions.md) records the choices that shape it:
-
-- [ ] Basic syntax
+- [x] Basic syntax
   - [x] Statements
   - [x] If condition
   - [x] For & While loop
-  - [x] Basic arithmatic and logical operations
+  - [x] Basic arithmetic and logical operations
   - [x] Datatypes: int, float, string, bool, array, map
   - [x] Try/Catch and [awaited Finally cleanup](docs/cleanup.md)
   - [x] [Suite and case setup/teardown](docs/fixtures.md)
@@ -185,12 +282,12 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Imports of local botwork files](docs/language.md#local-modules)
   - [x] Imports of [WebAssembly files](docs/wasm.md) and [packages](docs/packages.md)
   - [x] [Imports from URL](docs/packages.md#files-by-url), pinned and fetched ahead of runs
-- [ ] Docs
+- [x] Docs
   - [x] README
   - [x] [Getting started docs](docs/getting-started.md)
   - [x] [Syntax docs](docs/syntax.md)
   - [x] [Statement docs](docs/statements.md)
-- [ ] More statements out-of-box (like the ones RobotFramework Offers)
+- [x] More statements out of the box (like the ones Robot Framework offers)
   - [x] [Built-ins](docs/builtins.md)
   - [x] [Collections](docs/collections.md)
   - [x] [Datetime](docs/datetime.md)
@@ -199,7 +296,7 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [Strings](docs/strings.md)
   - [x] [Making HTTP Requests](docs/http.md)
   - [x] [JSON and CSV data](docs/structured-data.md)
-- [ ] integrations
+- [x] Integrations
   - [x] Selenium/Webdriver ([D11](docs/decisions.md#d11-browser-and-mobile-integrations)); see [browser automation with WebDriver](docs/webdriver.md)
   - [x] Appium ([D11](docs/decisions.md#d11-browser-and-mobile-integrations)); see [mobile automation with Appium](docs/appium.md)
   - [x] Playwright ([D11](docs/decisions.md#d11-browser-and-mobile-integrations)); see [browser automation with Playwright](docs/playwright.md)
@@ -208,12 +305,11 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] [JSON Reports](docs/json-report.md)
   - [x] [HTML Reports](docs/html-report.md)
   - [x] [Report listeners](docs/listeners.md)
-- [ ] Tooling
+- [x] Tooling
   - [x] [LSP support](docs/lsp.md)
   - [x] [Editor support](docs/editors.md) (Helix, Vim, Neovim, VS Code)
   - [x] [TreeSitter grammar](docs/tree-sitter.md)
   - [x] [Linting](docs/check.md)
-  - [ ] Trusted & Verified registry (for botwork packages), after 1.0 ([D10](docs/decisions.md#d10-packages-and-registry))
   - [x] Python extension support (via PyO3, [D9](docs/decisions.md#d9-python-packaging)); see [Python statements](docs/python.md)
   - [x] JavaScript extension support (via an out-of-process Node worker, [D7](docs/decisions.md#d7-javascript-hosting)); see [JavaScript statements](docs/javascript.md)
   - [x] WASM extension support (via Wasmtime and WASI, [D8](docs/decisions.md#d8-wasm-runtime)); see [WebAssembly statements](docs/wasm.md)
@@ -221,5 +317,11 @@ If there is interest out there for a tool like botwork, I plan to dedicate more 
   - [x] Ability to pass variables from CLI / Files
   - [x] [Run in parallel](docs/parallel-cli.md)
 - [x] Fully async, non-blocking operations ([async execution](docs/async-execution.md), [nonblocking I/O](docs/nonblocking-io.md))
-- [ ] Refactor my crappy code :P 
 - [x] [Unit tests with at least 50% coverage](docs/testing.md)
+- [ ] The [1.0 readiness gates](TODO.md#10-verify-10-readiness): the interpreter
+  refactoring finished, the coverage, mutation, and fuzzing thresholds met, the
+  usability sessions run, the contracts stabilized, and two independent reviews
+  passed
+
+After 1.0 comes a trusted and verified registry for botwork packages
+([D10](docs/decisions.md#d10-packages-and-registry)).

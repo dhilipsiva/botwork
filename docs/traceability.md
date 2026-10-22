@@ -107,11 +107,11 @@ Each statement's entry in the [statement reference](statements.md) lists its kin
 
 | Statement | Rules | Reference | Executed example | Review |
 | --- | --- | --- | --- | --- |
-| `Assert \|actual\| Equals \|expected\|` | B1, B8 | [entry](statements.md#assert-actual-equals-expected) | [assertion-diagnostics.md](assertion-diagnostics.md) (`assertion-details`) | Pending |
+| `Assert \|actual\| Equals \|expected\|` | B1, B8 | [entry](statements.md#assert-actual-equals-expected) | [README](../README.md) (`readme-suite`) | Pending |
 | `Assert \|condition\|` | B1, B8 | [entry](statements.md#assert-condition) | [builtins.md](builtins.md) (`builtins`) | Pending |
 | `Fail \|message\|` | B1 | [entry](statements.md#fail-message) | [builtins.md](builtins.md) (`builtins`) | Pending |
 | `Get Variable \|name\|` | B1 | [entry](statements.md#get-variable-name) | [builtins.md](builtins.md) (`builtins`) | Pending |
-| `Log \|value\|` | B1 | [entry](statements.md#log-value) | [README](../README.md) (`readme-sample`) | Pending |
+| `Log \|value\|` | B1 | [entry](statements.md#log-value) | [README](../README.md) (`readme-suite`) | Pending |
 | `No Operation` | B1 | [entry](statements.md#no-operation) | [builtins.md](builtins.md) (`builtins`) | Pending |
 | `Sleep \|milliseconds\|` | B1 | [entry](statements.md#sleep-milliseconds) | [builtins.md](builtins.md) (`builtins`) | Pending |
 | `Type Of \|value\|` | B1 | [entry](statements.md#type-of-value) | [builtins.md](builtins.md) (`builtins`) | Pending |
