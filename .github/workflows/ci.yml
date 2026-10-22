@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Every branch, so a feature branch is checked before it is merged; tag pushes
+  # are the release workflow's.
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
   # The release workflow runs every check before building what it publishes.

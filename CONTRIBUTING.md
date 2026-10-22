@@ -59,7 +59,7 @@ Write short, lowercase, action-oriented commit subjects, such as
 `record browser matrix evidence`, and keep each commit focused. A pull request
 describes the behavior change, links related issues, and lists the validation
 you ran. For a language change, include a small `.botwork` input and its
-expected output.
+expected output. CI runs on every pushed branch and every pull request.
 
 By contributing, you agree that your contribution is licensed under the
 project's [license](LICENSE).
