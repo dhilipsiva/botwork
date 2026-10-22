@@ -69,6 +69,9 @@ Everything else:
   [D2](docs/decisions.md#d2-usability-sessions).
 - `editors/`: the Tree-sitter grammars and the Helix, Vim, and VS Code
   packages, tested against `editors/test`.
+- `flake.nix` and `flake.lock`: the dev shells, `default` (stable) and
+  `nightly`; `tests/dev_shell.rs` keeps their versions equal to CI's and the
+  scripts'. The `Justfile` holds the local recipes.
 - `clippy.toml` sets `large-error-threshold = 129`, because `Diagnostic` is a
   public 128-byte value. `.cargo/config.toml` packs relative relocations on GNU
   Linux, and `.cargo/mutants.toml` configures cargo-mutants.
@@ -76,7 +79,11 @@ Everything else:
 
 ## Build, Test, and Development Commands
 
-Run commands from the repository root. These are the checks CI runs:
+Run commands from the repository root. `nix develop` (`flake.nix`) provides the
+pinned toolchains and tools without rustup, and the `Justfile` runs CI's Linux
+checks: `just check` before the tests, `just ci` with them, and `just coverage`,
+`just mutants`, `just fuzz-smoke`, `just public-api`, and `just release-dry-run`
+for the rest. These are the checks CI runs:
 
 - `cargo fmt --all -- --check`: formatting.
 - `cargo clippy --locked --all-targets -- -D warnings`: lints; add

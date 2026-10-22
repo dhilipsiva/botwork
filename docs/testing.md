@@ -2,6 +2,22 @@
 
 Run `cargo test` from the repository root. Linux typed-worker interoperability tests also require `python3` on PATH (the same interpreter used by the coverage-helper checks). Worker tests require the enabled facilities and test tools in the [platform matrix](worker-platforms.md); missing facilities fail the tests rather than skip coverage. Run `cargo test --release` to check the optimized build. Add `--offline` when dependencies are already cached.
 
+Without rustup, on NixOS for instance, `flake.nix` provides the toolchains, and
+the `Justfile` holds the commands CI runs on Linux:
+
+```sh
+nix develop --command just check   # formatting, Clippy, the helper scripts' tests, a full build
+nix develop --command just ci      # check, the benchmark workloads' correctness, and the tests
+```
+
+`nix develop` enters a shell with the pinned stable Rust (with Clippy, rustfmt,
+the LLVM tools, and the `wasm32-wasip2` target), Python, Node 22,
+cargo-llvm-cov 0.9.1, and cargo-mutants 27.1.0, so `just coverage` and
+`just mutants` run as the sections below describe. `nix develop .#nightly` has
+nightly-2026-08-14 and cargo-fuzz 0.13.2, which `just fuzz-smoke` and `just public-api`
+use. `just --list` lists every recipe. `tests/dev_shell.rs` checks that
+these versions are the ones CI and the scripts use.
+
 HTTP's Ring TLS backend requires a C compiler. GNU builds use the usual GCC/Clang
 toolchain. For `x86_64-unknown-linux-musl`, install the Rust target and a musl C
 toolchain (on Ubuntu, the `musl-tools` package), then set

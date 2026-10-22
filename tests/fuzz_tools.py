@@ -27,6 +27,10 @@ class CampaignEvidence(unittest.TestCase):
         with self.assertRaises(ValueError):
             VERIFY(COMPLETE.replace("10000", "9999"), 0, 10000)
 
+    def test_a_toolchain_name_selects_a_rustup_alias_and_an_empty_one_the_path(self):
+        self.assertEqual(RUNNER["selector"]("nightly-2026-08-14"), ["+nightly-2026-08-14"])
+        self.assertEqual(RUNNER["selector"](""), [])
+
     def test_missing_statistics_or_completion_never_pass(self):
         for log in ("", "stat::number_of_executed_units: 10000\n", "#10000 DONE\n"):
             with self.subTest(log=log), self.assertRaises(ValueError):

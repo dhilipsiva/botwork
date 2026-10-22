@@ -25,6 +25,12 @@ def capture(*command):
     return subprocess.check_output(command, cwd=ROOT, text=True).strip()
 
 
+def selector(toolchain):
+    """The `cargo` and `rustc` arguments that select `toolchain`: a rustup alias, or none for an
+    empty name, which uses the toolchain on PATH (the Nix dev shell's)."""
+    return [f"+{toolchain}"] if toolchain else []
+
+
 def verify(log, returncode, requested):
     if returncode != 0:
         raise ValueError(f"fuzzer exited with status {returncode}")
@@ -57,18 +63,20 @@ def positive(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--toolchain", default=NIGHTLY, help="an installed alias for the pinned nightly")
+    parser.add_argument("--toolchain", default=NIGHTLY,
+                        help="an installed rustup alias for the pinned nightly, or '' for the one on PATH")
     parser.add_argument("--target", choices=(*TARGETS, "all"), default="all")
     parser.add_argument("--runs", type=positive, default=10000)
     parser.add_argument("--seed", type=positive, default=314159)
     args = parser.parse_args()
+    select = selector(args.toolchain)
     if sys.platform != "linux":
         parser.error("the recorded campaign runner currently requires Linux")
     if args.seed > 0xffffffff:
         parser.error("seed must fit libFuzzer's 32-bit unsigned seed")
     if capture("cargo", "fuzz", "--version") != FUZZ_VERSION:
         parser.error(f"install {FUZZ_VERSION} with --locked")
-    rustc = capture("rustc", f"+{args.toolchain}", "-Vv")
+    rustc = capture("rustc", *select, "-Vv")
     if rustc.splitlines()[0] != RUSTC:
         parser.error(f"install {NIGHTLY}; got {rustc.splitlines()[0]}")
     output_root = ROOT / "target" / "fuzz-smoke"
@@ -84,7 +92,7 @@ def main():
         "base_revision": capture("git", "rev-parse", "HEAD"),
         "worktree_status": capture("git", "status", "--porcelain"),
         "input_sha256": fingerprints, "platform": platform.platform(),
-        "rustc": rustc, "cargo": capture("cargo", f"+{args.toolchain}", "-V"),
+        "rustc": rustc, "cargo": capture("cargo", *select, "-V"),
         "cargo_fuzz": FUZZ_VERSION, "seed": args.seed,
         "limits": {"runs_per_target": args.runs, "input_bytes": 8192, "source_bytes": 4096,
                    "input_timeout_seconds": 2, "fuzzer_timeout_seconds": 60, "process_timeout_seconds": 300,
@@ -95,7 +103,7 @@ def main():
     }
     print(f"campaign record: {output / 'summary.json'}", flush=True)
     try:
-        fetch = ["cargo", f"+{args.toolchain}", "fetch", "--locked", "--manifest-path", "fuzz/Cargo.toml"]
+        fetch = ["cargo", *select, "fetch", "--locked", "--manifest-path", "fuzz/Cargo.toml"]
         if execute(fetch, output / "fetch.log", os.environ.copy(), 300):
             raise ValueError("locked dependency fetch failed; see fetch.log")
         env = dict(os.environ, CARGO_NET_OFFLINE="true")
@@ -105,7 +113,7 @@ def main():
             corpus, artifacts = directory / "corpus", directory / "artifacts"
             corpus.mkdir(parents=True)
             artifacts.mkdir()
-            command = ["cargo", f"+{args.toolchain}", "fuzz", "run", target, str(corpus),
+            command = ["cargo", *select, "fuzz", "run", target, str(corpus),
                        str(ROOT / "fuzz" / "seeds" / target), "--", f"-seed={args.seed}", f"-runs={args.runs}",
                        "-max_len=8192", "-timeout=2", "-max_total_time=60", "-rss_limit_mb=512",
                        "-print_final_stats=1", f"-artifact_prefix={artifacts}/"]

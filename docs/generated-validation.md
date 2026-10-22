@@ -43,7 +43,7 @@ cargo install cargo-fuzz --version 0.13.2 --locked
 python3 scripts/fuzz_smoke.py
 ```
 
-An existing `nightly` alias with exactly the recorded compiler may be selected with `--toolchain nightly`. The runner checks versions, fetches locked dependencies, builds offline, and checks that recorded source/lockfile inputs stayed unchanged. Compiler aliases with different versions are rejected rather than silently changing the campaign. Tool upgrades require a new recorded baseline.
+An existing `nightly` alias with exactly the recorded compiler may be selected with `--toolchain nightly`, and `--toolchain ''` uses the toolchain on PATH: `just fuzz-smoke` runs the campaign that way in `nix develop .#nightly`, which has the recorded nightly and cargo-fuzz. The runner checks versions, fetches locked dependencies, builds offline, and checks that recorded source/lockfile inputs stayed unchanged. Compiler aliases with different versions are rejected rather than silently changing the campaign. Tool upgrades require a new recorded baseline.
 
 The default smoke budget is frozen at **10,000 executions per target**, seed **314159**, maximum input **8,192 bytes**, a **two-second per-input timeout**, **512 MiB RSS**, and a **60-second fuzz-loop allowance**. The wrapper caps each build/run process group at **300 seconds**. A time-limited exit with fewer than the requested executions fails verification, even if libFuzzer exits with status zero. The default optimized fuzz build retains debug assertions and overflow checks.
 

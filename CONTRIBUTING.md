@@ -28,6 +28,9 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked --no-fail-fast
 ```
 
+With Nix, `nix develop --command just ci` runs the same checks with CI's pinned
+toolchain; `just --list` shows the other recipes.
+
 Some tests need Linux facilities (user namespaces, `/proc`) and fixed tool
 paths such as `/usr/bin/printf`; [testing](docs/testing.md) explains them and
 the optional campaigns: coverage, mutation testing, fuzzing, and performance
