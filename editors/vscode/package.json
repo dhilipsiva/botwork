@@ -2,7 +2,7 @@
   "name": "botwork",
   "displayName": "Botwork",
   "description": "Botwork scripts, suites, and datasets: highlighting, and diagnostics, completion, hover, navigation, rename, and signature help from the botwork language server.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "botwork",
   "license": "MIT",
   "repository": {

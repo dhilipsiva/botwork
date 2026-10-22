@@ -37,7 +37,7 @@ message that names the version found, the versions it reads, and what to do.
 
 | Contract | Current | Also reads | Another version | Fixtures |
 | --- | --- | --- | --- | --- |
-| Botwork, as `botwork --version` prints | 0.2.0 | | A project's or package's `botwork` requirement that excludes it fails `--fetch`, and any run that imports from the project, with a version incompatibility: upgrade Botwork, or depend on a version of the package that supports this one | `packages/project-needs-newer`, `packages/dependency-needs-newer` |
+| Botwork, as `botwork --version` prints | 0.3.0 | | A project's or package's `botwork` requirement that excludes it fails `--fetch`, and any run that imports from the project, with a version incompatibility: upgrade Botwork, or depend on a version of the package that supports this one | `packages/project-needs-newer`, `packages/dependency-needs-newer` |
 | [Package manifest](packages.md), `botwork.toml` | | | A key this Botwork does not know is an error, unless the manifest's `botwork` requirement excludes this Botwork: then the error is that requirement | `packages/newer-keys` |
 | [Lockfile](packages.md#fetching), `botwork.lock` | 1 | | A newer lockfile: upgrade Botwork, or delete it and run `botwork --fetch` to lock the project again. Any other: delete it and fetch again | `packages/locked`, `packages/newer.lock` |
 | [JSON report](json-report.md), `botwork-report` | 1 | | Botwork only writes reports. It replaces an existing report of any version | `outputs/report-v1.json` |

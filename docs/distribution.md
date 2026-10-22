@@ -45,8 +45,9 @@ GNU and musl builds, each in debug and release.
 
 The `botwork` crate on crates.io is version 0.2.0, an early prototype published
 in April 2023. It predates this documentation and most of the language. The
-checkout still reports 0.2.0 too, until the next release. Install from source
-until the release workflow below publishes one.
+checkout is 0.3.0, the first release of the current implementation
+([CHANGELOG](../CHANGELOG.md)); install from source until the release workflow
+below publishes it.
 
 ## Releases
 
