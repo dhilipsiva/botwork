@@ -89,7 +89,7 @@ including `cargo publish --dry-run`.
 | Channel | Publishes | Needs |
 | --- | --- | --- |
 | GitHub Releases | The archives, the extension, `SHA256SUMS`, and provenance | Nothing beyond the workflow's own token |
-| crates.io | The `botwork` crate, without the evidence records under `docs/` | A `CARGO_REGISTRY_TOKEN` secret |
+| crates.io | The `botwork` crate: the library and CLI sources, the documentation pages they embed, the README, the changelog, and the licenses | A `CARGO_REGISTRY_TOKEN` secret |
 | Homebrew | `Formula/botwork.rb` in the tap | A `HOMEBREW_TAP` repository variable naming the tap, and a `HOMEBREW_TAP_TOKEN` secret that can push to it |
 | Scoop | `bucket/botwork.json` in the bucket | A `SCOOP_BUCKET` repository variable naming the bucket, and a `SCOOP_BUCKET_TOKEN` secret that can push to it |
 | winget | A pull request to `microsoft/winget-pkgs` for `dhilipsiva.Botwork`, made with `wingetcreate` | A `WINGET_TOKEN` secret, a classic token with the `public_repo` scope |

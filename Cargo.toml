@@ -10,8 +10,32 @@ documentation = "https://docs.rs/botwork"
 homepage = "https://github.com/dhilipsiva/botwork"
 repository = "https://github.com/dhilipsiva/botwork"
 readme = "README.md"
-# Evidence records document the repository's checks; the crate needs none of them.
-exclude = ["docs/*-evidence.json"]
+# The crate is the library and CLI: their sources, the WIT interface and the documentation pages
+# the code embeds (tests/package_contents.rs keeps this list complete), the README, the changelog,
+# and the licenses. Tests, examples, editors, and the evidence records stay in the repository.
+include = [
+    "/src/**",
+    "/wit/botwork.wit",
+    "/docs/acceptance-policy.md",
+    "/docs/async-execution.md",
+    "/docs/check.md",
+    "/docs/cleanup.md",
+    "/docs/fixtures.md",
+    "/docs/interpreter-architecture.md",
+    "/docs/isolated-workers.md",
+    "/docs/listeners.md",
+    "/docs/nonblocking-io.md",
+    "/docs/parameterized-cases.md",
+    "/docs/run-records.md",
+    "/docs/rust-api.md",
+    "/docs/secrets.md",
+    "/docs/shutdown.md",
+    "/docs/worker-protocol.md",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+]
 keywords = ["botwork", "robotframework", "testing", "ATDD", "rpa"]
 categories = ["science::robotics", "development-tools", "development-tools::testing"]
 
