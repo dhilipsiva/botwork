@@ -24,7 +24,7 @@ class Release(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def project(self, cargo, extension, rust="1.99.1"):
+    def project(self, cargo, extension, rust="1.99"):
         root = self.path / "project"
         (root / "editors/vscode").mkdir(parents=True)
         (root / "Cargo.toml").write_text(f'[package]\nname = "botwork"\nversion = "{cargo}"\nrust-version = "{rust}"\n')
@@ -60,11 +60,16 @@ class Release(unittest.TestCase):
                 RELEASE["version"](ref, root)
 
     def test_rust_version_must_be_the_rust_that_builds_the_release(self):
-        root = self.project("1.2.3", "1.2.3", rust="1.99.1")
-        self.assertEqual(RELEASE["rust_version"]("rustc 1.99.1 (58cf8f9c3 2026-10-13)", root), "1.99.1")
-        for rustc in ("rustc 1.100.0 (0123abcd 2026-11-12)", "rustc 1.99.0 (1234abcd 2026-10-01)", "cargo 1.99.1", ""):
+        root = self.project("1.2.3", "1.2.3", rust="1.99")
+        for rustc in ("rustc 1.99.1 (58cf8f9c3 2026-10-13)", "rustc 1.99.0 (1234abcd 2026-10-01)"):
+            self.assertEqual(RELEASE["rust_version"](rustc, root), "1.99")
+        for rustc in ("rustc 1.100.0 (0123abcd 2026-11-12)", "rustc 1.98.2 (1234abcd 2026-09-01)", "cargo 1.99.1", "rustc 1.99", ""):
             with self.subTest(rustc=rustc), self.assertRaises(ValueError):
                 RELEASE["rust_version"](rustc, root)
+        # A patch release would shut out the same series' nightly, which the public API and fuzz jobs use.
+        (root / "Cargo.toml").write_text('[package]\nname = "botwork"\nversion = "1.2.3"\nrust-version = "1.99.1"\n')
+        with self.assertRaises(ValueError):
+            RELEASE["rust_version"]("rustc 1.99.1 (58cf8f9c3 2026-10-13)", root)
         (root / "Cargo.toml").write_text('[package]\nname = "botwork"\nversion = "1.2.3"\n')
         with self.assertRaises(ValueError):
             RELEASE["rust_version"]("rustc 1.99.1 (58cf8f9c3 2026-10-13)", root)

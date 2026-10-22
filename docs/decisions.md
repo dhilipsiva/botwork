@@ -393,8 +393,10 @@ license, at the user's option: `LICENSE-APACHE` and `LICENSE-MIT` at the root,
 and `license = "MIT OR Apache-2.0"` in `Cargo.toml`, the VS Code extension, and
 the Tree-sitter grammar. Contributions are accepted under the same terms.
 
-`Cargo.toml` declares `rust-version`: the stable Rust that CI tested a version
-with when it was tagged. CI tests the newest stable on every push, and its
+`Cargo.toml` declares `rust-version`: the release series (such as 1.99) of the
+stable Rust that CI tested a version with when it was tagged. A series rather
+than a patch release, so that series' nightly, which the public API and fuzz
+jobs use, satisfies it too. CI tests the newest stable on every push, and its
 `msrv` job builds every target with `rust-version`. A tag whose `rust-version`
 is not the stable it builds with fails the release, so `rust-version` moves
 forward deliberately, with a CHANGELOG line, at each release.

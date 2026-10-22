@@ -6,7 +6,8 @@ Usage: release.py COMMAND ...
                                 must name the version that Cargo.toml and the
                                 VS Code extension carry
   rust-version RUSTC_VERSION     check that Cargo.toml's rust-version is the
-                                Rust that `rustc --version` printed (D20)
+                                release series of the Rust that `rustc --version`
+                                printed (D20)
   package VERSION TARGET BINARY OUT
                                 archive the binary with its licenses and README.md
   checksums DIRECTORY           write DIRECTORY/SHA256SUMS for its assets
@@ -65,15 +66,16 @@ def version(ref, root=ROOT):
 
 
 def rust_version(rustc, root=ROOT):
-    """Check that `rust-version` is the Rust of `rustc --version`'s output: D20 declares the
-    stable that CI used when a version was tagged."""
+    """Check that `rust-version` is the release series (major.minor) of `rustc --version`'s
+    output: D20 declares the stable that CI used when a version was tagged."""
     declared = tomllib.loads((root / "Cargo.toml").read_text())["package"].get("rust-version")
     words = rustc.split()
-    if len(words) < 2 or words[0] != "rustc":
+    if len(words) < 2 or words[0] != "rustc" or words[1].count(".") != 2:
         raise ValueError(f"not `rustc --version` output: {rustc!r}")
-    if declared != words[1]:
+    series = words[1].rsplit(".", 1)[0]
+    if declared != series:
         raise ValueError(f"Cargo.toml declares rust-version {declared}, but this release builds with "
-                         f"Rust {words[1]}; set rust-version to {words[1]} (decision D20)")
+                         f"Rust {words[1]}; set rust-version to {series} (decision D20)")
     return declared
 
 

@@ -44,8 +44,9 @@ idea (sentence-style scripts, one binary) and little else. The version moves to
 
 - Botwork is licensed under MIT OR Apache-2.0, at your option; 0.2.0 was MIT
   alone ([D20](docs/decisions.md#d20-license-and-minimum-rust-version)).
-- `Cargo.toml` declares `rust-version = "1.99.1"`, the stable Rust this release
-  is tested with; earlier, the policy was the latest stable, undeclared.
+- `Cargo.toml` declares `rust-version = "1.99"`, the release series of the stable
+  Rust this release is tested with; earlier, the policy was the latest stable,
+  undeclared.
 
 [Unreleased]: https://github.com/dhilipsiva/botwork/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/dhilipsiva/botwork/releases/tag/v0.3.0

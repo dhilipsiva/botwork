@@ -2,8 +2,9 @@
 name = "botwork"
 version = "0.3.0"
 edition = "2021"
-# The stable Rust CI used when this version was tagged (D20, docs/decisions.md).
-rust-version = "1.99.1"
+# The release series of the stable Rust CI used when this version was tagged (D20,
+# docs/decisions.md). A series, not a patch release, so the same series' nightly builds it too.
+rust-version = "1.99"
 license = "MIT OR Apache-2.0"
 description = "botwork is a single-binary, generic and open-source automation framework written in Rust for acceptance testing, acceptance test driven development (ATDD), and robotic process automation (RPA). The syntax is basically plain text (in any human language) with parameters. Easily extendible with Rust, Python & JavaScript. An efficient, fast alternative to Robot Framework."
 documentation = "https://docs.rs/botwork"
