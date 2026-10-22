@@ -6,8 +6,9 @@ it, what it needs at run time, and how Botwork code is shared.
 ## Install from source
 
 This is the supported way to install the current version. Botwork builds with
-the latest stable Rust ([D16](decisions.md#d16-minimum-supported-rust-version));
-install it from [rustup.rs](https://rustup.rs).
+the Rust that `Cargo.toml`'s `rust-version` names, or newer
+([D20](decisions.md#d20-license-and-minimum-rust-version)); install it from
+[rustup.rs](https://rustup.rs).
 
 ```sh
 git clone https://github.com/dhilipsiva/botwork.git
@@ -54,13 +55,15 @@ below publishes it.
 A tag `vX.Y.Z` releases version X.Y.Z through the channels the
 [roadmap decisions](decisions.md#d17-binary-distribution) chose. The tag must
 name the version that both `Cargo.toml` and `editors/vscode/package.json`
-carry. `.github/workflows/release.yml` then:
+carry, and `Cargo.toml`'s `rust-version` must be the stable Rust the release
+builds with ([D20](decisions.md#d20-license-and-minimum-rust-version)).
+`.github/workflows/release.yml` then:
 
 1. runs every CI check;
 2. builds the `dist` binary for Linux x86_64 (static musl), macOS arm64, and
    Windows x86_64, checks that it reports the version, and archives it with
-   `LICENSE` and `README.md` as `botwork-vX.Y.Z-<target>.tar.gz`, or `.zip` on
-   Windows;
+   `LICENSE-MIT`, `LICENSE-APACHE`, and `README.md` as
+   `botwork-vX.Y.Z-<target>.tar.gz`, or `.zip` on Windows;
 3. packages the VS Code extension as `botwork-vX.Y.Z.vsix`;
 4. writes `SHA256SUMS` and the Homebrew, Scoop, and winget manifests, and runs
    the packaged Linux binary;

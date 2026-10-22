@@ -4,7 +4,7 @@
   "description": "Botwork scripts, suites, and datasets: highlighting, and diagnostics, completion, hover, navigation, rename, and signature help from the botwork language server.",
   "version": "0.3.0",
   "publisher": "botwork",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/dhilipsiva/botwork"

@@ -35,6 +35,12 @@ jobs:
       - name: Read the version, and whether this ref publishes it
         id: version
         run: python3 scripts/release.py version "$GITHUB_REF" >> "$GITHUB_OUTPUT"
+      - name: Check that rust-version is the stable Rust this release builds with
+        # Decision D20: a tagged version declares the stable that CI tested it with.
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          rustup toolchain install stable --profile minimal
+          python3 scripts/release.py rust-version "$(rustc +stable --version)"
 
   test:
     name: Test

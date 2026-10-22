@@ -49,7 +49,7 @@ fn decisions() -> Vec<String> {
 #[test]
 fn every_decision_has_a_section_and_is_cited_by_the_roadmap() {
     let numbers = decisions();
-    let expected: Vec<String> = (1..=19).map(|number| format!("D{number}")).collect();
+    let expected: Vec<String> = (1..=20).map(|number| format!("D{number}")).collect();
     assert_eq!(numbers, expected);
     let anchors = anchors();
     let todo = read("TODO.md");

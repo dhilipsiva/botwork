@@ -12,8 +12,9 @@ whole diagnostic.
 
 ## Building and testing
 
-botwork builds with the latest stable Rust
-([D16](docs/decisions.md#d16-minimum-supported-rust-version)). From a checkout:
+botwork builds with the Rust that `Cargo.toml`'s `rust-version` names, or
+newer ([D20](docs/decisions.md#d20-license-and-minimum-rust-version)). From a
+checkout:
 
 ```sh
 cargo build
@@ -61,5 +62,7 @@ describes the behavior change, links related issues, and lists the validation
 you ran. For a language change, include a small `.botwork` input and its
 expected output. CI runs on every pushed branch and every pull request.
 
-By contributing, you agree that your contribution is licensed under the
-project's [license](LICENSE).
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in botwork by you, as defined in the Apache-2.0 license, shall be
+dual licensed as in the [README](README.md#license), without any additional
+terms or conditions.

@@ -24,12 +24,13 @@ class Release(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def project(self, cargo, extension):
+    def project(self, cargo, extension, rust="1.99.1"):
         root = self.path / "project"
         (root / "editors/vscode").mkdir(parents=True)
-        (root / "Cargo.toml").write_text(f'[package]\nname = "botwork"\nversion = "{cargo}"\n')
+        (root / "Cargo.toml").write_text(f'[package]\nname = "botwork"\nversion = "{cargo}"\nrust-version = "{rust}"\n')
         (root / "editors/vscode/package.json").write_text(json.dumps({"version": extension}))
-        (root / "LICENSE").write_text("license")
+        (root / "LICENSE-MIT").write_text("mit")
+        (root / "LICENSE-APACHE").write_text("apache")
         (root / "README.md").write_text("readme")
         return root
 
@@ -58,6 +59,16 @@ class Release(unittest.TestCase):
             with self.subTest(ref=ref), self.assertRaises(ValueError):
                 RELEASE["version"](ref, root)
 
+    def test_rust_version_must_be_the_rust_that_builds_the_release(self):
+        root = self.project("1.2.3", "1.2.3", rust="1.99.1")
+        self.assertEqual(RELEASE["rust_version"]("rustc 1.99.1 (58cf8f9c3 2026-10-13)", root), "1.99.1")
+        for rustc in ("rustc 1.100.0 (0123abcd 2026-11-12)", "rustc 1.99.0 (1234abcd 2026-10-01)", "cargo 1.99.1", ""):
+            with self.subTest(rustc=rustc), self.assertRaises(ValueError):
+                RELEASE["rust_version"](rustc, root)
+        (root / "Cargo.toml").write_text('[package]\nname = "botwork"\nversion = "1.2.3"\n')
+        with self.assertRaises(ValueError):
+            RELEASE["rust_version"]("rustc 1.99.1 (58cf8f9c3 2026-10-13)", root)
+
     def test_the_checked_in_versions_agree(self):
         cargo, extension = RELEASE["versions"]()
         self.assertEqual(cargo, extension)
@@ -74,15 +85,15 @@ class Release(unittest.TestCase):
                 self.assertEqual(first.read_bytes(), second.read_bytes())
                 if kind == "zip":
                     with zipfile.ZipFile(first) as archive:
-                        self.assertEqual(archive.namelist(), ["botwork.exe", "LICENSE", "README.md"])
+                        self.assertEqual(archive.namelist(), ["botwork.exe", "LICENSE-MIT", "LICENSE-APACHE", "README.md"])
                         self.assertEqual(archive.read("botwork.exe"), b"binary bytes")
                         self.assertEqual(archive.getinfo("botwork.exe").external_attr >> 16, 0o100755)
                         self.assertEqual({info.create_system for info in archive.infolist()}, {3})
                 else:
                     with tarfile.open(first) as archive:
                         members = archive.getmembers()
-                        self.assertEqual([member.name for member in members], ["botwork", "LICENSE", "README.md"])
-                        self.assertEqual([member.mode for member in members], [0o755, 0o644, 0o644])
+                        self.assertEqual([member.name for member in members], ["botwork", "LICENSE-MIT", "LICENSE-APACHE", "README.md"])
+                        self.assertEqual([member.mode for member in members], [0o755, 0o644, 0o644, 0o644])
                         self.assertEqual({(member.uid, member.gid, member.uname) for member in members}, {(0, 0, "")})
                         self.assertEqual(archive.extractfile("botwork").read(), b"binary bytes")
         with self.assertRaises(ValueError):
@@ -125,6 +136,7 @@ class Release(unittest.TestCase):
             name = url(target).rsplit("/", 1)[1]
             self.assertIn(f'url "{url(target)}"\n      sha256 "{sums[name]}"', formula)
         self.assertIn('bin.install "botwork"', formula)
+        self.assertIn('  license any_of: ["MIT", "Apache-2.0"]\n', formula)
         self.assertLess(len(RELEASE["DESCRIPTION"]), 80)
         windows = url("x86_64-pc-windows-msvc")
         digest = sums[windows.rsplit("/", 1)[1]]
@@ -132,6 +144,7 @@ class Release(unittest.TestCase):
         self.assertEqual(scoop["architecture"]["64bit"], {"url": windows, "hash": digest})
         self.assertEqual(scoop["version"], "1.2.3")
         self.assertEqual(scoop["bin"], "botwork.exe")
+        self.assertEqual(scoop["license"], "MIT|Apache-2.0")
         installer = next(path for path in written if path.endswith(".installer.yaml"))
         installer = (out / installer).read_text()
         self.assertIn(f"InstallerUrl: {windows}\n  InstallerSha256: {digest.upper()}\n", installer)
@@ -144,6 +157,8 @@ class Release(unittest.TestCase):
                 text = (out / path).read_text()
                 self.assertIn("PackageIdentifier: dhilipsiva.Botwork\nPackageVersion: 1.2.3\n", text)
                 self.assertTrue(text.endswith("ManifestVersion: 1.9.0\n"), text)
+        locale = next(path for path in written if path.endswith(".locale.en-US.yaml"))
+        self.assertIn("License: MIT OR Apache-2.0\nLicenseUrl: https://github.com/dhilipsiva/botwork#license\n", (out / locale).read_text())
 
     def test_manifests_refuse_missing_or_altered_archives(self):
         assets = self.assets()
@@ -168,6 +183,13 @@ class Workflow(unittest.TestCase):
     def test_the_workflow_builds_every_packaged_target(self):
         built = set(re.findall(r"^ +- target: (\S+)$", WORKFLOW, re.M))
         self.assertEqual(built, set(RELEASE["TARGETS"]))
+
+    def test_a_tag_checks_rust_version_against_the_stable_it_builds_with(self):
+        version = WORKFLOW.split("\n  version:\n", 1)[1].split("\n  test:\n", 1)[0]
+        step = version.split("- name: Check that rust-version is the stable Rust this release builds with\n", 1)[1]
+        self.assertIn("if: steps.version.outputs.publish == 'true'\n", step)
+        self.assertIn('python3 scripts/release.py rust-version "$(rustc +stable --version)"', step)
+        self.assertIn("rustup toolchain install stable", step)
 
     def test_publishing_needs_a_tag_and_skips_without_credentials(self):
         self.assertIn("permissions:\n  contents: read\n", WORKFLOW)

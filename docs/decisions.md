@@ -4,7 +4,8 @@ These decisions were ratified by the project owner on 2026-09-30. They settle
 the questions that [TODO.md](../TODO.md) left to the owner, and they revise
 three preregistered gates. Later the same day, the owner revised D4 and added
 D19 after the first campaign checked against D4 failed; D4 keeps its original
-text as history. The roadmap requires a written rationale for any
+text as history. On 2026-10-21 the owner added D20, which relicenses Botwork and
+supersedes D16; D16 also keeps its text as history. The roadmap requires a written rationale for any
 revision of a frozen task, budget, or score ("Freeze tasks, budgets, and
 scoring before measuring; any subsequent revision needs a written rationale
 and renewed assessment"). This page is that record.
@@ -31,10 +32,11 @@ such as `D4`.
 | D13 | The branch-coverage gate is dropped; the line-coverage gate stays |
 | D14 | Pre-release fuzzing is 1 CPU-hour per target |
 | D15 | The language, diagnostic codes, reports, CLI, and Rust API are stable at 1.0 |
-| D16 | The minimum supported Rust version is the latest stable release |
+| D16 | The minimum supported Rust version is the latest stable release (superseded by D20) |
 | D17 | Binaries ship through GitHub Releases, crates.io, Homebrew, winget, and Scoop |
 | D18 | The VS Code extension ships through the Marketplace and Open VSX |
 | D19 | Distributed binaries use fat LTO, one codegen unit, and packed relocations |
+| D20 | Botwork is licensed MIT OR Apache-2.0, and `rust-version` is the stable Rust of each release |
 
 ## Assessment
 
@@ -361,6 +363,8 @@ the public surface.
 
 ### D16: Minimum supported Rust version
 
+*Superseded by [D20](#d20-license-and-minimum-rust-version) on 2026-10-21; the original decision follows as history.*
+
 Botwork builds with the latest stable Rust release. CI tests the newest
 stable, and no older toolchain is promised.
 
@@ -379,6 +383,29 @@ Botwork ships through:
 
 The VS Code extension is published to the VS Code Marketplace and to Open VSX
 by the release workflow.
+
+### D20: License and minimum Rust version
+
+*Added on 2026-10-21; it supersedes D16.*
+
+Botwork is licensed under either of the Apache License, Version 2.0, or the MIT
+license, at the user's option: `LICENSE-APACHE` and `LICENSE-MIT` at the root,
+and `license = "MIT OR Apache-2.0"` in `Cargo.toml`, the VS Code extension, and
+the Tree-sitter grammar. Contributions are accepted under the same terms.
+
+`Cargo.toml` declares `rust-version`: the stable Rust that CI tested a version
+with when it was tagged. CI tests the newest stable on every push, and its
+`msrv` job builds every target with `rust-version`. A tag whose `rust-version`
+is not the stable it builds with fails the release, so `rust-version` moves
+forward deliberately, with a CHANGELOG line, at each release.
+
+**Rationale.** The Rust ecosystem's usual license lets Botwork's code move into
+and out of other dual-licensed crates, and the Apache license adds an explicit
+patent grant. Relicensing needs the consent of every author, and the owner is
+still the only human author, so the change is cheapest now, before 1.0 and
+before outside contributions. A declared `rust-version` lets Cargo report a too
+old toolchain plainly instead of failing on a newer language feature, and
+tying it to each release keeps the promise to the one toolchain CI checked.
 
 ## Owner prerequisites
 

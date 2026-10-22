@@ -3,8 +3,9 @@
 ## Project Structure & Module Organization
 
 Botwork is a Rust 2021 automation framework: a library and the `botwork` CLI in
-one Cargo package, built with the latest stable Rust
-([D16](docs/decisions.md#d16-minimum-supported-rust-version)).
+one Cargo package. CI tests the newest stable Rust, and `Cargo.toml`'s
+`rust-version` is the oldest that builds it
+([D20](docs/decisions.md#d20-license-and-minimum-rust-version)).
 
 The CLI (`src/`):
 

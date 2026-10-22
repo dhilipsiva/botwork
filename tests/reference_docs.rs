@@ -303,10 +303,11 @@ fn compatibility_versions_match_their_sources() {
             "{line}"
         );
     }
-    // Latest stable only: CI installs stable, and Cargo.toml pins no older one.
+    // D20: CI tests the newest stable and builds with Cargo.toml's rust-version.
     assert!(ci.contains("rustup toolchain install stable"));
-    assert!(!read("Cargo.toml").contains("rust-version"));
-    assert!(compatibility.contains("latest stable Rust release"));
+    assert!(ci.contains(r#"["package"]["rust-version"]"#));
+    assert!(read("Cargo.toml").contains("\nrust-version = \""));
+    assert!(compatibility.contains("`Cargo.toml` declares `rust-version`"));
 }
 
 /// The anchor GitHub generates for a heading.

@@ -245,6 +245,26 @@ jobs:
       - name: Check the workflows
         run: '"$RUNNER_TEMP/actionlint" -color'
 
+  msrv:
+    # Decision D20: Cargo.toml's rust-version is the oldest Rust that builds
+    # Botwork; the other jobs test the newest stable.
+    name: Minimum Rust version
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust that Cargo.toml declares
+        id: rust
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["rust-version"])')
+          rustup toolchain install "$version" --profile minimal
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build every target with it
+        run: cargo +${{ steps.rust.outputs.version }} check --locked --all-targets
+
   wasm:
     name: WebAssembly guest
     runs-on: ubuntu-latest

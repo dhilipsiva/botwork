@@ -79,10 +79,11 @@ newer versions Botwork must refuse; its README says how each was made.
 
 ## Rust toolchain
 
-Botwork builds with the latest stable Rust release, and CI tests the newest
-stable. No older toolchain is supported
-([D16](decisions.md#d16-minimum-supported-rust-version)). `Cargo.toml` declares
-no `rust-version`.
+`Cargo.toml` declares `rust-version`, the oldest Rust that builds Botwork: the
+stable release CI tested this version with when it was tagged
+([D20](decisions.md#d20-license-and-minimum-rust-version)). CI tests the newest
+stable on every push and builds every target with `rust-version`, and each
+release moves `rust-version` to the stable it is built with.
 
 ## Platforms
 

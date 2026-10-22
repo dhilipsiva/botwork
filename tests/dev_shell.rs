@@ -50,6 +50,11 @@ fn the_stable_toolchain_is_an_exact_release_with_the_tools_the_checks_need() {
         "{version}"
     );
     assert!(flake.contains("pkgs.rust-bin.stable.${rustVersion}.default"));
+    // D20: the shell's stable is the rust-version this release declares.
+    assert_eq!(
+        between(&read("Cargo.toml"), "\nrust-version =", "\"", "\""),
+        version
+    );
     for component in ["clippy", "rustfmt", "llvm-tools-preview", "wasm32-wasip2"] {
         assert!(flake.contains(&format!("\"{component}\"")), "{component}");
     }

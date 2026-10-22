@@ -5,8 +5,10 @@ Usage: release.py COMMAND ...
                                 $GITHUB_OUTPUT; only a tag publishes, and it
                                 must name the version that Cargo.toml and the
                                 VS Code extension carry
+  rust-version RUSTC_VERSION     check that Cargo.toml's rust-version is the
+                                Rust that `rustc --version` printed (D20)
   package VERSION TARGET BINARY OUT
-                                archive the binary with LICENSE and README.md
+                                archive the binary with its licenses and README.md
   checksums DIRECTORY           write DIRECTORY/SHA256SUMS for its assets
   manifests VERSION DIRECTORY OUT
                                 write the Homebrew formula, the Scoop manifest,
@@ -62,6 +64,19 @@ def version(ref, root=ROOT):
     return {"version": cargo, "publish": "true"}
 
 
+def rust_version(rustc, root=ROOT):
+    """Check that `rust-version` is the Rust of `rustc --version`'s output: D20 declares the
+    stable that CI used when a version was tagged."""
+    declared = tomllib.loads((root / "Cargo.toml").read_text())["package"].get("rust-version")
+    words = rustc.split()
+    if len(words) < 2 or words[0] != "rustc":
+        raise ValueError(f"not `rustc --version` output: {rustc!r}")
+    if declared != words[1]:
+        raise ValueError(f"Cargo.toml declares rust-version {declared}, but this release builds with "
+                         f"Rust {words[1]}; set rust-version to {words[1]} (decision D20)")
+    return declared
+
+
 def archive_name(release, target):
     return f"botwork-v{release}-{target}.{TARGETS[target]}"
 
@@ -77,7 +92,8 @@ def package(release, target, binary, out, root=ROOT):
     executable = "botwork.exe" if TARGETS[target] == "zip" else "botwork"
     entries = [
         (executable, Path(binary).read_bytes(), 0o755),
-        ("LICENSE", (root / "LICENSE").read_bytes(), 0o644),
+        ("LICENSE-MIT", (root / "LICENSE-MIT").read_bytes(), 0o644),
+        ("LICENSE-APACHE", (root / "LICENSE-APACHE").read_bytes(), 0o644),
         ("README.md", (root / "README.md").read_bytes(), 0o644),
     ]
     out = Path(out)
@@ -160,7 +176,7 @@ class Botwork < Formula
   desc "{DESCRIPTION}"
   homepage "{HOMEPAGE}"
   version "{release}"
-  license "MIT"
+  license any_of: ["MIT", "Apache-2.0"]
 
   on_macos do
     on_arm do
@@ -192,7 +208,7 @@ end
         "version": release,
         "description": DESCRIPTION,
         "homepage": HOMEPAGE,
-        "license": "MIT",
+        "license": "MIT|Apache-2.0",
         "architecture": {"64bit": {"url": windows_url, "hash": windows_hash}},
         "bin": "botwork.exe",
         "checkver": "github",
@@ -213,8 +229,8 @@ end
         "  PortableCommandAlias: botwork\nInstallers:\n- Architecture: x64\n"
         f"  InstallerUrl: {windows_url}\n  InstallerSha256: {windows_hash.upper()}\n" + footer("installer"))
     written[f"{base}.locale.en-US.yaml"] = (header("defaultLocale")
-        + f"PackageLocale: en-US\nPublisher: {publisher}\nPackageName: Botwork\nLicense: MIT\n"
-        f"LicenseUrl: {HOMEPAGE}/blob/main/LICENSE\nShortDescription: {DESCRIPTION}\nPackageUrl: {HOMEPAGE}\n"
+        + f"PackageLocale: en-US\nPublisher: {publisher}\nPackageName: Botwork\nLicense: MIT OR Apache-2.0\n"
+        f"LicenseUrl: {HOMEPAGE}#license\nShortDescription: {DESCRIPTION}\nPackageUrl: {HOMEPAGE}\n"
         + footer("defaultLocale"))
 
     for relative, text in written.items():
@@ -229,6 +245,8 @@ def main(arguments):
     if command == "version" and len(rest) == 1:
         for key, value in version(rest[0]).items():
             print(f"{key}={value}")
+    elif command == "rust-version" and len(rest) == 1:
+        print(rust_version(rest[0]))
     elif command == "package" and len(rest) == 4:
         print(package(*rest))
     elif command == "checksums" and len(rest) == 1:

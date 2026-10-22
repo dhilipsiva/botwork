@@ -3,10 +3,11 @@
 #   nix develop            # the pinned stable Rust, just, Python, Node, cargo-llvm-cov, cargo-mutants
 #   nix develop .#nightly  # the pinned nightly and cargo-fuzz, for `just fuzz-smoke` and `just public-api`
 #
-# Every version here equals the one CI and the campaign scripts use: stable is the release CI's
-# `stable` resolves to (D16, docs/decisions.md), the nightly is the one .github/workflows/ci.yml and
-# scripts/fuzz_smoke.py name, and the tools are the ones scripts/coverage.py,
-# scripts/mutation_core.py, and scripts/fuzz_smoke.py check for. tests/dev_shell.rs keeps them equal.
+# Every version here equals the one CI and the campaign scripts use: stable is Cargo.toml's
+# `rust-version`, the stable of this release (D20, docs/decisions.md); the nightly is the one
+# .github/workflows/ci.yml and scripts/fuzz_smoke.py name; and the tools are the ones
+# scripts/coverage.py, scripts/mutation_core.py, and scripts/fuzz_smoke.py check for.
+# tests/dev_shell.rs keeps them equal.
 {
   description = "Botwork development shells: pinned stable and nightly Rust and the campaign tools";
 
@@ -34,7 +35,7 @@
           overlays = [ (import rust-overlay) ];
         };
 
-        # The latest stable Rust (D16). Move it when a new stable is released.
+        # Cargo.toml's rust-version (D20); they move together, at a release.
         rustVersion = "1.99.1";
         # The nightly of the public API job and the fuzz campaign.
         nightlyDate = "2026-08-14";
